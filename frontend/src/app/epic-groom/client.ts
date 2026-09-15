@@ -46,10 +46,15 @@ const isEpicIssues = (value: unknown): value is EpicIssue[] =>
 const isActedStatus = (value: unknown): value is 'groomed' | 'authorised' =>
   value === 'groomed' || value === 'authorised'
 
-const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null =>
-  isRecord(body.pullRequest) && typeof body.pullRequest.number === 'number' && typeof body.pullRequest.url === 'string'
-    ? { number: body.pullRequest.number, url: body.pullRequest.url }
+const pullRequestAt = (body: Record<string, unknown>, field: string): EpicPullRequest | null => {
+  const named = body[field]
+
+  return isRecord(named) && typeof named.number === 'number' && typeof named.url === 'string'
+    ? { number: named.number, url: named.url }
     : null
+}
+
+const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null => pullRequestAt(body, 'pullRequest')
 
 const keyOf = (body: Record<string, unknown>): string | null =>
   typeof body.key === 'string' ? body.key : null
@@ -82,6 +87,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     return {
       kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
       planFingerprint: body.planFingerprint,
+      reslicing: pullRequestAt(body, 'reslicing'),
       key: keyOf(body),
     }
   }

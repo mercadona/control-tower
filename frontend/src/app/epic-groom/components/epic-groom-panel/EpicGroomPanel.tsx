@@ -1,6 +1,7 @@
 import { EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 import { useGatePresses } from 'app/epic-groom/useGatePresses'
+import { useMergedReslicing } from 'app/epic-groom/useMergedReslicing'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { Panel } from 'system-ui/panel'
@@ -22,6 +23,8 @@ const RESLICED =
 const PUBLISH_RESLICING = 'Publicar el nuevo slicing'
 const PUBLISHING_RESLICING = 'Publicando el nuevo slicing'
 const RESLICING_PUBLISHED = 'El nuevo slicing viaja en este pull request: mergéalo y las issues se crearán solas.'
+const RESLICING_MERGED =
+  'El nuevo slicing se aprobó al mergear su pull request: las issues se crean sin pulsar nada.'
 const CREATED = 'Issues del epic'
 const PROMOTE = 'Autorizar el trabajo'
 const PROMOTING = 'Autorizando el trabajo'
@@ -63,6 +66,7 @@ const EpicGroomPanel = () => {
   const read = useEpicGroom()
   const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
   const presses = useGatePresses(gateKey)
+  useMergedReslicing({ read, press: presses.groom })
   const { acted, refusal, session, reslicing } = presses
 
   if (read.phase === 'connecting') return null
@@ -156,7 +160,7 @@ const EpicGroomPanel = () => {
   }
 
   if (acted === null && read.kind === 'groomable') {
-    const { milestone, plan, home, planFingerprint } = read
+    const { milestone, plan, home, planFingerprint, reslicing: merged } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>
@@ -170,6 +174,14 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
+        {merged !== null && (
+          <>
+            <p className="epic-groom-panel__reslicing-merged">{RESLICING_MERGED}</p>
+            <a className="epic-groom-panel__pull-request" href={merged.url}>
+              {`${PULL_REQUEST} #${merged.number}`}
+            </a>
+          </>
+        )}
         <Button onClick={() => void presses.groom(planFingerprint)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>

@@ -116,6 +116,68 @@ describe('EpicGroomPanel', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Mira el panel de sesiones: puede estar abierta.')
   })
 
+  it('a groomable milestone whose re-slicing already merged creates the issues without anybody pressing', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomableAfterReslicing().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
+    expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
+    })
+    expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
+  })
+
+  it('a groomable milestone nobody re-sliced waits for the person to press', async () => {
+    const fetching = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByRole('button', GROOM_BUTTON)).toBeEnabled()
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+    expect(fetching).not.toHaveBeenCalledWith('/epic-groom', expect.anything())
+  })
+
+  it('the automatic press happens once, however many times the page renders after it', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomableAfterReslicing().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', PROMOTE_BUTTON)
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
+  it('the merged re-slicing is named on screen and linked, so the person sees what authorised the groom', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomableAfterReslicing().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<EpicGroomPanel />)
+
+    expect(
+      await screen.findByText(
+        'El nuevo slicing se aprobó al mergear su pull request: las issues se crean sin pulsar nada.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Pull request #363' })).toHaveAttribute(
+      'href',
+      EpicGroomMother.RESLICING_PULL_REQUEST.url,
+    )
+  })
+
   it('a groomed epic offers the authorisation and shows the rung each issue stands at', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomed().body, { status: 200 })))
 

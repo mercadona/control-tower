@@ -8,7 +8,7 @@ export type EpicGroomOutcome =
   | { kind: 'issues-uncertain'; milestone: string; reason: string }
   | {
       kind: 'groomable'; milestone: string; plan: GroomPlanIssue[]; home: string;
-      planFingerprint: string; key: string | null;
+      planFingerprint: string; reslicing: EpicPullRequest | null; key: string | null;
     }
   | {
       kind: 'partially-groomed'; milestone: string; plan: GroomPlanIssue[];

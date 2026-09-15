@@ -137,7 +137,13 @@ press; `groomable` shows the milestone and the dry run's product — the issues 
 groom would create, ordered and labelled, before anything is created, and
 offers **Revisar el slicing con la sesión**, which calls `POST /groom-session`
 so a person can walk that table with a coordinating session in the groom phase
-instead of only saying yes or no to it; `groomed`
+instead of only saying yes or no to it. When that read carries a `reslicing` —
+the merged pull request whose body marks it as a correction of the slicing —
+`useMergedReslicing.ts` presses the groom once by itself and the panel names the
+pull request that authorised it: a person merging is the authorisation, so
+nothing is left to click. That press belongs to the page, which is the only
+thing here that watches GitHub, so while nobody has the cabin open nothing
+happens and the issues appear the next time it is opened; `groomed`
 shows the issues the milestone already holds and offers the authorisation;
 `authorised` shows them all promoted, with nothing left to press.
 **Ejecutar el groom** calls

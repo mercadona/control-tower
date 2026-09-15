@@ -18,6 +18,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
       home: EpicGroomMother.HOME,
       planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
+      reslicing: null,
       key: null,
     })
   })
@@ -41,6 +42,18 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       ],
       [EpicGroomMother.resliced(), { kind: 'resliced', key: EpicGroomMother.KEY }],
       [
+        EpicGroomMother.groomableAfterReslicing(),
+        {
+          kind: 'groomable',
+          milestone: EpicGroomMother.MILESTONE,
+          plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          home: EpicGroomMother.HOME,
+          planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
+          reslicing: EpicGroomMother.RESLICING_PULL_REQUEST,
+          key: EpicGroomMother.KEY,
+        },
+      ],
+      [
         EpicGroomMother.issuesUncertain(),
         { kind: 'issues-uncertain', milestone: EpicGroomMother.MILESTONE, reason: EpicGroomMother.ISSUES_UNCERTAIN_REASON },
       ],
@@ -52,6 +65,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
           home: EpicGroomMother.HOME,
           planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
+          reslicing: null,
           key: EpicGroomMother.KEY,
         },
       ],
