@@ -1090,7 +1090,7 @@ Gate 2's own state for the checkout the held coordinating session sits in, deriv
 execution spec, the epic's milestone and its issues on GitHub — nothing stored. No parameters.
 The cabin polls it to draw gate 2's panel.
 
-**200 OK** — nine shapes, told apart by `status`.
+**200 OK** — ten shapes, told apart by `status`.
 
 No coordinating session is held, so there is nothing to groom:
 
@@ -1109,6 +1109,14 @@ The spec exists and is not frozen yet:
 
 ```json
 {"status":"draft"}
+```
+
+The spec is frozen and what the default branch holds is not the text this checkout holds, and that
+edit is **not committed**: the coordinating session changed the slicing and the correction has not
+left the checkout yet. `POST /spec-reslicing` is what makes it travel:
+
+```json
+{"status":"resliced","key":"3f9c1a…"}
 ```
 
 The spec is frozen, but what the default branch holds is **not the text this checkout holds** — the
@@ -1209,9 +1217,10 @@ promote:
 `key` is the same value `POST /epic-groom` and `POST /epic-promotion` demand in their
 `x-gate-key` header, minted once when the backend starts
 (`backend/src/infrastructure/gate-key.ts`) — the mechanism `GET /spec-freeze` documents above. It
-is attached only to the `groomable`, `partially-groomed` and `groomed` bodies, and only for the
-page's own request; `no-spec`, `draft`, `awaiting-publication`, `issues-uncertain` and `authorised`
-never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
+is attached only to the `resliced`, `groomable`, `partially-groomed` and `groomed` bodies, and only
+for the page's own request — `resliced` carries it because the button it offers presses
+`POST /spec-reslicing`, which demands the same key; `no-spec`, `draft`, `awaiting-publication`,
+`issues-uncertain` and `authorised` never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
 `issues-uncertain` offers nothing to press while its own listing cannot be trusted.
 
 `planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, then each
@@ -1225,8 +1234,8 @@ issue's order, title and labels, in the plan's own order
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
 with a 400 and its own `{code, detail}`, every tool refusal this read can meet: deriving these
-nine states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
-list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
+ten states can run `ct-groom --dry-run`, `git status --porcelain`, `gh api
+repos/<repo>/contents/<spec>` and `gh issue list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
 documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet. A
 `gh issue list` call that fails outright still meets `epic-issues-not-read` there, exactly as
 before this backend paged; only a paging climb that never comes back short answers
@@ -1285,6 +1294,7 @@ Then, once the key holds:
 | `groom-in-progress` | 409 | a groom of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
+| `spec-resliced` | 400 | the slicing changed in the coordinating session: publish it and merge it before the groom runs |
 | `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
 | `epic-issues-uncertain` | 400 | `gh issue list`'s paging could not be exhausted: `detail` is the same reason `GET /epic-groom`'s `issues-uncertain` body carries, and the plan comparison this press would otherwise run cannot be trusted either |
 | `plan-changed` | 409 | the spec changed since this plan was shown: read the new plan before pressing again |
@@ -1305,7 +1315,7 @@ mismatch means the spec changed underneath the page between the preview and the 
 carrying no `x-plan-fingerprint` at all meets the same code, because the page always has one to send
 at a pressable rung, so its absence means the request did not come from a preview.
 
-None of these eight touches the milestone or an issue.
+None of these nine touches the milestone or an issue.
 
 From running the groom itself, once the eight above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above

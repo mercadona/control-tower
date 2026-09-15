@@ -93,15 +93,28 @@ class EpicGroomDouble extends EpicGroom {
 
 class EpicBranchDouble extends EpicBranch {
   asked: CheckoutRoot[]
+  isCommitted: boolean
+  askedCommitted: { root: CheckoutRoot, paths: string[] }[]
 
-  constructor() {
+  constructor(isCommitted = true) {
     super()
     this.asked = []
+    this.isCommitted = isCommitted
+    this.askedCommitted = []
+  }
+
+  static withTheSpecEdited(): EpicBranchDouble {
+    return new EpicBranchDouble(false)
   }
 
   async current(root: CheckoutRoot): Promise<string> {
     this.asked.push(root)
     return Mother.BRANCH
+  }
+
+  async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {
+    this.askedCommitted.push({ root, paths })
+    return this.isCommitted
   }
 }
 
@@ -231,18 +244,19 @@ class Flow {
   pullRequests: PullRequestsDouble
   fingerprint: PlanFingerprint
 
-  constructor({ specs, published, issues, groom, pullRequests }: {
+  constructor({ specs, published, issues, groom, branch, pullRequests }: {
     specs?: EpicSpecsDouble,
     published?: PublishedSpecsDouble,
     issues?: EpicIssuesDouble,
     groom?: EpicGroomDouble,
+    branch?: EpicBranchDouble,
     pullRequests?: PullRequestsDouble,
   } = {}) {
     this.specs = specs ?? new EpicSpecsDouble(null)
     this.published = published ?? new PublishedSpecsDouble(true)
     this.issues = issues ?? new EpicIssuesDouble([])
     this.groom = groom ?? new EpicGroomDouble(Mother.PLAN)
-    this.branch = new EpicBranchDouble()
+    this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? new PullRequestsDouble(Mother.PULL_REQUEST)
     this.fingerprint = Mother.FINGERPRINT
   }
@@ -276,6 +290,39 @@ describe('ReadEpicGroom', () => {
     expect(read.issues).toEqual([])
     expect(flow.issues.asked).toEqual([])
     expect(flow.groom.asked).toEqual([])
+  })
+
+  it('a frozen spec the session edited and nobody committed is resliced, and the pull request is never asked for', async () => {
+    const frozen = Mother.frozen()
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      published: new PublishedSpecsDouble(false),
+      branch: EpicBranchDouble.withTheSpecEdited(),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.RESLICED)
+    expect(flow.branch.askedCommitted).toEqual([{ root: Mother.ROOT, paths: [frozen.path] }])
+    expect(flow.pullRequests.asked).toEqual([])
+    expect(read.pullRequest).toBeNull()
+    expect(read.plan).toBeNull()
+    expect(read.planFingerprint).toBeNull()
+    expect(read.issues).toEqual([])
+    expect(flow.issues.asked).toEqual([])
+    expect(flow.groom.asked).toEqual([])
+  })
+
+  it('a frozen spec whose edit is already committed still waits for its pull request to merge', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      published: new PublishedSpecsDouble(false),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
+    expect(read.pullRequest).toEqual(Mother.PULL_REQUEST)
   })
 
   it('a wait whose branch has no open pull request is still a wait, with nothing to link', async () => {

@@ -59,6 +59,7 @@ export class GroomEpic {
   static readonly REFUSED: readonly EpicGroomStateValue[] = Object.freeze([
     EpicGroomState.NO_SPEC,
     EpicGroomState.DRAFT,
+    EpicGroomState.RESLICED,
     EpicGroomState.AWAITING_PUBLICATION,
     EpicGroomState.ISSUES_UNCERTAIN,
   ])

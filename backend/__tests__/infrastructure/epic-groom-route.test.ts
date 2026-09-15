@@ -236,6 +236,18 @@ class Mother {
     })
   }
 
+  static reslicedRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.RESLICED, spec: null, milestone: null, plan: null, planFingerprint: null, issues: [],
+    })
+  }
+
+  static reslicedGroomed(): EpicGroomed {
+    return new EpicGroomed({
+      state: EpicGroomState.RESLICED, milestone: null, plan: null, issues: [], staleness: PlanStaleness.FRESH,
+    })
+  }
+
   static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
 
   static issuesUncertainRead(): EpicGroomRead {
@@ -549,6 +561,34 @@ describe('EpicGroomRoute', () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ status: 'awaiting-publication', pullRequest: null })
+  })
+
+  it('a resliced read answers the state and the gate key, and names no plan to press over', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.reslicedRead())
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'resliced', key: Keys.MINTED })
+  })
+
+  it('a press over a resliced spec is refused as spec-resliced and names what has to happen first', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.neverAsked()
+    const groom = GroomEpicSpy.answering(Mother.reslicedGroomed())
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, read, groom, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'spec-resliced',
+      detail: 'the slicing changed in the coordinating session: publish it and merge it before the groom runs',
+    })
   })
 
   it('an uncertain read answers the milestone and why, and offers no key to press', async () => {

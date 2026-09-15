@@ -22,6 +22,7 @@ export const EpicGroomOutcome = Object.freeze({
   NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_NOT_FROZEN: 'spec-not-frozen',
+  SPEC_RESLICED: 'spec-resliced',
   SPEC_NOT_PUBLISHED: 'spec-not-published',
   GROOM_IN_PROGRESS: 'groom-in-progress',
   PLAN_CHANGED: 'plan-changed',
@@ -38,6 +39,8 @@ export class EpicGroomRefusal {
   static readonly #SPEC_NOT_FROZEN_DETAIL = 'the spec is not frozen: gate 1 first'
   static readonly #SPEC_NOT_PUBLISHED_DETAIL =
     'the spec is frozen, but its committed copy is not yet readable on the default branch'
+  static readonly #SPEC_RESLICED_DETAIL =
+    'the slicing changed in the coordinating session: publish it and merge it before the groom runs'
 
   static readonly #BY_STATE: Projection<EpicGroomRefusalOf, EpicGroomStateValue> =
     new Projection<EpicGroomRefusalOf, EpicGroomStateValue>('refusal', [
@@ -50,6 +53,11 @@ export class EpicGroomRefusal {
         status: EpicGroomRefusal.#STATUS,
         code: EpicGroomOutcome.SPEC_NOT_FROZEN,
         detail: EpicGroomRefusal.#SPEC_NOT_FROZEN_DETAIL,
+      })],
+      [EpicGroomState.RESLICED, () => new Refusal({
+        status: EpicGroomRefusal.#STATUS,
+        code: EpicGroomOutcome.SPEC_RESLICED,
+        detail: EpicGroomRefusal.#SPEC_RESLICED_DETAIL,
       })],
       [EpicGroomState.AWAITING_PUBLICATION, () => new Refusal({
         status: EpicGroomRefusal.#STATUS,
@@ -171,6 +179,12 @@ export class EpicGroomRoute {
         return
       case EpicGroomState.DRAFT:
         Answer.send(response, 200, { status: EpicGroomState.DRAFT })
+        return
+      case EpicGroomState.RESLICED:
+        Answer.send(response, 200, {
+          status: EpicGroomState.RESLICED,
+          ...(minted === null ? {} : { key: minted }),
+        })
         return
       case EpicGroomState.AWAITING_PUBLICATION:
         Answer.send(response, 200, {

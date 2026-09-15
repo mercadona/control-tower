@@ -111,6 +111,13 @@ class Mother {
     })
   }
 
+  static reslicedRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.RESLICED, spec: Mother.frozenSpec(), milestone: null, plan: null,
+      planFingerprint: null, issues: [],
+    })
+  }
+
   static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
 
   static issuesUncertainRead(): EpicGroomRead {
@@ -190,6 +197,16 @@ describe('GroomEpic', () => {
     const groomed = await flow.run()
 
     expect(groomed.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
+    expect(flow.groom.runAsked).toEqual([])
+  })
+
+  it('pressing the groom over a resliced spec is refused with the reason and nothing is groomed', async () => {
+    const flow = Flow.readingOnce(Mother.reslicedRead())
+
+    const groomed = await flow.run()
+
+    expect(groomed.state).toBe(EpicGroomState.RESLICED)
+    expect(groomed.staleness).toBe(PlanStaleness.FRESH)
     expect(flow.groom.runAsked).toEqual([])
   })
 

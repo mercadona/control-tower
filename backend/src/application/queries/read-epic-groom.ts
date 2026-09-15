@@ -27,6 +27,7 @@ export class ReadEpicGroomParams {
 export const EpicGroomState = Object.freeze({
   NO_SPEC: 'no-spec',
   DRAFT: 'draft',
+  RESLICED: 'resliced',
   AWAITING_PUBLICATION: 'awaiting-publication',
   ISSUES_UNCERTAIN: 'issues-uncertain',
   GROOMABLE: 'groomable',
@@ -111,12 +112,7 @@ export class ReadEpicGroom {
     }
 
     const isPublished = await this.published.holds({ repository: params.repository, spec })
-    if (!isPublished) {
-      return new EpicGroomRead({
-        state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
-        issues: [], pullRequest: await this.#awaitedPullRequest(params),
-      })
-    }
+    if (!isPublished) return await this.#unpublished(params, spec)
 
     const milestone = spec.title()!
     const holding = await this.issues.listOf({ repository: params.repository, milestone })
@@ -146,6 +142,19 @@ export class ReadEpicGroom {
       ? EpicGroomState.GROOMED
       : EpicGroomState.AUTHORISED
     return new EpicGroomRead({ state, spec, milestone, plan, planFingerprint, issues: holding.issues })
+  }
+
+  async #unpublished(params: ReadEpicGroomParams, spec: EpicSpec): Promise<EpicGroomRead> {
+    if (!(await this.branch.committed({ root: params.root, paths: [spec.path] }))) {
+      return new EpicGroomRead({
+        state: EpicGroomState.RESLICED, spec, milestone: null, plan: null, planFingerprint: null, issues: [],
+      })
+    }
+
+    return new EpicGroomRead({
+      state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
+      issues: [], pullRequest: await this.#awaitedPullRequest(params),
+    })
   }
 
   async #awaitedPullRequest(params: ReadEpicGroomParams): Promise<ReviewedPullRequest | null> {
