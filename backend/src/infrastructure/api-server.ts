@@ -15,6 +15,7 @@ import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
 import { SessionStreamRoute } from './session-stream-route.ts'
 import { SessionInputRoute } from './session-input-route.ts'
+import { SessionResizeRoute } from './session-resize-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
@@ -37,6 +38,7 @@ import type { SurveyExternalTools } from '../application/queries/survey-external
 import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
+import type { ResizeSession } from '../application/actions/resize-session.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
 import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
@@ -84,6 +86,7 @@ export type ApiCollaborators = {
   liveSessions?: LiveSessions | null,
   watchLiveSession?: WatchLiveSession | null,
   typeIntoSession?: TypeIntoSession | null,
+  resizeSession?: ResizeSession | null,
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
@@ -144,6 +147,7 @@ export class ApiServer {
   readonly liveSessions: LiveSessions | null | undefined
   readonly watchLiveSession: WatchLiveSession | null | undefined
   readonly typeIntoSession: TypeIntoSession | null | undefined
+  readonly resizeSession: ResizeSession | null | undefined
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
@@ -163,7 +167,7 @@ export class ApiServer {
   constructor({
     port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
-    watchLiveSession, typeIntoSession, implementationStarts, recovery = null,
+    watchLiveSession, typeIntoSession, resizeSession, implementationStarts, recovery = null,
     openCoordinatingSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
@@ -182,6 +186,7 @@ export class ApiServer {
     this.liveSessions = liveSessions
     this.watchLiveSession = watchLiveSession
     this.typeIntoSession = typeIntoSession
+    this.resizeSession = resizeSession
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.openCoordinatingSession = openCoordinatingSession
@@ -274,6 +279,14 @@ export class ApiServer {
       SessionInputRoute.handledBy(this.liveSessions!, this.typeIntoSession!)
     )
     app.all(SessionInputRoute.PATH, SessionInputRoute.refuseOtherMethods)
+    app.post(
+      SessionResizeRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      SessionResizeRoute.handledBy(this.liveSessions!, this.resizeSession!)
+    )
+    app.all(SessionResizeRoute.PATH, SessionResizeRoute.refuseOtherMethods)
     app.post(
       CoordinatingSessionRoute.PATH,
       Browsers.turnAwayForeign,

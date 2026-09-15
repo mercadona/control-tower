@@ -67,6 +67,7 @@ import { SurveyExternalTools } from '../application/queries/survey-external-tool
 import { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import { TypeIntoSession } from '../application/actions/type-into-session.ts'
+import { ResizeSession } from '../application/actions/resize-session.ts'
 import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
@@ -581,6 +582,7 @@ class CtApi {
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
       typeIntoSession: new TypeIntoSession({ liveSessions }),
+      resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
       coordinatingSessions,
       readSpecFreeze,
