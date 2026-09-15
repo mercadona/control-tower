@@ -13,6 +13,7 @@ const FINDING: Record<string, string> = {
   'clarification-marker': 'Marcador de clarificación sin resolver',
   'hypothesis-absent': 'El spec no tiene sección «## Hipótesis»',
   'hypothesis-empty': 'La sección «## Hipótesis» está vacía',
+  'decision-without-provenance': 'Decisión congelada sin procedencia',
 }
 const FREEZE = 'Congelar el spec'
 const FREEZING = 'Congelando el spec'

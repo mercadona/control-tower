@@ -4,6 +4,11 @@ const ON = '2026-09-14'
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
 const MARKER_FINDING = { code: 'clarification-marker', line: 42, detail: '[NEEDS CLARIFICATION: which button?]' }
 const HYPOTHESIS_FINDING = { code: 'hypothesis-absent', line: null, detail: null }
+const PROVENANCE_FINDING = {
+  code: 'decision-without-provenance',
+  line: 13,
+  detail: '- **D-1 · la puerta** — un solo clic congela el spec.',
+}
 const NOT_FREEZABLE_DETAIL = 'the spec is not freezable: 2 finding(s) remain, the first on line 42'
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 1 answers only a request carrying the key the page was given'
 
@@ -28,6 +33,14 @@ const draftWithoutKey = () => ({
 const draftReady = () => ({
   status: 200,
   body: `{"status":"draft","spec":"${SPEC}","findings":[],"key":"${KEY}"}`,
+})
+
+const draftWithSourcelessDecision = () => ({
+  status: 200,
+  body:
+    `{"status":"draft","spec":"${SPEC}","findings":[` +
+    `{"code":"${PROVENANCE_FINDING.code}","line":${PROVENANCE_FINDING.line},"detail":${JSON.stringify(PROVENANCE_FINDING.detail)}}` +
+    `],"key":"${KEY}"}`,
 })
 
 const frozen = () => ({
@@ -67,11 +80,13 @@ export const SpecFreezeMother = {
   PULL_REQUEST,
   MARKER_FINDING,
   HYPOTHESIS_FINDING,
+  PROVENANCE_FINDING,
   NOT_FREEZABLE_DETAIL,
   NOT_FROM_THE_PAGE_DETAIL,
   none,
   noSpec,
   draftWithMarker,
+  draftWithSourcelessDecision,
   draftReady,
   draftWithoutKey,
   frozen,
