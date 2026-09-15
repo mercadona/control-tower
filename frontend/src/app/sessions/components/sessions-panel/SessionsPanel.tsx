@@ -3,12 +3,13 @@ import { SessionTerminal } from 'app/sessions/components/session-terminal'
 import { LiveSession } from 'app/sessions/Sessions.types'
 import { useLiveSessions } from 'app/sessions/useLiveSessions'
 import { Banner } from 'system-ui/banner'
-import { Button } from 'system-ui/button'
 import { Loading } from 'system-ui/loading'
+import { Tabs } from 'system-ui/tabs'
 import './SessionsPanel.css'
 
 const UNAVAILABLE_MESSAGE = 'No se pudo contactar con las sesiones en marcha'
 const NO_SESSIONS_MESSAGE = 'No hay ninguna sesión en marcha'
+const SESSIONS_TABLIST_LABEL = 'Sesiones abiertas'
 
 type SessionsPanelProps = { opened?: LiveSession | null }
 
@@ -35,25 +36,14 @@ export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactEleme
   }
 
   const chosen = state.sessions.find((session) => session.id === chosenId) ?? state.sessions[0]
+  const tabOptions = state.sessions.map((session) => ({ value: session.id, label: session.name }))
 
   return (
     <div className="sessions-panel">
-      {state.sessions.length > 1 && (
-        <ul className="sessions-panel__list">
-          {state.sessions.map((session) => (
-            <li key={session.id} className="sessions-panel__item">
-              <Button
-                variant={session.id === chosen.id ? 'primary' : 'secondary'}
-                aria-current={session.id === chosen.id ? 'true' : undefined}
-                onClick={() => setChosenId(session.id)}
-              >
-                {session.name}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <SessionTerminal session={chosen} onGone={refresh} />
+      <Tabs options={tabOptions} value={chosen.id} onChange={setChosenId} aria-label={SESSIONS_TABLIST_LABEL} />
+      <div role="tabpanel" aria-label={chosen.name}>
+        <SessionTerminal session={chosen} onGone={refresh} />
+      </div>
     </div>
   )
 }
