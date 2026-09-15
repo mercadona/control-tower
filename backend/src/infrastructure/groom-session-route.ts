@@ -1,0 +1,115 @@
+import type { Request, RequestHandler, Response } from 'express'
+import { Answer, Refusal } from './http.ts'
+import { Projection } from './projection.ts'
+import { GateKey } from './gate-key.ts'
+import { PlanCollapse } from './start-plan-route.ts'
+import { PlanFailure } from '../domain/exceptions.ts'
+import { GroomSessionOpening, OpenGroomSessionParams } from '../application/actions/open-groom-session.ts'
+import { HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation } from './coordinating-sessions.ts'
+import { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import type { CoordinatingSessions, OpeningReservationValue } from './coordinating-sessions.ts'
+import type { GroomSessionOpened, OpenGroomSession } from '../application/actions/open-groom-session.ts'
+
+export const GroomSessionOutcome = Object.freeze({
+  ACCEPTED: 'accepted',
+  NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
+  NO_COORDINATING_SESSION: 'no-coordinating-session',
+  NO_EPIC_SPEC: 'no-epic-spec',
+  ALREADY_LIVE: 'coordinating-session-already-live',
+  OPENING: 'coordinating-session-opening',
+} as const)
+
+export type GroomSessionOutcomeValue = (typeof GroomSessionOutcome)[keyof typeof GroomSessionOutcome]
+
+export class GroomSessionRefusal {
+  static readonly #BY_RESERVATION: Projection<Refusal, OpeningReservationValue> =
+    new Projection<Refusal, OpeningReservationValue>('refusal', [
+      [OpeningReservation.LIVE_HELD, new Refusal({
+        status: 409,
+        code: GroomSessionOutcome.ALREADY_LIVE,
+        detail: 'a coordinating conversation is already live: it has to end before the groom conversation opens',
+      })],
+      [OpeningReservation.OPENING_IN_PROGRESS, new Refusal({
+        status: 409,
+        code: GroomSessionOutcome.OPENING,
+        detail: 'a coordinating conversation is being opened: wait for it to be live and try again',
+      })],
+    ])
+
+  static of(reservation: OpeningReservationValue): Refusal {
+    return GroomSessionRefusal.#BY_RESERVATION.of(reservation)
+  }
+}
+
+export class GroomSessionRoute {
+  static readonly PATH = '/groom-session'
+  static readonly METHODS = 'POST'
+  static readonly STATUS = 'grooming'
+  static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
+  static readonly #NO_COORDINATING_SESSION_DETAIL =
+    'no coordinating session is held: there is no checkout to open the groom conversation in'
+  static readonly #NO_EPIC_SPEC_DETAIL = 'no execution spec exists in this checkout to talk about'
+
+  static opening(held: CoordinatingSessions, open: OpenGroomSession, key: GateKey): RequestHandler {
+    return async (request: Request, response: Response): Promise<void> => {
+      if (!key.holds(request.get(GateKey.HEADER))) {
+        Answer.refuse(response, 403, GroomSessionOutcome.NOT_FROM_THE_PAGE, GroomSessionRoute.#NOT_FROM_THE_PAGE_DETAIL)
+        return
+      }
+      const holding = held.held()
+      if (holding === null) {
+        Answer.refuse(
+          response, 400,
+          GroomSessionOutcome.NO_COORDINATING_SESSION, GroomSessionRoute.#NO_COORDINATING_SESSION_DETAIL
+        )
+        return
+      }
+      const reserved = held.reserve()
+      if (reserved.outcome !== OpeningReservation.RESERVED) {
+        Answer.refuseAs(response, GroomSessionRefusal.of(reserved.outcome))
+        return
+      }
+      await GroomSessionRoute.#accept(held, open, response, holding)
+    }
+  }
+
+  static async #accept(
+    held: CoordinatingSessions, open: OpenGroomSession, response: Response, holding: HeldCoordinatingSession
+  ): Promise<void> {
+    let opened: GroomSessionOpened
+    try {
+      opened = await open.execute(new OpenGroomSessionParams({
+        repository: holding.conversation.repository,
+        root: holding.conversation.root,
+      }))
+    } catch (cause) {
+      held.release()
+      if (!(cause instanceof PlanFailure)) throw cause
+      Answer.refuseAs(response, PlanCollapse.of(cause))
+      return
+    }
+    if (opened.outcome === GroomSessionOpening.NO_SPEC) {
+      held.release()
+      Answer.refuse(response, 400, GroomSessionOutcome.NO_EPIC_SPEC, GroomSessionRoute.#NO_EPIC_SPEC_DETAIL)
+      return
+    }
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.LIVE,
+      conversation: opened.conversation!,
+      session: opened.session!,
+      attention: SessionAttention.working(),
+    }))
+    Answer.send(response, 202, {
+      status: GroomSessionRoute.STATUS,
+      conversation: opened.conversation!.id.text,
+      repo: opened.conversation!.repository.text,
+      root: opened.conversation!.root.text,
+      session: { id: opened.session!.id, name: opened.session!.name },
+    })
+  }
+
+  static refuseOtherMethods(request: Request, response: Response): void {
+    response.setHeader('Allow', GroomSessionRoute.METHODS)
+    Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
+  }
+}

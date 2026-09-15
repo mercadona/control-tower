@@ -814,6 +814,49 @@ curl -s http://127.0.0.1:8787/coordinating-session
 
 ---
 
+## `POST /groom-session`
+
+Gate 2's way into the conversation. It opens the coordinating session in the
+**groom** phase: `PhasePrompt.groom` writes a prompt that invokes the plugin's
+own `control-tower-loop:ct-groom` skill, names the milestone and its frozen
+spec, and tells the session that the issues are not its to create and that a
+change to the slicing is an edit of §9 which this program publishes. No
+worktree is cut and no branch is created.
+
+**Request** — no body. The checkout and the repository are the ones the
+coordinating session this backend holds already names, so nothing is sent.
+The gate key travels in `x-gate-key`, exactly as gate 1's and gate 2's other
+buttons carry it.
+
+**202 Accepted**
+
+```json
+{"status":"grooming","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
+ "repo":"owner/name","root":"/repo/checkout",
+ "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
+```
+
+The opened conversation becomes the one `GET /coordinating-session` answers,
+live and `working`: there is one coordinating session and the groom phase takes
+its place, which is why a live conversation has to end before this door opens.
+
+**Refusals**
+
+| Status | `code` | When |
+|---|---|---|
+| 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
+| 400 | `no-coordinating-session` | nothing is held, so there is no checkout to open the conversation in |
+| 409 | `coordinating-session-already-live` | a conversation is live: it has to end first |
+| 409 | `coordinating-session-opening` | another opening is in flight |
+| 400 | `no-epic-spec` | no execution spec exists in this checkout to talk about |
+| 400 | `conversation-not-started` | `claude` could not be spawned in the checkout |
+
+```
+curl -s -X POST http://127.0.0.1:8787/groom-session -H 'x-gate-key: <key>'
+```
+
+---
+
 ## `POST /session-hooks`
 
 Where Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks

@@ -17,6 +17,7 @@ import { SessionStreamRoute } from './session-stream-route.ts'
 import { SessionInputRoute } from './session-input-route.ts'
 import { SessionResizeRoute } from './session-resize-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
+import { GroomSessionRoute } from './groom-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
 import { EpicGroomRoute } from './epic-groom-route.ts'
@@ -24,6 +25,7 @@ import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
 import type { WorkInFlight } from './work-in-flight.ts'
@@ -90,6 +92,7 @@ export type ApiCollaborators = {
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
+  openGroomSession?: OpenGroomSession | null,
   coordinatingSessions?: CoordinatingSessions | null,
   readSpecFreeze?: ReadSpecFreeze | null,
   freezeSpec?: FreezeSpec | null,
@@ -151,6 +154,7 @@ export class ApiServer {
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
+  readonly openGroomSession: OpenGroomSession | null | undefined
   readonly coordinatingSessions: CoordinatingSessions | null | undefined
   readonly readSpecFreeze: ReadSpecFreeze | null | undefined
   readonly freezeSpec: FreezeSpec | null | undefined
@@ -168,7 +172,7 @@ export class ApiServer {
     port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, implementationStarts, recovery = null,
-    openCoordinatingSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
+    openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
   }: ApiCollaborators) {
@@ -190,6 +194,7 @@ export class ApiServer {
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.openCoordinatingSession = openCoordinatingSession
+    this.openGroomSession = openGroomSession
     this.coordinatingSessions = coordinatingSessions
     this.readSpecFreeze = readSpecFreeze
     this.freezeSpec = freezeSpec
@@ -300,6 +305,12 @@ export class ApiServer {
       CoordinatingSessionRoute.reading(this.coordinatingSessions!)
     )
     app.all(CoordinatingSessionRoute.PATH, CoordinatingSessionRoute.refuseOtherMethods)
+    app.post(
+      GroomSessionRoute.PATH,
+      Browsers.turnAwayForeign,
+      GroomSessionRoute.opening(this.coordinatingSessions!, this.openGroomSession!, this.gateKey!)
+    )
+    app.all(GroomSessionRoute.PATH, GroomSessionRoute.refuseOtherMethods)
     app.post(
       SessionHooksRoute.PATH,
       Browsers.turnAwayForeign,

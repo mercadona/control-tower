@@ -48,6 +48,7 @@ import { CtGroomEpic } from './ct-groom-epic.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
@@ -532,6 +533,12 @@ class CtApi {
       records: conversationRecords,
     })
     const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
+    const openGroomSession = new OpenGroomSession({
+      specs: epicSpecs,
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+    })
     const epicBranch = new GitEpicBranch({ run: git })
     const gateKey = new GateKey({ random: randomBytes })
     const readSpecFreeze = new ReadSpecFreeze({ specs: epicSpecs, branch: epicBranch, pullRequests })
@@ -590,6 +597,7 @@ class CtApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
+      openGroomSession,
       coordinatingSessions,
       readSpecFreeze,
       freezeSpec,
