@@ -90,6 +90,8 @@ describe('ClaudeConversations against a real shell', () => {
       conversation.id.text,
       '--permission-mode',
       ClaudeConversations.PERMISSION_MODE,
+      '--model',
+      ClaudeConversations.MODEL,
       `Read the file at ${Governed.PROMPT_PATH} and do exactly what it says.`,
     ])
     await rm(path, { recursive: true, force: true })
