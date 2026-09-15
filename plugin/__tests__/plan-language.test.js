@@ -53,6 +53,10 @@ class Plan {
     return `${marker} ${text}`
   }
 
+  static withACodeBlockSaying(text) {
+    return ['Contract (src/a.js):', `${Plan.#FENCE}js`, text, Plan.#FENCE].join('\n')
+  }
+
   static #words(n, tail = '.') {
     return `${Array.from({ length: n }, (_, i) => `word${i}`).join(' ')}${tail}`
   }
@@ -152,5 +156,40 @@ describe('the objective of a task', () => {
   it('asks the other markers for nothing', () => {
     const tests = Plan.withATaskMarkerSaying('**Tests:**', 'One lands. Another lands.')
     expect(Violations.about(tests, 'one-sentence')).toEqual([])
+  })
+})
+
+describe('the words the standard does not approve', () => {
+  it('rejects a single word and names its replacement', () => {
+    const [violation] = Violations.about('The task utilizes the barrel.', 'word')
+    expect(violation).toContain('"utilize" is not an approved word')
+    expect(violation).toContain('Write "use"')
+  })
+
+  it('catches the inflections of a single word', () => {
+    expect(Violations.about('The gate requires a plan.', 'word')).toHaveLength(1)
+    expect(Violations.about('The gate required a plan.', 'word')).toHaveLength(1)
+  })
+
+  it('rejects a phrase', () => {
+    expect(Violations.about('Read the issue prior to the plan.', 'word')[0]).toContain('Write "before"')
+    expect(Violations.about('Read the issue in order to plan.', 'word')[0]).toContain('Write "to"')
+  })
+
+  it('never looks inside backticks', () => {
+    expect(Violations.about('The flag is `--utilize`.', 'word')).toEqual([])
+  })
+
+  it('never looks inside a code block', () => {
+    expect(Violations.about(Plan.withACodeBlockSaying('const utilize = 1'), 'word')).toEqual([])
+  })
+
+  it('leaves the words a contract fixes alone', () => {
+    expect(Violations.about('**Files:** `src/a.js` (create), `src/b.js` (modify).', 'word')).toEqual([])
+  })
+
+  it('carries 48 entries, each with its replacement', () => {
+    expect(PlanLanguage.NON_APPROVED).toHaveLength(48)
+    expect(PlanLanguage.NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
   })
 })

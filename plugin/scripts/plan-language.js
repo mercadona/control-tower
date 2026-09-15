@@ -3,6 +3,63 @@ export class PlanLanguage {
   static DESCRIPTIVE_WORDS = 25
   static PARAGRAPH_SENTENCES = 6
 
+  static NON_APPROVED = [
+    ['utilize', 'use'],
+    ['utilise', 'use'],
+    ['prior to', 'before'],
+    ['subsequent to', 'after'],
+    ['in order to', 'to'],
+    ['due to', 'because of'],
+    ['as well as', 'and'],
+    ['via', 'with'],
+    ['ensure', 'make sure'],
+    ['obtain', 'get'],
+    ['commence', 'start'],
+    ['terminate', 'stop'],
+    ['attempt', 'try'],
+    ['assist', 'help'],
+    ['provide', 'give'],
+    ['approximately', 'about'],
+    ['additional', 'more'],
+    ['numerous', 'many'],
+    ['however', 'but'],
+    ['therefore', 'so'],
+    ['thus', 'so'],
+    ['hence', 'so'],
+    ['whilst', 'while'],
+    ['regarding', 'about'],
+    ['concerning', 'about'],
+    ['in terms of', 'for'],
+    ['with respect to', 'about'],
+    ['with regard to', 'about'],
+    ['leverage', 'use'],
+    ['facilitate', 'help'],
+    ['initiate', 'start'],
+    ['finalize', 'finish'],
+    ['indicate', 'show'],
+    ['require', 'need'],
+    ['comprise', 'have'],
+    ['in the event that', 'if'],
+    ['at this point in time', 'now'],
+    ['a number of', 'some'],
+    ['the majority of', 'most'],
+    ['it should be noted that', 'remove it and say the thing'],
+    ['please note', 'remove it and say the thing'],
+    ['e.g.', 'for example'],
+    ['i.e.', 'that is'],
+    ['etc.', 'name the items'],
+    ['alternatively', 'or'],
+    ['furthermore', 'also'],
+    ['moreover', 'also'],
+    ['nevertheless', 'but'],
+  ]
+
+  static #MATCHERS = PlanLanguage.NON_APPROVED.map(([phrase, replacement]) => ({
+    re: PlanLanguage.#matcherFor(phrase),
+    phrase,
+    replacement,
+  }))
+
   static #HEADING = /^#{1,6} /
   static #ROLE_LABEL = /^(?:Current state|Contract|Call site|Final text) \(/
   static #TABLE_SEPARATOR = /^\|[\s:|-]+\|$/
@@ -48,6 +105,11 @@ export class PlanLanguage {
         out.push(
           `line ${line}: one-sentence — **Objective:** carries ${sentences.length} sentences and it takes one. Say the observable behaviour of the commit, and nothing else.`,
         )
+      }
+      for (const { re, phrase, replacement } of PlanLanguage.#MATCHERS) {
+        if (re.test(text)) {
+          out.push(`line ${line}: word — "${phrase}" is not an approved word. Write "${replacement}".`)
+        }
       }
     }
     return out
@@ -124,5 +186,15 @@ export class PlanLanguage {
 
   static #shorten(sentence) {
     return sentence.length <= 60 ? sentence : `${sentence.slice(0, 57)}...`
+  }
+
+  static #escapeRe(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  static #matcherFor(phrase) {
+    const body = PlanLanguage.#escapeRe(phrase).replace(/ /g, '\\s+')
+    const inflections = phrase.includes(' ') ? '' : '(?:s|es|d|ed|ing)?'
+    return new RegExp(`(?<![\\w-])${body}${inflections}(?![\\w-])`, 'i')
   }
 }
