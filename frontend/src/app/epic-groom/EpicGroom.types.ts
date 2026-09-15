@@ -8,7 +8,7 @@ export type EpicGroomOutcome =
       planFingerprint: string; key: string | null;
     }
   | {
-      kind: 'partially-groomed'; milestone: string; plan: GroomPlanIssue[]; home: string;
+      kind: 'partially-groomed'; milestone: string; plan: GroomPlanIssue[];
       planFingerprint: string; issues: EpicIssue[]; key: string | null;
     }
   | { kind: 'groomed'; milestone: string; issues: EpicIssue[]; key: string | null }

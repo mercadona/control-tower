@@ -79,7 +79,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     isEpicIssues(body.issues)
   ) {
     return {
-      kind: 'partially-groomed', milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
+      kind: 'partially-groomed', milestone: body.milestone, plan: body.plan.issues,
       planFingerprint: body.planFingerprint, issues: body.issues, key: keyOf(body),
     }
   }

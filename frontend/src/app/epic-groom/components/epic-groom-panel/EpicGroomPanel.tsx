@@ -139,7 +139,7 @@ const EpicGroomPanel = () => {
   }
 
   if (acted === null && read.kind === 'partially-groomed') {
-    const { milestone, plan, home, issues, planFingerprint } = read
+    const { milestone, plan, issues, planFingerprint } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>
