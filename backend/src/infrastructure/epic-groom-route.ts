@@ -173,7 +173,10 @@ export class EpicGroomRoute {
         Answer.send(response, 200, { status: EpicGroomState.DRAFT })
         return
       case EpicGroomState.AWAITING_PUBLICATION:
-        Answer.send(response, 200, { status: EpicGroomState.AWAITING_PUBLICATION })
+        Answer.send(response, 200, {
+          status: EpicGroomState.AWAITING_PUBLICATION,
+          pullRequest: outcome.pullRequest,
+        })
         return
       case EpicGroomState.ISSUES_UNCERTAIN:
         Answer.send(response, 200, {

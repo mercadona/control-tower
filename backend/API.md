@@ -1064,8 +1064,15 @@ The spec is frozen, but its committed copy is not yet readable on the default br
 request gate 1 opened has to merge first:
 
 ```json
-{"status":"awaiting-publication"}
+{"status":"awaiting-publication",
+ "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
+
+`pullRequest` is the open pull request of the branch the checkout sits on, read with the same `gh pr
+list` `POST /spec-freeze` uses, so the link survives a page reload long after the freeze's own answer
+is gone. It is `null` when no open pull request can be found — the wait is the same wait, with
+nothing to link, and never an error. This is the only read that runs `git rev-parse` and `gh pr
+list`: the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a

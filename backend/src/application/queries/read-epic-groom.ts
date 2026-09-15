@@ -4,10 +4,14 @@ import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { PublishedSpecs } from '../../domain/ports/published-specs.ts'
 import type { EpicIssues } from '../../domain/ports/epic-issues.ts'
 import type { EpicGroom } from '../../domain/ports/epic-groom.ts'
+import type { EpicBranch } from '../../domain/ports/epic-branch.ts'
+import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { PlanFingerprint } from '../../domain/policies/plan-fingerprint.ts'
+
+type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 export class ReadEpicGroomParams {
   readonly root: CheckoutRoot
@@ -41,8 +45,9 @@ export class EpicGroomRead {
   readonly planFingerprint: string | null
   readonly issues: readonly EpicIssue[]
   readonly reason: string | null
+  readonly pullRequest: ReviewedPullRequest | null
 
-  constructor({ state, spec, milestone, plan, planFingerprint, issues, reason = null }: {
+  constructor({ state, spec, milestone, plan, planFingerprint, issues, reason = null, pullRequest = null }: {
     state: EpicGroomStateValue,
     spec: EpicSpec | null,
     milestone: string | null,
@@ -50,6 +55,7 @@ export class EpicGroomRead {
     planFingerprint: string | null,
     issues: readonly EpicIssue[],
     reason?: string | null,
+    pullRequest?: ReviewedPullRequest | null,
   }) {
     this.state = state
     this.spec = spec
@@ -58,6 +64,7 @@ export class EpicGroomRead {
     this.planFingerprint = planFingerprint
     this.issues = issues
     this.reason = reason
+    this.pullRequest = pullRequest
     Object.freeze(this)
   }
 }
@@ -67,15 +74,25 @@ export class ReadEpicGroom {
   readonly published: PublishedSpecs
   readonly issues: EpicIssues
   readonly groom: EpicGroom
+  readonly branch: EpicBranch
+  readonly pullRequests: PullRequests
   readonly fingerprint: PlanFingerprint
 
-  constructor({ specs, published, issues, groom, fingerprint }: {
-    specs: EpicSpecs, published: PublishedSpecs, issues: EpicIssues, groom: EpicGroom, fingerprint: PlanFingerprint,
+  constructor({ specs, published, issues, groom, branch, pullRequests, fingerprint }: {
+    specs: EpicSpecs,
+    published: PublishedSpecs,
+    issues: EpicIssues,
+    groom: EpicGroom,
+    branch: EpicBranch,
+    pullRequests: PullRequests,
+    fingerprint: PlanFingerprint,
   }) {
     this.specs = specs
     this.published = published
     this.issues = issues
     this.groom = groom
+    this.branch = branch
+    this.pullRequests = pullRequests
     this.fingerprint = fingerprint
   }
 
@@ -97,7 +114,7 @@ export class ReadEpicGroom {
     if (!isPublished) {
       return new EpicGroomRead({
         state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
-        issues: [],
+        issues: [], pullRequest: await this.#awaitedPullRequest(params),
       })
     }
 
@@ -129,6 +146,12 @@ export class ReadEpicGroom {
       ? EpicGroomState.GROOMED
       : EpicGroomState.AUTHORISED
     return new EpicGroomRead({ state, spec, milestone, plan, planFingerprint, issues: holding.issues })
+  }
+
+  async #awaitedPullRequest(params: ReadEpicGroomParams): Promise<ReviewedPullRequest | null> {
+    const branch = await this.branch.current(params.root)
+
+    return await this.pullRequests.openOfBranch({ branch, repository: params.repository })
   }
 
   static #isPartiallyGroomed(plan: GroomPlan, holding: readonly EpicIssue[]): boolean {

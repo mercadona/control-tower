@@ -5,6 +5,8 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
@@ -21,7 +23,7 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
   constructor(answers: EpicGroomRead[]) {
     super({
       specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
-      fingerprint: Mother.FINGERPRINT,
+      branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
     })
     this.answers = answers
     this.asked = []
