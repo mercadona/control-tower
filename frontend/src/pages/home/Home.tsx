@@ -4,15 +4,14 @@ import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
 import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
-import { EpicGroomPanel } from 'app/epic-groom/components/epic-groom-panel'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
+import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { LiveSession } from 'app/sessions/Sessions.types'
-import { SpecFreezePanel } from 'app/spec-freeze/components/spec-freeze-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -478,9 +477,7 @@ const Home = () => {
             )}
           </section>
 
-          <SpecFreezePanel />
-
-          <EpicGroomPanel />
+          <GateSequence />
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">

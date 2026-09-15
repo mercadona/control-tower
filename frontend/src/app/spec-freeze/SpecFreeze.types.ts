@@ -14,3 +14,8 @@ export type FreezeAskOutcome =
   | { kind: 'frozen'; on: string; pullRequest: PullRequestRef }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'backend-unreachable' }
+
+export type SpecFreezeGateSummary =
+  | { kind: 'hidden' }
+  | { kind: 'active' }
+  | { kind: 'frozen'; on: string | null; pullRequest: PullRequestRef | null }

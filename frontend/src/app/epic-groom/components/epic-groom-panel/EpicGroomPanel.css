@@ -1,3 +1,8 @@
+.epic-groom-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .epic-groom-panel__milestone {
   margin: 0;
   font-weight: 600;

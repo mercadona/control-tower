@@ -391,7 +391,7 @@ class CtApi {
           conversation: recovered.conversation!,
           session: null,
           attention: null,
-        }))
+        }), recovered.timeline)
         stderr(`coordinating session ${recovered.conversation!.id.text}: claude code no longer holds it, nothing was resumed\n`)
         return
       case RecoveredConversation.LIVE:
@@ -400,7 +400,7 @@ class CtApi {
           conversation: recovered.conversation!,
           session: recovered.session!,
           attention: SessionAttention.working(),
-        }))
+        }), recovered.timeline)
         stderr(`coordinating session ${recovered.conversation!.id.text}: resumed\n`)
         return
       default: {
@@ -514,12 +514,17 @@ class CtApi {
     const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
     const conversationRecords = new DiskConversationRecords({
       read: Disk.read,
-      write: Disk.write,
+      write: Disk.atomicWrite,
       root: asked.stateRoot,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
     })
     const coordinatingSessions = new CoordinatingSessions({
       liveSessions,
       stderr: (line) => process.stderr.write(line),
+      records: conversationRecords,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
     })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
@@ -532,6 +537,9 @@ class CtApi {
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+      stderr: (line) => process.stderr.write(line),
     })
     const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
