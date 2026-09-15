@@ -127,12 +127,14 @@ the groom and the authorisation. `GET /epic-groom` polls the same checkout
 `groomed` or `authorised`, and answers one of the seven states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
 already says what is missing; `awaiting-publication` says the frozen spec is
-waiting in a pull request the person has to merge, and links that pull request
-when the read names one; `groomable` shows the milestone and the dry run's
-product — the issues the groom would create, ordered and labelled, before
-anything is created; `groomed` shows the issues the milestone already holds and
-offers the authorisation; `authorised` shows them all promoted, with nothing
-left to press. **Ejecutar el groom** calls
+waiting in a pull request the person has to merge and links it, or — when the
+read found no open pull request for the branch — that the spec is still
+unpublished and none was found, which is a wait to watch rather than a merge to
+press; `groomable` shows the milestone and the dry run's product — the issues the
+groom would create, ordered and labelled, before anything is created; `groomed`
+shows the issues the milestone already holds and offers the authorisation;
+`authorised` shows them all promoted, with nothing left to press.
+**Ejecutar el groom** calls
 `POST /epic-groom` and **Autorizar el trabajo** calls `POST /epic-promotion`,
 each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
 proxy that strips `Origin` for `/spec-freeze` does it for both, so neither

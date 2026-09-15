@@ -1078,9 +1078,11 @@ request gate 1 opened has to merge first:
 
 `pullRequest` is the open pull request of the branch the checkout sits on, read with the same `gh pr
 list` `POST /spec-freeze` uses, so the link survives a page reload long after the freeze's own answer
-is gone. It is `null` when no open pull request can be found — the wait is the same wait, with
-nothing to link, and never an error. This is the only read that runs `git rev-parse` and `gh pr
-list`: the other eight shapes ask neither.
+is gone. It is `null` when no open pull request can be found, and the page says a different thing for
+that case — the spec is still unpublished and no open pull request was found for its branch, rather
+than asking for a merge with nothing to merge. Either way it is a wait, never an error: the creation
+may have failed after the commit and the push, or the pull request may have been closed unmerged. This
+is the only read that runs `git rev-parse` and `gh pr list`: the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a

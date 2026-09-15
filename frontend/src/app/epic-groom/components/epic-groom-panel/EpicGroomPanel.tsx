@@ -19,7 +19,9 @@ const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const ISSUES_UNCERTAIN_TITLE = 'No se ha podido leer completa la lista de issues del epic'
-const AWAITING_PUBLICATION = 'El spec congelado espera en un pull request: mergéalo para abrir el groom.'
+const AWAITING_MERGE = 'El spec congelado espera en un pull request: mergéalo para abrir el groom.'
+const AWAITING_WITHOUT_PULL_REQUEST =
+  'El spec congelado sigue sin publicar y no se ha encontrado ningún pull request abierto para su rama.'
 const PULL_REQUEST = 'Pull request'
 
 const NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
@@ -72,7 +74,9 @@ const EpicGroomPanel = () => {
     const { pullRequest } = read
     return (
       <Panel heading={HEADING}>
-        <p className="epic-groom-panel__awaiting">{AWAITING_PUBLICATION}</p>
+        <p className="epic-groom-panel__awaiting">
+          {pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}
+        </p>
         {pullRequest !== null && (
           <a className="epic-groom-panel__pull-request" href={pullRequest.url}>
             {`${PULL_REQUEST} #${pullRequest.number}`}
