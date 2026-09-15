@@ -39,7 +39,7 @@
 > **Landed with a correction — read this before the steps.** The steps below prescribe a module of
 > free functions with a prose banner, and that shape is wrong: `style.md` denies a NEW module the
 > declared-debt exemption, and every module created in `plugin/scripts/` this September is a class
-> with no comments. The task shipped in two commits: `1b2d06c` carries the logic, and `efaf699`
+> with no comments. The task shipped in two commits: `e1b1f4a` carries the logic, and `96cbcac`
 > reshapes it into `export class PlanLanguage` in `plugin/scripts/plan-language.js`, with
 > `plugin/__tests__/plan-language.test.js` as its test. **The logic below is binding and landed
 > byte for byte. The shape is not — the shape is the last bullet of the Global Constraints.** Read
