@@ -927,7 +927,8 @@ labels are on screen and no request has been posted. Its boundary pair is
 `pressing the authorisation sends the key and says the work is authorised`,
 `a refused groom is shown with the words the program printed`,
 `without a key the buttons stay disabled and it says where the gate opens from`,
-`there is nothing to show while gate 1 has not been pressed`.
+`there is nothing to show while gate 1 has not been pressed`,
+`a promotion refused after a successful groom keeps the groomed issues on screen`.
 
 **Verification:**
 
