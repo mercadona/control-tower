@@ -239,7 +239,16 @@ the repo moves to the organisation:
   `4300308`: same 390/48 px column, 72 px header, the `sidebar-right` glyph in a
   tertiary 40 px `Button`, `aria-expanded` + `aria-controls`, a body that is
   `hidden` when folded, and the width transition switched off under
-  `prefers-reduced-motion`.
+  `prefers-reduced-motion`. The `tabs` one traces
+  `packages/logistics-ui/src/components/Tabs` at `4d946b4`: the ARIA tabs
+  pattern (`tablist` / `tab`, one tab stop for the whole bar, `ArrowLeft` /
+  `ArrowRight` / `Home` / `End` walking it with disabled tabs skipped), the
+  underlined active tab in `--foreground-primary` against
+  `--foreground-secondary`, and the label-ghost technique that reserves the
+  active tab's width so the bar does not shift when the selection moves.
+  Upstream's `focus-visible` outline reaches for `--border-brand`, which the
+  vendored theme does not carry; the mirror uses `--border-brand-primary`
+  instead, the closest token that exists.
 - The tokens live under `[data-ds='logistics']`; the `<html>` carries that
   attribute and `data-theme`, which `Theme.followSystemPreference()` sets from
   the system preference (light or dark) and keeps following if it changes.

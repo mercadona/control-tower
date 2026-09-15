@@ -37,24 +37,24 @@ describe('SessionsPanel', () => {
     vi.unstubAllGlobals()
   })
 
-  it('the live sessions are listed by their names', async () => {
+  it('the live sessions are listed by their names as tabs', async () => {
     vi.stubGlobal('fetch', answering(TWO_SESSIONS))
 
     render(<SessionsPanel />)
 
-    expect(await screen.findByRole('button', { name: 'zsh' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'zsh' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'bash' })).toBeInTheDocument()
+    expect(screen.getByRole('tablist')).toBeInTheDocument()
     expect(screen.getByLabelText('Terminal de la sesión')).toBeInTheDocument()
   })
 
-  it('a single session shows no chooser since there is nothing to choose', async () => {
+  it('a single session still shows the tab bar naming that one session', async () => {
     vi.stubGlobal('fetch', answering(ZSH_ALONE))
 
     render(<SessionsPanel />)
 
-    await screen.findByRole('region', { name: 'Terminal de la sesión' })
-
-    expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'zsh' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
   })
 
   it('the first session is the one shown', async () => {
@@ -62,30 +62,43 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel />)
 
-    await screen.findByRole('button', { name: 'zsh' })
+    await screen.findByRole('tab', { name: 'zsh' })
 
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/a1/stream'))
   })
 
-  it('choosing another session shows that one', async () => {
+  it('choosing another session tab shows that session', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', answering(TWO_SESSIONS))
 
     render(<SessionsPanel />)
 
-    await screen.findByRole('button', { name: 'zsh' })
-    await user.click(screen.getByRole('button', { name: 'bash' }))
+    await screen.findByRole('tab', { name: 'zsh' })
+    await user.click(screen.getByRole('tab', { name: 'bash' }))
 
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
 
-  it('the chosen session is named as chosen for a screen reader', async () => {
+  it('the chosen session is the only tab marked selected', async () => {
     vi.stubGlobal('fetch', answering(TWO_SESSIONS))
 
     render(<SessionsPanel />)
 
-    expect(await screen.findByRole('button', { name: 'zsh' })).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('button', { name: 'bash' })).not.toHaveAttribute('aria-current')
+    expect(await screen.findByRole('tab', { name: 'zsh' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'bash' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('walking the tab bar with an arrow key switches to the session under it', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', answering(TWO_SESSIONS))
+
+    render(<SessionsPanel />)
+
+    await user.click(await screen.findByRole('tab', { name: 'zsh' }))
+    await user.keyboard('{ArrowRight}')
+
+    expect(screen.getByRole('tab', { name: 'bash' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
 
   it('no live session is said out loud instead of an empty box', async () => {
@@ -106,20 +119,21 @@ describe('SessionsPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con las sesiones en marcha')
   })
 
-  it('a session that reports itself gone leaves no chooser when only one session remains', async () => {
+  it('a session that reports itself gone leaves the tab bar naming only the one that remains', async () => {
     vi.stubGlobal('fetch', answeringInTurn([TWO_SESSIONS, ONE_SESSION]))
 
     render(<SessionsPanel />)
 
-    await screen.findByRole('button', { name: 'zsh' })
+    await screen.findByRole('tab', { name: 'zsh' })
     const stream = await waitFor(() => FakeEventSource.last())
     stream.refuseBeforeOpen()
 
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
-    expect(screen.queryByRole('list')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+    expect(screen.getByRole('tab', { name: 'bash' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('the session the page just opened is fetched again and shown as chosen', async () => {
+  it('the session the page just opened is fetched again and shown as the selected tab', async () => {
     const fetching = answeringInTurn([ZSH_ALONE, WITH_COORDINATING_SESSION])
     vi.stubGlobal('fetch', fetching)
 
@@ -129,7 +143,10 @@ describe('SessionsPanel', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
     rerender(<SessionsPanel opened={CoordinatingSessionMother.SESSION} />)
 
-    expect(await screen.findByRole('button', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute('aria-current', 'true')
+    expect(await screen.findByRole('tab', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(fetching).toHaveBeenCalledTimes(2)
   })
 
@@ -138,10 +155,20 @@ describe('SessionsPanel', () => {
 
     render(<SessionsPanel />)
 
-    await screen.findByRole('button', { name: 'zsh' })
+    await screen.findByRole('tab', { name: 'zsh' })
     const stream = await waitFor(() => FakeEventSource.last())
     stream.refuseBeforeOpen()
 
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
+  })
+
+  it('the terminal panel is reachable and named after the chosen session', async () => {
+    vi.stubGlobal('fetch', answering(TWO_SESSIONS))
+
+    render(<SessionsPanel />)
+
+    await screen.findByRole('tab', { name: 'zsh' })
+
+    expect(screen.getByRole('tabpanel', { name: 'zsh' })).toBeInTheDocument()
   })
 })

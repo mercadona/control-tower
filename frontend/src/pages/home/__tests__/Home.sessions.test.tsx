@@ -151,7 +151,10 @@ describe('Home · sessions panel', () => {
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('button', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute('aria-current', 'true')
+    expect(await screen.findByRole('tab', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(scrolling).toHaveBeenCalled()
   })
 
