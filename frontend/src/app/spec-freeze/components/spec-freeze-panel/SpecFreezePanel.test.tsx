@@ -49,7 +49,7 @@ describe('SpecFreezePanel', () => {
     expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
   })
 
-  it('pressing it sends the key and then says the groom is waiting for that pull request to merge', async () => {
+  it('pressing it sends the key and then says the spec lives in a pull request the person has to merge', async () => {
     const fetching = vi
       .fn()
       .mockResolvedValueOnce(new Response(SpecFreezeMother.draftReady().body, { status: 200 }))
@@ -69,7 +69,9 @@ describe('SpecFreezePanel', () => {
     expect(
       screen.getByRole('link', { name: `Pull request #${SpecFreezeMother.PULL_REQUEST.number}` }),
     ).toHaveAttribute('href', SpecFreezeMother.PULL_REQUEST.url)
-    expect(screen.getByText('El groom espera al merge de este pull request.')).toBeInTheDocument()
+    expect(
+      screen.getByText('El spec ya vive en este pull request: mergéalo para continuar al groom.'),
+    ).toBeInTheDocument()
   })
 
   it('without a key the button stays disabled and says where the gate opens from', async () => {
@@ -124,7 +126,7 @@ describe('SpecFreezePanel', () => {
     render(<SpecFreezePanel />)
 
     expect(await screen.findByText(/Spec congelado, sin fecha/)).toBeInTheDocument()
-    expect(screen.getByText(/El groom espera al merge/)).toBeInTheDocument()
+    expect(screen.getByText(/mergéalo para continuar al groom/)).toBeInTheDocument()
   })
 
   it('the button is disabled while the press is in flight and says it is freezing', async () => {
@@ -156,7 +158,7 @@ describe('SpecFreezePanel', () => {
     fireEvent.click(button)
     fireEvent.click(button)
 
-    await waitFor(() => expect(screen.getByText(/El groom espera al merge/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/mergéalo para continuar al groom/)).toBeInTheDocument())
     const presses = fetching.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(presses).toHaveLength(1)
   })

@@ -783,12 +783,30 @@ A conversation is live:
 {"status":"live","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
- "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"}}
+ "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"},
+ "timeline":[
+   {"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null},
+   {"id":"7a2e...","kind":"working","at":"2026-09-15T09:00:05.000Z","detail":null},
+   {"id":"9b4d...","kind":"waiting-for-permission","at":"2026-09-15T09:02:00.000Z",
+    "detail":"should the button read Arrancar brainstorming?"}
+ ]}
 ```
 
 `attention.status` is `working` or `waiting`, moved by `POST /session-hooks`.
 `attention.question` carries the live question while `waiting`, and is `null`
 otherwise — it is dropped the moment the session works again.
+
+`timeline` is the ordered history of every session event the backend has
+recorded for this conversation, oldest first, each with a stable `id`, a
+`kind` — `opened`, `resumed`, `unresumable`, `working`, `waiting-for-permission`,
+`completed` or `ended` — an ISO `at` timestamp and a `detail`, which carries
+the live question for `waiting-for-permission` and is `null` for every other
+kind. A `Stop` hook always projects `completed`: Claude Code's last message is
+a completion summary, never a question, so it never becomes `detail`. The
+timeline is rebuilt from this same field on every page reload, never kept only
+in the browser, and it survives a backend restart: it is read back from
+`<state root>/coordinating-session/<conversation>/timeline.json`, the same
+directory `phase-prompt.md` and the conversation record already live in.
 
 Claude Code no longer holds a conversation this backend tried to resume at
 start-up:
@@ -796,7 +814,8 @@ start-up:
 ```json
 {"status":"unresumable","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
- "detail":"claude code no longer holds this conversation: the coordinating session was not resumed"}
+ "detail":"claude code no longer holds this conversation: the coordinating session was not resumed",
+ "timeline":[{"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null}]}
 ```
 
 The cabin never opens a different conversation and presents it as this one: an
@@ -844,7 +863,10 @@ Each event projects to an attention:
 | `Notification` | `waiting` | yes, as the live question |
 | `Stop` | `waiting`, no question | no |
 
-**202 Accepted**
+**202 Accepted** — sent only once the timeline event this hook produced is
+durably recorded. Events from concurrent hooks are recorded one at a time, in
+the order they arrived, so a restart right after this response never loses an
+already-acknowledged event.
 
 ```json
 {"status":"reported","attention":"waiting"}
@@ -856,6 +878,7 @@ Each event projects to an attention:
 |---|---|---|
 | `hook-not-understood` | 400 | the body is not JSON, not an object, or misses a known `hook_event_name` or a well-formed `session_id` |
 | `conversation-not-live` | 400 | no held conversation answers to that `session_id` |
+| `timeline-not-recorded` | 400 | the attention moved but the timeline event could not be recorded; the acknowledgement is never sent for an event that failed to persist |
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -946,10 +969,37 @@ curl -s http://127.0.0.1:8787/spec-freeze
 ## `POST /spec-freeze`
 
 Gate 1's press. Writes `**Estado:** CONGELADA` and the freeze date into the
-execution spec, commits it with its design document, pushes the checkout's own
-branch and opens the pull request that publishes both. No request body — the
-whole checkout is read from the held coordinating session, the same way `GET
+execution spec, commits it with its design document, pushes the branch it
+publishes on and opens the pull request that publishes both. No request body —
+the whole checkout is read from the held coordinating session, the same way `GET
 /spec-freeze` does.
+
+**The branch it publishes on.** A checkout sitting on any branch other than the
+default one publishes on that branch, exactly as before. A checkout sitting on
+the branch the remote calls default never commits there: gate 1 cuts
+`milestone/` plus the spec's own file name without its `.md`, and carries on
+without asking first — the spec's path names the branch, so the name is derived
+and never slugged from a title. The cut is idempotent: a branch of that name the checkout
+already holds is switched to, one only the remote holds is fetched under its own
+name, and neither is ever cut a second time.
+
+**What it publishes is what that branch holds.** Switching branch changes the
+spec on disk, so the spec is read again at its own path once the branch is
+resolved, and everything after that — whether it is freezable, which design
+document it names, whether the freeze was already delivered — is decided on that
+copy. A branch already carrying a frozen spec keeps it: gate 1 never writes back
+over it the copy the press started from. A branch that does not carry the spec
+yet is published with the copy the freeze read before switching.
+
+**Which branch the remote calls default** is resolved in three steps, and the
+gate never passes when none of them answers: `git symbolic-ref
+refs/remotes/origin/HEAD` first, which is free and local; then, only if that
+fails, `git ls-remote --symref origin HEAD`, the remote's own answer — a
+repository born from `git init` plus `git remote add` never had the local ref
+`git clone` writes; and, if the remote does not answer either,
+`epic-branch-not-published`, naming `git remote set-head origin -a` as what
+declares it. This backend never writes that ref into the governed repository
+itself.
 
 **Request header**
 
@@ -1000,7 +1050,7 @@ time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
 | `epic-spec-not-read` | the execution spec could not be listed or read back from disk |
 | `epic-spec-not-understood` | the spec carries no title, or names no design document under `**Handoff origen:**` |
 | `epic-spec-not-written` | the state line and its date could not be written back to disk |
-| `epic-branch-not-published` | `git` failed to resolve, add, commit or push the checkout's branch, or the checkout sits on the branch the remote declares as its default — refused before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
+| `epic-branch-not-published` | `git` failed to resolve, cut, switch to, fetch, add, commit or push the branch gate 1 publishes on, or neither the checkout nor the remote could say which branch is default — the branch is resolved before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
 | `epic-branch-not-understood` | `git` printed something this backend cannot read while resolving the branch or the remote's default |
 | `epic-pull-request-not-opened` | `gh pr create` failed |
 | `pull-request-not-understood` | `gh` answered something this backend cannot read while opening the pull request |
@@ -1045,8 +1095,17 @@ The spec is frozen, but its committed copy is not yet readable on the default br
 request gate 1 opened has to merge first:
 
 ```json
-{"status":"awaiting-publication"}
+{"status":"awaiting-publication",
+ "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
+
+`pullRequest` is the open pull request of the branch the checkout sits on, read with the same `gh pr
+list` `POST /spec-freeze` uses, so the link survives a page reload long after the freeze's own answer
+is gone. It is `null` when no open pull request can be found, and the page says a different thing for
+that case — the spec is still unpublished and no open pull request was found for its branch, rather
+than asking for a merge with nothing to merge. Either way it is a wait, never an error: the creation
+may have failed after the commit and the push, or the pull request may have been closed unmerged. This
+is the only read that runs `git rev-parse` and `gh pr list`: the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a
@@ -1064,14 +1123,14 @@ person reads for why:
 
 The spec is frozen and published, and the milestone holds no issue yet. `plan` is `ct-groom
 --dry-run`'s own product, kept as what a real run would create: the milestone and, per row of the
-spec's slices table, the order, the title and the labels the real run would give its issue:
+spec's slices table, the order, the title, the labels and the repository the real run would give its issue:
 
 ```json
 {"status":"groomable",
  "milestone":"The loop enters through brainstorming",
- "plan":{"issues":[
-   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
-   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ "plan":{"home":"mercadona/control-tower","issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"],"repo":"mercadona/repo-pulse"}
  ]},
  "planFingerprint":"9c1a3f…",
  "key":"3f9c1a…"}
@@ -1086,9 +1145,9 @@ never read as missing:
 ```json
 {"status":"partially-groomed",
  "milestone":"The loop enters through brainstorming",
- "plan":{"issues":[
-   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
-   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ "plan":{"home":"mercadona/control-tower","issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"],"repo":"mercadona/repo-pulse"}
  ]},
  "planFingerprint":"9c1a3f…",
  "issues":[
@@ -1130,8 +1189,13 @@ page's own request; `no-spec`, `draft`, `awaiting-publication`, `issues-uncertai
 never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
 `issues-uncertain` offers nothing to press while its own listing cannot be trusted.
 
-`planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, then each
-issue's order, title and labels, in the plan's own order
+`plan.home` is the milestone's **home repository**, the one the coordinating session holds, and
+each issue's `repo` is the repository that issue will be created in: the milestone's slices table
+may send a row to another repository (`Repo` column), and one row never spans two. A row whose
+`repo` equals `home` is the ordinary case.
+
+`planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, the home
+repository, then each issue's order, title, labels and repository, in the plan's own order
 (`backend/src/domain/value-objects/groom-plan.ts`'s `canonicalText()`, hashed by
 `backend/src/domain/policies/plan-fingerprint.ts`). It travels only on `groomable` and
 `partially-groomed`, the two shapes that carry a `plan`; `POST /epic-groom` demands it back in its

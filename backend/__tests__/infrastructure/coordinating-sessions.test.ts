@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation,
+  AttendOutcome, CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
+import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -10,6 +11,7 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
 class LiveSessionsDouble extends LiveSessions {
   readonly stopped: string[]
@@ -85,13 +87,62 @@ class Mother {
   }
 }
 
+class RecordsDouble extends ConversationRecords {
+  appended: { conversation: CoordinatingConversation, event: SessionTimelineEvent }[]
+  overlapping: number
+  #busy: boolean
+  #delayMs: number
+  #failing: Error | null
+
+  constructor() {
+    super()
+    this.appended = []
+    this.overlapping = 0
+    this.#busy = false
+    this.#delayMs = 0
+    this.#failing = null
+  }
+
+  delayEachWriteBy(ms: number): void {
+    this.#delayMs = ms
+  }
+
+  failNextWriteWith(cause: Error): void {
+    this.#failing = cause
+  }
+
+  async appendTimelineEvent({ conversation, event }: {
+    conversation: CoordinatingConversation, event: SessionTimelineEvent,
+  }): Promise<void> {
+    if (this.#busy) this.overlapping += 1
+    this.#busy = true
+    if (this.#delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#delayMs))
+    this.#busy = false
+    if (this.#failing !== null) {
+      const failure = this.#failing
+      this.#failing = null
+      throw failure
+    }
+    this.appended.push({ conversation, event })
+  }
+}
+
 class Registry {
-  static of(liveSessions: LiveSessionsDouble): { held: CoordinatingSessions, said: string[] } {
+  static readonly EVENT_ID = 'timeline-event-1'
+  static readonly AT = '2026-09-15T10:00:00.000Z'
+
+  static of(liveSessions: LiveSessionsDouble): { held: CoordinatingSessions, said: string[], records: RecordsDouble } {
     const said: string[] = []
+    const records = new RecordsDouble()
+    let sequence = 0
+    const newId = () => { sequence += 1; return `timeline-event-${sequence}` }
 
     return {
-      held: new CoordinatingSessions({ liveSessions, stderr: (line) => { said.push(line) } }),
+      held: new CoordinatingSessions({
+        liveSessions, stderr: (line) => { said.push(line) }, records, newId, now: () => Registry.AT,
+      }),
       said,
+      records,
     }
   }
 }
@@ -121,18 +172,19 @@ describe('CoordinatingSessions', () => {
     expect(held.held()?.state).toBe('ended')
   })
 
-  it('refuses to attend a conversation that has ended', () => {
+  it('refuses to attend a conversation that has ended', async () => {
     const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
     const { held } = Registry.of(liveSessions)
     held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
     liveSessions.exits(Mother.FIRST_SESSION)
 
-    const attended = held.attend({
+    const attended = await held.attend({
       conversation: Mother.FIRST.id.text,
       attention: SessionAttention.waiting('are you still there?'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
     })
 
-    expect(attended).toBe(false)
+    expect(attended.outcome).toBe(AttendOutcome.NO_MATCH)
     expect(held.held()?.attention).toBeNull()
   })
 
@@ -219,18 +271,123 @@ describe('CoordinatingSessions', () => {
     expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
 
-  it('moves the attention of the live conversation it holds', () => {
+  it('moves the attention of the live conversation it holds', async () => {
     const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
     const { held, said } = Registry.of(liveSessions)
     held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
 
-    const attended = held.attend({
+    const attended = await held.attend({
       conversation: Mother.FIRST.id.text,
       attention: SessionAttention.waiting('which of the two screens do you mean?'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
     })
 
-    expect(attended).toBe(true)
+    expect(attended.outcome).toBe(AttendOutcome.RECORDED)
     expect(held.held()?.attention).toEqual(SessionAttention.waiting('which of the two screens do you mean?'))
     expect(said).toContain(`coordinating session ${Mother.FIRST.id.text} waiting\n`)
+  })
+
+  it('starts with no timeline until a conversation is remembered', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding())
+
+    expect(held.timeline()).toEqual([])
+  })
+
+  it('holds the timeline it was remembered with', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    const seed = [
+      new SessionTimelineEvent({ id: 'seed-1', kind: TimelineEventKind.OPENED, at: '2026-09-15T09:00:00.000Z', detail: null }),
+    ]
+
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION), seed)
+
+    expect(held.timeline()).toEqual(seed)
+  })
+
+  it('appends and persists a timeline event when the attention moves', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held, records } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.waiting('which screen?'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
+    })
+    await held.settled()
+
+    const created = new SessionTimelineEvent({
+      id: Registry.EVENT_ID, kind: TimelineEventKind.WAITING_FOR_PERMISSION, at: Registry.AT, detail: 'which screen?',
+    })
+    expect(held.timeline()).toEqual([created])
+    expect(records.appended).toEqual([{ conversation: Mother.FIRST, event: created }])
+  })
+
+  it('appends and persists an ended event when the terminal exits', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held, records } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    liveSessions.exits(Mother.FIRST_SESSION)
+    await held.settled()
+
+    const created = new SessionTimelineEvent({
+      id: Registry.EVENT_ID, kind: TimelineEventKind.ENDED, at: Registry.AT, detail: null,
+    })
+    expect(held.timeline()).toEqual([created])
+    expect(records.appended).toEqual([{ conversation: Mother.FIRST, event: created }])
+  })
+
+  it('persists concurrent events one at a time, in the order they happened', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held, records } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    records.delayEachWriteBy(10)
+
+    held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.waiting('first?'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
+    })
+    held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.working(),
+      event: TimelineEventKind.WORKING,
+    })
+    await held.settled()
+
+    expect(records.overlapping).toBe(0)
+    expect(records.appended.map(({ event }) => event.kind)).toEqual([
+      TimelineEventKind.WAITING_FOR_PERMISSION, TimelineEventKind.WORKING,
+    ])
+    expect(held.timeline().map((event) => event.kind)).toEqual([
+      TimelineEventKind.WAITING_FOR_PERMISSION, TimelineEventKind.WORKING,
+    ])
+  })
+
+  it('persists the next event even after a previous one failed to persist', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held, records, said } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    records.failNextWriteWith(new Error('disk is full'))
+
+    held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.waiting('first?'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
+    })
+    held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.working(),
+      event: TimelineEventKind.WORKING,
+    })
+    await held.settled()
+
+    expect(records.appended.map(({ event }) => event.kind)).toEqual([TimelineEventKind.WORKING])
+    expect(held.timeline().map((event) => event.kind)).toEqual([
+      TimelineEventKind.WAITING_FOR_PERMISSION, TimelineEventKind.WORKING,
+    ])
+    expect(said.some((line) => line.includes('timeline event not recorded'))).toBe(true)
   })
 })

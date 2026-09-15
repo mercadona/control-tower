@@ -16,9 +16,18 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       kind: 'groomable',
       milestone: EpicGroomMother.MILESTONE,
       plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+      home: EpicGroomMother.HOME,
       planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
       key: null,
     })
+  })
+
+  it('a wait that names no pull request reads as a wait with none, not as unavailable', async () => {
+    answerWith(EpicGroomMother.awaitingPublicationWithNoPullRequest())
+
+    const outcome = await EpicGroomClient.read()
+
+    expect(outcome).toEqual({ kind: 'awaiting-publication', pullRequest: null })
   })
 
   it('each of the nine states is read as its own kind', async () => {
@@ -26,7 +35,10 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       [EpicGroomMother.none(), { kind: 'none' }],
       [EpicGroomMother.noSpec(), { kind: 'no-spec' }],
       [EpicGroomMother.draft(), { kind: 'draft' }],
-      [EpicGroomMother.awaitingPublication(), { kind: 'awaiting-publication' }],
+      [
+        EpicGroomMother.awaitingPublication(),
+        { kind: 'awaiting-publication', pullRequest: EpicGroomMother.PULL_REQUEST },
+      ],
       [
         EpicGroomMother.issuesUncertain(),
         { kind: 'issues-uncertain', milestone: EpicGroomMother.MILESTONE, reason: EpicGroomMother.ISSUES_UNCERTAIN_REASON },
@@ -37,6 +49,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'groomable',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          home: EpicGroomMother.HOME,
           planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
           key: EpicGroomMother.KEY,
         },

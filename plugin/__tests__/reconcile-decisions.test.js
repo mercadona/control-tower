@@ -9,7 +9,7 @@ const SLICE = { n: 1, name: 'login', type: 'backend', entrega: '', gate: '', dep
 // decisions it is handed (and optionally epic context / reason).
 function wanted(frozenDecisions, opts = {}) {
   const plan = groomPlan([SLICE], {
-    milestone: 'Epic', specRef: SPEC_REF,
+    milestone: 'Epic', specRef: SPEC_REF, repoOf: () => 'o/r',
     epicContext: opts.epicContext ?? null,
     frozenDecisions, frozenDecisionsReason: opts.frozenDecisionsReason ?? null,
   })

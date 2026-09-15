@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -160,6 +160,8 @@ describe('Home · sessions panel', () => {
 
     openHome()
 
-    expect(await screen.findByText((text) => text.includes(CoordinatingSessionMother.QUESTION))).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.timeline')).not.toBeNull())
+    const timeline = document.querySelector('.timeline') as HTMLElement
+    expect(within(timeline).getByText((text) => text.includes(CoordinatingSessionMother.QUESTION))).toBeInTheDocument()
   })
 })

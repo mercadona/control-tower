@@ -7,6 +7,7 @@ import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { PlanComment } from '../../domain/value-objects/plan-comment.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
+import type { SessionTimelineEvent } from '../../domain/value-objects/session-timeline-event.ts'
 import type { UserStories } from '../../domain/ports/user-stories.ts'
 import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
 import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
@@ -35,10 +36,14 @@ export class OpenCoordinatingSessionParams {
 export class CoordinatingSessionOpened {
   readonly conversation: CoordinatingConversation
   readonly session: LiveSession
+  readonly timeline: readonly SessionTimelineEvent[]
 
-  constructor({ conversation, session }: { conversation: CoordinatingConversation, session: LiveSession }) {
+  constructor({ conversation, session, timeline }: {
+    conversation: CoordinatingConversation, session: LiveSession, timeline: readonly SessionTimelineEvent[],
+  }) {
     this.conversation = conversation
     this.session = session
+    this.timeline = timeline
     Object.freeze(this)
   }
 }
@@ -74,10 +79,10 @@ export class OpenCoordinatingSession {
       root,
     })
     const prompt = PhasePrompt.brainstorming({ story, comment: params.comment, repository: params.repository, root })
-    const promptPath = await this.records.prepare({ conversation, prompt })
+    const { promptPath, timeline } = await this.records.prepare({ conversation, prompt })
     await this.sessionHooks.install(root)
     const session = this.conversations.start({ conversation, promptPath })
 
-    return new CoordinatingSessionOpened({ conversation, session })
+    return new CoordinatingSessionOpened({ conversation, session, timeline })
   }
 }

@@ -5,6 +5,8 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
@@ -22,7 +24,7 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
   constructor(answers: EpicGroomRead[]) {
     super({
       specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
-      fingerprint: Mother.FINGERPRINT,
+      branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
     })
     this.answers = answers
     this.asked = []
@@ -54,12 +56,14 @@ class EpicGroomDouble extends EpicGroom {
 class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly MILESTONE = 'Test epic'
   static readonly PATH = 'docs/superpowers/specs/2026-01-01-test-execution.md'
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.MILESTONE,
-    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
+    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME })],
   })
   static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
   static readonly PLAN_FINGERPRINT = Mother.FINGERPRINT.of(Mother.PLAN)

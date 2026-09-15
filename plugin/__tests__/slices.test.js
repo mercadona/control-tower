@@ -1285,3 +1285,69 @@ describe('analyzeSlicesTable — the Señal column (Slice 10)', () => {
     for (const s of r.slices) expect(s.senal).toBe('')
   })
 })
+
+// #348 — THE Repo COLUMN, AND WHY IT IS RAW LIKE Gate/Señal/E2E.
+//
+// A milestone gains a home repository and N target repositories, and the column
+// is how a row says which one it lands in. This parser resolves NOTHING about
+// it: the default to the home repository, a cell naming two repositories and a
+// cell that is not `owner/repo` are all `milestone-repos.js`'s business — the
+// same split as Gate (gates.js) and Señal (groom.js).
+//
+// `repoColumnPresent` is exposed instead of pushing 'Repo' into
+// missingOptionalColumns, for the SAME reason as Gate and E2E: every entry of
+// that list produces a warning with the consequence of the absence, and the
+// consequence here is "every row lands in the home repository", which is
+// exactly the behaviour of every spec that exists today. A warning that comes
+// out on every run of every single-repository spec is the noise that trains
+// people to ignore the other warnings.
+//
+// And `depCell` travels raw because the crossing spelling is INVISIBLE in
+// `deps`: DEP_RE extracts `5` out of `owner/repo#5`, so the row passes for a
+// dependency on slice 5 of its own repository. Whoever refuses it needs the
+// text, not the numbers.
+describe('analyzeSlicesTable — the Repo column (#348)', () => {
+  const SPEC_REPO = `## 9. Slices
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|
+| 1 | modelo | backend | tabla | – | AC-1.1 | schema | – |
+| 2 | api | backend | endpoint | #1 | AC-2.1 | – | mercadona/Other-Repo |
+| 3 | dos | backend | endpoint | #1 | AC-3.1 | – | o/a, o/b |
+`
+  it('the Repo cell travels raw and the column is reported present even with every cell empty', () => {
+    const allEmpty = `## 9. Slices
+| # | Slice | Tipo | Dep | Repo |
+|---|-------|------|-----|------|
+| 1 | modelo | backend | – | – |
+`
+    const r = analyzeSlicesTable(allEmpty)
+    expect(r.repoColumnPresent).toBe(true)
+    expect(r.slices[0].repo).toBe('–')
+  })
+  it('a table with no Repo column reports it absent and never as a missing optional column', () => {
+    const r = analyzeSlicesTable(SPEC_AREA_TOUCHES)
+    expect(r.repoColumnPresent).toBe(false)
+    expect(r.missingOptionalColumns).not.toContain('Repo')
+    for (const s of r.slices) expect(s.repo).toBe('')
+  })
+  it('a Repo cell naming a repository travels verbatim, case included', () => {
+    const r = analyzeSlicesTable(SPEC_REPO)
+    expect(r.slices[1].repo).toBe('mercadona/Other-Repo')
+    expect(r.slices[2].repo).toBe('o/a, o/b')
+  })
+  it('the Dep cell travels raw beside the numbers it yielded', () => {
+    const crossing = `## 9. Slices
+| # | Slice | Tipo | Dep | Repo |
+|---|-------|------|-----|------|
+| 1 | modelo | backend | – | – |
+| 2 | api | backend | o/other#1 | – |
+`
+    const r = analyzeSlicesTable(crossing)
+    expect(r.slices[1].depCell).toBe('o/other#1')
+    expect(r.slices[1].deps).toEqual([1])
+    expect(r.slices[0].depCell).toBe('–')
+  })
+  it('with no table at all, the report still answers about the Repo column', () => {
+    expect(analyzeSlicesTable('# spec sin tabla').repoColumnPresent).toBe(false)
+  })
+})

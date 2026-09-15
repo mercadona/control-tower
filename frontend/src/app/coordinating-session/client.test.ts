@@ -27,6 +27,7 @@ describe('CoordinatingSessionClient', () => {
       root: CoordinatingSessionMother.ROOT,
       session: CoordinatingSessionMother.SESSION,
       attention: { status: 'waiting', question: CoordinatingSessionMother.QUESTION },
+      timeline: CoordinatingSessionMother.WAITING_TIMELINE,
     })
   })
 
@@ -39,6 +40,7 @@ describe('CoordinatingSessionClient', () => {
       kind: 'ended',
       conversation: CoordinatingSessionMother.CONVERSATION,
       detail: CoordinatingSessionMother.ENDED_DETAIL,
+      timeline: CoordinatingSessionMother.WORKING_TIMELINE,
     })
   })
 

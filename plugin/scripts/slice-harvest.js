@@ -213,7 +213,7 @@ export class SliceHarvest {
       }
     }
 
-    const row = { ...harvestSlice({ events, issue, pr }), telemetry }
+    const row = { repo, ...harvestSlice({ events, issue, pr }), telemetry }
     return SliceHarvestReport.of({ row, failures, closers })
   }
 

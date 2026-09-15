@@ -16,6 +16,8 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import {
@@ -43,7 +45,7 @@ class ReadEpicGroomSpy extends ReadEpicGroom {
   constructor(answer: (params: ReadEpicGroomParams) => Promise<EpicGroomRead>) {
     super({
       specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
-      fingerprint: Mother.FINGERPRINT,
+      branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
     })
     this.asked = []
     this.answer = answer
@@ -68,7 +70,7 @@ class GroomEpicSpy extends GroomEpic {
     super({
       read: new ReadEpicGroom({
         specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
-        fingerprint: Mother.FINGERPRINT,
+        branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
       }),
       groom: new EpicGroom(),
       fingerprint: Mother.FINGERPRINT,
@@ -135,6 +137,7 @@ class LiveSessionsDouble extends LiveSessions {
 
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
@@ -145,8 +148,9 @@ class Mother {
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
   static readonly MILESTONE = 'Test epic'
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.MILESTONE,
-    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
+    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME })],
   })
   static readonly FINGERPRINT = new PlanFingerprint({
     digest: (text) => Buffer.from(text, 'utf8').toString('hex'),
@@ -220,6 +224,17 @@ class Mother {
     return new EpicGroomRead({
       state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
       planFingerprint: Mother.PLAN_FINGERPRINT, issues,
+    })
+  }
+
+  static readonly PULL_REQUEST = Object.freeze({
+    number: 341, url: `https://github.com/${Mother.REPOSITORY.text}/pull/341`,
+  })
+
+  static awaitingPublicationRead(pullRequest: { number: number, url: string } | null): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.AWAITING_PUBLICATION, spec: null, milestone: null, plan: null, planFingerprint: null,
+      issues: [], pullRequest,
     })
   }
 
@@ -356,7 +371,7 @@ describe('EpicGroomRoute', () => {
     expect(await groomable.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
@@ -373,14 +388,14 @@ describe('EpicGroomRoute', () => {
     expect(await fromThePage.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
     expect(await fromElsewhere.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
     })
   })
@@ -450,7 +465,7 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
@@ -499,7 +514,7 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       status: 'partially-groomed',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       issues: [{
         number: 1,
@@ -509,6 +524,33 @@ describe('EpicGroomRoute', () => {
       }],
       key: Keys.MINTED,
     })
+  })
+
+  it('a read still waiting for the pull request that publishes the spec answers it, so the page can link it', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.awaitingPublicationRead(Mother.PULL_REQUEST))
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'awaiting-publication',
+      pullRequest: { number: 341, url: `https://github.com/${Mother.REPOSITORY.text}/pull/341` },
+    })
+  })
+
+  it('a wait with no pull request to name answers the wait with a null one, never without the field', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.awaitingPublicationRead(null))
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'awaiting-publication', pullRequest: null })
   })
 
   it('an uncertain read answers the milestone and why, and offers no key to press', async () => {

@@ -318,7 +318,7 @@ class CtApi {
     })
 
     return new HarvestClock({
-      checkouts: () => checkouts.known(),
+      checkouts: () => checkouts.known()?.map((checkout) => checkout.root) ?? null,
       survey: (root) => surveyWorkspaces.execute(new SurveyWorkspacesParams({ root })),
       harvest: (prepared, repository) =>
         harvestDelivery.execute(new HarvestDeliveryParams({ prepared, repository })),
@@ -389,7 +389,7 @@ class CtApi {
           conversation: recovered.conversation!,
           session: null,
           attention: null,
-        }))
+        }), recovered.timeline)
         stderr(`coordinating session ${recovered.conversation!.id.text}: claude code no longer holds it, nothing was resumed\n`)
         return
       case RecoveredConversation.LIVE:
@@ -398,7 +398,7 @@ class CtApi {
           conversation: recovered.conversation!,
           session: recovered.session!,
           attention: SessionAttention.working(),
-        }))
+        }), recovered.timeline)
         stderr(`coordinating session ${recovered.conversation!.id.text}: resumed\n`)
         return
       default: {
@@ -512,12 +512,17 @@ class CtApi {
     const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
     const conversationRecords = new DiskConversationRecords({
       read: Disk.read,
-      write: Disk.write,
+      write: Disk.atomicWrite,
       root: asked.stateRoot,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
     })
     const coordinatingSessions = new CoordinatingSessions({
       liveSessions,
       stderr: (line) => process.stderr.write(line),
+      records: conversationRecords,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
     })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
@@ -530,6 +535,9 @@ class CtApi {
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+      stderr: (line) => process.stderr.write(line),
     })
     const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
     const epicBranch = new GitEpicBranch({ run: git })
@@ -550,7 +558,13 @@ class CtApi {
       digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
     })
     const readEpicGroom = new ReadEpicGroom({
-      specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom, fingerprint: planFingerprint,
+      specs: epicSpecs,
+      published: publishedSpecs,
+      issues: epicIssues,
+      groom: epicGroom,
+      branch: epicBranch,
+      pullRequests,
+      fingerprint: planFingerprint,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })

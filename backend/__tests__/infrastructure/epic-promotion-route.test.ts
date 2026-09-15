@@ -12,6 +12,8 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import {
@@ -40,6 +42,7 @@ class PromoteEpicSpy extends PromoteEpic {
     super({
       read: new ReadEpicGroom({
         specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+        branch: new EpicBranch(), pullRequests: new PullRequests(),
         fingerprint: new PlanFingerprint({ digest: (text) => text }),
       }),
       issues: new EpicIssues(),
@@ -87,6 +90,7 @@ class LiveSessionsDouble extends LiveSessions {
 
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
@@ -118,10 +122,11 @@ class Mother {
   }
 
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.MILESTONE,
     issues: [
-      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
-      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'], repo: Mother.HOME }),
     ],
   })
 

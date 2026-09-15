@@ -61,6 +61,9 @@ import { BigQueryTable, LoadOutcome } from './bigquery-load.js'
 import { HarvestTable } from './harvest-table.js'
 import { HarvestLedger, LedgerIdentity } from './harvest-ledger.js'
 import { IndexOutcome, SliceHarvest, SliceRead, TelemetryIndex } from './slice-harvest.js'
+// #348: a milestone has one home repository and N target ones, and its reach
+// travels in the description of the milestone this command already reads.
+import { MilestoneRepos } from './milestone-repos.js'
 
 // Hardened `arg()`: the SAME one as ct-next.mjs/ct-groom.mjs/ct-status.mjs,
 // word for word and for the same measured reason — a dangling flag cannot
@@ -140,18 +143,52 @@ const reasons = []
 // the epic, which are the ones it matters most to measure. It is the same
 // mistake that already cost a false report in this repo (see the header of
 // ct-status.mjs).
-let issues = []
-try {
-  issues = JSON.parse(gh([
-    'issue', 'list', '--repo', repo, '--milestone', milestone, '--state', 'all',
+const ISSUE_FIELDS = 'number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences'
+function listIssues(where) {
+  return JSON.parse(gh([
+    'issue', 'list', '--repo', where, '--milestone', milestone, '--state', 'all',
     '--limit', '1000',
     // closedByPullRequestsReferences: it is GitHub that says which PR closed
     // each issue. Deducing it from the timeline already produced a green and
     // wrong table (see closingPrNumbers in harvest.js).
-    '--json', 'number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences',
+    '--json', ISSUE_FIELDS,
   ]))
+}
+
+let issues = []
+try {
+  issues = listIssues(repo)
 } catch (e) {
   reasons.push(`could not list the issues of the milestone "${milestone}" in ${repo}: ${e.message}`)
+}
+
+// #348 — THE MILESTONE'S REACH, AND WHY THE HARVEST FOLLOWS IT.
+//
+// The slices of a milestone land in the repository each row of the §9 table
+// named, so the cost of THE MILESTONE is spread across N repositories. This
+// command reads it whole: the reach travels in the milestone's description
+// (`<!-- ct-repos:home,target,… -->`, written by /ct-groom) and the milestone
+// comes inside the issues already listed — measured against the real `gh`:
+// `gh issue list --json milestone` answers {number,title,description,dueOn}.
+//
+// It CAN follow it, unlike /ct-status: everything this command reads is
+// remote. There is no checkout to cross anything with, which is why the
+// milestone of every target repository is read with the SAME title (the
+// identity /ct-groom writes in each one) and harvested into the same ledger.
+//
+// A listing that fails for one of those repositories is a reason and exit 1 —
+// never a repository harvested as empty, which would read as "that half of
+// the milestone cost nothing".
+const [reached] = MilestoneRepos.reachesIn(issues)
+const reach = reached === undefined ? null : reached.reach
+const harvested = [repo, ...(reach ? reach.targets.filter((target) => target.toLowerCase() !== repo.toLowerCase()) : [])]
+const issuesByRepo = new Map([[repo, issues]])
+for (const target of harvested.slice(1)) {
+  try {
+    issuesByRepo.set(target, listIssues(target))
+  } catch (e) {
+    reasons.push(`could not list the issues of the milestone "${milestone}" in ${target}, which this milestone also reaches: ${e.message}`)
+  }
 }
 
 // `ghRunner`: the same `gh` as above but with the `{ code, stdout, stderr }`
@@ -172,7 +209,14 @@ const ghRunner = (a) => {
 // codes nowhere and it does not start here. The listing failing does NOT drop
 // the exit to 1: the cause is almost always that this repo has no telemetry
 // (every epic older than 1422c67).
-const index = TelemetryIndex.read({ gh: ghRunner, repo })
+//
+// #348: one index per repository harvested — the judge's telemetry is committed
+// in the repository the slice landed in, so asking the home repository about a
+// slice of another one would report "no telemetry" about a file that exists.
+const indexByRepo = new Map(harvested
+  .filter((target) => issuesByRepo.has(target))
+  .map((target) => [target, TelemetryIndex.read({ gh: ghRunner, repo: target })]))
+const index = indexByRepo.get(repo)
 const telemetryDir = index.outcome === IndexOutcome.NOT_READ
   ? { status: 'no-leido', why: index.detail }
   : { status: 'ok', why: null }
@@ -189,16 +233,21 @@ function reasonFor(n, f) {
 
 const rows = []
 const harvester = new SliceHarvest({ gh: ghRunner })
-for (const issue of issues) {
-  const report = harvester.harvest({ repo, issue, index })
-  // Two PRs closing the same issue is rare: it is said out loud and the first
-  // one is harvested, instead of picking in silence and losing the finding.
-  if (report.closers.length > 1) reasons.push(`issue #${issue.number} is closed by ${report.closers.length} PRs (${report.closers.map((n) => `#${n}`).join(', ')}); the row harvests only #${report.closers[0]}`)
-  for (const f of report.failures) reasons.push(reasonFor(issue.number, f))
-  if (report.row) rows.push(report.row)
+for (const [where, theirIssues] of issuesByRepo) {
+  for (const issue of theirIssues) {
+    const report = harvester.harvest({ repo: where, issue, index: indexByRepo.get(where) })
+    // Two PRs closing the same issue is rare: it is said out loud and the first
+    // one is harvested, instead of picking in silence and losing the finding.
+    if (report.closers.length > 1) reasons.push(`issue ${where}#${issue.number} is closed by ${report.closers.length} PRs (${report.closers.map((n) => `#${n}`).join(', ')}); the row harvests only #${report.closers[0]}`)
+    for (const f of report.failures) reasons.push(reasonFor(issue.number, f))
+    if (report.row) rows.push(report.row)
+  }
 }
 
-rows.sort((a, b) => (a.issue ?? 0) - (b.issue ?? 0))
+// #348: by repository and then by issue. An issue number is unique per
+// repository and not per milestone, so ordering by number alone would
+// interleave two repositories' slices with no way to read the table.
+rows.sort((a, b) => String(a.repo).localeCompare(String(b.repo)) || (a.issue ?? 0) - (b.issue ?? 0))
 
 if (bqTable && reasons.length) console.error(`BigQuery: nothing is loaded — the harvest is incomplete (${reasons.length} read(s) left unfinished)`)
 else if (bqTable && !rows.length) console.error('BigQuery: nothing to load — the milestone has no slices')
@@ -226,10 +275,14 @@ if (asJson) {
   console.log(JSON.stringify({ repo, milestone, filas: rows, motivos: reasons, telemetry: { dir: METRICS_REPO_DIR, status: telemetryDir.status, why: telemetryDir.why } }, null, 2))
 } else {
   console.log(`# Harvest — ${milestone}`)
-  console.log(`# repo: ${repo} · slices: ${rows.length}`)
+  // #348: the home repository, then every repository this milestone reaches.
+  // The `Repo` column is only printed when there is more than one: with a
+  // single repository it would repeat the header's own line on every row.
+  const spread = harvested.length > 1
+  console.log(`# home: ${repo}${spread ? ` · repos: ${harvested.join(', ')}` : ''} · slices: ${rows.length}`)
   console.log('')
-  console.log('| Issue | Slice | Tipo | Gate | ready→claim | claim→release | release→merge | reopens | requeues | blocked | PR |')
-  console.log('|---|---|---|---|---|---|---|---|---|---|---|')
+  console.log(`| Issue |${spread ? ' Repo |' : ''} Slice | Tipo | Gate | ready→claim | claim→release | release→merge | reopens | requeues | blocked | PR |`)
+  console.log(`|---|${spread ? '---|' : ''}---|---|---|---|---|---|---|---|---|---|`)
   for (const f of rows) {
     // The `*` marks that release→merge was measured against the CLOSING OF THE
     // ISSUE and not against the merge of a PR. It is marked in the cell itself,
@@ -237,7 +290,7 @@ if (asJson) {
     // table.
     const mark = f.mergeSource === 'issue-closed' ? '*' : ''
     const pr = f.pr ? `#${f.pr} +${f.additions}/−${f.deletions} ${f.changedFiles}f` : '—'
-    console.log(`| #${f.issue} | ${f.title ?? '—'} | ${f.type ?? '—'} | ${f.gate ?? '—'} | ${formatDuration(f.readyToClaim)} | ${formatDuration(f.claimToRelease)} | ${formatDuration(f.releaseToMerge)}${mark} | ${f.reopens} | ${f.requeues} | ${f.blocked.length} | ${pr} |`)
+    console.log(`| #${f.issue} |${spread ? ` ${f.repo ?? '—'} |` : ''} ${f.title ?? '—'} | ${f.type ?? '—'} | ${f.gate ?? '—'} | ${formatDuration(f.readyToClaim)} | ${formatDuration(f.claimToRelease)} | ${formatDuration(f.releaseToMerge)}${mark} | ${f.reopens} | ${f.requeues} | ${f.blocked.length} | ${pr} |`)
   }
   console.log('')
   // It is reported BY FAMILY (`Tipo`), never aggregated — honesty rule of §6,
@@ -267,8 +320,8 @@ if (asJson) {
   if (telemetryDir.status === 'no-leido') {
     console.log(`could not list \`${METRICS_REPO_DIR}\` in ${repo} (${telemetryDir.why}). This repo may have no judge telemetry, or the read may have failed: **nothing is counted**, and the gap is NOT a zero.`)
   } else {
-    console.log('| Issue | Slice | Verdicts | sin-vara | Findings by rule | high/medium/low | vara ct | brief | bytes per role | returns | tool | tokens |')
-    console.log('|---|---|---|---|---|---|---|---|---|---|---|---|')
+    console.log(`| Issue |${spread ? ' Repo |' : ''} Slice | Verdicts | sin-vara | Findings by rule | high/medium/low | vara ct | brief | bytes per role | returns | tool | tokens |`)
+    console.log(`|---|${spread ? '---|' : ''}---|---|---|---|---|---|---|---|---|---|`)
     for (const f of rows) {
       const t = f.telemetry
       let verdicts = '—'
@@ -382,7 +435,7 @@ if (asJson) {
           if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} no column)`
         }
       }
-      console.log(`| #${f.issue} | ${f.title ?? '—'} | ${verdicts} | ${withoutYardstick} | ${byRule} | ${severities} | ${ctYardstick} | ${brief} | ${bytesPerRole} | ${returns} | ${tool} | ${tokens} |`)
+      console.log(`| #${f.issue} |${spread ? ` ${f.repo ?? '—'} |` : ''} ${f.title ?? '—'} | ${verdicts} | ${withoutYardstick} | ${byRule} | ${severities} | ${ctYardstick} | ${brief} | ${bytesPerRole} | ${returns} | ${tool} | ${tokens} |`)
     }
     console.log('')
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measured === 0)) {

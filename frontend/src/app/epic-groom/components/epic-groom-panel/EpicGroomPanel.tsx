@@ -18,12 +18,15 @@ const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const ISSUES_UNCERTAIN_TITLE = 'No se ha podido leer completa la lista de issues del epic'
+const AWAITING_MERGE = 'El spec congelado espera en un pull request: mergéalo para abrir el groom.'
+const AWAITING_WITHOUT_PULL_REQUEST =
+  'El spec congelado sigue sin publicar y no se ha encontrado ningún pull request abierto para su rama.'
+const PULL_REQUEST = 'Pull request'
 
 const EPIC_GROOM_NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'none',
   'no-spec',
   'draft',
-  'awaiting-publication',
   'unavailable',
 ]
 
@@ -32,7 +35,8 @@ type EpicGroomAskRefusal = Exclude<EpicGroomAskOutcome, { kind: 'acted' }>
 
 const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
-const planItem = (issue: GroomPlanIssue): string => `#${issue.order} · ${issue.title}`
+const planItem = (issue: GroomPlanIssue, home: string): string =>
+  issue.repo === home ? `#${issue.order} · ${issue.title}` : `#${issue.order} · ${issue.title} · ${issue.repo}`
 const issueItem = (issue: EpicIssue): string => `#${issue.number} · ${issue.title}`
 
 const EpicGroomPanelLabels = {
@@ -63,6 +67,22 @@ const EpicGroomPanel = () => {
       <div className="epic-groom-panel">
         <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
       </div>
+    )
+  }
+
+  if (acted === null && read.kind === 'awaiting-publication') {
+    const { pullRequest } = read
+    return (
+      <Panel heading={HEADING}>
+        <p className="epic-groom-panel__awaiting">
+          {pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}
+        </p>
+        {pullRequest !== null && (
+          <a className="epic-groom-panel__pull-request" href={pullRequest.url}>
+            {`${PULL_REQUEST} #${pullRequest.number}`}
+          </a>
+        )}
+      </Panel>
     )
   }
 
@@ -113,7 +133,7 @@ const EpicGroomPanel = () => {
     ) : null
 
   if (acted === null && read.kind === 'groomable') {
-    const { milestone, plan, planFingerprint } = read
+    const { milestone, plan, home, planFingerprint } = read
     return (
       <div className="epic-groom-panel">
         <p className="epic-groom-panel__milestone">{milestone}</p>
@@ -122,7 +142,7 @@ const EpicGroomPanel = () => {
         <ul className="epic-groom-panel__plan">
           {plan.map((issue) => (
             <li key={issue.order} className="epic-groom-panel__plan-item">
-              <span className="epic-groom-panel__plan-title">{EpicGroomPanelLabels.planItem(issue)}</span>
+              <span className="epic-groom-panel__plan-title">{EpicGroomPanelLabels.planItem(issue, home)}</span>
               <span className="epic-groom-panel__plan-labels">{issue.labels.join(', ')}</span>
             </li>
           ))}

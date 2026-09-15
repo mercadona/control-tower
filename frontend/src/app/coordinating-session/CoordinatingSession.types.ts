@@ -5,6 +5,22 @@ export type Attention = {
 
 export type LiveSessionRef = { id: string; name: string }
 
+export type TimelineEventKind =
+  | 'opened'
+  | 'resumed'
+  | 'unresumable'
+  | 'working'
+  | 'waiting-for-permission'
+  | 'completed'
+  | 'ended'
+
+export type TimelineEvent = {
+  id: string
+  kind: TimelineEventKind
+  at: string
+  detail: string | null
+}
+
 export type CoordinatingSessionOutcome =
   | { kind: 'none' }
   | {
@@ -14,9 +30,10 @@ export type CoordinatingSessionOutcome =
       root: string
       session: LiveSessionRef
       attention: Attention
+      timeline: TimelineEvent[]
     }
-  | { kind: 'unresumable'; conversation: string; detail: string }
-  | { kind: 'ended'; conversation: string; detail: string }
+  | { kind: 'unresumable'; conversation: string; detail: string; timeline: TimelineEvent[] }
+  | { kind: 'ended'; conversation: string; detail: string; timeline: TimelineEvent[] }
   | { kind: 'unavailable' }
 
 export type OpenedCoordinatingSession = { conversation: string; session: LiveSessionRef }

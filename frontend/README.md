@@ -73,11 +73,36 @@ backend's run and the other two endpoints refuse that id with
 
 `app/coordinating-session` (`CoordinatingSessionStatus`, rendered by `Home`
 beside `SessionsPanel`) polls `GET /coordinating-session` every two seconds
-(`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) to show the entrance
-conversation's attention: **Trabajando** while it works, **Esperando** with
-its question under **Te está preguntando** once the brainstorming asks
-something, or a banner saying the conversation could not be recovered.
-`StartPlanForm`'s one button opens it with `POST /coordinating-session`.
+(`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) and renders the backend's
+`timeline` as a compact vertical `system-ui/timeline` — the session's
+chronological history (opened, resumed, working, waiting for a permission
+prompt, completed, ended), each with a timestamp, and only the last event
+marked current. It never renders the raw Markdown of an assistant message: a
+permission prompt's own short question is the only free text a timeline item
+carries, and a completed turn shows a fixed label instead of the session's
+`last_assistant_message`. The whole timeline is what the backend answers on
+every poll, so a page reload rebuilds it from that field rather than from
+anything kept only in React state, and it survives a backend restart the same
+way the conversation itself does. An `unresumable` or `ended` conversation
+still shows its banner, with the timeline it had kept underneath it.
+`StartPlanForm`'s one button opens the conversation with `POST
+/coordinating-session`.
+
+The visible timeline carries no `aria-live` of its own — every poll can
+rewrite the whole list, and a live region over all of it would have assistive
+technology repeat the entire history on each update. A single visually
+hidden `role="status"` element (`.coordinating-session-status__visually-hidden`,
+the same clip-rect technique `Banner` already uses for its type label)
+announces only the current event's own text, the same pattern
+`ImplementProgress` already uses for its stage announcement.
+
+`system-ui/timeline` (`Timeline`) is this repository's mirror of
+`logistics-ui`'s Timeline component, alongside the other `system-ui/*`
+mirrors under [The look](#the-look-the-logistics-design-system): a vertical
+list of items, each a marker on a connecting line, a label, an optional
+timestamp and an optional detail line, with the current item's marker and
+label in the brand colour and every earlier one muted. It declares no
+`min-width`, so it renders correctly at the panel's narrowest width.
 
 `Home` lays out a right column (`home__side`), a sibling of `main` rather than
 an overlay, that always holds a `Panel` heading **Sesión coordinadora** with
@@ -125,12 +150,16 @@ pressed from the page the backend itself serves.
 the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
 `groomed` or `authorised`, and answers one of the seven states `EpicGroom.types.ts`
-declares: `none`, `no-spec`, `draft` and `awaiting-publication` render nothing,
-because gate 1's panel already says what is missing; `groomable` shows the
-milestone and the dry run's product — the issues the groom would create,
-ordered and labelled, before anything is created; `groomed` shows the issues
-the milestone already holds and offers the authorisation; `authorised` shows
-them all promoted, with nothing left to press. **Ejecutar el groom** calls
+declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
+already says what is missing; `awaiting-publication` says the frozen spec is
+waiting in a pull request the person has to merge and links it, or — when the
+read found no open pull request for the branch — that the spec is still
+unpublished and none was found, which is a wait to watch rather than a merge to
+press; `groomable` shows the milestone and the dry run's product — the issues the
+groom would create, ordered and labelled, before anything is created; `groomed`
+shows the issues the milestone already holds and offers the authorisation;
+`authorised` shows them all promoted, with nothing left to press.
+**Ejecutar el groom** calls
 `POST /epic-groom` and **Autorizar el trabajo** calls `POST /epic-promotion`,
 each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
 proxy that strips `Origin` for `/spec-freeze` does it for both, so neither

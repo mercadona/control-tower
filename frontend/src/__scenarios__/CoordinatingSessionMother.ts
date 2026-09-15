@@ -9,6 +9,17 @@ const UNRESUMABLE_DETAIL = 'claude code no longer holds this conversation: the c
 const ENDED_DETAIL = 'the terminal of this coordinating session exited and no other one was opened'
 const ALREADY_LIVE_DETAIL = 'a coordinating conversation is already live: it has to end before another one opens'
 
+const OPENED_AT = '2026-09-15T09:00:00.000Z'
+const WORKING_AT = '2026-09-15T09:05:00.000Z'
+const WAITING_AT = '2026-09-15T09:10:00.000Z'
+
+const OPENED_EVENT = { id: 'event-1', kind: 'opened' as const, at: OPENED_AT, detail: null }
+const WORKING_TIMELINE = [OPENED_EVENT, { id: 'event-2', kind: 'working' as const, at: WORKING_AT, detail: null }]
+const WAITING_TIMELINE = [
+  ...WORKING_TIMELINE,
+  { id: 'event-3', kind: 'waiting-for-permission' as const, at: WAITING_AT, detail: QUESTION },
+]
+
 const none = () => ({ status: 200, body: '{"status":"none"}' })
 
 const nothingRead = (): CoordinatingSessionRead => ({ phase: 'read', kind: 'none' })
@@ -21,6 +32,7 @@ const workingRead = (): CoordinatingSessionRead => ({
   root: ROOT,
   session: SESSION,
   attention: { status: 'working', question: null },
+  timeline: WORKING_TIMELINE,
 })
 
 const waitingRead = (): CoordinatingSessionRead => ({
@@ -31,6 +43,7 @@ const waitingRead = (): CoordinatingSessionRead => ({
   root: ROOT,
   session: SESSION,
   attention: { status: 'waiting', question: QUESTION },
+  timeline: WAITING_TIMELINE,
 })
 
 const unresumableRead = (): CoordinatingSessionRead => ({
@@ -38,13 +51,15 @@ const unresumableRead = (): CoordinatingSessionRead => ({
   kind: 'unresumable',
   conversation: CONVERSATION,
   detail: UNRESUMABLE_DETAIL,
+  timeline: WORKING_TIMELINE,
 })
 
 const working = () => ({
   status: 200,
   body:
     `{"status":"live","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
-    `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"working","question":null}}`,
+    `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"working","question":null},` +
+    `"timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const waiting = () => ({
@@ -52,21 +67,22 @@ const waiting = () => ({
   body:
     `{"status":"live","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},` +
-    `"attention":{"status":"waiting","question":"${QUESTION}"}}`,
+    `"attention":{"status":"waiting","question":"${QUESTION}"},` +
+    `"timeline":${JSON.stringify(WAITING_TIMELINE)}}`,
 })
 
 const unresumable = () => ({
   status: 200,
   body:
     `{"status":"unresumable","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
-    `"detail":"${UNRESUMABLE_DETAIL}"}`,
+    `"detail":"${UNRESUMABLE_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const ended = () => ({
   status: 200,
   body:
     `{"status":"ended","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
-    `"detail":"${ENDED_DETAIL}"}`,
+    `"detail":"${ENDED_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const endedRead = (): CoordinatingSessionRead => ({
@@ -74,6 +90,7 @@ const endedRead = (): CoordinatingSessionRead => ({
   kind: 'ended',
   conversation: CONVERSATION,
   detail: ENDED_DETAIL,
+  timeline: WORKING_TIMELINE,
 })
 
 const opened = () => ({
@@ -99,6 +116,8 @@ export const CoordinatingSessionMother = {
   UNRESUMABLE_DETAIL,
   ENDED_DETAIL,
   ALREADY_LIVE_DETAIL,
+  WORKING_TIMELINE,
+  WAITING_TIMELINE,
   none,
   nothingRead,
   workingRead,

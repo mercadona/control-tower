@@ -647,7 +647,7 @@ describe('ct-init.sh', () => {
     expect(agents).toContain('`observabilidad`')
     expect(agents).toContain('`sin-vara`')
     // The line of "no value" markers names Señal too.
-    expect(agents).toContain('"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):')
+    expect(agents).toContain('"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`/`Repo`):')
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -658,6 +658,29 @@ describe('ct-init.sh', () => {
   // places (the contract that reaches the user repository's AGENTS.md verbatim
   // and the command whoever grooms reads) and this test is what stops one of the
   // two from falling behind.
+  // #348 — THE Repo COLUMN AND THE SAME-REPOSITORY DEPENDENCY, IN BOTH PLACES.
+  //
+  // The rule lives in two documents on purpose: the contract, which is what a
+  // governed repository carries and what whoever writes a spec reads, and
+  // `docs/loop/ct-groom.md`, the command's full reference. The precedent is the
+  // `Señal` pair just below, and the reason is the same: two copies of one rule
+  // drift, and only a test that compares them goes red when they do.
+  it('the contract documents the Repo column and the same-repository dependency rule, and ct-groom.md says the same', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const contract = readContract(dir)
+    const reference = readFileSync(join(root, '..', 'docs', 'loop', 'ct-groom.md'), 'utf8')
+
+    for (const said of [contract, reference]) {
+      expect(said).toMatch(/\bRepo\b/)
+      expect(said).toMatch(/home repository/)
+      expect(said).toMatch(/One row, one repository/i)
+      expect(said).toMatch(/owner\/repo#N/)
+      expect(said).toMatch(/cannot be ordered after a slice of/)
+    }
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('the contract says the signal is not one more acceptance criterion, and ct-groom.md says the same', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
