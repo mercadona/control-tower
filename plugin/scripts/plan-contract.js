@@ -20,8 +20,9 @@
 // ============================================================================
 
 import { extractTasks } from './plan-tasks.js'
+import { PlanLanguage } from './plan-language.js'
 
-const BLOCKQUOTE_MARKER = 'This plan is written to be executed by task-scoped subagents'
+const BLOCKQUOTE_MARKER = 'Task-scoped subagents execute this plan'
 
 export const PLAN_SECTIONS = [
   '## 1. Context and goal',
@@ -160,7 +161,7 @@ const langAt = (line) => line.slice(3).trim().toLowerCase()
 // Annotates every line with whether it is structural (outside a fence) — the
 // only markdown parsing this contract needs. A fence opens and closes with a
 // line that STARTS with three backticks, as in the rest of the repo's parsers.
-function annotate(markdown) {
+export function annotate(markdown) {
   const out = []
   let inFence = false
   for (const line of String(markdown).split('\n')) {
@@ -502,6 +503,8 @@ export function validatePlan(markdown, { readFile } = {}) {
       }
     }
   }
+
+  for (const detail of PlanLanguage.violationsOf(lines)) push('ste', detail)
 
   return { ok: violations.length === 0, violations }
 }

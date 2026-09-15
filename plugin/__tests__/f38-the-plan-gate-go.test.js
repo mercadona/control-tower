@@ -46,7 +46,7 @@ const tmp = (pref) => { const d = mkdtempSync(join(tmpdir(), pref)); trash.push(
 const FENCE = '```'
 const plan = (issue) => [
   `# #${issue} — fixture slice`, '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**', '',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**', '',
   '## 1. Context and goal', 'Fixture.',
   '### Desired end state', 'Work done.',
   '### Out of scope', 'N/A — fixture.',
@@ -56,7 +56,8 @@ const plan = (issue) => [
   '## 5. Interfaces', 'Consumes: N/A. Produces: N/A.',
   '## 6. Test strategy', 'N/A — fixture.',
   '## 7. Tasks', '### Task 1 — do the work',
-  '**Objective:** the work is committed.', '**Files:** work.txt', 'Final text (work.txt):',
+  '**Objective:** the commit adds the work.', '',
+  '**Files:** work.txt', 'Final text (work.txt):',
   FENCE, 'trabajo', FENCE,
   '**TDD:** No TDD — fixture.', '**Tests:** N/A — fixture.',
   '**Verification:** git log shows the commit.', FENCE + 'bash', 'git log --oneline -1', FENCE,

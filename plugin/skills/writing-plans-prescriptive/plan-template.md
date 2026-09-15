@@ -1,10 +1,12 @@
 # {{#<issue> — what this slice delivers}}
 
-> **This plan is written to be executed by task-scoped subagents that arrive with zero context
-> and decide nothing.** Every task carries the current state of what it touches (copied
-> verbatim), the contracts it honours and the exact commands that verify it; its bodies are
-> yours to write, test-first. Names, signatures, constants and test names come from this
-> document, which decided them. On ambiguity, the issue body and AGENTS.md win.
+> **Task-scoped subagents execute this plan.** They arrive with no context. They decide
+> nothing. Each task carries the state of what it changes, copied exactly from the repo, and
+> the contracts it obeys and the commands that verify it.
+
+> You write the bodies. You write the test first. This document decided the names, the
+> signatures, the constants and the test names. If a decision is not clear, follow the issue
+> body and AGENTS.md.
 
 ## 1. Context and goal
 
@@ -13,7 +15,7 @@ asks for, in one paragraph.}}
 
 ### Desired end state
 
-{{Concrete list of what exists when every task is done — mirror the issue's acceptance
+{{Concrete list of what exists once every task finishes — mirror the issue's acceptance
 criteria.}}
 
 ### Out of scope
@@ -29,17 +31,18 @@ Protected" section. If nothing: N/A — <reason>.}}
 
 ## 3. Reference patterns
 
-{{The yardstick of this repo for this slice, in two lists. It is the only part of the plan that
-tells the implementer how code is written here and the judge what to block on, so every path you
-name is grepped by `--check-plan`: a path that is not in the repo fails the plan.}}
+{{The yardstick of this repo for this slice, in two lists. This section alone tells the
+implementer how this repo writes code, and tells the judge what to block on. So `--check-plan`
+greps every path you name here. A path that is not in the repo fails the plan.}}
 
 Files to imitate: {{real files whose shape the implementer copies — same role, same layer. Or
 N/A — <reason>.}}
 
-Rules to obey: {{start from `.agent/conventions.md` where the repo declares one; then this repo's
-own convention documents, by path — `AGENTS.md`, `CLAUDE.md`, a file
-under `docs/conventions/`, `CONTRIBUTING` — plus any skill the issue's milestone context section names
-(a skill is not a path and is not checked on disk). Or N/A — this repo declares none.}}
+Rules to obey: {{If the repo declares one, start from `.agent/conventions.md`. Then list this
+repo's own convention documents by path — `AGENTS.md`, `CLAUDE.md`, a file under
+`docs/conventions/`, `CONTRIBUTING`. Add any skill the issue's milestone context section names. A
+skill is not a path, so `--check-plan` does not check it against the disk. Or N/A — this repo
+declares none.}}
 
 ## 4. Inventory
 
@@ -50,11 +53,12 @@ under `docs/conventions/`, `CONTRIBUTING` — plus any skill the issue's milesto
 ## 5. Interfaces
 
 Consumes: {{the interface the issue declares for its dependency — names and signatures inline,
-in prose; or N/A — no dependencies. If it has to be quoted from the repo, quote it inside
-the task that consumes it, with `Current state (path, lines A-B):`.}}
-Produces: {{what later slices rely on — one exported name and signature per line, in prose:
-the block lives in the task that creates the file, which is what the task brief carries. Or
-N/A — <reason>.}}
+in prose; or N/A — no dependencies. If you must quote it from the repo, quote it inside the task
+that consumes it, with `Current state (path, lines A-B):`.}}
+
+Produces: {{what later slices rely on — one exported name and signature per line, in prose. The
+task that creates the file carries the block, and its task brief includes it. Or N/A —
+<reason>.}}
 
 ## 6. Test strategy
 
@@ -77,11 +81,11 @@ greps it.}}
 Contract (path/to/file.ext):
 
 {{Max 25 lines: types, interfaces, exact signatures, typed errors, and constants the implementer
-cannot derive (formats, flags, magic values). Declarations only: bodies are written test-first.}}
+cannot derive (formats, flags, magic values). Declarations only: you write the bodies test-first.}}
 
 Call site (path/to/consumer.ext):
 
-{{Max 10 lines, before -> after: how the call reads in the consumer once this task is done —
+{{Max 10 lines, before -> after: how the call reads in the consumer once you finish this task —
 route, handler, component usage.}}
 
 Final text (path/to/doc.md):
@@ -99,21 +103,23 @@ No code — <reason>. Blocks add up to 30 lines per task, and each task fits on 
 
 **Tests:** {{added: named one by one / removed on purpose: named one by one | N/A — <reason>}}
 
-**Verification:** {{what the commands prove, in prose if it helps — the commands themselves go
-in the fenced block below, one per line, already run. A program executes that block, so it
-carries commands and `--check-plan` rejects a task without one.}}
+**Verification:** {{Say what the commands prove. The commands go in the fenced block below, one
+to a line, and you ran them already. A program executes that block, so it carries commands
+only, and `--check-plan` refuses a task with none.}}
 
 ```bash
 {{command}}   # {{expected: exit 0 — the comment says what exit 0 will mean here}}
 ```
 
-{{The program scores this block by EXIT CODE and nothing else, so every command is a predicate:
-a command whose exit code IS the claim. Anything you assert about a count, a line or a piece of
-output goes inside `test`: `test "$(… | grep -c 'x')" -eq 2`, `test "$(wc -l < f)" -le 150`,
-`test -z "$(git status --porcelain)"`. Keep the claim in the command and out of the comment:
-`grep -c` exits 0 for "found at least one" and 1 for "found none", so
-`grep -c … # expected: 0` goes green exactly when it should go red. `--check-plan` rejects the
-commands it can prove cannot measure their own claim.}}
+{{The program scores this block by exit code alone, so every command is a predicate: its exit
+code is the claim. Put any assertion about a count, a line, or output inside `test`. For
+example: `test "$(… | grep -c 'x')" -eq 2`, `test "$(wc -l < f)" -le 150`, or
+`test -z "$(git status --porcelain)"`.
+
+Keep the claim in the command, not in the comment. `grep -c` exits 0 when it finds at least one
+match and 1 when it finds none. So a check like `grep -c … # expected: 0` turns green exactly
+when it should turn red. `--check-plan` rejects a command whose exit code cannot prove its
+claim.}}
 
 ### Task 2 — {{name}}
 
@@ -135,12 +141,14 @@ commands it can prove cannot measure their own claim.}}
 
 ## 8. Global verification
 
-{{End-to-end validation once every task is committed. A program runs it (`ct-step global`,
-after the last commit), so the commands go in a fenced block — each one a predicate, exit 0,
-same rules as a task's **Verification:** block. Prose before and after the block is welcome:
-what to start, what to look at with human eyes. A slice with no end-to-end to run
-(documentation, pure configuration) declares it with the exact line `N/A — <reason>` instead
-of a block; `--check-plan` rejects a §8 that is only prose.}}
+{{This validates the slice end-to-end once you commit the last task. `ct-step global` runs it
+right after that commit. So the commands go in a fenced block. Each command is a predicate that
+exits 0, the same rule as a task's **Verification:** block.
+
+Prose before and after the block is welcome: what to start, what to look at with human eyes. A
+slice with nothing to run end-to-end — pure documentation or configuration — has no block. It
+uses the exact line `N/A — <reason>` in place of one. `--check-plan` rejects a §8 that has only
+prose.}}
 
 ```bash
 {{command}}   # {{expected: exit 0 — a predicate, as in every task}}
@@ -148,5 +156,5 @@ of a block; `--check-plan` rejects a §8 that is only prose.}}
 
 ## 9. Assumptions
 
-{{Numbered: every ambiguity resolved without asking, what was decided, and its provenance
+{{Numbered: every ambiguity you resolved on your own, what you decided, and its provenance
 (issue / milestone context / repo convention / own call).}}

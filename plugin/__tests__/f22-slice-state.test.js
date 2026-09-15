@@ -670,7 +670,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
   const minimalPlanFor = (issue) => [
     `# #${issue} — fixture slice`,
     '',
-    '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+    '> **Task-scoped subagents execute this plan. They arrive with no context.**',
     '',
     '## 1. Context and goal',
     'Fixture.',
@@ -692,7 +692,8 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
     'N/A — fixture.',
     '## 7. Tasks',
     '### Task 1 — do the work',
-    '**Objective:** the work is committed.',
+    '**Objective:** the commit adds the work.',
+    '',
     '**Files:** f.txt',
     'Final text (f.txt):',
     FENCE,

@@ -16,10 +16,10 @@ const REAL_FILE = 'export function sum(a, b) {\n  return a + b\n}\n'
 const VALID_PLAN = [
   '# #7 — sum() returns the sum',
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
-  'sum() exists and has to be covered.',
+  'sum() exists and needs a test.',
   '### Desired end state',
   'sum() with a test.',
   '### Out of scope',
@@ -39,6 +39,7 @@ const VALID_PLAN = [
   '## 7. Tasks',
   '### Task 1 — cover sum',
   '**Objective:** sum ends up covered.',
+  '',
   '**Files:** tests/math.test.js',
   'Current state (src/math.js):',
   F,
@@ -77,10 +78,10 @@ const readFile = (path) => {
 const HEADER = (title) => [
   `# ${title}`,
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
-  'sum() has to be exposed through the barrel.',
+  'The barrel does not export sum() yet.',
   '### Desired end state',
   'The barrel exports sum().',
   '### Out of scope',
@@ -120,10 +121,11 @@ const planWithTasks = (tasks, { beforeTasks = [] } = {}) => [
   '## 7. Tasks',
   ...tasks.flatMap((blocks, i) => [
     `### Task ${i + 1} — do job ${i + 1}`,
-    `**Objective:** job ${i + 1} is done.`,
+    `**Objective:** Task ${i + 1} writes its file.`,
+    '',
     '**Files:** src/index.js',
     ...blocks.flatMap(block),
-    ...(blocks.length ? [] : ['No code — the configuration is described in prose with the value inline.']),
+    ...(blocks.length ? [] : ['No code — the prose carries the configuration value inline.']),
     '**TDD:** No TDD — fixture.',
     '**Tests:** N/A — fixture.',
     '**Verification:** npm test',
@@ -497,7 +499,7 @@ describe('validatePlan — test files carry no final-state block', () => {
 describe('validatePlan — "at least one block with a role" per task', () => {
   it('a task whose only block is the bash verification is a violation', () => {
     const plan = planWithTasks([[CONTRACT], []]).replace(
-      'No code — the configuration is described in prose with the value inline.', 'There is nothing here.',
+      'No code — the prose carries the configuration value inline.', 'There is nothing here.',
     )
     const [v] = violationsOf(plan, 'tasks')
     expect(v.detail).toContain('No code — ')
@@ -549,10 +551,10 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   const planWith = (verification) => [
     '# #7 — sum() returns the sum',
     '',
-    '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+    '> **Task-scoped subagents execute this plan. They arrive with no context.**',
     '',
     '## 1. Context and goal',
-    'sum() exists and has to be covered.',
+    'sum() exists and needs a test.',
     '### Desired end state',
     'sum() with a test.',
     '### Out of scope',
@@ -573,7 +575,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
     '### Task 1 — cover sum',
     '**Objective:** sum ends up covered.',
     '**Files:** tests/math.test.js',
-    'No code — the test is described by name and assertion.',
+    'No code — the name and assertion describe the test.',
     '**TDD:** red first: expect(sum(2, 2)).toBe(4)',
     '**Tests:** add tests/math.test.js',
     ...verification,
@@ -751,5 +753,18 @@ describe('validatePlan — the §3 paths exist', () => {
   it('with no readFile injected it is neither asserted nor denied, just like literality', () => {
     const r = validatePlan(withSection3('Rules to obey: `docs/conventions/domain.md`'), {})
     expect(r.violations.filter((v) => v.rule === 'reference-paths')).toEqual([])
+  })
+})
+
+describe('the language of the plan', () => {
+  it('returns the prose violations under the rule `ste`', () => {
+    const long = Array.from({ length: 30 }, (_, i) => `word${i}`).join(' ')
+    const plan = planWithTasks([[CONTRACT]], { beforeTasks: [] }).replace('Unit with vitest.', `${long}.`)
+    expect(violationsOf(plan, 'ste')).toHaveLength(1)
+    expect(violationsOf(plan, 'ste')[0].detail).toContain('length —')
+  })
+
+  it('leaves a plan whose prose obeys the standard with no ste violation', () => {
+    expect(violationsOf(PLAN_WITH_ROLES, 'ste')).toEqual([])
   })
 })

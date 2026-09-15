@@ -12,7 +12,7 @@ const FENCE = '```'
 const planOfOneTaskWithBacktickedFiles = () => [
   '# #99 — fixture slice',
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'Fixture.',
@@ -34,7 +34,8 @@ const planOfOneTaskWithBacktickedFiles = () => [
   'N/A — fixture.',
   '## 7. Tasks',
   '### Task 1 — do the work',
-  '**Objective:** the work is committed.',
+  '**Objective:** the commit adds the work.',
+  '',
   '**Files:** `work.txt` (create).',
   'Final text (work.txt):',
   FENCE,
