@@ -2205,3 +2205,143 @@ describe('ct-groom — the repositories a spec may name (#348)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+// #348 — THE GROOM READS AND WRITES ONCE PER TARGET REPOSITORY.
+//
+// A milestone has one home repository (`--repo`) and N target ones, one per
+// `Repo` cell, and every read and every write below answers about ONE of them.
+// The property these tests pin is BOTH halves: a milestone that reaches one
+// repository makes the same calls it always made (the rest of this file's
+// tests are that half), and one that reaches two names each repository in the
+// argv of its own calls.
+describe('ct-groom — one read and one write per target repository (#348)', () => {
+  const SPEC_TWO_REPOS = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|
+| 1 | login | backend | modelo | – | AC-1.1 | schema | – |
+| 2 | pantalla | ui | alta | – | AC-2.1 | – | o/other |
+`
+  const specWith = (body) => {
+    const dir = makeSpecDir('ctg-')
+    const spec = join(dir, 'spec.md')
+    writeFileSync(spec, body)
+    return { dir, spec }
+  }
+
+  it('the dry run says which repository each issue lands in', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
+    expect(res.status).toBe(0)
+    const plan = JSON.parse(res.stdout)
+    expect(plan.issues[0].repo).toBe('o/home')
+    expect(plan.issues[1].repo).toBe('o/other')
+    expect(plan.targets).toEqual(['o/home', 'o/other'])
+    expect(plan.repo).toBe('o/home')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a spec with no Repo column prints every issue in the home repository', () => {
+    const { dir, spec } = specWith(SPEC)
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
+    expect(res.status).toBe(0)
+    const plan = JSON.parse(res.stdout)
+    expect(plan.issues.map((i) => i.repo)).toEqual(['o/home', 'o/home'])
+    expect(plan.targets).toEqual(['o/home'])
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the issues and the labels of every target repository are listed, each one named in the argv', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const argvLog = join(dir, 'argv.log')
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], {
+      encoding: 'utf8',
+      env: fakeEnv({ FAKE_GH_ARGV_LOG_FILE: argvLog, FAKE_GH_COUNTER_FILE: join(dir, 'counter') }),
+    })
+    expect(res.status).toBe(0)
+    const log = readFileSync(argvLog, 'utf8')
+    expect(log).toMatch(/owner=o -f name=home/)
+    expect(log).toMatch(/owner=o -f name=other/)
+    expect(log).toMatch(/repos\/o\/home\/labels/)
+    expect(log).toMatch(/repos\/o\/other\/labels/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a listing that fails for the second repository aborts naming that repository', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], {
+      encoding: 'utf8',
+      env: fakeEnv({ FAKE_GH_COUNTER_FILE: join(dir, 'counter'), FAKE_GH_LIST_FAIL_AT: '1' }),
+    })
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('could not list the issues of o/other')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('an issue that already exists is paired inside its own repository, never across repositories', () => {
+    // The SAME ct-order marker in both repositories: slice 1 lands at home and
+    // slice 2 in o/other, and o/other's issue #77 carries ct-order:2. Pairing
+    // across repositories would let home's #55 (ct-order:1) claim slice 2, or
+    // the other way round.
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const atHome = { number: 55, title: '#1 login', body: '<!-- ct-order:1 -->', state: 'open', labels: [], milestone: { title: 'Epic' } }
+    const atOther = { number: 77, title: '#2 pantalla', body: '<!-- ct-order:2 -->', state: 'open', labels: [], milestone: { title: 'Epic' } }
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], {
+      encoding: 'utf8',
+      env: fakeEnv({
+        FAKE_GH_COUNTER_FILE: join(dir, 'counter'),
+        FAKE_GH_LIST_SEQUENCE: JSON.stringify([[atHome], [atOther]]),
+      }),
+    })
+    expect(res.stderr).not.toMatch(/orphaned/)
+    expect(res.status).not.toBe(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the real run creates each issue in its own repository, with that repository milestone and labels', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const argvLog = join(dir, 'argv.log')
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic'], {
+      encoding: 'utf8',
+      env: fakeEnv({ FAKE_GH_ARGV_LOG_FILE: argvLog, FAKE_GH_COUNTER_FILE: join(dir, 'counter') }),
+    })
+    expect(res.status).toBe(0)
+    const log = readFileSync(argvLog, 'utf8')
+    expect(log).toMatch(/issue create --repo o\/home --title #1 login/)
+    expect(log).toMatch(/issue create --repo o\/other --title #2 pantalla/)
+    expect(log).toMatch(/api repos\/o\/home\/milestones -f title=Epic/)
+    expect(log).toMatch(/api repos\/o\/other\/milestones -f title=Epic/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the labels created in a repository are only the ones its own issues carry', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const argvLog = join(dir, 'argv.log')
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic'], {
+      encoding: 'utf8',
+      env: fakeEnv({ FAKE_GH_ARGV_LOG_FILE: argvLog, FAKE_GH_COUNTER_FILE: join(dir, 'counter') }),
+    })
+    expect(res.status).toBe(0)
+    const log = readFileSync(argvLog, 'utf8')
+    expect(log).toMatch(/label create type:backend --repo o\/home/)
+    expect(log).toMatch(/label create type:ui --repo o\/other/)
+    expect(log).not.toMatch(/label create type:ui --repo o\/home/)
+    expect(log).not.toMatch(/label create type:backend --repo o\/other/)
+    // The whole status: vocabulary is seeded in BOTH: an issue is born at
+    // status:backlog anywhere, and the other three are written later by an
+    // `--add-label` that cannot create them.
+    expect(log).toMatch(/label create status:ready --repo o\/home/)
+    expect(log).toMatch(/label create status:ready --repo o\/other/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the backlog reminder names the repositories the issues live in', () => {
+    const { dir, spec } = specWith(SPEC_TWO_REPOS)
+    const atHome = { number: 55, title: '#1 login', body: '<!-- ct-order:1 -->', state: 'open', labels: [{ name: 'status:backlog' }], milestone: { title: 'Epic' } }
+    const res = spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], {
+      encoding: 'utf8',
+      env: fakeEnv({ FAKE_GH_COUNTER_FILE: join(dir, 'counter'), FAKE_GH_LIST_SEQUENCE: JSON.stringify([[atHome], []]) }),
+    })
+    expect(res.stderr).toMatch(/o\/home, o\/other/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+})

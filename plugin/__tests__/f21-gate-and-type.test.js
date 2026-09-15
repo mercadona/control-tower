@@ -307,7 +307,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   })
 
   it('groomPlan exposes the resolved gates as structured data', () => {
-    const plan = groomPlan([backendWithGate], { milestone: 'Epic', specRef: {} })
+    const plan = groomPlan([backendWithGate], { repoOf: () => 'o/r', milestone: 'Epic', specRef: {} })
     expect(plan.issues[0].gates).toEqual(['visual'])
   })
 })

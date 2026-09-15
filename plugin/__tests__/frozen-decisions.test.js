@@ -88,13 +88,13 @@ describe('buildIssueBody — frozen decisions', () => {
 
 describe('groomPlan — the frozen decisions travel in the plan', () => {
   it('every issue carries frozenDecisions and frozenDecisionsUnknown', () => {
-    const plan = groomPlan([SLICE], { milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: '- **D-1** — iOS 17.' })
+    const plan = groomPlan([SLICE], { repoOf: () => 'o/r', milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: '- **D-1** — iOS 17.' })
     expect(plan.issues[0].frozenDecisions).toBe('- **D-1** — iOS 17.')
     expect(plan.issues[0].frozenDecisionsUnknown).toBe(false)
     expect(plan.issues[0].body).toContain('## Decisiones congeladas')
   })
   it('reason `malformada` → frozenDecisionsUnknown true (it is not "it has none")', () => {
-    const plan = groomPlan([SLICE], { milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: null, frozenDecisionsReason: 'malformada' })
+    const plan = groomPlan([SLICE], { repoOf: () => 'o/r', milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: null, frozenDecisionsReason: 'malformada' })
     expect(plan.issues[0].frozenDecisionsUnknown).toBe(true)
   })
 })

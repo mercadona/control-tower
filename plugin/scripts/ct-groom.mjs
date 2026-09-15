@@ -739,7 +739,7 @@ const slices = report.slices
 // never the raw stack trace of an uncaught exception.
 let plan
 try {
-  plan = groomPlan(slices, { milestone, specRef, epicContext, epicContextReason, frozenDecisions, frozenDecisionsReason })
+  plan = groomPlan(slices, { milestone, specRef, epicContext, epicContextReason, frozenDecisions, frozenDecisionsReason, repoOf: (n) => repoOfOrder.get(n) || homeRepo })
 } catch (e) {
   console.error(e.message)
   process.exit(2)
@@ -979,162 +979,198 @@ let anyOrphans = false
 //      only the ones that are missing, a label the repo had already looked
 //      after stops changing colour on every groom.
 let existingLabelNames = null
+// #348 — ONE READ PER TARGET REPOSITORY, AND WHY THE MAPS.
+//
+// A milestone's slices land in N repositories, and every read below answers
+// about ONE of them: the issues that already exist, the labels that already
+// exist, and which of those issues belong to this epic. Three Maps keyed by
+// repository, filled by the same calls a single-repository run already made —
+// so a milestone that reaches one repository makes exactly the same calls, in
+// the same order, with the same messages, as before this existed.
+//
+// `targetRepos` is home-first (see MilestoneRepos.of), which is what makes the
+// order of the calls deterministic.
+//
+// What is NOT per repository: the blockers of the two gates and the
+// `otherEpicWarnings` are accumulated across every repository and reported
+// TOGETHER before a single exit, for the same reason the gates already report
+// together inside one repository — naming only the first says "remove that one
+// and it goes through", and that is false when there is more than one. And
+// `reconcileEntries` is built ONCE, after the loop, because it walks
+// `plan.issues` (every repository's) and each issue is paired inside ITS OWN
+// repository's `inEpic`: pairing across repositories would let an issue of
+// another repository claim a slice's marker.
+const sameRepo = (one, other) => String(one).toLowerCase() === String(other).toLowerCase()
 if (typeof repo === 'string') {
-  try {
-    // Listing via GraphQL (only issues, never PRs; only the fields that get
-    // used) — see GROOM_ISSUES_QUERY. It replaces the REST
-    // `repos/<repo>/issues` that brought ALL the repo's PRs with their complete
-    // bodies and overflowed the buffer in large repos (ENOBUFS). The same set
-    // of issues `realIssuesOnly` produced over REST; realIssuesOnly is kept as
-    // a safety net (harmless: GraphQL does not return PRs).
-    const [owner, name] = repo.split('/')
-    const pages = JSON.parse(gh(['api', 'graphql', '--paginate', '--slurp', '-f', `query=${GROOM_ISSUES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`]))
-    existingIssues = realIssuesOnly(normalizeGraphqlIssues(pages))
-  } catch (e) {
-    console.error(`could not list the issues of ${repo}: ${e.message}`)
-    process.exit(1)
-  }
-  try {
-    const rawLabels = JSON.parse(gh(['api', `repos/${repo}/labels`, '--method', 'GET', '--paginate', '--slurp']))
-    existingLabelNames = new Set(flattenPages(rawLabels).map((l) => l && l.name).filter(Boolean))
-  } catch (e) {
-    // The same criterion as the issue/milestone listing: a read failure is NOT
-    // degraded into "the repo has no labels at all" — that would lead to
-    // rewriting existing labels with --force and to reporting as "new" labels
-    // that did exist. It aborts with a clear message.
-    console.error(`could not list the labels of ${repo}: ${e.message}`)
-    process.exit(1)
-  }
-  const knownOrders = new Set(plan.issues.map((i) => i.order))
-  const partition = partitionByEpic(existingIssues, milestone)
-  inEpic = partition.inEpic
-
-  // F23 — the gates of the per-epic scope. They go HERE, between the issue
-  // listing and everything else, because this point is ahead of the script's
-  // first mutation (the creation of the milestone, much further down): a check
-  // that cannot stop the next action is decoration, and one that aborts after
-  // creating the milestone leaves rubbish in GitHub — the same reason the
-  // listing was placed where it is.
-  //
-  // Both gates are computed IN FULL and reported TOGETHER before a single
-  // exit: naming only the first blocker says "remove that one and it goes
-  // through", and that is false when there is more than one.
-  //
-  // Exit code 1, by the precedent of this very file: 1 is "I read an
-  // inconsistent state, I am NOT carrying on" (see the abort of the project's
-  // item listing); 2 is an argv/spec validation error; 3 is "there was
-  // divergence but the work got done", and here nothing gets done.
+  existingIssues = new Map()
+  existingLabelNames = new Map()
+  inEpic = new Map()
+  // The gates' findings, accumulated across every target repository (see
+  // above). `blockers` decides the exit; `otherEpicWarnings` is emitted after
+  // it, because each of its lines claims this groom is going to create a
+  // slice — and a run that stops dead creates nothing.
   const blockers = []
-  const blockerRepoRef = typeof repo === 'string' ? repo : '<owner/repo>'
-
-  // Gate A — issues with NO milestone. No epic can be attributed to them, so
-  // both possible readings do damage: pairing one would rewrite somebody
-  // else's issue; ignoring it would create a duplicate of the slice that is
-  // ours. It only blocks if its order COLLIDES with today's §9 table — a
-  // marker that competes with nothing prevents nothing, but it does not keep
-  // quiet either (the same criterion as NO_MILESTONE_KEY in gh-issue-map.js: a
-  // shared bucket with a warning, never invisible).
-  const withoutMilestoneBlockers = []
-  for (const i of partition.sinMilestone) {
-    const order = extractOrder(i.body)
-    if (order == null) continue
-    if (knownOrders.has(order)) {
-      withoutMilestoneBlockers.push(`  #${i.number}  ct-order:${order}`)
-    } else {
-      console.error(`warning: issue #${i.number} carries the ct-order:${order} marker and has no milestone — I cannot decide which epic it belongs to, so it stays out of this groom. It does not collide with the §9 table of this spec, which is why it does not block; assign it its own milestone so that it stops turning up: gh issue edit ${i.number} --repo ${blockerRepoRef} --milestone "<its own>"`)
-    }
-  }
-  if (withoutMilestoneBlockers.length) {
-    blockers.push({
-      headline: 'these issues carry a ct-order marker that collides with the §9 table of this spec, but they have NO milestone — I cannot decide whether they belong to this epic or to another one:',
-      lines: withoutMilestoneBlockers,
-      remedy: `assign them their own milestone and run again: gh issue edit <n> --repo ${blockerRepoRef} --milestone "<its own>"`,
-    })
-  }
-
-  // Gate B — the SAME epic under ANOTHER title. A risk the per-epic scoping
-  // itself introduces, not one that already existed: while the pairing was
-  // global, a `--milestone` with a typo in it (or an epic renamed in GitHub)
-  // still found its issues by marker and at worst reported divergence. Scoped,
-  // that very same run sees ZERO issues in its epic and recreates the whole
-  // epic duplicated under a new milestone, with exit 0 — a command that gives
-  // no error and does not do what it looks like it does.
-  //
-  // The signal that tells it apart from a different epic reusing numbers is
-  // the link to the spec, which every groomed issue carries in its body
-  // (groom.js#renderSpecLink). The same order + the SAME document = the same
-  // epic under another name. A different document = two legitimate epics
-  // sharing the order number, which is EXACTLY what F23 comes to enable: it
-  // does not fire.
-  //
-  // The link's TARGET is compared (specTarget), not the whole line: the line
-  // starts with "> Slice `#N` of the epic. " and that prefix changed format in
-  // F6, so comparing the whole thing would fail against any earlier issue.
-  //
-  // When the target is missing on either side, or differs, the gate does NOT
-  // fire — it fails OPEN. The price has to be stated in full, because it is
-  // not the status quo: if the epic had been renamed and its issues carry the
-  // link in another shape (groomed before F10, or with the degraded shape
-  // "— sin enlace: <motivo>"), `inEpic` comes out empty and this run recreates
-  // the WHOLE epic duplicated with exit 0. Before F23, the global pairing
-  // found them by marker and reported divergence with exit 3, creating
-  // nothing: the false negative gives nothing back, it opens a hole that did
-  // not exist before. It is accepted in exchange for not bricking the normal
-  // case — a false positive would stop dead two different epics reusing order
-  // numbers, which is exactly what F23 comes to enable. What is done is not to
-  // keep quiet about it: every discard from this bucket that could end in a
-  // duplicated epic —that is, one of a slice that does not yet have an issue
-  // in this epic— emits a warning on stderr (further down, in the `continue`
-  // itself), non-blocking.
-  const specTargetByOrder = new Map(plan.issues.map((i) => [i.order, specTarget(i.specLink)]))
-  const otherEpicBlockers = []
   const otherEpicWarnings = []
-  for (const i of partition.otrosEpics) {
-    const order = extractOrder(i.body)
-    if (order == null || !knownOrders.has(order)) continue
-    const theirs = specTarget(extractSpecLink(i.body))
-    const ours = specTargetByOrder.get(order)
-    if (theirs === null || ours === null || theirs !== ours) {
-      // The warning of the fail-open. It closes the asymmetry with gate A,
-      // which does name on stderr the milestone-less issues that do NOT block:
-      // this bucket is exactly the one a duplicated epic with exit 0 comes out
-      // of (see the comment above), so discarding it in silence is the one
-      // thing that cannot be done. It does not block, it does not change the
-      // exit code, and it does not alter when the gate fires.
-      //
-      // Scoped to the slices that do NOT already have an issue in THIS epic,
-      // with the same predicate the pairing further down uses
-      // (`findByMarker(inEpic, marker)`): duplication can only occur if the
-      // slice is going to be created, and if it already has an issue here the
-      // pairing finds it and the creation is skipped — there is nothing to
-      // duplicate, so the warning would come out on every run without
-      // describing any loss and with nothing the human could do to silence it.
-      // The same criterion, in this very file, as the closed-issue filter of
-      // `backlogPendingCount`: a warning that cannot be satisfied is a warning
-      // that teaches you to ignore the rest. The scoping loses no dangerous
-      // case — it covers exactly the set in which duplication is possible.
-      if (findByMarker(inEpic, `<!-- ct-order:${order} -->`)) continue
-      const reason = theirs === null
-        ? 'but its body carries no link-to-the-spec line to compare it against'
-        : (ours === null
-          ? 'but this spec has produced no link to compare it against'
-          : 'but its link to the spec does not match this spec\'s')
-      // It accumulates instead of being printed here: the warnings are emitted
-      // AFTER the exit of the blockers (further down), because each of them
-      // claims this groom is going to create that slice — and in a run that
-      // stops dead nothing gets created. Nothing is lost: the next run, now
-      // unblocked, computes them all over again just the same.
-      otherEpicWarnings.push(`warning: slice #${order} of this spec has an issue in another milestone with the same ct-order (#${i.number}, "${epicTitleOf(i)}"), ${reason} — so I treat it as another epic and I ${dryRun ? 'would create' : 'will create'} a new issue for slice #${order} in "${milestone}". If it really is the same epic renamed, this is going to duplicate it: check before carrying on.`)
-      continue
+  for (const target of targetRepos) {
+    try {
+      // Listing via GraphQL (only issues, never PRs; only the fields that get
+      // used) — see GROOM_ISSUES_QUERY. It replaces the REST
+      // `repos/<repo>/issues` that brought ALL the repo's PRs with their complete
+      // bodies and overflowed the buffer in large repos (ENOBUFS). The same set
+      // of issues `realIssuesOnly` produced over REST; realIssuesOnly is kept as
+      // a safety net (harmless: GraphQL does not return PRs).
+      const [owner, name] = target.split('/')
+      const pages = JSON.parse(gh(['api', 'graphql', '--paginate', '--slurp', '-f', `query=${GROOM_ISSUES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`]))
+      existingIssues.set(target, realIssuesOnly(normalizeGraphqlIssues(pages)))
+    } catch (e) {
+      console.error(`could not list the issues of ${target}: ${e.message}`)
+      process.exit(1)
     }
-    otherEpicBlockers.push(`  #${i.number}  ct-order:${order}  milestone: "${epicTitleOf(i)}"`)
-  }
-  if (otherEpicBlockers.length) {
-    blockers.push({
-      headline: 'these slices already have an issue in ANOTHER milestone that points at the SAME spec — it looks like this very epic under another title, not a different epic:',
-      lines: otherEpicBlockers,
-      remedy: `this spec asks for --milestone "${milestone}". If you renamed the epic, use its real title; if it really is a new epic, its §9 table should not point at the same spec as the previous one.`,
-    })
+    try {
+      const rawLabels = JSON.parse(gh(['api', `repos/${target}/labels`, '--method', 'GET', '--paginate', '--slurp']))
+      existingLabelNames.set(target, new Set(flattenPages(rawLabels).map((l) => l && l.name).filter(Boolean)))
+    } catch (e) {
+      // The same criterion as the issue/milestone listing: a read failure is NOT
+      // degraded into "the repo has no labels at all" — that would lead to
+      // rewriting existing labels with --force and to reporting as "new" labels
+      // that did exist. It aborts with a clear message.
+      console.error(`could not list the labels of ${target}: ${e.message}`)
+      process.exit(1)
+    }
+    // knownOrders is scoped to the slices that land in THIS repository (#348):
+    // the gates below ask "does this marker collide with what this run is going
+    // to create HERE", and a slice that lands in another repository creates
+    // nothing here to collide with.
+    const hereIssues = plan.issues.filter((i) => sameRepo(i.repo, target))
+    const knownOrders = new Set(hereIssues.map((i) => i.order))
+    const partition = partitionByEpic(existingIssues.get(target), milestone)
+    inEpic.set(target, partition.inEpic)
+
+    // F23 — the gates of the per-epic scope. They go HERE, between the issue
+    // listing and everything else, because this point is ahead of the script's
+    // first mutation (the creation of the milestone, much further down): a check
+    // that cannot stop the next action is decoration, and one that aborts after
+    // creating the milestone leaves rubbish in GitHub — the same reason the
+    // listing was placed where it is.
+    //
+    // Exit code 1, by the precedent of this very file: 1 is "I read an
+    // inconsistent state, I am NOT carrying on" (see the abort of the project's
+    // item listing); 2 is an argv/spec validation error; 3 is "there was
+    // divergence but the work got done", and here nothing gets done.
+    const blockerRepoRef = target
+    // `where`: the repository's name is added to each finding ONLY when this
+    // milestone really reaches more than one — with a single repository the
+    // message is the one it always was, byte for byte.
+    const where = targetRepos.length > 1 ? `  repo: ${target}` : ''
+
+    // Gate A — issues with NO milestone. No epic can be attributed to them, so
+    // both possible readings do damage: pairing one would rewrite somebody
+    // else's issue; ignoring it would create a duplicate of the slice that is
+    // ours. It only blocks if its order COLLIDES with today's §9 table — a
+    // marker that competes with nothing prevents nothing, but it does not keep
+    // quiet either (the same criterion as NO_MILESTONE_KEY in gh-issue-map.js: a
+    // shared bucket with a warning, never invisible).
+    const withoutMilestoneBlockers = []
+    for (const i of partition.sinMilestone) {
+      const order = extractOrder(i.body)
+      if (order == null) continue
+      if (knownOrders.has(order)) {
+        withoutMilestoneBlockers.push(`  #${i.number}  ct-order:${order}${where}`)
+      } else {
+        console.error(`warning: issue #${i.number} carries the ct-order:${order} marker and has no milestone — I cannot decide which epic it belongs to, so it stays out of this groom. It does not collide with the §9 table of this spec, which is why it does not block; assign it its own milestone so that it stops turning up: gh issue edit ${i.number} --repo ${blockerRepoRef} --milestone "<its own>"`)
+      }
+    }
+    if (withoutMilestoneBlockers.length) {
+      blockers.push({
+        headline: 'these issues carry a ct-order marker that collides with the §9 table of this spec, but they have NO milestone — I cannot decide whether they belong to this epic or to another one:',
+        lines: withoutMilestoneBlockers,
+        remedy: `assign them their own milestone and run again: gh issue edit <n> --repo ${blockerRepoRef} --milestone "<its own>"`,
+      })
+    }
+
+    // Gate B — the SAME epic under ANOTHER title. A risk the per-epic scoping
+    // itself introduces, not one that already existed: while the pairing was
+    // global, a `--milestone` with a typo in it (or an epic renamed in GitHub)
+    // still found its issues by marker and at worst reported divergence. Scoped,
+    // that very same run sees ZERO issues in its epic and recreates the whole
+    // epic duplicated under a new milestone, with exit 0 — a command that gives
+    // no error and does not do what it looks like it does.
+    //
+    // The signal that tells it apart from a different epic reusing numbers is
+    // the link to the spec, which every groomed issue carries in its body
+    // (groom.js#renderSpecLink). The same order + the SAME document = the same
+    // epic under another name. A different document = two legitimate epics
+    // sharing the order number, which is EXACTLY what F23 comes to enable: it
+    // does not fire.
+    //
+    // The link's TARGET is compared (specTarget), not the whole line: the line
+    // starts with "> Slice `#N` of the epic. " and that prefix changed format in
+    // F6, so comparing the whole thing would fail against any earlier issue.
+    //
+    // When the target is missing on either side, or differs, the gate does NOT
+    // fire — it fails OPEN. The price has to be stated in full, because it is
+    // not the status quo: if the epic had been renamed and its issues carry the
+    // link in another shape (groomed before F10, or with the degraded shape
+    // "— sin enlace: <motivo>"), `inEpic` comes out empty and this run recreates
+    // the WHOLE epic duplicated with exit 0. Before F23, the global pairing
+    // found them by marker and reported divergence with exit 3, creating
+    // nothing: the false negative gives nothing back, it opens a hole that did
+    // not exist before. It is accepted in exchange for not bricking the normal
+    // case — a false positive would stop dead two different epics reusing order
+    // numbers, which is exactly what F23 comes to enable. What is done is not to
+    // keep quiet about it: every discard from this bucket that could end in a
+    // duplicated epic —that is, one of a slice that does not yet have an issue
+    // in this epic— emits a warning on stderr (further down, in the `continue`
+    // itself), non-blocking.
+    const specTargetByOrder = new Map(hereIssues.map((i) => [i.order, specTarget(i.specLink)]))
+    const otherEpicBlockers = []
+    for (const i of partition.otrosEpics) {
+      const order = extractOrder(i.body)
+      if (order == null || !knownOrders.has(order)) continue
+      const theirs = specTarget(extractSpecLink(i.body))
+      const ours = specTargetByOrder.get(order)
+      if (theirs === null || ours === null || theirs !== ours) {
+        // The warning of the fail-open. It closes the asymmetry with gate A,
+        // which does name on stderr the milestone-less issues that do NOT block:
+        // this bucket is exactly the one a duplicated epic with exit 0 comes out
+        // of (see the comment above), so discarding it in silence is the one
+        // thing that cannot be done. It does not block, it does not change the
+        // exit code, and it does not alter when the gate fires.
+        //
+        // Scoped to the slices that do NOT already have an issue in THIS epic,
+        // with the same predicate the pairing further down uses
+        // (`findByMarker(inEpic, marker)`): duplication can only occur if the
+        // slice is going to be created, and if it already has an issue here the
+        // pairing finds it and the creation is skipped — there is nothing to
+        // duplicate, so the warning would come out on every run without
+        // describing any loss and with nothing the human could do to silence it.
+        // The same criterion, in this very file, as the closed-issue filter of
+        // `backlogPendingCount`: a warning that cannot be satisfied is a warning
+        // that teaches you to ignore the rest. The scoping loses no dangerous
+        // case — it covers exactly the set in which duplication is possible.
+        if (findByMarker(partition.inEpic, `<!-- ct-order:${order} -->`)) continue
+        const reason = theirs === null
+          ? 'but its body carries no link-to-the-spec line to compare it against'
+          : (ours === null
+            ? 'but this spec has produced no link to compare it against'
+            : 'but its link to the spec does not match this spec\'s')
+        // It accumulates instead of being printed here: the warnings are emitted
+        // AFTER the exit of the blockers (further down), because each of them
+        // claims this groom is going to create that slice — and in a run that
+        // stops dead nothing gets created. Nothing is lost: the next run, now
+        // unblocked, computes them all over again just the same.
+        otherEpicWarnings.push(`warning: slice #${order} of this spec has an issue in another milestone with the same ct-order (#${i.number}, "${epicTitleOf(i)}"), ${reason} — so I treat it as another epic and I ${dryRun ? 'would create' : 'will create'} a new issue for slice #${order} in "${milestone}". If it really is the same epic renamed, this is going to duplicate it: check before carrying on.`)
+        continue
+      }
+      otherEpicBlockers.push(`  #${i.number}  ct-order:${order}  milestone: "${epicTitleOf(i)}"${where}`)
+    }
+    if (otherEpicBlockers.length) {
+      blockers.push({
+        headline: 'these slices already have an issue in ANOTHER milestone that points at the SAME spec — it looks like this very epic under another title, not a different epic:',
+        lines: otherEpicBlockers,
+        remedy: `this spec asks for --milestone "${milestone}". If you renamed the epic, use its real title; if it really is a new epic, its §9 table should not point at the same spec as the previous one.`,
+      })
+    }
   }
 
   if (blockers.length) {
@@ -1148,16 +1184,23 @@ if (typeof repo === 'string') {
   }
   for (const warning of otherEpicWarnings) console.error(warning)
 
-  for (const i of inEpic) {
-    const order = extractOrder(i.body)
-    if (order != null && !knownOrders.has(order)) {
-      console.error(`warning: issue #${i.number} carries the ct-order:${order} marker, but slice #${order} is no longer in the spec's §9 table — an issue orphaned from the epic "${milestone}" (was the slice deleted without closing/renumbering its issue?); review it by hand`)
-      anyOrphans = true
+  for (const [target, issues] of inEpic) {
+    const knownOrders = new Set(plan.issues.filter((i) => sameRepo(i.repo, target)).map((i) => i.order))
+    for (const i of issues) {
+      const order = extractOrder(i.body)
+      if (order != null && !knownOrders.has(order)) {
+        console.error(`warning: issue #${i.number} carries the ct-order:${order} marker, but slice #${order} is no longer in the spec's §9 table — an issue orphaned from the epic "${milestone}" (was the slice deleted without closing/renumbering its issue?); review it by hand`)
+        anyOrphans = true
+      }
     }
   }
   reconcileEntries = plan.issues.map((iss) => {
     const marker = `<!-- ct-order:${iss.order} -->`
-    const found = findByMarker(inEpic, marker)
+    // #348: paired inside ITS OWN repository. `inEpic` is keyed by repository
+    // and a slice is only ever paired against the issues of the repository it
+    // lands in — across repositories, an issue that happens to carry the same
+    // ct-order would claim a slice that is not its own.
+    const found = findByMarker(inEpic.get(iss.repo) || [], marker)
     if (!found) return { iss, found: null, diff: null, bodyResult: null, gaps: null }
     // F23: `diff.milestone` is UNREACHABLE from here ever since the pairing is
     // scoped per epic — `found` comes out of `inEpic`, and only issues whose
@@ -1217,7 +1260,7 @@ if (typeof repo === 'string') {
   // messages aimed at a human. The "gap" warning (if there is one) was already
   // printed above — it is not repeated here.
   if (reconcileFlag && dryRun) {
-    for (const { found, diff, bodyResult } of reconcileEntries) {
+    for (const { iss, found, diff, bodyResult } of reconcileEntries) {
       // "is there anything to write?" is NOT "does this count towards the exit
       // code?". `hasDrift` answers the second (it deliberately excludes the
       // epic context, §4.4 of the design), and gating the write with it made
@@ -1229,7 +1272,7 @@ if (typeof repo === 'string') {
       if (fieldArgs.length || bodyResult.body !== null) {
         const bodyCats = bodyDriftCategories(diff, bodyResult)
         const bodyNote = bodyResult.body !== null ? ` --body <updated: ${bodyCats.join(', ')}>` : ''
-        console.error(`--reconcile would apply: gh issue edit ${found.number} --repo ${repo} ${fieldArgs.join(' ')}${bodyNote}`.trim())
+        console.error(`--reconcile would apply: gh issue edit ${found.number} --repo ${iss.repo} ${fieldArgs.join(' ')}${bodyNote}`.trim())
       }
     }
   }
@@ -1249,19 +1292,41 @@ if (typeof repo === 'string') {
 // the groom —the human promotion to `status:ready`— blew up, and the claim
 // behind it died with exit 3 saying «reintenta más tarde». See
 // groom.js#LOOP_STATUS_LABELS.
-const wantedLabels = [...new Set([...plan.issues.flatMap((i) => i.labels), ...LOOP_STATUS_LABELS])]
-const reusedLabels = existingLabelNames ? wantedLabels.filter((l) => existingLabelNames.has(l)) : []
-const newLabels = existingLabelNames ? wantedLabels.filter((l) => !existingLabelNames.has(l)) : wantedLabels
-const LABEL_VOCAB_HINT = `check whether any of them is a synonym of one that already exists (\`gh label list --repo ${typeof repo === 'string' ? repo : '<owner/repo>'}\`): the collision detection (area:/touches:) only works if every spec in the repo uses the SAME vocabulary`
+//
+// #348: one list per target repository. A repository gets the labels of the
+// issues that land IN IT plus the whole `status:` vocabulary — not the labels
+// of a row that landed somewhere else: creating `type:ui` in a repository that
+// received no ui slice would be inventing vocabulary in somebody's repo.
+const wantedLabelsFor = (target) => [...new Set([
+  ...plan.issues.filter((i) => sameRepo(i.repo, target)).flatMap((i) => i.labels),
+  ...LOOP_STATUS_LABELS,
+])]
+const wantedLabels = new Map(targetRepos.map((target) => [target, wantedLabelsFor(target)]))
+const labelsOf = (target) => wantedLabels.get(target) || []
+const knownLabelsOf = (target) => (existingLabelNames ? existingLabelNames.get(target) : null) || null
+const reusedLabelsOf = (target) => {
+  const known = knownLabelsOf(target)
+  return known ? labelsOf(target).filter((l) => known.has(l)) : []
+}
+const newLabelsOf = (target) => {
+  const known = knownLabelsOf(target)
+  return known ? labelsOf(target).filter((l) => !known.has(l)) : labelsOf(target)
+}
+const LABEL_VOCAB_HINT = (target) => `check whether any of them is a synonym of one that already exists (\`gh label list --repo ${target}\`): the collision detection (area:/touches:) only works if every spec in the repo uses the SAME vocabulary`
 // It speaks ONLY when there is something to check — inventing new vocabulary.
 // If the plan creates no label at all, there is nothing to tell apart and the
 // silence goes on meaning what it meant (the same criterion as F5's divergence
 // report: silence = nothing to decide). With no --repo nothing can be claimed
 // about what exists, so nothing is said either.
-function labelReportLine(verb) {
-  if (!existingLabelNames || !newLabels.length) return null
-  const reusedPart = reusedLabels.length ? ` (the rest already existed and are reused as they are, untouched: ${reusedLabels.join(', ')})` : ''
-  return `new labels ${verb} in ${repo}: ${newLabels.join(', ')}${reusedPart} — ${LABEL_VOCAB_HINT}`
+function labelReportLines(verb) {
+  if (!existingLabelNames) return []
+  return targetRepos.flatMap((target) => {
+    const missing = newLabelsOf(target)
+    if (!missing.length) return []
+    const reused = reusedLabelsOf(target)
+    const reusedPart = reused.length ? ` (the rest already existed and are reused as they are, untouched: ${reused.join(', ')})` : ''
+    return [`new labels ${verb} in ${target}: ${missing.join(', ')}${reusedPart} — ${LABEL_VOCAB_HINT(target)}`]
+  })
 }
 // F6, serious 2 — the groom creates issues in `status:backlog`
 // (groom.js#buildLabels) and the dispatcher only looks at `status:ready`:
@@ -1288,18 +1353,27 @@ function backlogPendingCount() {
 function printBacklogReminder() {
   const pending = backlogPendingCount()
   if (!pending) return
+  // #348: the promotion command names the repository, and a milestone that
+  // reaches more than one says so — `gh issue edit <n> --repo <the home one>`
+  // would silently do nothing for an issue that lives somewhere else.
   const repoRef = typeof repo === 'string' ? repo : '<owner/repo>'
-  console.error(`reminder: ${pending} issue(s) of this epic ${dryRun ? 'would be left' : 'are left'} in status:backlog — /ct-next dispatches NOTHING that does not carry status:ready. Promoting them is a deliberate human step (it is the loop's gate: you are the one who decides what goes in flight): gh issue edit <n> --repo ${repoRef} --add-label status:ready --remove-label status:backlog`)
+  const where = targetRepos.length > 1
+    ? `<the repository each one lives in: ${targetRepos.join(', ')}>`
+    : repoRef
+  console.error(`reminder: ${pending} issue(s) of this epic ${dryRun ? 'would be left' : 'are left'} in status:backlog — /ct-next dispatches NOTHING that does not carry status:ready. Promoting them is a deliberate human step (it is the loop's gate: you are the one who decides what goes in flight): gh issue edit <n> --repo ${where} --add-label status:ready --remove-label status:backlog`)
 }
 
 if (dryRun) {
   // F6's two messages go to stderr, BEFORE the plan: stdout has to go on being
   // pure, parseable JSON (several tests, and any real pipeline, depend on
   // that).
-  const labelLine = labelReportLine('that would be created')
-  if (labelLine) console.error(labelLine)
+  for (const line of labelReportLines('that would be created')) console.error(line)
   printBacklogReminder()
-  console.log(JSON.stringify({ ...plan, repo: typeof repo === 'string' ? repo : null, project: projectNum }, null, 2))
+  // #348: `repo` stays what it always was (the HOME repository, or null with
+  // no --repo) and `targets` says how far the milestone reaches — home first.
+  // Each issue carries its own `repo`, which is what the backend projects into
+  // gate 2's plan so the TL sees where every row lands before authorising it.
+  console.log(JSON.stringify({ ...plan, repo: typeof repo === 'string' ? repo : null, targets: targetRepos, project: projectNum }, null, 2))
   // Exit code (F5): 3 for "divergence detected, not reconciled" —
   // deliberately DIFFERENT from 0 (the spec and the issues agree: real
   // silence, nothing to decide) and from 2 (a validation error: the §9 table
@@ -1539,19 +1613,26 @@ if (projectNum) {
 // the same title would cause a duplicate) and compare in memory. If the fetch
 // fails (auth, network, rate limit) we abort — we do NOT treat it as "it does
 // not exist", or we would end up creating a duplicate milestone.
-let allMilestones
-try {
-  allMilestones = JSON.parse(gh(['api', `repos/${repo}/milestones`, '--method', 'GET', '-f', 'state=all', '--paginate']))
-} catch (e) {
-  console.error(`could not list the milestones of ${repo}: ${e.message}`)
-  process.exit(1)
+//
+// #348: ONE MILESTONE PER TARGET REPOSITORY, ALL WITH THE SAME TITLE. The
+// title is the milestone's identity for /ct-next, /ct-status and /ct-harvest,
+// and it is what lets a reader standing in one repository find the same
+// milestone in another without being told its number — which is per
+// repository and cannot travel.
+for (const target of targetRepos) {
+  let allMilestones
+  try {
+    allMilestones = JSON.parse(gh(['api', `repos/${target}/milestones`, '--method', 'GET', '-f', 'state=all', '--paginate']))
+  } catch (e) {
+    console.error(`could not list the milestones of ${target}: ${e.message}`)
+    process.exit(1)
+  }
+  const existing = allMilestones.find((m) => m.title === milestone)
+  if (!existing) {
+    const created = JSON.parse(gh(['api', `repos/${target}/milestones`, '-f', `title=${milestone}`]))
+    console.log(`milestone created: ${milestone} (#${created.number})${targetRepos.length > 1 ? ` in ${target}` : ''}`)
+  } else console.log(`milestone already exists: ${milestone} (#${existing.number})${targetRepos.length > 1 ? ` in ${target}` : ''}`)
 }
-let msNumber = allMilestones.find((m) => m.title === milestone)?.number
-if (!msNumber) {
-  const created = JSON.parse(gh(['api', `repos/${repo}/milestones`, '-f', `title=${milestone}`]))
-  msNumber = created.number
-  console.log(`milestone created: ${milestone} (#${msNumber})`)
-} else console.log(`milestone already exists: ${milestone} (#${msNumber})`)
 
 // the labels that are missing. Any gh failure here is real (auth, network,
 // rate limit) and must abort the script instead of leaving issues without their
@@ -1565,15 +1646,20 @@ if (!msNumber) {
 // `--force` is kept in the creation in case another run created it between the
 // listing and this call (a benign race): with --force that is not an error,
 // without it the whole run would abort.
-for (const l of newLabels) {
-  gh(['label', 'create', l, '--repo', repo, '--force'])
+//
+// #348: the labels of each target repository are created IN IT, and only the
+// ones its own issues carry (see wantedLabelsFor) — a repository that received
+// no `ui` slice does not get a `type:ui` label nobody asked for.
+for (const target of targetRepos) {
+  for (const l of newLabelsOf(target)) {
+    gh(['label', 'create', l, '--repo', target, '--force'])
+  }
 }
 {
   // The report goes AFTER creating them: saying "created" before `gh` has
   // really created them would be claiming something a later failure would
   // contradict.
-  const line = labelReportLine('created')
-  if (line) console.error(line)
+  for (const line of labelReportLines('created')) console.error(line)
 }
 
 // issues idempotent by their ct-order marker. We do NOT use `gh issue list
@@ -1625,7 +1711,7 @@ for (const { iss, found, diff, bodyResult } of reconcileEntries) {
         // carrying on blind with the rest of the slices, which could leave only
         // SOME issues reconciled with no clear record of which.
         try {
-          gh(['issue', 'edit', String(found.number), '--repo', repo, ...allArgs])
+          gh(['issue', 'edit', String(found.number), '--repo', iss.repo, ...allArgs])
         } catch (e) {
           console.error(`could not reconcile issue #${found.number} (order #${iss.order}): ${e.message}`)
           process.exit(1)
@@ -1638,13 +1724,17 @@ for (const { iss, found, diff, bodyResult } of reconcileEntries) {
         console.log(`issue #${found.number} reconciled (order #${iss.order}): ${appliedCategories(diff, bodyResult).join(', ')}`)
       }
     }
-    if (projectNum && !hasProjectItem(existingProjectItems, repo, found.number)) {
+    // #348: the project's items belong to the PROJECT, not to a repository —
+    // they are listed once, and `hasProjectItem` already takes the repository
+    // as an argument, so the only thing that changes is that the issue's own
+    // repository is the one asked about and the one that builds its url.
+    if (projectNum && !hasProjectItem(existingProjectItems, iss.repo, found.number)) {
       console.log(`issue #${found.number} was not in project ${project} (a gap left by an earlier interrupted run) — adding it now`)
-      addToProjectWithSprint(`https://github.com/${repo}/issues/${found.number}`, iss.order)
+      addToProjectWithSprint(`https://github.com/${iss.repo}/issues/${found.number}`, iss.order)
     }
     continue
   }
-  const num = gh(['issue', 'create', '--repo', repo, '--title', iss.title, '--body', iss.body,
+  const num = gh(['issue', 'create', '--repo', iss.repo, '--title', iss.title, '--body', iss.body,
     '--milestone', milestone, ...iss.labels.flatMap((l) => ['--label', l])])
   console.log(`issue created, order #${iss.order}: ${num}`)
   // F23: it is pushed into `inEpic` because that is the list the marker is
@@ -1654,7 +1744,7 @@ for (const { iss, found, diff, bodyResult } of reconcileEntries) {
   // coherence with that list, not because it protects against anything: a
   // duplicated order in the §9 table is already cut off by
   // groom.js#findDuplicateOrders before getting here.
-  inEpic.push({ number: null, body: iss.body })
+  inEpic.get(iss.repo).push({ number: null, body: iss.body })
   if (projectNum) addToProjectWithSprint(num, iss.order)
 }
 
