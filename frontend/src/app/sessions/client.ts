@@ -91,9 +91,9 @@ const send = async (id: string, text: string): Promise<TypeOutcome> => {
 
 const writeChains = new Map<string, Promise<unknown>>()
 
-const type = (id: string, text: string): Promise<TypeOutcome> => {
+const chained = <T>(id: string, action: () => Promise<T>): Promise<T> => {
   const previous = writeChains.get(id) ?? Promise.resolve()
-  const outcome = previous.then(() => send(id, text))
+  const outcome = previous.then(action)
   writeChains.set(id, outcome)
   void outcome.finally(() => {
     if (writeChains.get(id) === outcome) writeChains.delete(id)
@@ -101,7 +101,9 @@ const type = (id: string, text: string): Promise<TypeOutcome> => {
   return outcome
 }
 
-const resize = async (id: string, size: TerminalSize): Promise<void> => {
+const type = (id: string, text: string): Promise<TypeOutcome> => chained(id, () => send(id, text))
+
+const sendResize = async (id: string, size: TerminalSize): Promise<void> => {
   try {
     await fetch(`${PATH}/${encodeURIComponent(id)}/resize`, {
       method: 'POST',
@@ -113,6 +115,8 @@ const resize = async (id: string, size: TerminalSize): Promise<void> => {
     return
   }
 }
+
+const resize = (id: string, size: TerminalSize): Promise<void> => chained(id, () => sendResize(id, size))
 
 export const SessionsClient = {
   list,
