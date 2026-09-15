@@ -55,6 +55,7 @@ those imports resolve, and it is no longer a statement about this backend.
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |
+| **Registered checkout** | The pair `{repo, path}` this backend records once a checkout root has been confirmed to hold that repository: the registry of where each repository is checked out on this machine. It answers a question a bare path cannot — *where is `owner/name` checked out?* — which is what the plugin's dispatcher asks it before dispatching a slice of a milestone's target repository. A path registered before the pair was recorded keeps serving the harvest sweep and answers that question with *not registered*, because a path whose repository was never written down cannot say what it holds |
 | **Prepared workspace** | A worktree `.worktrees/<n>` on branch `feat/<n>` that a plan agent works in |
 | **Harvest** | Collecting what a delivered slice left behind — its worktree, its branch, its agent — once its pull request merged; the plugin's `dispatch-check --collect` does it, the backend only decides when |
 | **Harvest ledger** | The BigQuery table where every harvested slice leaves its row, shared by every team and told apart by `repo`; the plugin loads it, the backend only says which table (`CT_HARVEST_BQ_TABLE`) |

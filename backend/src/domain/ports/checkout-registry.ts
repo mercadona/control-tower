@@ -1,11 +1,11 @@
-import type { CheckoutRoot } from '../value-objects/checkout-root.ts'
+import type { RegisteredCheckout } from '../value-objects/registered-checkout.ts'
 
 export class CheckoutRegistry {
-  remember(root: CheckoutRoot): void {
-    throw new Error(`${this.constructor.name} must implement remember(root), asked to remember ${root}`)
+  remember(checkout: RegisteredCheckout): void {
+    throw new Error(`${this.constructor.name} must implement remember(checkout), asked to remember ${checkout.root}`)
   }
 
-  known(): CheckoutRoot[] | null {
+  known(): RegisteredCheckout[] | null {
     throw new Error(`${this.constructor.name} must implement known()`)
   }
 }

@@ -3,6 +3,7 @@ import { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
 import { PlanFailure } from '../../domain/exceptions.ts'
 import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
+import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
 import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
 import type { PlanAgents } from '../../domain/ports/plan-agents.ts'
 import type { PlanComment } from '../../domain/value-objects/plan-comment.ts'
@@ -123,7 +124,7 @@ export class StartPlan {
     const sown = await this.#prepare(target, issue)
     const located = sown.located
     const agent = await this.#launch(target, story, issue, located)
-    this.checkouts.remember(target.root)
+    this.checkouts.remember(new RegisteredCheckout({ repository: target.repository, root: target.root }))
 
     return new PlanStarted({
       agent,

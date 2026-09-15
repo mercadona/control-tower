@@ -1,6 +1,7 @@
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { ImplementationProgressFailure } from '../domain/exceptions.ts'
 import { ImplementationStep } from '../domain/value-objects/implementation-state.ts'
+import { RegisteredCheckout } from '../domain/value-objects/registered-checkout.ts'
 import type { CheckoutRegistry } from '../domain/ports/checkout-registry.ts'
 import type { ImplementationProgress } from '../domain/ports/implementation-progress.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
@@ -82,7 +83,10 @@ export class ActivePlanRecovery {
     const found = await this.plans.inFlight()
     if (!found.wereListed) return found.reason
     for (const watch of found.watches ?? []) {
-      this.checkouts.remember(new CheckoutRoot(watch.located.root))
+      this.checkouts.remember(new RegisteredCheckout({
+        repository: watch.repository,
+        root: new CheckoutRoot(watch.located.root),
+      }))
       if (this.activePlans.find({ issue: watch.issue.number, repository: watch.repository }) !== null) continue
       if (this.implementationStarts.matches(watch)) {
         this.#rememberImplementing(watch)
