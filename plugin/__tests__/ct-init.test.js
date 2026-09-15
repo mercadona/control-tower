@@ -1746,6 +1746,7 @@ describe('ct-init.sh', () => {
     const freeze = analyzeSpecFreeze(md)
     expect(freeze.clarifications).toEqual([])
     expect(freeze.hypothesis).toBe('ok')
+    expect(freeze.decisionsWithoutProvenance).toEqual([])
 
     expect(readEpicContext(md).content).not.toMatch(/<!--/)
 
@@ -1758,6 +1759,25 @@ describe('ct-init.sh', () => {
     expect(table.invalidDepRefs).toEqual([])
     expect(table.slices.map((s) => s.deps)).toEqual([[], [1]])
 
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  // The third trap of the same family: the template's own D-1 wrapped its
+  // "*(Procedencia: …)*" over two lines, so the trim that removes it when
+  // projecting matched nothing and the marker travelled, dirty, into the body
+  // of every issue — the B2 warning readSpecSection emits. It is the same
+  // defect the freeze gate sees from the other side, and both are fixed by the
+  // suffix living on one line.
+  it("the seeded template's frozen decisions project with no provenance marker left behind", async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const md = readFileSync(join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md'), 'utf8')
+    const { readFrozenDecisions } = await import('../scripts/groom.js')
+
+    const projected = readFrozenDecisions(md)
+
+    expect(projected.warnings).toEqual([])
+    expect(projected.content).not.toMatch(/Procedencia/)
     rmSync(dir, { recursive: true, force: true })
   })
 })

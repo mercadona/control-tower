@@ -16,7 +16,7 @@ Groom with the spec already pushed to the default branch (otherwise the issues a
 |---|---|---|
 | `0` | No real divergence (or `--reconcile` resolved it) | promote to `status:ready` whatever should fly |
 | `1` | Stopped dead, **nothing created or modified**: an issue with no milestone whose `ct-order` collides, a renamed epic, a `gh` failure, a `--project` precondition (`Sprint` field, a current iteration) | read the reason, fix it, repeat |
-| `2` | The spec does not come in: malformed table, unrecognizable `Dep`, unknown gate, exemption with no reason, pending clarification marker, `## Hipótesis` absent | fix the spec — every error is reported together, also under `--dry-run` |
+| `2` | The spec does not come in: malformed table, unrecognizable `Dep`, unknown gate, exemption with no reason, pending clarification marker, `## Hipótesis` absent, a frozen decision with no `*(Procedencia: …)*` | fix the spec — every error is reported together, also under `--dry-run` |
 | `3` | Something real is left unreconciled: title, link to the spec, labels, AC, deps, `## E2E`, a duplicated section or an orphan issue | review in GitHub; `--reconcile` applies it |
 
 `--dry-run --repo` returns the same `3` as the real run: if you automate this, do not chain with `&&`.

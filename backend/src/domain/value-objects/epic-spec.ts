@@ -1,5 +1,5 @@
 import { analyzeSpecFreeze, HYPOTHESIS_REASONS } from '../../../../plugin/scripts/groom.js'
-import { FreezeFinding, FreezeFindingCode } from './freeze-finding.ts'
+import { FreezeFinding, FreezeFindingCode, type FreezeFindingCodeValue } from './freeze-finding.ts'
 
 export class EpicSpec {
   static readonly TITLE_SUFFIX = ' — Execution spec'
@@ -56,18 +56,17 @@ export class EpicSpec {
 
   findings(): FreezeFinding[] {
     const analyzed = analyzeSpecFreeze(this.text)
-    const clarifications = analyzed.clarifications.map((clarification) => new FreezeFinding({
-      code: FreezeFindingCode.CLARIFICATION_MARKER,
-      line: clarification.line,
-      detail: clarification.raw,
-    }))
+    const lined = [
+      ...EpicSpec.#linedAs(FreezeFindingCode.CLARIFICATION_MARKER, analyzed.clarifications),
+      ...EpicSpec.#linedAs(FreezeFindingCode.DECISION_WITHOUT_PROVENANCE, analyzed.decisionsWithoutProvenance),
+    ]
     switch (analyzed.hypothesis) {
       case HYPOTHESIS_REASONS.OK:
-        return clarifications
+        return lined
       case HYPOTHESIS_REASONS.ABSENT:
-        return [...clarifications, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_ABSENT, line: null, detail: null })]
+        return [...lined, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_ABSENT, line: null, detail: null })]
       case HYPOTHESIS_REASONS.EMPTY:
-        return [...clarifications, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null })]
+        return [...lined, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null })]
       default:
         throw new Error(`no freeze finding is declared for the hypothesis reason ${JSON.stringify(analyzed.hypothesis)}`)
     }
@@ -85,6 +84,10 @@ export class EpicSpec {
         return line
       })
       .join('\n')
+  }
+
+  static #linedAs(code: FreezeFindingCodeValue, reported: { line: number, raw: string }[]): FreezeFinding[] {
+    return reported.map((one) => new FreezeFinding({ code, line: one.line, detail: one.raw }))
   }
 
   static #lines(text: string): string[] {
