@@ -73,7 +73,7 @@ const EpicGroomPanel = () => {
   if (acted === null && read.kind === 'awaiting-publication') {
     const { pullRequest } = read
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__awaiting">
           {pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}
         </p>
@@ -82,7 +82,7 @@ const EpicGroomPanel = () => {
             {`${PULL_REQUEST} #${pullRequest.number}`}
           </a>
         )}
-      </Panel>
+      </div>
     )
   }
 

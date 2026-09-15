@@ -32,14 +32,15 @@ const GateSequence = () => {
         ? { kind: 'active' }
         : { kind: 'hidden' }
 
-  const isGate2Actionable =
-    epicGroomRead.phase === 'read' && !EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(epicGroomRead.kind)
-  const isGate2Authorised = epicGroomRead.phase === 'read' && epicGroomRead.kind === 'authorised'
+  const epicGroomKind = epicGroomRead.phase === 'read' ? epicGroomRead.kind : null
+  const isGate2Visible = epicGroomKind !== null && !EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(epicGroomKind)
+  const isGate2Actionable = isGate2Visible && epicGroomKind !== 'awaiting-publication'
+  const isGate2Authorised = epicGroomKind === 'authorised'
 
-  useEffect(() => setGate1ManualExpanded(null), [isGate2Actionable])
+  useEffect(() => setGate1ManualExpanded(null), [isGate2Visible])
   useEffect(() => setGate2ManualExpanded(null), [isGate2Authorised])
 
-  const gate1DefaultExpanded = gate1Summary.kind !== 'frozen' || !isGate2Actionable
+  const gate1DefaultExpanded = gate1Summary.kind !== 'frozen' || !isGate2Visible
   const gate1Expanded = gate1ManualExpanded ?? gate1DefaultExpanded
 
   const gate2DefaultExpanded = !isGate2Authorised
@@ -60,7 +61,7 @@ const GateSequence = () => {
         heading={EPIC_GROOM_GATE_HEADING}
         expanded={gate2Expanded}
         onToggle={setGate2ManualExpanded}
-        hidden={!isGate2Actionable}
+        hidden={!isGate2Visible}
       >
         <EpicGroomPanel />
       </CollapsableCard>

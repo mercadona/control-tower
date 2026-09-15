@@ -80,12 +80,18 @@ describe('Home and the gate sequence', () => {
     expect(gateToggle(GATE_2_HEADING)).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('does not claim gate 2 is actionable while publication is still awaiting the merge', async () => {
+  it('shows gate 2 waiting for the pull request to merge, with no primary action, and collapses gate 1 to make room', async () => {
     stubGates(SpecFreezeMother.frozen(), EpicGroomMother.awaitingPublication())
     openHome()
 
-    await screen.findByText('El groom espera al merge de este pull request.')
-    expect(screen.queryByRole('heading', { name: GATE_2_HEADING })).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: GATE_2_HEADING })
+    expect(
+      screen.getByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: `Pull request #${EpicGroomMother.PULL_REQUEST.number}` }))
+      .toHaveAttribute('href', EpicGroomMother.PULL_REQUEST.url)
+    expect(screen.queryByRole('button', GROOM_BUTTON)).not.toBeInTheDocument()
+    expect(gateToggle(GATE_1_HEADING)).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('collapses an authorised gate 2 by default and lets it be reopened', async () => {
