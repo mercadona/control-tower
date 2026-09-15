@@ -783,12 +783,30 @@ A conversation is live:
 {"status":"live","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
- "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"}}
+ "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"},
+ "timeline":[
+   {"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null},
+   {"id":"7a2e...","kind":"working","at":"2026-09-15T09:00:05.000Z","detail":null},
+   {"id":"9b4d...","kind":"waiting-for-permission","at":"2026-09-15T09:02:00.000Z",
+    "detail":"should the button read Arrancar brainstorming?"}
+ ]}
 ```
 
 `attention.status` is `working` or `waiting`, moved by `POST /session-hooks`.
 `attention.question` carries the live question while `waiting`, and is `null`
 otherwise — it is dropped the moment the session works again.
+
+`timeline` is the ordered history of every session event the backend has
+recorded for this conversation, oldest first, each with a stable `id`, a
+`kind` — `opened`, `resumed`, `unresumable`, `working`, `waiting-for-permission`,
+`completed` or `ended` — an ISO `at` timestamp and a `detail`, which carries
+the live question for `waiting-for-permission` and is `null` for every other
+kind. A `Stop` hook always projects `completed`: Claude Code's last message is
+a completion summary, never a question, so it never becomes `detail`. The
+timeline is rebuilt from this same field on every page reload, never kept only
+in the browser, and it survives a backend restart: it is read back from
+`<state root>/coordinating-session/<conversation>/timeline.json`, the same
+directory `phase-prompt.md` and the conversation record already live in.
 
 Claude Code no longer holds a conversation this backend tried to resume at
 start-up:
@@ -796,7 +814,8 @@ start-up:
 ```json
 {"status":"unresumable","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
- "detail":"claude code no longer holds this conversation: the coordinating session was not resumed"}
+ "detail":"claude code no longer holds this conversation: the coordinating session was not resumed",
+ "timeline":[{"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null}]}
 ```
 
 The cabin never opens a different conversation and presents it as this one: an
@@ -844,7 +863,10 @@ Each event projects to an attention:
 | `Notification` | `waiting` | yes, as the live question |
 | `Stop` | `waiting`, no question | no |
 
-**202 Accepted**
+**202 Accepted** — sent only once the timeline event this hook produced is
+durably recorded. Events from concurrent hooks are recorded one at a time, in
+the order they arrived, so a restart right after this response never loses an
+already-acknowledged event.
 
 ```json
 {"status":"reported","attention":"waiting"}
@@ -856,6 +878,7 @@ Each event projects to an attention:
 |---|---|---|
 | `hook-not-understood` | 400 | the body is not JSON, not an object, or misses a known `hook_event_name` or a well-formed `session_id` |
 | `conversation-not-live` | 400 | no held conversation answers to that `session_id` |
+| `timeline-not-recorded` | 400 | the attention moved but the timeline event could not be recorded; the acknowledgement is never sent for an event that failed to persist |
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
