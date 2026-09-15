@@ -6,7 +6,7 @@ import express from 'express'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { SpecFreezeRoute } from '../../src/infrastructure/spec-freeze-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
-import { FreezesInFlight } from '../../src/infrastructure/freezes-in-flight.ts'
+import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import { EpicSpecNotUnderstood } from '../../src/domain/exceptions.ts'
 import {
   ReadSpecFreeze, ReadSpecFreezeParams, SpecFreezeRead, SpecFreezeState,
@@ -241,7 +241,7 @@ class RunningApi {
   static async listening(held: CoordinatingSessions, read: ReadSpecFreeze, freeze: FreezeSpec, key: GateKey): Promise<number> {
     const app = express()
     app.get(RunningApi.PATH, Browsers.turnAwayForeign, SpecFreezeRoute.reading(held, read, key))
-    app.post(RunningApi.PATH, SpecFreezeRoute.freezing(held, freeze, key, new FreezesInFlight()))
+    app.post(RunningApi.PATH, SpecFreezeRoute.freezing(held, freeze, key, new WorkInFlight()))
     app.all(RunningApi.PATH, SpecFreezeRoute.refuseOtherMethods)
     const server = createServer(app)
     await new Promise<void>((resolve, reject) => {

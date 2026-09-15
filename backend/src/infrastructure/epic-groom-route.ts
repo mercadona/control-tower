@@ -4,6 +4,7 @@ import { Projection } from './projection.ts'
 import { EpicGroomState, ReadEpicGroomParams } from '../application/queries/read-epic-groom.ts'
 import { GateKey } from './gate-key.ts'
 import { GroomEpic, GroomEpicParams } from '../application/actions/groom-epic.ts'
+import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
@@ -22,6 +23,7 @@ export const EpicGroomOutcome = Object.freeze({
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_NOT_FROZEN: 'spec-not-frozen',
   SPEC_NOT_PUBLISHED: 'spec-not-published',
+  GROOM_IN_PROGRESS: 'groom-in-progress',
 } as const)
 
 export type EpicGroomOutcomeValue = (typeof EpicGroomOutcome)[keyof typeof EpicGroomOutcome]
@@ -66,6 +68,8 @@ export class EpicGroomRoute {
   static readonly NO_PLAN_ON_THIS_PRESS = 'no plan on this press'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to groom'
+  static readonly #GROOM_IN_PROGRESS_DETAIL =
+    'a groom of this checkout is under way: wait for it to answer before pressing again'
 
   static reading(held: CoordinatingSessions, read: ReadEpicGroom, key: GateKey): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
@@ -95,7 +99,7 @@ export class EpicGroomRoute {
   }
 
   static grooming(
-    held: CoordinatingSessions, groom: GroomEpic, key: GateKey, stderr: (line: string) => void
+    held: CoordinatingSessions, groom: GroomEpic, key: GateKey, inFlight: WorkInFlight, stderr: (line: string) => void
   ): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
       if (!key.holds(request.get(GateKey.HEADER))) {
@@ -105,6 +109,10 @@ export class EpicGroomRoute {
       const holding = held.held()
       if (holding === null) {
         Answer.refuse(response, 400, EpicGroomOutcome.NO_COORDINATING_SESSION, EpicGroomRoute.#NO_COORDINATING_SESSION_DETAIL)
+        return
+      }
+      if (inFlight.reserve(holding.conversation.root.text) !== Reservation.RESERVED) {
+        Answer.refuse(response, 409, EpicGroomOutcome.GROOM_IN_PROGRESS, EpicGroomRoute.#GROOM_IN_PROGRESS_DETAIL)
         return
       }
       let groomed: EpicGroomed
@@ -117,6 +125,8 @@ export class EpicGroomRoute {
         if (!(cause instanceof PlanFailure)) throw cause
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
+      } finally {
+        inFlight.release(holding.conversation.root.text)
       }
       if (GroomEpic.REFUSED.includes(groomed.state)) {
         Answer.refuseAs(response, EpicGroomRefusal.of(groomed))

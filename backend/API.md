@@ -1039,14 +1039,20 @@ Then, once the key holds:
 | `code` | Status | Meaning |
 |---|---|---|
 | `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to freeze |
+| `freeze-in-progress` | 409 | a freeze of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to freeze |
 | `spec-already-frozen` | 400 | the spec is already frozen: it cannot be frozen twice |
 | `spec-not-freezable` | 400 | a clarification marker or an absent/empty `## Hipótesis` remains; `detail` names how many findings remain and the first one, by line when it has one |
 
-None of these five touches the spec, a commit or the remote.
+`freeze-in-progress` guards against two tabs pressing gate 1 at once: a synchronous reservation,
+taken before the freeze starts and released once it answers (whether it froze the spec or was
+refused), keyed by the checkout so a second press while the first is still running is turned away
+instead of racing it into freezing — and possibly writing — the same spec twice.
+
+None of these six touches the spec, a commit or the remote.
 
 From writing the spec, publishing the branch and opening the pull request,
-once the five above did not apply — the same `PlanCollapse` doctrine `POST
+once the six above did not apply — the same `PlanCollapse` doctrine `POST
 /coordinating-session` documents for its own tool refusals
 (`backend/src/infrastructure/start-plan-route.ts`), reached here for the first
 time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
@@ -1226,13 +1232,22 @@ Then, once the key holds:
 | `code` | Status | Meaning |
 |---|---|---|
 | `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to groom |
+| `groom-in-progress` | 409 | a groom of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
 | `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
 
-None of these five touches the milestone or an issue.
+`groom-in-progress` is `POST /epic-groom`'s own guard against two tabs pressing gate 2 at once — the
+same synchronous-reservation mechanism `freeze-in-progress` documents above
+(`backend/src/infrastructure/work-in-flight.ts`), keyed by the checkout and released once the groom
+answers. It is a distinct code on purpose: gate 1 and gate 2 guard two different presses, so a
+client cannot confuse which one is still running. `GET /epic-groom` and `POST /epic-promotion` take
+no reservation of their own — a promotion adds a label to an issue, which is idempotent, so pressing
+it twice at once creates nothing to duplicate.
 
-From running the groom itself, once the five above did not apply — the `PlanCollapse` codes this
+None of these six touches the milestone or an issue.
+
+From running the groom itself, once the six above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
 (`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
 /epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the

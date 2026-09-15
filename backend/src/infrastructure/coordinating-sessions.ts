@@ -1,3 +1,4 @@
+import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 import type { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
 import type { LiveSession } from '../domain/value-objects/live-session.ts'
@@ -72,35 +73,38 @@ export class ReservedOpening {
 }
 
 export class CoordinatingSessions {
+  static readonly #OPENING = 'opening'
+
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   #held: HeldCoordinatingSession | null
   #stopFollowing: (() => void) | null
-  #opening: boolean
+  readonly #opening: WorkInFlight
 
   constructor({ liveSessions, stderr }: { liveSessions: LiveSessions, stderr: (line: string) => void }) {
     this.liveSessions = liveSessions
     this.stderr = stderr
     this.#held = null
     this.#stopFollowing = null
-    this.#opening = false
+    this.#opening = new WorkInFlight()
   }
 
   reserve(): ReservedOpening {
     const live = this.#live()
     if (live !== null) return ReservedOpening.liveHeld(live)
-    if (this.#opening) return ReservedOpening.openingInProgress()
-    this.#opening = true
+    if (this.#opening.reserve(CoordinatingSessions.#OPENING) !== Reservation.RESERVED) {
+      return ReservedOpening.openingInProgress()
+    }
 
     return ReservedOpening.reserved()
   }
 
   release(): void {
-    this.#opening = false
+    this.#opening.release(CoordinatingSessions.#OPENING)
   }
 
   remember(held: HeldCoordinatingSession): void {
-    this.#opening = false
+    this.#opening.release(CoordinatingSessions.#OPENING)
     this.#stopFollowingTheHeldSession()
     this.#held = held
     if (held.state !== CoordinatingSessionState.LIVE) return

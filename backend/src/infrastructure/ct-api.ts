@@ -41,7 +41,7 @@ import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
 import { GitEpicBranch } from './git-epic-branch.ts'
 import { GateKey } from './gate-key.ts'
-import { FreezesInFlight } from './freezes-in-flight.ts'
+import { WorkInFlight } from './work-in-flight.ts'
 import { GhPublishedSpecs } from './gh-published-specs.ts'
 import { GhEpicIssues } from './gh-epic-issues.ts'
 import { CtGroomEpic } from './ct-groom-epic.ts'
@@ -580,9 +580,10 @@ class CtApi {
       readSpecFreeze,
       freezeSpec,
       gateKey,
-      freezesInFlight: new FreezesInFlight(),
+      freezesInFlight: new WorkInFlight(),
       readEpicGroom,
       groomEpic,
+      epicGroomInFlight: new WorkInFlight(),
       promoteEpic,
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),

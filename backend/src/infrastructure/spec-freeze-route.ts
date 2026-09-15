@@ -3,7 +3,7 @@ import { Answer, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { SpecFreezeState, ReadSpecFreezeParams } from '../application/queries/read-spec-freeze.ts'
 import { GateKey } from './gate-key.ts'
-import { FreezesInFlight, FreezeReservation } from './freezes-in-flight.ts'
+import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { FreezeSpec, FreezeSpecParams, FreezeOutcome } from '../application/actions/freeze-spec.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
@@ -100,7 +100,7 @@ export class SpecFreezeRoute {
   }
 
   static freezing(
-    held: CoordinatingSessions, freeze: FreezeSpec, key: GateKey, inFlight: FreezesInFlight
+    held: CoordinatingSessions, freeze: FreezeSpec, key: GateKey, inFlight: WorkInFlight
   ): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
       if (!key.holds(request.get(GateKey.HEADER))) {
@@ -112,7 +112,7 @@ export class SpecFreezeRoute {
         Answer.refuse(response, 400, SpecFreezeOutcome.NO_COORDINATING_SESSION, SpecFreezeRoute.#NO_COORDINATING_SESSION_DETAIL)
         return
       }
-      if (inFlight.reserve(holding.conversation.root) !== FreezeReservation.RESERVED) {
+      if (inFlight.reserve(holding.conversation.root.text) !== Reservation.RESERVED) {
         Answer.refuse(response, 409, SpecFreezeOutcome.FREEZE_IN_PROGRESS, SpecFreezeRoute.#FREEZE_IN_PROGRESS_DETAIL)
         return
       }
@@ -127,7 +127,7 @@ export class SpecFreezeRoute {
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       } finally {
-        inFlight.release(holding.conversation.root)
+        inFlight.release(holding.conversation.root.text)
       }
       if (frozen.outcome !== FreezeOutcome.FROZEN) {
         Answer.refuseAs(response, SpecFreezeRefusal.of(frozen))

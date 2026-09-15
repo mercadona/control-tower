@@ -10,6 +10,8 @@ import {
   ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState,
 } from '../../src/application/queries/read-epic-groom.ts'
 import { GroomEpic, GroomEpicParams, EpicGroomed } from '../../src/application/actions/groom-epic.ts'
+import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
+import { EpicNotGroomed } from '../../src/domain/exceptions.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
@@ -74,6 +76,21 @@ class GroomEpicSpy extends GroomEpic {
   static neverAsked(): GroomEpicSpy {
     return new GroomEpicSpy(async () => { throw new Error('the groom must not be asked') })
   }
+
+  static refusing(cause: Error): GroomEpicSpy {
+    return new GroomEpicSpy(async () => { throw cause })
+  }
+
+  static hanging(): GroomEpicSpy {
+    let answer: (groomed: EpicGroomed) => void = () => undefined
+    const pending = new Promise<EpicGroomed>((resolve) => { answer = resolve })
+    const hanging = new GroomEpicSpy(async () => await pending)
+    hanging.answerTheHangingOne = (): void => answer(Mother.groomedOutcome([Mother.backlogIssue()]))
+
+    return hanging
+  }
+
+  answerTheHangingOne: () => void = () => undefined
 
   async execute(params: GroomEpicParams): Promise<EpicGroomed> {
     this.asked.push(params)
@@ -216,11 +233,12 @@ class RunningApi {
     read: ReadEpicGroom,
     groom: GroomEpic,
     key: GateKey,
+    inFlight: WorkInFlight = new WorkInFlight(),
     stderr: (line: string) => void = (): void => {}
   ): Promise<number> {
     const app = express()
     app.get(RunningApi.PATH, Browsers.turnAwayForeign, EpicGroomRoute.reading(held, read, key))
-    app.post(RunningApi.PATH, EpicGroomRoute.grooming(held, groom, key, stderr))
+    app.post(RunningApi.PATH, EpicGroomRoute.grooming(held, groom, key, inFlight, stderr))
     app.all(RunningApi.PATH, EpicGroomRoute.refuseOtherMethods)
     const server = createServer(app)
     await new Promise<void>((resolve, reject) => {
@@ -331,6 +349,43 @@ describe('EpicGroomRoute', () => {
     expect(groom.asked).toEqual([])
   })
 
+  it('a second press while the first is in flight is refused and the groom runs once', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.hanging()
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key)
+
+    const first = RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    const second = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      code: 'groom-in-progress',
+      detail: 'a groom of this checkout is under way: wait for it to answer before pressing again',
+    })
+    expect(groom.asked).toHaveLength(1)
+    groom.answerTheHangingOne()
+    await first
+    expect(groom.asked).toHaveLength(1)
+  })
+
+  it('a groom that failed frees the next press instead of locking the checkout for ever', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.refusing(new EpicNotGroomed('ct-groom exited with something other than 0 or 3'))
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, Keys.minted())
+
+    const refused = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    const again = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(refused.status).toBe(400)
+    expect(again.status).toBe(400)
+    expect(await again.json()).toEqual({
+      code: 'epic-not-groomed',
+      detail: 'ct-groom exited with something other than 0 or 3',
+    })
+    expect(groom.asked).toHaveLength(2)
+  })
+
   it('a groomable read answers the milestone and what would be created', async () => {
     const held = Mother.live()
     const read = ReadEpicGroomSpy.answering(Mother.groomableRead())
@@ -438,7 +493,7 @@ describe('EpicGroomRoute', () => {
     const groom = GroomEpicSpy.answering(Mother.groomedOutcome(issuesAfter))
     const key = Keys.minted()
     const said: string[] = []
-    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, (line) => { said.push(line) })
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, new WorkInFlight(), (line) => { said.push(line) })
 
     const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
 
@@ -461,7 +516,7 @@ describe('EpicGroomRoute', () => {
     const groom = GroomEpicSpy.answering(Mother.regroomedOutcome([Mother.backlogIssue()]))
     const key = Keys.minted()
     const said: string[] = []
-    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, (line) => { said.push(line) })
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, new WorkInFlight(), (line) => { said.push(line) })
 
     const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
 
