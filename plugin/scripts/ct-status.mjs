@@ -52,6 +52,11 @@ import { liveSliceProcesses } from './liveness.js'
 import { buildState } from './loop-state.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
 import { parseRepoSlug, repoOfRemoteUrl } from './dispatch.js'
+// #348: the reach of a milestone (which repositories its slices land in), and
+// the registry that says where each of those is checked out on this machine.
+import { MilestoneRepos } from './milestone-repos.js'
+import { CheckoutRegistry } from './checkout-registry.js'
+import { homedir } from 'node:os'
 
 // A hardened `arg()`: the SAME one as in
 // ct-next.mjs/ct-groom.mjs/dispatch-check.mjs, word for word and for the same
@@ -137,6 +142,11 @@ const gh = (a) => {
 }
 
 const git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
+// detailOf: `gh`/`git`'s own message, preferred over Node's (which buries the
+// real reason under the whole argv). It lives HERE, beside the two runners it
+// explains, because the scope block (#348) reads it long before
+// `identityReason` does.
+const detailOf = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'unknown error'
 
 // motivos: everything that could NOT be checked. It is the only thing that
 // decides the exit 1, so nothing that lands here can end up in a report that
@@ -161,6 +171,75 @@ const reasons = []
 const { abiertos: open, cerrados: closed, motivos: issueReasons } = loadIssues({ repo, gh })
 const issuesRead = issueReasons.length === 0
 reasons.push(...issueReasons)
+
+// ---------------------------------------------------------------- scope ---
+// #348 — WHAT THIS REPORT COVERS, SAID IN ITS FIRST LINE.
+//
+// A milestone now has one home repository and N target ones, and its slices are
+// issues of the repository each row named. This report crosses one repository's
+// issues with ONE checkout's worktrees, branches and processes, and its own
+// header calls crossing the wrong pair «el peor fallo posible de este comando»
+// — measured: 3 manufactured findings, one of them an accusation of
+// abandonment. So it does not learn to cross another repository's issues with
+// this checkout: what it learns is to stop implying that the repository it was
+// asked about is the whole milestone.
+//
+// It goes in the report's FIRST LINE, where scope belongs, and NOT as a
+// `warning:`: a warning that fires on every multi-repository milestone for ever
+// is the noise `plugin/conventions/simplicity.md` forbids, and it would train
+// people to ignore the warnings this command exists to emit. For the same
+// reason the exit code does not move: nothing here could not be checked — it
+// was not this call's to check, and the line says which call would.
+//
+// The checkout of each of those repositories is resolved against the registry
+// (scripts/checkout-registry.js) so that the line says whether the other half
+// can be asked for at all, with the three answers that module gives and no
+// fourth.
+const scopeLines = []
+{
+  const reaches = []
+  const seen = new Set()
+  for (const raw of [...open, ...closed]) {
+    const milestone = raw && raw.milestone
+    const title = milestone && typeof milestone.title === 'string' ? milestone.title : null
+    if (title === null || seen.has(title)) continue
+    seen.add(title)
+    const reach = MilestoneRepos.reachIn(milestone.description)
+    const elsewhere = reach ? reach.targets.filter((target) => target.toLowerCase() !== repo.toLowerCase()) : []
+    if (elsewhere.length) reaches.push({ milestone: title, elsewhere })
+  }
+  if (reaches.length) {
+    const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+    const resolved = new Map()
+    const whereOf = (target) => {
+      if (!resolved.has(target)) {
+        resolved.set(target, registry.entries === undefined
+          ? { state: null }
+          : CheckoutRegistry.resolve({
+            repo: target,
+            entries: registry.entries,
+            remoteOf: (path) => {
+              try {
+                return { url: git(['-C', path, 'remote', 'get-url', 'origin']).trim() }
+              } catch (e) {
+                return { error: detailOf(e) }
+              }
+            },
+          }))
+      }
+      const answer = resolved.get(target)
+      if (answer.state === CheckoutRegistry.STATES.CONFIRMED) return `checkout ${answer.path}`
+      if (answer.state === CheckoutRegistry.STATES.STALE) return `its registered checkout ${answer.path} no longer answers for it: ${answer.why}`
+      if (answer.state === CheckoutRegistry.STATES.NOT_REGISTERED) return 'no checkout registered'
+      return 'the registry of checkouts could not be read'
+    }
+    for (const { milestone, elsewhere } of reaches) {
+      const named = elsewhere.map((target) => `${target} (${whereOf(target)})`).join(' and ')
+      scopeLines.push(`scope: ${repo}. The milestone "${milestone}" also reaches ${named}, and this report says NOTHING about it — neither its issues nor its worktrees: ${elsewhere.map((target) => `/ct-status --repo ${target}`).join(', ')}.`)
+    }
+    scopeLines.push('')
+  }
+}
 
 const mapped = open.map(mapGhIssue)
 const inProgress = mapped.filter((i) => i.status === 'in-progress').map((i) => ({ n: i.n, nombre: i.name }))
@@ -201,7 +280,6 @@ const openStatusByNumber = new Map(mapped.map((i) => [String(i.n), i.status]))
 // about to create branches and worktrees), nothing is aborted here: a check
 // that cannot be made is exactly a `sinComprobar` with exit 1. Which half is
 // not trustworthy is said, and the other one keeps being reported.
-const detailOf = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'unknown error'
 
 function identityReason(root, expected) {
   let originUrl
@@ -527,7 +605,11 @@ if (residueTotal) {
 // there is nothing, having left a read half-done, is literally the bug of §3.2
 // of the field feedback.
 if (!lines.length && !unchecked.length) {
-  lines.push('loop at rest: nothing in flight, nothing to harvest, no residue.')
+  // #348: the line names the repository it is at rest IN. With a milestone
+  // spread across repositories, «loop at rest» on its own asserts about
+  // repositories this report never looked at — and the scope line above says
+  // which those are.
+  lines.push(`loop at rest in ${repo}: nothing in flight, nothing to harvest, no residue.`)
 }
 
 // Channel: the report is the PRODUCT and goes on stdout; the reasons for what
@@ -554,7 +636,7 @@ if (unchecked.length) {
 } else {
   lines.push('exit 0 — nothing to review')
 }
-console.log(lines.join('\n'))
+console.log([...scopeLines, ...lines].join('\n'))
 
 // `process.exitCode` and NOT `process.exit(code)` — the same lesson already
 // written twice in this repo (ct-next.mjs, next to its `finalExitCode`, and the

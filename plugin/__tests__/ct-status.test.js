@@ -529,3 +529,91 @@ describe('/ct-status — the whole report reaches the other side of the pipe', (
     cleanUp(b)
   })
 })
+
+// #348 — WHAT THIS REPORT COVERS, AND WHAT IT DOES NOT.
+//
+// A milestone has one home repository and N target ones. This report crosses
+// one repository's issues with ONE checkout's worktrees, and its own header
+// calls crossing the wrong pair the worst failure it can have, so it does not
+// learn to cross another repository's issues with this checkout. What it learns
+// is to stop implying that the repository it was asked about is the whole
+// milestone: the first line says which repositories of the milestone it says
+// nothing about, and whether each of those even has a checkout registered.
+//
+// It is NOT a `warning:` and it does NOT move the exit code, deliberately: a
+// warning that fires on every multi-repository milestone for ever is the noise
+// that trains people to ignore the ones that matter — and nothing here could
+// not be checked, it was not this call's to check.
+describe('/ct-status — the scope of the report (#348)', () => {
+  const REACH = '<!-- ct-repos:o/r,o/other -->'
+  const withReach = (description) => JSON.stringify([
+    [{ ...openIssue(7, 'ready'), milestone: { title: 'Epic', description } }],
+    [],
+  ])
+
+  function registryWith(entries) {
+    const configDir = mkdtempSync(join(tmpdir(), 'ct-st-config-'))
+    mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+    writeFileSync(join(configDir, 'control-tower', 'checkouts.json'), JSON.stringify({ checkouts: entries }))
+    return configDir
+  }
+
+  it('the report names the repositories of the milestone it does not cover, and how to ask about them', () => {
+    const b = bench()
+    const configDir = registryWith([])
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: withReach(REACH), CLAUDE_CONFIG_DIR: configDir })
+    expect(res.stdout).toMatch(/^scope: o\/r\. The milestone "Epic" also reaches o\/other/)
+    expect(res.stdout).toContain('/ct-status --repo o/other')
+    expect(res.stdout).toMatch(/says NOTHING about it/)
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(b)
+  })
+
+  it('the scope line says whether the repository it does not cover has a checkout registered', () => {
+    const b = bench()
+    const elsewhere = bench({ origin: 'https://github.com/o/other.git' })
+    const configDir = registryWith([{ repo: 'o/other', path: elsewhere.repo }])
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: withReach(REACH), CLAUDE_CONFIG_DIR: configDir })
+    expect(res.stdout).toContain(`checkout ${elsewhere.repo}`)
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(elsewhere)
+    cleanUp(b)
+  })
+
+  it('a registered checkout that holds another repository is said to be stale, not offered as the place to look', () => {
+    const b = bench()
+    const elsewhere = bench({ origin: 'https://github.com/o/somebody-else.git' })
+    const configDir = registryWith([{ repo: 'o/other', path: elsewhere.repo }])
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: withReach(REACH), CLAUDE_CONFIG_DIR: configDir })
+    expect(res.stdout).toMatch(/no longer answers for it/)
+    expect(res.stdout).toContain('o/somebody-else')
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(elsewhere)
+    cleanUp(b)
+  })
+
+  it('a milestone that reaches one repository prints no scope line at all', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: withReach('<!-- ct-repos:o/r -->') })
+    expect(res.stdout).not.toMatch(/^scope:/m)
+    cleanUp(b)
+  })
+
+  it('the at-rest line names the repository it is at rest in, and the exit code does not move', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/loop at rest in o\/r:/)
+    cleanUp(b)
+  })
+
+  it('the scope does not become a finding: with the rest clean the exit is still 0', () => {
+    const b = bench()
+    const configDir = registryWith([])
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: withReach(REACH), CLAUDE_CONFIG_DIR: configDir })
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toMatch(/warning:.*o\/other/)
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(b)
+  })
+})
