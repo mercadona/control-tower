@@ -25,10 +25,10 @@ read, and at that size an OK is an act of faith.
 
 **Announce at start:** "I'm using the writing-plans-prescriptive skill to write the slice plan."
 
-This skill is the Control Tower port of crear-plan-detallado. Three things
+This skill is the Control Tower port of crear-plan-detallado. Four things
 are non-negotiable and machine-checked by `plan-contract.js`: the fixed structure, the
-**literality rule** (every quoted current state exists verbatim in the repo), and the
-**block taxonomy** below.
+**literality rule** (every quoted current state exists verbatim in the repo), the
+**block taxonomy** below, and the **language** of the prose.
 
 ## Input: the issue is the frozen spec
 
@@ -160,6 +160,41 @@ state you wrote the plan against. So a citation of a file your tasks later rewri
 validating after the work is done. Never relabel a `Current state (path):` block as prose to
 get past the gate: that silently removes it from the only check that proves the plan describes
 the real repo.
+
+## The plan uses Simplified Technical English
+
+The plan is the whole brief of a subagent that arrives with no context. A long passive sentence
+hides who does what, and that is the one thing this reader needs. So the plan's prose follows
+ASD-STE100, and `--check-plan` measures it. Six sub-rules fire, all under the rule name `ste`:
+
+| Sub-rule | What fails |
+|---|---|
+| `length` | A sentence carries more words than its limit |
+| `paragraph` | A paragraph carries more than 6 sentences |
+| `passive` | A form of `be` stands before a past participle |
+| `gerund` | An `-ing` word opens a sentence, or follows a preposition |
+| `word` | A word of the non-approved list appears. The message names the replacement |
+| `one-sentence` | `**Objective:**` carries more than one sentence |
+
+**Two limits, and position decides which one applies.** A paragraph that starts with a task
+marker gets 20 words per sentence, and so does every paragraph of `## 8. Global verification`.
+Everywhere else the limit is 25. The marker itself costs nothing: the gate removes it first.
+
+**What the gate never measures.** A code block, whole: your verbatim citations, your contracts
+and your commands. A backticked span, a path and a URL all count as one word.
+
+**A test name goes inside backticks.** `**TDD:**` carries a literal name such as
+`it('the header is read before the body')`. That name belongs to the test, and inside backticks
+the gate leaves it alone. Outside them it fires `passive` for a name you cannot reword.
+
+**Before and after.** *"The analysis is read by the module that was written in Task 3, and its
+output is then validated against the fixtures."* (24 words, passive three times) becomes: *"Task
+3 writes the module. The module reads the analysis. The fixtures verify its output."*
+
+The four lists live in `scripts/plan-language.js`: the 48 non-approved words with their
+replacement, the irregular participles, the words that end in `-ed` and are not participles, and
+the words that end in `-ing` and are not verb forms. If the gate refuses a word this repository
+needs, add it to the exception, and say so in `## 9. Assumptions`.
 
 ## Structure
 
