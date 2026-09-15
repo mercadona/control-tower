@@ -10,8 +10,11 @@ type RecordedSpawn = {
   options: { name: string, cols: number, rows: number, cwd: string, env: Record<string, string> },
 }
 
+type ResizedTo = { cols: number, rows: number }
+
 class TerminalDouble implements Terminal {
   readonly written: string[] = []
+  readonly resized: ResizedTo[] = []
   #onData: ((bytes: string) => void) | null = null
   #onExit: (() => void) | null = null
 
@@ -25,6 +28,10 @@ class TerminalDouble implements Terminal {
 
   write(text: string): void {
     this.written.push(text)
+  }
+
+  resize(cols: number, rows: number): void {
+    this.resized.push({ cols, rows })
   }
 
   prints(bytes: string): void {
@@ -190,6 +197,14 @@ describe('PtyLiveSessions', () => {
     opened.sessions.write({ session: opened.session, text: 'ls -la\n' })
 
     expect(opened.terminal.written).toEqual(['ls -la\n'])
+  })
+
+  it('a resize reaches the terminal of that session', () => {
+    const opened = OpenedTerminal.with()
+
+    opened.sessions.resize({ session: opened.session, cols: 120, rows: 40 })
+
+    expect(opened.terminal.resized).toEqual([{ cols: 120, rows: 40 }])
   })
 
   it('the shell is the login interactive one, and /bin/sh when SHELL is unset', () => {

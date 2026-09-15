@@ -7,6 +7,7 @@ export type Terminal = {
   onData(listener: (bytes: string) => void): void,
   onExit(listener: () => void): void,
   write(text: string): void,
+  resize(cols: number, rows: number): void,
 }
 
 export type TerminalSpawn = (file: string, argv: string[], options: {
@@ -98,6 +99,10 @@ export class PtyLiveSessions extends LiveSessions {
 
   write({ session, text }: { session: LiveSession, text: string }): void {
     this.#terminalFor(session).terminal.write(text)
+  }
+
+  resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
+    this.#terminalFor(session).terminal.resize(cols, rows)
   }
 
   #terminalFor(session: LiveSession): OpenTerminal {

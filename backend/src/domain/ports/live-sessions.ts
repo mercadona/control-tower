@@ -20,4 +20,8 @@ export class LiveSessions {
   write({ session, text }: { session: LiveSession, text: string }): void {
     throw new Error(`${this.constructor.name} must implement write()`)
   }
+
+  resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
+    throw new Error(`${this.constructor.name} must implement resize()`)
+  }
 }

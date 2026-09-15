@@ -19,6 +19,7 @@ class TerminalDouble implements Terminal {
   onData(): void {}
   onExit(): void {}
   write(): void {}
+  resize(): void {}
 }
 
 type RecordingSpawn = TerminalSpawn & { calls: RecordedSpawn[] }
