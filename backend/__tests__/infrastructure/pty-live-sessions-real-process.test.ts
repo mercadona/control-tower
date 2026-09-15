@@ -112,11 +112,11 @@ describe('PtyLiveSessions with a real process', () => {
   it('a resize reaches the real terminal, and the shell sees the new size', async () => {
     const sessions = RealCabin.opening(realTerminals)
     const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
-    const token = '40 120'
+    const token = 'ct-size:40 120'
 
     const echoed = Echoed.waits({ sessions, session, token })
     sessions.resize({ session, cols: 120, rows: 40 })
-    sessions.write({ session, text: 'stty size\n' })
+    sessions.write({ session, text: 'echo ct-size:$(stty size)\n' })
     await echoed
 
     const watch = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
