@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/p
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -41,7 +41,10 @@ import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
 import { GitEpicBranch } from './git-epic-branch.ts'
 import { GateKey } from './gate-key.ts'
-import { FreezesInFlight } from './freezes-in-flight.ts'
+import { WorkInFlight } from './work-in-flight.ts'
+import { GhPublishedSpecs } from './gh-published-specs.ts'
+import { GhEpicIssues } from './gh-epic-issues.ts'
+import { CtGroomEpic } from './ct-groom-epic.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -53,6 +56,9 @@ import { ReadImplementationProgress } from '../application/queries/read-implemen
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import { FreezeSpec } from '../application/actions/freeze-spec.ts'
+import { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
+import { GroomEpic } from '../application/actions/groom-epic.ts'
+import { PromoteEpic } from '../application/actions/promote-epic.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/read-fixes-asked.ts'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.ts'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
@@ -69,6 +75,7 @@ import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
+import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -105,6 +112,10 @@ class PluginTree {
 
   static ctStep(): string {
     return join(PluginTree.#root(), 'scripts', 'ct-step.mjs')
+  }
+
+  static ctGroom(): string {
+    return join(PluginTree.#root(), 'scripts', 'ct-groom.mjs')
   }
 }
 
@@ -189,6 +200,7 @@ class CtApi {
   static readonly #CANNOT_LISTEN = 1
   static readonly #PROCESS_TIMEOUT_MS = 30_000
   static readonly #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
+  static readonly #GROOM_TIMEOUT_MS = 6 * 60 * 1000
   static readonly #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
   static readonly #SHELL = 'sh'
   static readonly #SECONDS_FOR_GH_IN_A_HARVEST = 60
@@ -525,6 +537,22 @@ class CtApi {
     const freezeSpec = new FreezeSpec({
       specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
     })
+    const publishedSpecs = new GhPublishedSpecs({ gh })
+    const epicIssues = new GhEpicIssues({ gh })
+    const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
+    const epicGroom = new CtGroomEpic({
+      node: (argv, options) => groomRunner.run(argv, options),
+      wholeOutput: (argv, options) => groomRunner.runWholeOutput(argv, options),
+      ctGroom: PluginTree.ctGroom(),
+    })
+    const planFingerprint = new PlanFingerprint({
+      digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+    })
+    const readEpicGroom = new ReadEpicGroom({
+      specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom, fingerprint: planFingerprint,
+    })
+    const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
+    const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories),
@@ -558,7 +586,11 @@ class CtApi {
       readSpecFreeze,
       freezeSpec,
       gateKey,
-      freezesInFlight: new FreezesInFlight(),
+      freezesInFlight: new WorkInFlight(),
+      readEpicGroom,
+      groomEpic,
+      epicGroomInFlight: new WorkInFlight(),
+      promoteEpic,
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })

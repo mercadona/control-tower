@@ -18,14 +18,19 @@ import { SessionInputRoute } from './session-input-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
+import { EpicGroomRoute } from './epic-groom-route.ts'
+import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
-import type { FreezesInFlight } from './freezes-in-flight.ts'
+import type { WorkInFlight } from './work-in-flight.ts'
 import type { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import type { FreezeSpec } from '../application/actions/freeze-spec.ts'
+import type { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
+import type { GroomEpic } from '../application/actions/groom-epic.ts'
+import type { PromoteEpic } from '../application/actions/promote-epic.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
@@ -86,7 +91,11 @@ export type ApiCollaborators = {
   readSpecFreeze?: ReadSpecFreeze | null,
   freezeSpec?: FreezeSpec | null,
   gateKey?: GateKey | null,
-  freezesInFlight?: FreezesInFlight | null,
+  freezesInFlight?: WorkInFlight | null,
+  readEpicGroom?: ReadEpicGroom | null,
+  groomEpic?: GroomEpic | null,
+  epicGroomInFlight?: WorkInFlight | null,
+  promoteEpic?: PromoteEpic | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -142,7 +151,11 @@ export class ApiServer {
   readonly readSpecFreeze: ReadSpecFreeze | null | undefined
   readonly freezeSpec: FreezeSpec | null | undefined
   readonly gateKey: GateKey | null | undefined
-  readonly freezesInFlight: FreezesInFlight | null | undefined
+  readonly freezesInFlight: WorkInFlight | null | undefined
+  readonly readEpicGroom: ReadEpicGroom | null | undefined
+  readonly groomEpic: GroomEpic | null | undefined
+  readonly epicGroomInFlight: WorkInFlight | null | undefined
+  readonly promoteEpic: PromoteEpic | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
@@ -152,6 +165,7 @@ export class ApiServer {
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, implementationStarts, recovery = null,
     openCoordinatingSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
+    readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
@@ -176,6 +190,10 @@ export class ApiServer {
     this.freezeSpec = freezeSpec
     this.gateKey = gateKey
     this.freezesInFlight = freezesInFlight
+    this.readEpicGroom = readEpicGroom
+    this.groomEpic = groomEpic
+    this.epicGroomInFlight = epicGroomInFlight
+    this.promoteEpic = promoteEpic
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -282,6 +300,14 @@ export class ApiServer {
     app.post(SpecFreezeRoute.PATH, Browsers.turnAwayForeign,
       SpecFreezeRoute.freezing(this.coordinatingSessions!, this.freezeSpec!, this.gateKey!, this.freezesInFlight!))
     app.all(SpecFreezeRoute.PATH, SpecFreezeRoute.refuseOtherMethods)
+    app.get(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
+      EpicGroomRoute.reading(this.coordinatingSessions!, this.readEpicGroom!, this.gateKey!))
+    app.post(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
+      EpicGroomRoute.grooming(this.coordinatingSessions!, this.groomEpic!, this.gateKey!, this.epicGroomInFlight!, this.stderr!))
+    app.all(EpicGroomRoute.PATH, EpicGroomRoute.refuseOtherMethods)
+    app.post(EpicPromotionRoute.PATH, Browsers.turnAwayForeign,
+      EpicPromotionRoute.promoting(this.coordinatingSessions!, this.promoteEpic!, this.gateKey!, this.stderr!))
+    app.all(EpicPromotionRoute.PATH, EpicPromotionRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 

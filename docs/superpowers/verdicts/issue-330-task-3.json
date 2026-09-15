@@ -1,0 +1,66 @@
+{
+  "issue": 330,
+  "task": 3,
+  "task_name": "The epic's issues on GitHub, read and promoted",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises two things: the backend lists a milestone's issues with their rung, and moves one from status:backlog to status:ready touching nothing else. Both are in the diff. Listing: GhEpicIssues.listOf builds the argv 'issue list --repo <repo> --milestone <m> --state all --limit 200 --json number,url,title,labels,state', parses gh's stdout and turns each row into an EpicIssue whose status comes from the plugin's resolveStatus, sorted by number ascending. Moving one: promoteArgvFor emits exactly 'issue edit <n> --repo <repo> --add-label <READY_LABEL> --remove-label <BACKLOG_LABEL>' and promote() runs it, so nothing else on the issue is touched; both labels come from GhPlanIssues (the new BACKLOG_LABEL joins the three that were already there), so the vocabulary is still declared once. The implementer's amendment shortened the objective's wording ('moves one to status:ready') but the diff honours the brief's original sentence, source rung included.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The TDD line asks for it('only an open issue standing at backlog is promotable') with four EpicIssues - no status: label, status:backlog, status:in-progress, a closed status:backlog - and only the first two answering true. The test in the diff is exactly that: Mother.noStatusLabel(), Mother.backlog(), Mother.inProgress(), Mother.closedBacklog(), asserted true/true/false/false in that order. 'no status: label' is modelled as status BACKLOG, which is faithful because resolveStatus (the criterion the task names) resolves an issue with no status: label to backlog. Its boundary pair, it('promoting adds status:ready and removes status:backlog and nothing else'), asserts the full argv with toEqual, so 'exactly those two flags and no other' is pinned literally.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Both Contract blocks match name by name. epic-issue.ts: readonly number/url/title/status/isOpen, the constructor taking one object with those five keys, and isPromotable(): boolean - all present, with Object.freeze(this). gh-epic-issues.ts: class GhEpicIssues extends EpicIssues, static readonly LIMIT = 200 (spelled into the argv as String(GhEpicIssues.LIMIT)), static readonly OPEN = 'OPEN' (used as raw.state === GhEpicIssues.OPEN), constructor({ gh }: { gh: Gh }), and both static argv builders with the parameter names and shapes the block gives. The Current state block of gh-plan-issues.ts is untouched and BACKLOG_LABEL is added beside the three lines it quotes, built the same way. The three new leaves are named as the task's prose states - epic-issues-not-read, epic-issues-not-understood, epic-issue-not-promoted - and all three are wired into PlanCollapse. One observation, not a deviation: the port's method is listOf, while section 5 of the plan (not part of this brief's yardstick, and not quoted by any later task's Contract) advertises EpicIssues.ofMilestone to slice 6; the task declares no Contract block for the port, so nothing the brief states is contradicted.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Rows the diff bears on: D-11 (a yardstick is imported from the plugin, never reimplemented) - the rung is read with resolveStatus imported from plugin/scripts/gh-issue-map.js and no second opinion about labels is written here; D-10 (everything new under backend/ is TypeScript) - the four new/modified backend files are .ts and the plugin is only imported, not changed; D-13 (no phase is stored) - nothing is persisted, every answer is derived from what gh printed. D-6, D-7 and D-22 are not reopened: this task adds no endpoint and no button, writes nothing to a pull request and performs no merge; the promotion it builds is a label swap that a later task puts behind the gate key. Every other row (D-1, D-14, D-18, D-21, D-23, D-25 and the block of unchanged decisions) has nothing the diff bears on.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: GhEpicIssues follows gh-published-specs.ts and gh-plan-issues.ts closely - constructor({ gh }), static argv builders, gh.run with safeToRepeat, outcome.failed read as data and turned into a typed failure quoting gh's own stderr; the port copies published-specs.ts's 'must implement' shape; the test copies the scripted-conversation idiom, doubling only the launch of the process. defects.md, rule by rule: (1) closed vocabulary - status is a loose string, which is what the plan's Contract block pins and what the source forces, since resolveStatus can answer any status: suffix the repository carries (status:blocked, status:rejected), not only the four rungs; isPromotable compares against the declared member PlanIssueStatus.BACKLOG rather than a literal, and isOpen is the plan's own field. I declare that tension rather than file it: the Contract block and defects.md cannot both be fully satisfied and the implementer answers for neither. (2) raw map as the return value of logic - none: RawEpicIssue is a boundary model living in its adapter's file (architecture.md allows exactly that), it is converted to EpicIssue at one door (#toEpicIssue) and what listOf returns is EpicIssue[]. (3) two fields that have to agree - none: status and isOpen are independent facts about a GitHub issue, and there is no sentinel standing for an absence. (4) errors named for what happens - EpicIssuesNotRead, EpicIssuesNotUnderstood and EpicIssueNotPromoted are named for what happened, hang off an EpicIssuesFailure family that separates the call failing from the answer being unreadable (domain.md), and each reaches its own kebab-case code in PlanCollapse (boundaries.md). style.md: no comments, English throughout, every function hangs off a type. decisions.md: both labels are read from GhPlanIssues and the rung from the plugin, so neither partition is declared twice. boundaries.md: the failure of gh is data, the parse projects only the keys consumed and validates them, the adapter is named after its implementation and decides no policy. Delivery shape: nothing in either yardstick prescribes a shape for adding a new port and adapter with no call site yet, and none of the new symbols alters an existing signature. One finding below, low, about the surviving mutation the implementer declared. The skill control-tower-loop:test-driven-development loaded and was read.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The only pre-existing test file the diff touches is plan-refusal.test.ts, and it gains one line and loses none: 'EpicIssuesFailure' joins the FAMILIES list. That list is the guard's own mechanism for naming abstract family roots (eighteen were already there, EpicGroomFailure added by task 1 of this slice), and the sibling test a_family_is_not_a_way_of_collapsing_so_answering_one_raises_instead_of_guessing keeps proving that a family answers no refusal. The three concrete leaves stay inside the guard's reach and all three are declared in PlanCollapse, so the assertion is not weakened. The task's own text asks for it: 'plan-refusal.test.ts learns them'. Every other '-' line in the diff is in the plan markdown, not in a test.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in production code, not in the test's scaffolding. Revert gh-epic-issues.ts, epic-issue.ts or the exceptions and every new test falls: isPromotable is EpicIssue's own method, the argv the test compares is built by GhEpicIssues.promoteArgvFor, the sort and the rung resolution happen inside listOf, and the three failure classes are the ones the assertions instanceof against. The test's own scaffolding is a Gh whose launch is scripted (the cut right before the external system) and a fixture that is a verbatim capture of gh's stdout, named with its provenance in the describe; no expected value is hard-coded in place of a production line.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Everything written inside the declared files traces to a sentence of the task: the value object and the port from Files plus their Contract blocks, the adapter from its Contract, BACKLOG_LABEL from 'BACKLOG_LABEL joins the three below', the family and its three leaves plus their PlanCollapse entries from 'Three leaves join PlanCollapse as ...'. Nothing the Out of scope section names is touched: ct-groom.mjs, groom.js, slices.js and gh-issue-map.js are imported or invoked, never modified, and there is no merge, no pull request write and no Project v2. The plan hunk is an amendment and I read it line by line: it adds plan-refusal.test.ts (modify) to this task's Files - a route added, never removed, and justified because the new exception family makes that pre-existing guard enumerate its root; the rest is prose compression (the objective's 'from status:backlog', 'the loop's declared criterion', 'and no other' on the TDD line, 'the label is' in a verification comment). That compression is forced rather than opportunistic: plan-contract.js budgets a whole task block at CODE_BUDGETS.chars = 3500, so the extra Files line had to be paid for elsewhere. Nothing load-bearing was disarmed - the five Verification commands are byte-identical, the Tests list is untouched, both TDD test names are unchanged, and the substance the objective lost is still spelled in the task's prose and in the TDD assertion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests are gh-epic-issues.test.ts in full. Deterministic: no clock, no date, no network, no randomness, no sleep standing in for synchronisation - the only wait is a SleepDouble handed to the retry policy. Isolated: every test builds its own GhDouble and its own EpicIssues through it, the mothers return fresh frozen values, and no state outlives a test or is needed in order from another. Verifies real behaviour: the assertions are on what the adapter sent (the literal argv array) and on what it returned (numbers sorted 329, 330, isOpen false for CLOSED, the rung IN_REVIEW resolved from the labels), not on a double's call count or a constant the test defined; the double raises when nobody wrote an answer for a call, as testing.md asks. The fixture mirrors gh's real response completely - labels with their id, description and color included - which is the opposite of the incomplete-mock anti-pattern the skill's reference names, and its provenance is declared in the describe. Two names carry 'and', which the skill would split, but both are dictated verbatim by the plan's Tests list, so I declare it instead of filing it.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The declared surviving mutation is acceptable in its outcome but its premise does not hold in full. Gutting EpicIssue's constructor guards leaves the suite green, and the guard must stay - domain.md says a value object guards what makes it this value 'and it stays even on the day every caller already satisfies it', so 'the line nobody needs' was never an available repair. But the reason given for writing no test either, that GhEpicIssues only ever builds it from already-validated JSON, is only partly true: the door checks types, not the invariants the guard checks. A gh answer of {\"number\": 0} or {\"title\": \"\"} passes #readsAsAnIssue and then makes the constructor throw a bare Error out of listOf, uncaught, instead of the EpicIssuesNotUnderstood that every other unreadable answer earns - which boundaries.md calls a validation error leaving the boundary layer. The case is one real gh cannot produce (GitHub has no issue numbered 0 and no empty title), which is why I leave it low rather than ask for the round trip: either widen #readsAsAnIssue to the invariants EpicIssue demands, or say in the declaration that the guard is an invariant that defends itself against a shape the external contract cannot emit.",
+        "path": "backend/src/infrastructure/gh-epic-issues.ts",
+        "line": 102,
+        "evidence": "conventions/testing.md antipattern: 'A surviving mutation left with neither of its two repairs chosen.' The door the declaration leans on checks only types: 'return typeof number === 'number' && typeof url === 'string' && typeof title === 'string' &&', while the guard it is said to duplicate checks 'if (!Number.isInteger(issue.number) || issue.number < 1)' and 'if (issue.title.length === 0)'."
+      }
+    ],
+    "review_token": "0c1b9762c1a36632c34f31a1e5ba605de89efefb0eebc496295fd9065c3227fd"
+  }
+}

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
+import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
@@ -21,6 +22,7 @@ const NO_SESSIONS = SessionsMother.noSessions()
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_COORDINATING_SESSION = CoordinatingSessionMother.none()
 const NO_SPEC_FREEZE = SpecFreezeMother.none()
+const NO_EPIC_GROOM = EpicGroomMother.none()
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
@@ -49,6 +51,7 @@ const backendAnswering = (answer: Answer) => {
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
+      if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return fetching(input, init)
     }),
   )
@@ -64,6 +67,7 @@ const backendRecovering = (answer: Answer) => {
     if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
     if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
+    if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
     return init === undefined ? fetching(input) : fetching(input, init)
   })
 
@@ -83,6 +87,7 @@ const backendPending = () => {
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
+      if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return pending
     })
   vi.stubGlobal('fetch', fetching)

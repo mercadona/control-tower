@@ -10,6 +10,8 @@ import { SessionInputOutcome } from '../../src/infrastructure/session-input-rout
 import { CoordinatingSessionOutcome } from '../../src/infrastructure/coordinating-session-route.ts'
 import { SessionHookOutcome } from '../../src/infrastructure/session-hooks-route.ts'
 import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts'
+import { EpicGroomOutcome } from '../../src/infrastructure/epic-groom-route.ts'
+import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -26,6 +28,8 @@ class RequestVocabularies {
       ...Object.values(CoordinatingSessionOutcome),
       ...Object.values(SessionHookOutcome),
       ...Object.values(SpecFreezeOutcome),
+      ...Object.values(EpicGroomOutcome),
+      ...Object.values(EpicPromotionOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -37,6 +41,10 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.MALFORMED_REPO,
     ProgressRequestOutcome.MALFORMED_ROOT,
     SessionInputOutcome.NOT_LIVE,
+    SpecFreezeOutcome.NOT_FROM_THE_PAGE,
+    SpecFreezeOutcome.NO_COORDINATING_SESSION,
+    SpecFreezeOutcome.NO_EPIC_SPEC,
+    EpicGroomOutcome.ISSUES_UNCERTAIN,
   ])
 }
 

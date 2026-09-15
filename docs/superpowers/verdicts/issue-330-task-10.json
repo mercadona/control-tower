@@ -1,0 +1,57 @@
+{
+  "issue": 330,
+  "task": 10,
+  "task_name": "Gate 2 written down",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises the three endpoints and the vocabulary they add, written where this backend documents its contract and its ubiquitous language. Both halves are in the diff: API.md gains `## GET /epic-groom`, `## POST /epic-groom` and `## POST /epic-promotion` immediately after `POST /spec-freeze`, and this-repository.md's ubiquitous-language table gains `Groom plan`, `Epic issue` and `Gate 2`. I checked every factual claim of the new prose against the code rather than against the plan, and found none false: the seven `200` shapes and which of them carry `key` match `EpicGroomRoute.#answerRead` exactly (`groomable` and `groomed` only, `...(minted === null ? {} : { key: minted })`); `none` is answered before the read when `held.held()` is null; the five refusals of POST /epic-groom and the three of POST /epic-promotion match `EpicGroomOutcome`/`EpicPromotionOutcome` in code, status and detail wording; `epic-not-groomed`'s exit codes match `CtGroomEpic.NO_DIVERGENCE = 0` and `UNRECONCILED_DIVERGENCE = 3` with `detail` being `said.stderr.trim()`; the wire `status` values `backlog`/`ready` match what the plugin's `resolveStatus` returns (bare, without the `status:` prefix); `promoted` matches `waiting.map((issue) => issue.number)`. The claim I weighed hardest is the GET refusal paragraph, which names `ct-groom --dry-run`, `gh api .../contents/<spec>` and `gh issue list` but not the on-disk spec read, so `epic-spec-not-read` and `epic-spec-not-understood` (reachable through `DiskEpicSpecs.mostRecent`) are not enumerated for this route the way the sibling `GET /spec-freeze` paragraph enumerates them. Its governing clause — 'every tool refusal this read can meet' — is true and the two codes are documented in the section above, so this is an under-inclusive illustration rather than a false statement, and it does not earn a finding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The `**TDD:**` line reads 'No TDD — the deliverable is documentation, and the two claims that can be checked mechanically are checked by this task's verification block.' There is no assertion the plan wrote down for me to compare, so this item has no subject.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "The brief carries one `Final text (backend/conventions/this-repository.md)` block with three table rows; all three appear verbatim at lines 76-78 of the document, wording and pipes identical. The rest of the brief's contract is the shape API.md must take, and it is honoured name by name: seven `200` bodies each with an example; `key` attached only to `groomable` and `groomed` and only for the page's own request; the `x-gate-key` request-header table for both presses; the five refusal codes of POST /epic-groom with their statuses (`gate-not-from-the-page` 403, `no-coordinating-session`, `no-epic-spec`, `spec-not-frozen`, `spec-not-published` at 400); the six PlanCollapse codes the slice adds, spelled exactly as `PlanCollapse` declares them in start-plan-route.ts lines 340-345; the three refusal codes of POST /epic-promotion and its `200` body with `promoted`; and the two rows in 'Where the frontend consumes each one' naming `frontend/src/app/epic-groom/client.ts` and `EpicGroom.types.ts` (three rows, in fact — GET and POST /epic-groom plus POST /epic-promotion, which is what the brief's 'Both paths' asks for). Those frontend files do not exist yet; tasks 11-13 of this same plan create them, so the row is forward-looking within the slice and prescribed word for word by the brief.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The rows the diff bears on are D-6, D-7, D-22, D-23 and D-11, and each is implemented with the value the table states. D-6/D-22: both presses are documented as demanding `x-gate-key`, 'the exact value GET /epic-groom minted for the page', refused with `gate-not-from-the-page` 403 'checked before anything else, ahead even of whether a session is held' — which is what `EpicGroomRoute.grooming` and `EpicPromotionRoute.promoting` do on their first line. D-7: no merge and no write to a pull request appears anywhere in the new text. D-23: `awaiting-publication` and `spec-not-published` are both documented as 'its committed copy is not yet readable on the default branch', and the Gate 2 vocabulary row says the groom runs 'over a spec whose committed copy is already readable on the default branch'. D-11: the `Epic issue` row credits 'the plugin's own `resolveStatus` so this backend keeps no second opinion', which is the actual import in gh-epic-issues.ts line 1. D-13: every state is described as derived, 'nothing stored'. No row is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the two new API.md verb sections are modelled on `GET /spec-freeze` and `POST /spec-freeze` in the same file and reproduce their idiom exactly — the one-paragraph lead, '**200 OK** — N shapes, told apart by `status`', the `**Request header**` table, the split refusal tables ('Checked before anything else' / 'Then, once the key holds'), the 'None of these five touches…' sentence, the PlanCollapse table and the closing `curl` line. The vocabulary rows follow the table idiom of the rows above them. Rules: CLAUDE.md/AGENTS.md — everything added is English, and the contract strings it quotes (`status:backlog`, `status:ready`, `x-gate-key`) keep the spelling their external contract gives them, which is the second exemption; `backend/conventions/this-repository.md` — `{code, detail}` in kebab-case and 'an application refusal answers 400' are what the new tables document, and the exception-family naming (`*NotRead`/`*NotUnderstood` → its own code) is mirrored in the six documented codes. `.agent/conventions-ack.md` cites lines 59 and 66 of this-repository.md; the insertion is at line 76, so those citations stay true. `conventions/defects.md`, rule by rule, on this diff: (1) closed vocabulary — no subject in a markdown diff, and what it documents is a closed vocabulary of seven states plus explicit codes, with no boolean standing in for any of them and no 'other' bucket; (2) raw map as the return value of logic — no subject, the diff adds no code; (3) two fields that have to agree — no subject; the one place it could bite is the documented `promoted` list beside `status`, and the text pins it to a derivation ('`promoted` names only the issues this press actually moved'), matching `waiting.map(...)` rather than a flag; no sentinel is documented, `authorised` is a member of the vocabulary rather than an empty/absent marker; (4) an error named for where it happens — no subject in the diff, and the six codes it documents are named for what happens (`epic-not-groomed`, `published-spec-not-read`, `epic-issue-not-promoted`), not for the module that raised them. Delivery shape: no document of either yardstick prescribes a shape of change for documentation, and no signature or call site is altered here.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No test file is touched: the two paths are `backend/API.md` and `backend/conventions/this-repository.md`. The diff's only `-` lines are three lines of prose — the endpoint count row and the two lines of rule 3 — and none of them is an assertion, a case or a test.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The task's `**Files:**` declares two documents and nothing else, and the diff writes only markdown. There is no production behaviour this task promised and therefore nothing that could be produced by a test's scaffolding instead.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff touches exactly the two declared files and nothing `### Out of scope` names (no `ct-groom.mjs`, no `--reconcile`/`--project`, no merge, no repository column on the milestone or on the dry run's product). Inside the files, the only lines not literally enumerated by the task text are the two corrections the implementer declared, and both serve the task's own sentence — adding three endpoints is what makes the old lines false — and both are right: 'Endpoints | 18 (`POST` 8, `GET` 10)' matches the registrations in api-server.ts (POST: start-plan, implement-plan, sessions/:id/input, coordinating-session, session-hooks, spec-freeze, epic-groom, epic-promotion = 8; GET: plan-events, active-plans, implement-progress, implement-history, external-tools, sessions, sessions/:id/stream, coordinating-session, spec-freeze, epic-groom = 10), and the old 15/6/9 was the same enumeration minus these three. Rule 3's 'Three exceptions take no body at all and therefore mount neither body middleware' is also right: `/spec-freeze`, `/epic-groom` and `/epic-promotion` are the only POSTs registered without `JsonBody.demandDeclared` and `JsonBody.reader()`. I also checked what else the addition could have falsified — rules 1, 2, 5, 7 and 8 of 'Rules that apply to every endpoint' and the 'Where the frontend consumes each one' table — and found nothing else left stale. No plan file appears in the diff, so there is no amendment to rule on.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The diff adds no test: both touched files are documents and the `+` lines are all markdown. There is no new test to measure for determinism, isolation or verifying real behaviour.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "132c787f94da152633c333eee01e22aa5fde5aae400807daee29576ff84ba88a"
+  }
+}

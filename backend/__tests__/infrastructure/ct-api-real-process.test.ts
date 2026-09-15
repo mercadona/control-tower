@@ -605,6 +605,17 @@ describe('ct-api entrypoint', () => {
     await RunFileFixture.remove(state)
   })
 
+  it('a started backend answers gate 2 with no session held', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-epic-groom-'))
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
+
+    const response = await fetch(`http://127.0.0.1:${port}/epic-groom`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+    await RunFileFixture.remove(state)
+  })
+
   it('review_plan_is_no_longer_mounted_in_the_real_process', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 

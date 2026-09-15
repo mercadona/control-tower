@@ -1441,4 +1441,16 @@ describe('ApiServer', () => {
     expect(refused.status).toBe(405)
     expect(refused.headers.get('allow')).toBe('GET, POST')
   })
+
+  it('the two paths of gate 2 refuse a method they do not serve naming the ones they do', async () => {
+    const port = await RunningApi.listening()
+
+    const groomRefused = await fetch(`http://127.0.0.1:${port}/epic-groom`, { method: 'DELETE' })
+    const promotionRefused = await fetch(`http://127.0.0.1:${port}/epic-promotion`)
+
+    expect(groomRefused.status).toBe(405)
+    expect(groomRefused.headers.get('allow')).toBe('GET, POST')
+    expect(promotionRefused.status).toBe(405)
+    expect(promotionRefused.headers.get('allow')).toBe('POST')
+  })
 })

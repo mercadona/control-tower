@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
+import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -45,6 +46,7 @@ const NO_SESSIONS = SessionsMother.noSessions().body
 
 const NO_COORDINATING_SESSION = CoordinatingSessionMother.none().body
 const NO_SPEC_FREEZE = SpecFreezeMother.none().body
+const NO_EPIC_GROOM = EpicGroomMother.none().body
 
 const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
@@ -52,6 +54,7 @@ const withReadyTools = <T extends (input: string | URL | Request, init?: Request
     if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
     if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(NO_COORDINATING_SESSION))
     if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
+    if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
     return init === undefined ? fetching(input) : fetching(input, init)
   }))
 

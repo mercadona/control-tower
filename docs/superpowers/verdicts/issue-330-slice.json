@@ -1,0 +1,35 @@
+{
+  "issue": 330,
+  "tasks_total": 13,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "outcome": "conforme",
+        "result": "Every sentence of `### Desired end state` is delivered somewhere in the sum of the thirteen commits, and nothing a later commit touched took one back. (1) The seven states: `EpicGroomRoute.reading` answers `{\"status\":\"none\"}` with no session held and `ReadEpicGroom.execute` derives the other six in ladder order from evidence only — spec on disk, `PublishedSpecs.holds`, the milestone's issues — storing nothing (read-epic-groom.ts:80-99). (2) The dry run's product is `ct-groom --dry-run`'s own stdout, parsed by `CtGroomEpic.#planIn` into the milestone and, per issue, `order`, `title`, `labels`, and projected onto the wire by `#wirePlanIssueOf`. (3) `POST /epic-groom` runs the real groom over the spec and milestone the read gave and answers the second read's issues (groom-epic.ts:50-66); `GroomEpic.REFUSED` returns `draft` and `awaiting-publication` before `groom.run` is ever called, and `EpicGroomRefusal` projects them to `spec-not-frozen` and `spec-not-published`, so nothing is touched in either case. (4) `CtGroomEpic.#groom` accepts exactly `0` and `3` and raises `EpicNotGroomed(said.stderr.trim())` otherwise; `PlanCollapse` maps it to `epic-not-groomed`, the client keeps `detail` as `error`, and `EpicGroomPanel` renders it in a `Banner type=\"error\" role=\"alert\"` with no translation. (5) `PromoteEpic` promotes only `isPromotable()` issues — open and standing at backlog — one call each, and `GhEpicIssues.promoteArgvFor` carries exactly `--add-label status:ready --remove-label status:backlog` and no other flag; the answer carries the second read's `issues` and `promoted`. (6) Both presses demand `GateKey.HEADER` before asking anything and answer 403 `gate-not-from-the-page`. (7) `Home.tsx` renders `<EpicGroomPanel />` right after `<SpecFreezePanel />` and outside every `currentStage` branch, and both routes write one `RECORD` line per successful act to the injected `stderr`, which `ct-api.ts` binds to `process.stderr.write`. The two endpoints are mounted in `api-server.ts`, built in `ct-api.ts` and proxied by `API_PATHS` in `frontend/vite.config.ts`, so the end state is reachable and not only type-checkable."
+      },
+      {
+        "rule": "coherencia",
+        "outcome": "conforme",
+        "result": "Thirteen commits, and each leaves standing what the ones before it established. The three files more than one task touches grow strictly by addition and every addition survives in the accumulated diff: `exceptions.ts` carries all seven new leaves of T1, T2 and T3 at once; `start-plan-route.ts` registers all six new `PlanCollapse` codes; `plan-refusal.test.ts` carries both new families and `refusal-codes.test.ts` both new vocabularies. No later commit reverses an earlier one and no scaffolding for an intermediate state survives: T1-T3 build ports and adapters that T4-T6 consume unchanged, T7-T8 expose them, T9 wires exactly the two routes T7 and T8 declared, T10 documents what T7, T8 and T9 actually built (`API.md`'s endpoint count moves 15 -> 18 and its seven `GET` bodies, five refusal codes, six `PlanCollapse` codes and `promoted` field match the routes line for line), and T11-T13 consume that same contract from the page — `EpicGroom.types.ts`'s seven kinds are the route's seven statuses, `x-gate-key` is the header the routes demand, and `helpers.tsx` plus `Home.restoreWorkflow.test.tsx` gained the `/epic-groom` stub in the same commit that put the panel on the page, so no earlier suite was left broken or quietly rewritten. Two tasks never solve the same problem twice: the phase is derived in one place (`ReadEpicGroom`), both actions and both routes read it, and the ladder's vocabulary is imported from the plugin's `resolveStatus` and `GhPlanIssues`' labels rather than respelled."
+      },
+      {
+        "rule": "observabilidad",
+        "outcome": "conforme",
+        "result": "The declared signal — «the dry run product matches the issues the real groom creates and each one ends at `status:ready`» — is emitted by production lines of this diff, on this repository's own channel, with bounded values. Production emits it: `EpicGroomRoute.#recordOf` writes `gate 2 groom: \"<milestone>\" planned N issue(s), holds M now` after a successful groom (epic-groom-route.ts:136) and `EpicPromotionRoute.#recordOf` writes `gate 2 promotion: \"<milestone>\" holds N issue(s), moved <numbers> to status:ready` after a successful press (epic-promotion-route.ts:110); both are called from the route handlers themselves, not from a test, and `ct-api.ts` hands the server `stderr: (line) => process.stderr.write(line)`, so a reader of `make run-backend` sees them after the merge. The repo's own instrumentation: this backend's channel is a named prefixed line on an injected `stderr`, exactly as `harvest sweep:` (harvest-clock.ts:60,64) and `coordinating session:` (ct-api.ts:382) already do; no logging library is brought in and no dependency manifest changed. Every value is bounded: the milestone is the spec's own title, one per epic, and the rest are counts and the list of issue numbers this very press moved, which is the payload the signal asks for. The smell does not apply: the cell names something read in production after the merge, so its second half fails. One `low` below, on what that line says on the re-groom path the slice deliberately supports."
+      }
+    ],
+    "findings": [
+      {
+        "rule": "observabilidad",
+        "severity": "low",
+        "what": "On the re-groom path the slice deliberately supports — `GroomEpic` is not refused over an already groomed epic, and `groom-epic.test.ts` pins it with `an epic already groomed runs again because the plugin is idempotent by existence` — the first read is `groomed`, so `EpicGroomRead.plan` is `null`, `EpicGroomed.plan` is `null`, and the record line reports `planned 0 issue(s), holds 7 now`. The reader of that line cannot tell «no dry run was taken on this press» from «the dry run planned nothing while seven issues exist», which is precisely the comparison the declared signal exists to make. Nothing is wrong with the groom itself and the line is never absent, so this is a nit and only a nit: naming the absence (`no plan on this press`) instead of the number `0` would keep the same line honest on both paths.",
+        "path": "backend/src/infrastructure/epic-groom-route.ts",
+        "line": 134,
+        "evidence": "const planned = groomed.plan === null ? 0 : groomed.plan.issues.length"
+      }
+    ],
+    "review_token": "a3c21e528728c60e066ffaeda2fd01ac7d99480fc066bc036f4135f103cbbdb0"
+  }
+}

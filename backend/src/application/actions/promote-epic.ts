@@ -1,0 +1,83 @@
+import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomState } from '../queries/read-epic-groom.ts'
+import type { EpicGroomStateValue } from '../queries/read-epic-groom.ts'
+import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
+import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import type { EpicIssues } from '../../domain/ports/epic-issues.ts'
+import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
+import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
+
+export class PromoteEpicParams {
+  readonly root: CheckoutRoot
+  readonly repository: RepositoryName
+
+  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+    this.root = root
+    this.repository = repository
+    Object.freeze(this)
+  }
+}
+
+export class EpicPromoted {
+  readonly state: EpicGroomStateValue
+  readonly milestone: string | null
+  readonly plan: GroomPlan | null
+  readonly issues: readonly EpicIssue[]
+  readonly promoted: readonly number[]
+  readonly reason: string | null
+
+  constructor({ state, milestone, plan, issues, promoted, reason = null }: {
+    state: EpicGroomStateValue,
+    milestone: string | null,
+    plan: GroomPlan | null,
+    issues: readonly EpicIssue[],
+    promoted: readonly number[],
+    reason?: string | null,
+  }) {
+    this.state = state
+    this.milestone = milestone
+    this.plan = plan
+    this.issues = issues
+    this.promoted = promoted
+    this.reason = reason
+    Object.freeze(this)
+  }
+}
+
+export class PromoteEpic {
+  readonly read: ReadEpicGroom
+  readonly issues: EpicIssues
+
+  constructor({ read, issues }: { read: ReadEpicGroom, issues: EpicIssues }) {
+    this.read = read
+    this.issues = issues
+  }
+
+  async execute(params: PromoteEpicParams): Promise<EpicPromoted> {
+    const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const nothingSafeToAuthorise = before.issues.length === 0 ||
+      before.state === EpicGroomState.PARTIALLY_GROOMED ||
+      before.state === EpicGroomState.ISSUES_UNCERTAIN
+
+    if (nothingSafeToAuthorise) {
+      return new EpicPromoted({
+        state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues, promoted: [],
+        reason: before.reason,
+      })
+    }
+
+    const waiting = before.issues.filter((issue) => issue.isPromotable())
+    for (const issue of waiting) {
+      await this.issues.promote({ repository: params.repository, issue })
+    }
+
+    const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+
+    return new EpicPromoted({
+      state: after.state,
+      milestone: after.milestone,
+      plan: after.plan,
+      issues: after.issues,
+      promoted: waiting.map((issue) => issue.number),
+    })
+  }
+}

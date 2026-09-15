@@ -1,4 +1,7 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import type { ExecFileException } from 'node:child_process'
 
 export class ProcessOutput {
@@ -20,6 +23,7 @@ export class ProcessOutput {
 
 export class ToolRunner {
   static readonly #UNKNOWN_EXIT = 1
+  static readonly PIPE_BUFFER_BYTES = 65536
 
   readonly bin: string
   readonly budgetMs: number
@@ -40,6 +44,31 @@ export class ToolRunner {
           stderr: failure === null ? stderr : (stderr.trim() || failure.message),
         }))
       })
+    })
+  }
+
+  async runWholeOutput(argv: string[], { cwd }: { cwd?: string } = {}): Promise<ProcessOutput> {
+    const collected = join(await mkdtemp(join(tmpdir(), 'ct-whole-output-')), 'stdout')
+    const sink = await open(collected, 'w')
+    try {
+      const said = await this.#spawned(argv, { cwd, stdout: sink.fd })
+      return new ProcessOutput({ code: said.code, stdout: await readFile(collected, 'utf8'), stderr: said.stderr })
+    } finally {
+      await sink.close()
+      await rm(dirname(collected), { recursive: true, force: true })
+    }
+  }
+
+  #spawned(argv: string[], { cwd, stdout }: { cwd?: string, stdout: number }): Promise<{ code: number, stderr: string }> {
+    return new Promise((resolve) => {
+      const child = spawn(this.bin, argv, {
+        cwd, env: this.env, timeout: this.budgetMs, stdio: ['ignore', stdout, 'pipe'],
+      })
+      let stderr = ''
+      child.stderr?.setEncoding('utf8')
+      child.stderr?.on('data', (chunk: string) => { stderr += chunk })
+      child.on('error', (failure: Error) => resolve({ code: ToolRunner.#UNKNOWN_EXIT, stderr: stderr.trim() || failure.message }))
+      child.on('close', (code: number | null) => resolve({ code: code ?? ToolRunner.#UNKNOWN_EXIT, stderr }))
     })
   }
 

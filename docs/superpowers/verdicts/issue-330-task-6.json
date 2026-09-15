@@ -1,0 +1,66 @@
+{
+  "issue": 330,
+  "task": 6,
+  "task_name": "Gate 2's press: the promotion",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises three things and each has a production line. (a) 'adds status:ready to the epic's issues that are waiting for it': PromoteEpic.execute filters before.issues with issue.isPromotable() and awaits this.issues.promote({ repository, issue }) once per surviving issue, sequentially, preserving the order the read listed them in; the label write itself is GhEpicIssues.promote, already shipped in task 3 behind the EpicIssues port. (b) 'and to nothing else': nothing but the filtered list reaches promote — the in-progress issue and the closed backlog issue never do, and the empty-milestone branch returns before any call. (c) the answer is taken from a second read (const after = await this.read.execute(...)), so state/milestone/issues describe what the milestone really holds after the press, while promoted names the numbers this press moved. No promised behaviour is missing from the diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The TDD line asks for it('it promotes the issues waiting at backlog and asks nothing of the ones that are not') where, of four issues (one at backlog, one with no status label, one in progress, one closed at backlog), the EpicIssues double receives exactly the first two and promoted names those two numbers. The test in the diff builds exactly those four (Mother.backlogIssue #1, Mother.noStatusLabelIssue #2, Mother.inProgressIssue #3, Mother.closedBacklogIssue #4) and asserts expect(flow.issues.promoteAsked).toEqual([{repository, issue: backlogIssue}, {repository, issue: noStatusLabelIssue}]) plus expect(promoted.promoted).toEqual([1, 2]). Same assertion, same input, same expected value. The 'no status label' issue is modelled as PlanIssueStatus.BACKLOG, which is faithful and not a deviation: gh-issue-map.js resolveStatus returns status 'backlog' when statusLabels.length === 0, so by the time an EpicIssue exists at the application layer the absence has already been resolved. The boundary pair it('an epic with no issue at all is refused and nothing is promoted') is present and asserts the rung the read gave (GROOMABLE) and promoteAsked === [].",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Compared symbol by symbol against the Contract (backend/src/application/actions/promote-epic.ts) block. PromoteEpicParams: constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) — same names, same order, same types, frozen. EpicPromoted: readonly state: EpicGroomStateValue, milestone: string | null, issues: readonly EpicIssue[], promoted: readonly number[] — the four fields, in the declared order, with the declared types. PromoteEpic: constructor({ read, issues }: { read: ReadEpicGroom, issues: EpicIssues }) and async execute(params: PromoteEpicParams): Promise<EpicPromoted>. The prose contract is honoured too: it asks ReadEpicGroom (not a re-derived ladder), returns early with promoted: [] when before.issues.length === 0 whatever the rung is, promotes only isPromotable() issues one call each in listed order, and re-reads before answering. No block declared any Final text and no Call site block applies (the consumer, EpicPromotionRoute, is task 8).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row against the diff. D-13 ('no phase is stored'): the action stores nothing — the rung it answers is the one the second ReadEpicGroom gave, derived from the milestone's issues, which is the row this diff bears on most and it implements exactly that value. D-11 ('a yardstick is imported, never reimplemented'): no second opinion about the ladder is written here; the promotable rule stays on EpicIssue.isPromotable(), the same predicate read-epic-groom.ts uses to tell GROOMED from AUTHORISED. D-10 ('everything new under backend/ is TypeScript'): promote-epic.ts and promote-epic.test.ts are .ts. D-6 ('gates 1 and 2 are acts of the app'): the promotion is a use case the program answers for. D-22 (the gate key) and D-7 (no write to a pull request) have no subject in this diff — the key is the route's, task 8, and nothing here touches a pull request. No row is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: promote-epic.ts is the twin of backend/src/application/actions/groom-epic.ts (params object frozen at construction, result object frozen at construction, ports by name in the constructor, read-before / act / read-after), and promote-epic.test.ts mirrors backend/__tests__/application/groom-epic.test.ts scaffolding for scaffolding (ReadEpicGroomDouble, a Mother of named scenarios, a Flow whose fields are the dependencies). architecture.md: application/actions is the right folder, dependencies enter through the constructor by name, it depends on ports (EpicIssues) and on a query, never on an adapter, and the result object is declared beside the use case rather than a raw map. decisions.md: the promotable rule is not spread — it stays on EpicIssue.isPromotable(), and the task's own control greps that exactly one call decides who moves. domain.md: no tool noun anywhere (PromoteEpic, EpicPromoted, EpicIssues.promote). boundaries.md has no subject: nothing in this diff crosses the outer edge. style.md: no comment or docstring anywhere in either file, every identifier English, every function hangs off a class (the only module-level declaration is the type alias PromoteAsked, which is the sibling test's idiom). testing.md: application layer with its collaborators doubled at construction, assertions on what the port received and on what the use case returned, objects built by a mother whose methods are named scenarios (backlogIssue, noStatusLabelIssue, inProgressIssue, closedBacklogIssue, readyIssue, groomableRead, groomedRead, authorisedRead), and the double raises when nobody wrote an answer ('was asked a Nth time with no answer written for it'). Read as testing.md asks — could each assertion fail for the reason its name gives? — all four can: drop the length === 0 branch and test 2 falls on the unwritten second answer; drop the isPromotable filter and tests 1 and 3 fall on promoteAsked; answer before.issues and test 4 falls. defects.md, rule by rule: (1) closed vocabulary — the answer carries state: EpicGroomStateValue, the vocabulary itself and not a boolean derived from it, and there is no dispatch with a catch-all branch in the diff (EpicIssue.status being typed string rather than PlanIssueStatusValue is task 3's line, untouched here); (2) raw map as the return value of logic — none: the use case returns EpicPromoted and the objects handed to promote()/ReadEpicGroomParams are the declared named-argument shapes of a port and a params object, not maps a consumer reads by key lookup; (3) two fields that have to agree — none: promoted is not derivable from issues (which issues this press moved is distinct from which stand at ready afterwards), and milestone carries its absence as null in the type rather than as a sentinel empty string; (4) an error named for where it happens — no subject: this diff declares no error type. Two clashes declared rather than reported as findings, because in both the implementer had no other diff available. First, ReadEpicGroomDouble is byte-for-byte the one in groom-epic.test.ts, which testing.md's antipattern list calls 'a test helper... repeated in two files'; extracting it would need a third file and **Files:** declares exactly two (create), a control ct-step checks mechanically. Second, the plan's Contract block dictates PromoteEpicParams, against architecture.md's 'No suffix on the type, on its parameters or on its result' — and the whole repository already reads that way (FreezeSpecParams, ReadEpicGroomParams, GroomEpicParams), so the name was fixed before this task. Delivery shape: no signature, constructor or public contract of anything that already existed is altered, so nothing is left on an old path.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Does not apply: both files are new (new file mode 100644) and the diff contains no '-' line at all, so no pre-existing assertion, case or test was removed, relaxed or rewritten.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in production code, not in scaffolding. The filter (before.issues.filter((issue) => issue.isPromotable())), the one-call-per-issue loop, the empty-milestone early return and the second read are all in backend/src/application/actions/promote-epic.ts; the test file only supplies the read's answers and records what the port received. Revert promote-epic.ts and every one of the four tests fails at import. The label write behind the port is real too: GhEpicIssues.promote in backend/src/infrastructure/gh-epic-issues.ts, shipped in task 3.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff writes exactly the two files **Files:** declares, both created, and nothing else: 258 insertions, 0 deletions, no plan hunk and therefore no amendment to rule on. Inside them every line serves a sentence of the task — the params object, the result object and the use case are the Contract block verbatim, and the four tests are the two TDD tests plus the two the **Tests:** line names, with no fifth. Nothing named in ### Out of scope is touched: no plugin script, no --reconcile or Project v2, no dispatcher, no merge or pull-request write, no repository column on the milestone or on the product. No refactor, rename or adjacent fix rode along.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Four new tests, measured on the three properties. Deterministic: no clock, no date, no network, no filesystem, no randomness, no sleep — every input is a value the test constructs. Isolated: each test builds its own Flow with its own doubles, the only shared state is Mother's frozen value objects and a string constant, and no test depends on the order of the file. Verifies real behaviour: the assertions are on what the EpicIssues port received (promoteAsked) and on what the use case returned (state, issues, promoted), which is the observable effect, and none of them would survive reverting the production file. The finer half was read with the skill control-tower-loop:test-driven-development and its testing-anti-patterns.md reference, both loaded: the skill's 'Minimal — One thing. \"and\" in name? Split it.' is contradicted by three of the four names, but every one of those names is dictated verbatim by the plan's **TDD:** and **Tests:** lines, so it is declared here and left out of the findings. One low remains, on the second read's fixture in the first test, pinned to anti-pattern 4's Iron Rule.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "test-desiderata",
+        "severity": "low",
+        "what": "The second read's answer in the first test models a state GitHub cannot hold: waiting.map(() => Mother.readyIssue()) yields the same issue twice, both numbered 1, so the milestone is described as holding #1 ready, #1 ready, #3 and #4, when what really comes back after promoting #1 and #2 is #1 ready and #2 ready. Nothing asserts on it, so the test still measures what its name says — hence low — but a reader taking the fixture as the shape of a real read would take away a duplicate issue number. waiting.map((issue) => Mother.readyVersionOf(issue)) or a listing of the two ready issues by number would say the true thing at the same cost.",
+        "path": "backend/__tests__/application/promote-epic.test.ts",
+        "line": 140,
+        "evidence": "const after = [...waiting.map(() => Mother.readyIssue()), Mother.inProgressIssue(), Mother.closedBacklogIssue()] — against testing-anti-patterns.md: \"Mock the COMPLETE data structure as it exists in reality, not just fields your immediate test uses.\""
+      }
+    ],
+    "review_token": "ad28271d46d05dad0da75113f0d9349ce32fab3b4d59c47c0b963d4bf21e2f20"
+  }
+}
