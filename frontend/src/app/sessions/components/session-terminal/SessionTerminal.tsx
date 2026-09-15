@@ -73,6 +73,7 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
     const fitAndResize = () => {
       const proposed = fitAddon.proposeDimensions()
       if (proposed === undefined || !Number.isFinite(proposed.cols) || !Number.isFinite(proposed.rows)) return
+      if (proposed.cols <= 0 || proposed.rows <= 0) return
       fitAddon.fit()
       if (proposed.cols === lastSize.cols && proposed.rows === lastSize.rows) return
       lastSize = { cols: proposed.cols, rows: proposed.rows }

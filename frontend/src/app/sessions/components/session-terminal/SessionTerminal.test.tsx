@@ -1,89 +1,22 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { Terminal } from '@xterm/xterm'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from 'pages/home/__tests__/FakeXterm'
 import { SessionTerminal } from 'app/sessions/components/session-terminal/SessionTerminal'
 
 const SESSION = { id: 'a1', name: 'zsh' }
 
 const NOOP_ON_GONE = () => undefined
 
-type FakeTerminal = {
-  written: string[]
-  disposed: boolean
-  onDataHandler: ((text: string) => void) | null
-  opened: Element | null
-}
-
-let proposedDimensions: { cols: number; rows: number } | undefined
 let resizeObserverCallback: ResizeObserverCallback | null = null
-let lastAddonDisposed = false
 
-vi.mock('@xterm/xterm', () => {
-  class MockTerminal {
-    static instances: MockTerminal[] = []
-    written: string[] = []
-    disposed = false
-    onDataHandler: ((text: string) => void) | null = null
-    opened: Element | null = null
-
-    constructor() {
-      MockTerminal.instances.push(this)
-    }
-
-    loadAddon() {}
-
-    open(screen: Element) {
-      this.opened = screen
-    }
-
-    write(data: string) {
-      this.written.push(data)
-    }
-
-    reset() {
-      this.written = []
-    }
-
-    onData(handler: (text: string) => void) {
-      this.onDataHandler = handler
-    }
-
-    resize() {}
-
-    dispose() {
-      this.disposed = true
-    }
-  }
-
-  return { Terminal: MockTerminal }
-})
-
-vi.mock('@xterm/addon-fit', () => {
-  class MockFitAddon {
-    proposeDimensions() {
-      return proposedDimensions
-    }
-
-    fit() {}
-
-    dispose() {
-      lastAddonDisposed = true
-    }
-  }
-
-  return { FitAddon: MockFitAddon }
-})
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 const refusedWrite = () => new Response(JSON.stringify({ code: 'session-not-live', detail: 'no live session answers to that id' }), { status: 400 })
 
 const typedWrite = () => new Response(JSON.stringify({ status: 'typed', id: SESSION.id }), { status: 202 })
 
-const lastTerminal = (): FakeTerminal => {
-  const instances = (Terminal as unknown as { instances: FakeTerminal[] }).instances
-  const instance = instances.at(-1)
-  if (instance === undefined) throw new Error('no terminal was created')
-  return instance
-}
+const lastTerminal = (): FakeTerminal => FakeTerminal.last()
 
 let resizeObserverDisconnected = false
 
@@ -103,10 +36,10 @@ class FakeResizeObserver {
 describe('SessionTerminal', () => {
   beforeEach(() => {
     FakeEventSource.install()
-    proposedDimensions = undefined
+    FakeTerminal.install()
+    FakeFitAddon.install()
     resizeObserverCallback = null
     resizeObserverDisconnected = false
-    lastAddonDisposed = false
     vi.stubGlobal('ResizeObserver', FakeResizeObserver)
   })
   afterEach(() => {
@@ -239,7 +172,7 @@ describe('SessionTerminal', () => {
   })
 
   it('a proposed size other than the default posts it to resize on mount', async () => {
-    proposedDimensions = { cols: 120, rows: 40 }
+    FakeFitAddon.nextProposedDimensions = { cols: 120, rows: 40 }
     const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'resized', id: SESSION.id, cols: 120, rows: 40 }), { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
@@ -254,7 +187,18 @@ describe('SessionTerminal', () => {
   })
 
   it('an unchanged 80x24 posts nothing to resize', async () => {
-    proposedDimensions = { cols: 80, rows: 24 }
+    FakeFitAddon.nextProposedDimensions = { cols: 80, rows: 24 }
+    const posting = vi.fn(async () => new Response('', { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(posting).not.toHaveBeenCalled()
+  })
+
+  it('a 0x0 proposal from a not-yet-laid-out container posts nothing to resize', async () => {
+    FakeFitAddon.nextProposedDimensions = { cols: 0, rows: 0 }
     const posting = vi.fn(async () => new Response('', { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
@@ -271,7 +215,7 @@ describe('SessionTerminal', () => {
 
     render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
-    proposedDimensions = { cols: 100, rows: 30 }
+    FakeFitAddon.nextProposedDimensions = { cols: 100, rows: 30 }
     resizeObserverCallback?.([], {} as ResizeObserver)
     resizeObserverCallback?.([], {} as ResizeObserver)
 
@@ -292,6 +236,6 @@ describe('SessionTerminal', () => {
     unmount()
 
     expect(resizeObserverDisconnected).toBe(true)
-    expect(lastAddonDisposed).toBe(true)
+    expect(FakeFitAddon.last().disposed).toBe(true)
   })
 })
