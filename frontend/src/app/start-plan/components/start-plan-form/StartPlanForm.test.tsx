@@ -14,8 +14,8 @@ const OPENED = {
   opened: { conversation: CoordinatingSessionMother.CONVERSATION, session: CoordinatingSessionMother.SESSION },
 }
 
-const REFUSAL_ERROR = CoordinatingSessionMother.ONE_REPOSITORY_ONLY_DETAIL
-const REFUSED = { kind: 'refused' as const, code: 'one-repository-only', error: REFUSAL_ERROR }
+const REFUSAL_ERROR = CoordinatingSessionMother.ALREADY_LIVE_DETAIL
+const REFUSED = { kind: 'refused' as const, code: 'coordinating-session-already-live', error: REFUSAL_ERROR }
 const UNREACHABLE = { kind: 'backend-unreachable' as const }
 
 const submitButton = () => screen.getByRole('button', { name: 'Arrancar brainstorming' })

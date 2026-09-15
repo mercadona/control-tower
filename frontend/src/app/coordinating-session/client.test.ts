@@ -63,14 +63,14 @@ describe('CoordinatingSessionClient', () => {
   })
 
   it("returns the backend's refusal with its code", async () => {
-    answerWith(CoordinatingSessionMother.oneRepositoryOnly())
+    answerWith(CoordinatingSessionMother.alreadyLive())
 
     const outcome = await CoordinatingSessionClient.open(submission())
 
     expect(outcome).toEqual({
       kind: 'refused',
-      code: 'one-repository-only',
-      error: CoordinatingSessionMother.ONE_REPOSITORY_ONLY_DETAIL,
+      code: 'coordinating-session-already-live',
+      error: CoordinatingSessionMother.ALREADY_LIVE_DETAIL,
     })
   })
 })
