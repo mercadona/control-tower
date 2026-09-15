@@ -120,21 +120,34 @@ class EpicBranchDouble extends EpicBranch {
 
 class PullRequestsDouble extends PullRequests {
   answer: ReviewedPullRequest | null
+  merged: ReviewedPullRequest | null
   asked: PullRequestAsked[]
+  mergedAsked: PullRequestAsked[]
 
-  constructor(answer: ReviewedPullRequest | null) {
+  constructor(answer: ReviewedPullRequest | null, merged: ReviewedPullRequest | null = null) {
     super()
     this.answer = answer
+    this.merged = merged
     this.asked = []
+    this.mergedAsked = []
   }
 
   static withNoneOpen(): PullRequestsDouble {
     return new PullRequestsDouble(null)
   }
 
+  static withAReslicingMerged(): PullRequestsDouble {
+    return new PullRequestsDouble(null, Mother.RESLICING)
+  }
+
   async openOfBranch(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
     this.asked.push(subject)
     return this.answer
+  }
+
+  async mergedReslicingOf(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
+    this.mergedAsked.push(subject)
+    return this.merged
   }
 }
 
@@ -143,6 +156,10 @@ class Mother {
   static readonly BRANCH = 'milestone/2026-01-01-test-execution'
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 12, url: 'https://github.com/owner/name/pull/12',
+  })
+
+  static readonly RESLICING: ReviewedPullRequest = Object.freeze({
+    number: 363, url: 'https://github.com/owner/name/pull/363',
   })
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly HOME = Mother.REPOSITORY.text
@@ -393,6 +410,46 @@ describe('ReadEpicGroom', () => {
 
     expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.TWO_SLICE_PLAN))
     expect(read.planFingerprint).not.toBe(Mother.FINGERPRINT.of(Mother.PLAN))
+  })
+
+  it('a groomable milestone whose re-slicing already merged carries that pull request', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      pullRequests: PullRequestsDouble.withAReslicingMerged(),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.GROOMABLE)
+    expect(read.reslicing).toEqual(Mother.RESLICING)
+    expect(flow.pullRequests.mergedAsked).toEqual([{ branch: Mother.BRANCH, repository: Mother.REPOSITORY }])
+    expect(flow.pullRequests.asked).toEqual([])
+  })
+
+  it('a groomable milestone nobody re-sliced carries no pull request to authorise it', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      pullRequests: PullRequestsDouble.withNoneOpen(),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.GROOMABLE)
+    expect(read.reslicing).toBeNull()
+  })
+
+  it('a groomed milestone is never asked which merge authorised it, because its issues already exist', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      issues: new EpicIssuesDouble([Mother.backlogIssue()]),
+      pullRequests: PullRequestsDouble.withAReslicingMerged(),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.GROOMED)
+    expect(read.reslicing).toBeNull()
+    expect(flow.pullRequests.mergedAsked).toEqual([])
   })
 
   it('publication is asked about the spec this checkout holds, so its content decides and not its path', async () => {

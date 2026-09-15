@@ -205,6 +205,7 @@ export class EpicGroomRoute {
           milestone: outcome.milestone,
           plan: { home: outcome.plan!.home, issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
           planFingerprint: outcome.planFingerprint,
+          reslicing: outcome.reslicing,
           ...(minted === null ? {} : { key: minted }),
         })
         return

@@ -1279,6 +1279,15 @@ each issue's `repo` is the repository that issue will be created in: the milesto
 may send a row to another repository (`Repo` column), and one row never spans two. A row whose
 `repo` equals `home` is the ordinary case.
 
+`reslicing` travels on `groomable` alone, and it is what makes the groom run
+without a further click: it is the **merged** pull request of the branch the
+checkout sits on whose body carries `<!-- ct-groom:reslicing -->`
+(`gh pr list --state merged --json number,url,body`), which is to say the
+correction a person approved by merging it. `null` means nobody re-sliced this
+milestone, and then the groom waits for the press it always waited for. It is
+asked only in that one state: once the milestone holds an issue there is nothing
+left to authorise, so `partially-groomed`, `groomed` and `authorised` never ask.
+
 `planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, the home
 repository, then each issue's order, title, labels and repository, in the plan's own order
 (`backend/src/domain/value-objects/groom-plan.ts`'s `canonicalText()`, hashed by

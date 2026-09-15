@@ -206,6 +206,17 @@ class Mother {
     })
   }
 
+  static readonly RESLICING = Object.freeze({
+    number: 363, url: `https://github.com/${Mother.REPOSITORY.text}/pull/363`,
+  })
+
+  static groomableAfterReslicingRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.GROOMABLE, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT, issues: [], reslicing: Mother.RESLICING,
+    })
+  }
+
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
@@ -385,6 +396,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
       key: Keys.MINTED,
     })
     expect(await authorised.json()).toEqual({
@@ -402,6 +414,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
       key: Keys.MINTED,
     })
     expect(await fromElsewhere.json()).toEqual({
@@ -409,6 +422,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
     })
   })
 
@@ -479,6 +493,26 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
+      key: Keys.MINTED,
+    })
+  })
+
+  it('a groomable answer carries the merged re-slicing that authorised it, so the page needs no click', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.groomableAfterReslicingRead())
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'groomable',
+      milestone: Mother.MILESTONE,
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: Mother.RESLICING,
       key: Keys.MINTED,
     })
   })

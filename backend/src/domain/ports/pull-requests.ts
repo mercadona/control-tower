@@ -22,6 +22,16 @@ export class PullRequests {
     )
   }
 
+  async mergedReslicingOf({ branch, repository }: {
+    branch: string,
+    repository: RepositoryName,
+  }): Promise<ReviewedPullRequest | null> {
+    throw new Error(
+      `${this.constructor.name} must implement mergedReslicingOf({ branch, repository }) and answer the merged pull `
+      + `request that published a re-slicing of ${branch} in ${repository}`
+    )
+  }
+
   async open({ repository, branch, title, body }: {
     repository: RepositoryName,
     branch: string,

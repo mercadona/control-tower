@@ -8,6 +8,7 @@ import { SleepDouble } from '../sleep-double.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { Reslicing } from '../../src/domain/value-objects/reslicing.ts'
 import { PullRequestNotRead, PullRequestNotUnderstood, EpicPullRequestNotOpened } from '../../src/domain/exceptions.ts'
 
 const DECLARED = JSON.parse(
@@ -23,6 +24,20 @@ class GhDouble {
     number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42',
   })
   static LISTED = `[{"number":42,"url":"https://github.com/josemerca/ct-loop-sandbox/pull/42"}]\n`
+  static MILESTONE_BRANCH = 'milestone/2026-09-15-the-groom-execution'
+
+  static readonly MERGED_CAPTURE =
+    'gh pr list --repo mercadona/control-tower --state merged --json number,url,body --limit 1, captured on '
+    + '2026-09-15: a JSON array of objects carrying exactly body, number and url, in that order — '
+    + '[{"body":"Gate 1 dead-ended instead of …","number":361,"url":"https://github.com/mercadona/control-tower/pull/361"}]'
+
+  static mergedListing(...bodies: string[]): string {
+    return `${JSON.stringify(bodies.map((body, index) => ({
+      body,
+      number: 360 + index,
+      url: `https://github.com/josemerca/ct-loop-sandbox/pull/${360 + index}`,
+    })))}\n`
+  }
 
   readonly answers: ProcessOutput[]
   readonly calls: string[][]
@@ -72,6 +87,10 @@ class GhDouble {
     return this.pullRequests().openOfBranch({ branch, repository: GhDouble.REPOSITORY })
   }
 
+  async mergedReslicingOf(branch = GhDouble.MILESTONE_BRANCH) {
+    return this.pullRequests().mergedReslicingOf({ branch, repository: GhDouble.REPOSITORY })
+  }
+
   async open({ branch = 'feat/7', title = 'the epic pull request', body = 'the epic pull request body' } = {}) {
     return this.pullRequests().open({ repository: GhDouble.REPOSITORY, branch, title, body })
   }
@@ -81,6 +100,65 @@ class GhDouble {
       .fixesAsked({ pullRequest: GhDouble.PULL_REQUEST, repository: GhDouble.REPOSITORY })
   }
 }
+
+describe('GhPullRequests, reading the merge that authorised a re-slicing', () => {
+  describe(GhDouble.MERGED_CAPTURE, () => {
+    it('a merged pull request whose body carries the re-slicing marker is the one the read answers', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing(
+        `${Reslicing.MARKER}\n\nThe slicing of this milestone changed in the coordinating session.`
+      ))
+
+      const found = await gh.mergedReslicingOf()
+
+      expect(found).toEqual(new OpenPullRequest({
+        number: 360, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/360',
+      }))
+      expect(gh.calls).toEqual([[
+        'pr', 'list', '--repo', 'josemerca/ct-loop-sandbox',
+        '--head', GhDouble.MILESTONE_BRANCH, '--state', 'merged',
+        '--json', 'number,url,body', '--limit', GhPullRequests.MERGED_READ,
+      ]])
+    })
+
+    it('a merged pull request without the marker is not a re-slicing and answers nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing(
+        "The epic's two documents, with the execution spec frozen on 2026-09-14."
+      ))
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+    })
+
+    it('the marked one is found even when a later merge of the same branch carries no marker', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing(
+        'Gate 1 opened this one and nobody re-sliced anything.',
+        `${Reslicing.MARKER}\n\nslices 2 and 3 joined`
+      ))
+
+      const found = await gh.mergedReslicingOf()
+
+      expect(found?.number).toBe(361)
+    })
+
+    it('a branch nobody ever merged answers nothing and never asks a second time', async () => {
+      const gh = GhDouble.answering('[]\n')
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+      expect(gh.calls).toHaveLength(1)
+    })
+  })
+
+  it('a merged listing whose entry has no body is told apart from a gh that failed', async () => {
+    const unreadable = await GhDouble
+      .answering('[{"number":360,"url":"https://github.com/josemerca/ct-loop-sandbox/pull/360"}]\n')
+      .mergedReslicingOf()
+      .catch((cause) => cause)
+    const failed = await GhDouble.refusing('HTTP 404').mergedReslicingOf().catch((cause) => cause)
+
+    expect(unreadable).toBeInstanceOf(PullRequestNotUnderstood)
+    expect(unreadable).not.toBeInstanceOf(PullRequestNotRead)
+    expect(failed).toBeInstanceOf(PullRequestNotRead)
+  })
+})
 
 describe('GhPullRequests', () => {
   it('the_branch_it_asks_about_is_the_one_the_loop_derives_from_the_issue', async () => {

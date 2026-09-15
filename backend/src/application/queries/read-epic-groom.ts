@@ -47,8 +47,11 @@ export class EpicGroomRead {
   readonly issues: readonly EpicIssue[]
   readonly reason: string | null
   readonly pullRequest: ReviewedPullRequest | null
+  readonly reslicing: ReviewedPullRequest | null
 
-  constructor({ state, spec, milestone, plan, planFingerprint, issues, reason = null, pullRequest = null }: {
+  constructor({
+    state, spec, milestone, plan, planFingerprint, issues, reason = null, pullRequest = null, reslicing = null,
+  }: {
     state: EpicGroomStateValue,
     spec: EpicSpec | null,
     milestone: string | null,
@@ -57,6 +60,7 @@ export class EpicGroomRead {
     issues: readonly EpicIssue[],
     reason?: string | null,
     pullRequest?: ReviewedPullRequest | null,
+    reslicing?: ReviewedPullRequest | null,
   }) {
     this.state = state
     this.spec = spec
@@ -66,6 +70,7 @@ export class EpicGroomRead {
     this.issues = issues
     this.reason = reason
     this.pullRequest = pullRequest
+    this.reslicing = reslicing
     Object.freeze(this)
   }
 }
@@ -129,6 +134,7 @@ export class ReadEpicGroom {
     if (holding.issues.length === 0) {
       return new EpicGroomRead({
         state: EpicGroomState.GROOMABLE, spec, milestone, plan, planFingerprint, issues: [],
+        reslicing: await this.#mergedReslicing(params),
       })
     }
 
@@ -155,6 +161,12 @@ export class ReadEpicGroom {
       state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
       issues: [], pullRequest: await this.#awaitedPullRequest(params),
     })
+  }
+
+  async #mergedReslicing(params: ReadEpicGroomParams): Promise<ReviewedPullRequest | null> {
+    const branch = await this.branch.current(params.root)
+
+    return await this.pullRequests.mergedReslicingOf({ branch, repository: params.repository })
   }
 
   async #awaitedPullRequest(params: ReadEpicGroomParams): Promise<ReviewedPullRequest | null> {
