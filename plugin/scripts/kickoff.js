@@ -41,6 +41,19 @@ export const SIGNAL_ABSENT = '(sin señal declarada — el issue no trae la secc
 // non-interactive wrapper; not to put an account map back in.
 export const AGENT_BIN = process.env.CT_AGENT_BIN || 'claude'
 
+// ARCHITECT_MODEL — the model the launched session runs on, named on the line
+// and not inherited. That session is the architect: it writes the slice's plan
+// before any subagent exists, and the plan is what every later step is judged
+// against, so it is the last place in the loop where a cheaper tier should be
+// decided by accident.
+//
+// And accident is exactly what inheriting means here: with no `--model`, the
+// session takes whatever default the machine that launched it happens to carry,
+// which F35 already made ambient when it removed the account map. The value
+// stays the same as every other step's (`step-contracts.js`, `agents/*.md`):
+// one loop, one tier.
+export const ARCHITECT_MODEL = 'opus'
+
 // Exported (F3): ct-groom.mjs needs the set of recognised `Tipo` values in
 // order to warn when the spec carries a value that matches no key of this
 // object — `renderKickoff`, further down, does `ADDENDA[slice.type] || ''` in
