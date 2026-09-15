@@ -129,6 +129,10 @@ export class HarvestTable {
     new HarvestColumn({ name: 'findings', type: HarvestColumn.INTEGER, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#ruleCountEntryField(1) }),
   ]
 
+  static #repoOf(row, identity) {
+    return row.repo ?? identity.repo
+  }
+
   static #reportDate(row, identity) {
     return HarvestTable.#valueAt(identity, 'harvestedAt').slice(0, 10)
   }
@@ -145,7 +149,7 @@ export class HarvestTable {
     new HarvestColumn({ name: 'harvest_id', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('harvestId') }),
     new HarvestColumn({ name: 'harvested_at', type: HarvestColumn.TIMESTAMP, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('harvestedAt') }),
     new HarvestColumn({ name: 'report_date', type: HarvestColumn.DATE, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#reportDate }),
-    new HarvestColumn({ name: 'repo', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('repo') }),
+    new HarvestColumn({ name: 'repo', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#repoOf }),
     new HarvestColumn({ name: 'milestone', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromIdentity('milestone') }),
     new HarvestColumn({ name: 'plugin_version', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromIdentity('pluginVersion') }),
     new HarvestColumn({ name: 'actor', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('actor') }),
