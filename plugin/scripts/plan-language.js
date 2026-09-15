@@ -1,6 +1,7 @@
 export class PlanLanguage {
   static PROCEDURAL_WORDS = 20
   static DESCRIPTIVE_WORDS = 25
+  static PARAGRAPH_SENTENCES = 6
 
   static #HEADING = /^#{1,6} /
   static #ROLE_LABEL = /^(?:Current state|Contract|Call site|Final text) \(/
@@ -37,6 +38,16 @@ export class PlanLanguage {
             `line ${line}: length — the sentence "${PlanLanguage.#shorten(sentence)}" carries ${count} words and the limit here is ${limit}. Split it.`,
           )
         }
+      }
+      if (!paragraph.row && sentences.length > PlanLanguage.PARAGRAPH_SENTENCES) {
+        out.push(
+          `line ${line}: paragraph — the paragraph carries ${sentences.length} sentences and the limit is ${PlanLanguage.PARAGRAPH_SENTENCES}. Split it.`,
+        )
+      }
+      if (marker === '**Objective:**' && sentences.length > 1) {
+        out.push(
+          `line ${line}: one-sentence — **Objective:** carries ${sentences.length} sentences and it takes one. Say the observable behaviour of the commit, and nothing else.`,
+        )
       }
     }
     return out

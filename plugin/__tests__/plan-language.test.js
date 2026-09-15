@@ -41,6 +41,18 @@ class Plan {
     return ['## 1. ' + Plan.#words(30, ''), '|---|---|', 'Current state (src/a.js, lines 1-2):'].join('\n')
   }
 
+  static withSentences(n) {
+    return Array.from({ length: n }, (_, i) => `The task ${i} lands.`).join(' ')
+  }
+
+  static withATableRowOfCells(n) {
+    return `| ${Array.from({ length: n }, (_, i) => `cell ${i}`).join(' | ')} |`
+  }
+
+  static withATaskMarkerSaying(marker, text) {
+    return `${marker} ${text}`
+  }
+
   static #words(n, tail = '.') {
     return `${Array.from({ length: n }, (_, i) => `word${i}`).join(' ')}${tail}`
   }
@@ -108,5 +120,37 @@ describe('the length of a sentence', () => {
 
   it('drops headings, role labels and table separators', () => {
     expect(Violations.of(Plan.withHeadingsRoleLabelsAndTableSeparators())).toEqual([])
+  })
+})
+
+describe('the length of a paragraph', () => {
+  it('accepts six sentences and rejects seven', () => {
+    expect(Violations.about(Plan.withSentences(PlanLanguage.PARAGRAPH_SENTENCES), 'paragraph')).toEqual([])
+    expect(
+      Violations.about(Plan.withSentences(PlanLanguage.PARAGRAPH_SENTENCES + 1), 'paragraph'),
+    ).toHaveLength(1)
+  })
+
+  it('names the count and the limit', () => {
+    const [violation] = Violations.about(Plan.withSentences(8), 'paragraph')
+    expect(violation).toContain('carries 8 sentences and the limit is 6')
+  })
+
+  it('never counts the cells of a table row as sentences', () => {
+    expect(Violations.about(Plan.withATableRowOfCells(8), 'paragraph')).toEqual([])
+  })
+})
+
+describe('the objective of a task', () => {
+  it('accepts one sentence and rejects two', () => {
+    const one = Plan.withATaskMarkerSaying('**Objective:**', 'The barrel exports sum().')
+    const two = Plan.withATaskMarkerSaying('**Objective:**', 'The barrel exports sum(). The test covers it.')
+    expect(Violations.about(one, 'one-sentence')).toEqual([])
+    expect(Violations.about(two, 'one-sentence')).toHaveLength(1)
+  })
+
+  it('asks the other markers for nothing', () => {
+    const tests = Plan.withATaskMarkerSaying('**Tests:**', 'One lands. Another lands.')
+    expect(Violations.about(tests, 'one-sentence')).toEqual([])
   })
 })
