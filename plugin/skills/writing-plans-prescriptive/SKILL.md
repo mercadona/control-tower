@@ -159,7 +159,7 @@ by `--check-plan`. Six sub-rules fire, under the rule name `ste`:
 | `length` | A sentence carries more words than its limit |
 | `paragraph` | A paragraph carries more than 6 sentences |
 | `passive` | A form of `be` stands before a past participle |
-| `gerund` | An `-ing` word opens a sentence, or follows a preposition |
+| `gerund` | An `-ing` word opens a sentence, or directly follows a preposition |
 | `word` | A word of the non-approved list appears. The message names the replacement |
 | `one-sentence` | `**Objective:**` carries more than one sentence |
 
@@ -174,10 +174,10 @@ backticked span, a path or a URL counts as one word.
 `it('the header is read before the body')`. That name belongs to the test, and inside backticks
 the gate leaves it alone. Outside them it fires `passive` for a name you cannot reword.
 
-The four lists live in `scripts/plan-language.js`: the 48 non-approved words with their
-replacement, the irregular participles, the words that end in `-ed` and are not participles, and
-the words that end in `-ing` and are not verb forms. If the gate refuses a word this repository
-needs, add it to the exception, and say so in `## 9. Assumptions`.
+The four lists live in `scripts/plan-language.js`: the 47 non-approved words with their
+replacement, the irregular participles, the `-ed` words that are not participles, and the `-ing`
+words that are not verb forms. If the gate refuses a word the plan needs, say so in
+`## 9. Assumptions` and stop: a wrong refusal is a finding for a person.
 
 ## Structure
 
@@ -238,8 +238,8 @@ part.
 `RepoFixture`, `crearRepoFixture(opciones?)`, `commitsSinMerges(ruta)`), plus one line of
 closed decisions: *dates pinned with `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`, repo created under
 `mkdtempSync(tmpdir())`, `limpiar()` removes it, fixtures only.* Replaced 106 lines of helper
-plus 43 of its test — 84% and 77% rewritten — and leaked a temp directory on failure when
-pasted.
+plus 43 of its test — 84% and 77% rewritten — and the paste leaked a temp directory on
+failure.
 
 **3. Configuration — `server/tsconfig.json` and `server/package.json`.** The prose above
 replaced 75 lines of JSON across two blocks.
