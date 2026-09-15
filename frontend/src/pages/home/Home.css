@@ -2,7 +2,10 @@
    is a column of this layout and declares `height: 100%`, which only resolves
    against a containing block that has a height to give. */
 .home {
-  --home-sessions-width: 680px;
+  /* clamp(min, preferred, max): the 280px navigation rail already takes its
+     own share of the viewport, so the column's preferred width is relative
+     to the viewport rather than a fixed 680px that starves the work area. */
+  --home-sessions-width: clamp(480px, 40vw, 680px);
   --home-sessions-min-height: 480px;
   --home-sessions-stacked-height: 60vh;
   height: 100vh;
@@ -53,14 +56,8 @@
 }
 
 .home__side > .home__sessions {
-  flex: 1 1 auto;
+  --panel-padding: 16px;
   min-height: var(--home-sessions-min-height);
-  padding: 16px;
-}
-
-.home__side > .home__sessions > .panel__body {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 .home__history {

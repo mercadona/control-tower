@@ -54,8 +54,12 @@ carries the terminal's fitted size so the pty agrees with what the page shows.
 emulator, rather than a scrolling log, and fits it to its container with
 `@xterm/addon-fit`: a `ResizeObserver` on the screen element schedules a fit
 after a 100 ms debounce, and `SessionsClient.resize` is only called when the
-fitted size changes. A resize failure is swallowed — it is not user-actionable
-and never shows a banner. **The backend owns the session, not the page**: it is opened
+fitted size changes and neither dimension is zero or non-finite. `resize`
+chains through the same per-session promise queue as `type`, so two quick
+resizes — or a resize racing a keystroke — reach the backend in the order
+they were sent rather than in whichever order their requests happen to
+settle. A resize failure is swallowed — it is not user-actionable and never
+shows a banner. **The backend owns the session, not the page**: it is opened
 once at the backend's start-up, so the page is a window onto it and never its
 owner — closing the tab ends only the subscription and disposes the on-screen
 terminal, while the process, its scrollback and its row in `GET /sessions`
@@ -80,8 +84,12 @@ an overlay, that always holds a `Panel` heading **Sesiones en marcha** with
 `CoordinatingSessionStatus` and `SessionsPanel` inside it — on the page in
 every phase, never hidden and never disabled by which stage is showing. Once
 an implementation is running, `ImplementHistory` stacks under that panel in
-the same column. Above 1280 px the column sits beside `main` at a fixed width;
-below it, the column stacks under the work area with no overlay.
+the same column. Above 1280 px the column sits beside `main` at
+`clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a fixed
+680px, because the 280 px navigation rail already takes its own share of a
+1440 px viewport and a fixed column left the work area too narrow for its own
+flow bar; below 1280 px the column stacks under the work area with no
+overlay.
 
 `app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
 the workspace, outside every `currentStage` branch) is gate 1's panel.
