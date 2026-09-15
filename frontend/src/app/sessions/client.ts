@@ -4,6 +4,7 @@ import {
   SessionsOutcome,
   SessionStreamListener,
   SessionStreamSubscription,
+  TerminalSize,
   TypeOutcome,
 } from 'app/sessions/Sessions.types'
 
@@ -100,8 +101,22 @@ const type = (id: string, text: string): Promise<TypeOutcome> => {
   return outcome
 }
 
+const resize = async (id: string, size: TerminalSize): Promise<void> => {
+  try {
+    await fetch(`${PATH}/${encodeURIComponent(id)}/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(size),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+    })
+  } catch {
+    return
+  }
+}
+
 export const SessionsClient = {
   list,
   watch,
   type,
+  resize,
 }

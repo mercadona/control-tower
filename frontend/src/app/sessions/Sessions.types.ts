@@ -1,5 +1,7 @@
 export type LiveSession = { id: string; name: string }
 
+export type TerminalSize = { cols: number; rows: number }
+
 export type SessionsOutcome =
   | { kind: 'loaded'; sessions: LiveSession[] }
   | { kind: 'unavailable' }

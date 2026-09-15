@@ -232,4 +232,26 @@ describe('SessionsClient', () => {
     await vi.advanceTimersByTimeAsync(2000)
     await expect(second).resolves.toEqual({ kind: 'unreachable' })
   })
+
+  it('resizing posts the size as json to that session resize', async () => {
+    const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'resized', id: 'a1', cols: 120, rows: 40 }), { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    await SessionsClient.resize('a1', { cols: 120, rows: 40 })
+
+    expect(posting).toHaveBeenCalledWith('/sessions/a1/resize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 120, rows: 40 }),
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('a resize that cannot reach the backend resolves instead of throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+
+    await expect(SessionsClient.resize('a1', { cols: 120, rows: 40 })).resolves.toBeUndefined()
+  })
 })
