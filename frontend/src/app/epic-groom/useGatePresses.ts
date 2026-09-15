@@ -77,4 +77,3 @@ const useGatePresses = (gateKey: string | null): GatePresses => {
 }
 
 export { useGatePresses }
-export type { GatePresses }

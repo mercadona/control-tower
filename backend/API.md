@@ -1189,7 +1189,9 @@ is gone. It is `null` when no open pull request can be found, and the page says 
 that case — the spec is still unpublished and no open pull request was found for its branch, rather
 than asking for a merge with nothing to merge. Either way it is a wait, never an error: the creation
 may have failed after the commit and the push, or the pull request may have been closed unmerged. This
-is the only read that runs `git rev-parse` and `gh pr list`: the other eight shapes ask neither.
+read and `groomable` are the only two that run `git rev-parse` and `gh pr list` — this one for the open
+pull request it waits for, `groomable` for the merged re-slicing that may already have authorised it;
+the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a

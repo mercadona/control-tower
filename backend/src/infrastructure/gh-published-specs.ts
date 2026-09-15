@@ -5,7 +5,7 @@ import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export class GhPublishedSpecs extends PublishedSpecs {
-  static readonly BLOB = 'blob'
+  static readonly #BLOB = 'blob'
 
   readonly gh: Gh
   readonly digest: (text: string) => string
@@ -22,8 +22,8 @@ export class GhPublishedSpecs extends PublishedSpecs {
     return ['api', `repos/${repository.text}/contents/${encoded}`]
   }
 
-  static blobTextOf(text: string): string {
-    return `${GhPublishedSpecs.BLOB} ${Buffer.byteLength(text, 'utf8')}\0${text}`
+  static #blobTextOf(text: string): string {
+    return `${GhPublishedSpecs.#BLOB} ${Buffer.byteLength(text, 'utf8')}\0${text}`
   }
 
   async holds({ repository, spec }: { repository: RepositoryName, spec: EpicSpec }): Promise<boolean> {
@@ -39,7 +39,7 @@ export class GhPublishedSpecs extends PublishedSpecs {
     }
 
     return GhPublishedSpecs.#shaIn(outcome.stdout, { repository, spec })
-      === this.digest(GhPublishedSpecs.blobTextOf(spec.text))
+      === this.digest(GhPublishedSpecs.#blobTextOf(spec.text))
   }
 
   static #shaIn(printed: string, asked: { repository: RepositoryName, spec: EpicSpec }): string {

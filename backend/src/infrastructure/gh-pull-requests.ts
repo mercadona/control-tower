@@ -33,7 +33,7 @@ export class OpenPullRequest {
 export class GhPullRequests extends PullRequests {
   static readonly #ASKS = Object.freeze(['CHANGES_REQUESTED', 'COMMENTED'])
   static readonly #PAGE_SIZE = 'per_page=100'
-  static readonly MERGED_READ = '10'
+  static readonly #MERGED_READ = '10'
   static readonly CREATED = /\/pull\/(\d+)$/
 
   readonly gh: Gh
@@ -62,7 +62,7 @@ export class GhPullRequests extends PullRequests {
     return [
       'pr', 'list', '--repo', repository.text,
       '--head', branch, '--state', 'merged',
-      '--json', 'number,url,body', '--limit', GhPullRequests.MERGED_READ,
+      '--json', 'number,url,body', '--limit', GhPullRequests.#MERGED_READ,
     ]
   }
 

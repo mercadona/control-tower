@@ -116,7 +116,7 @@ describe('GhPullRequests, reading the merge that authorised a re-slicing', () =>
       expect(gh.calls).toEqual([[
         'pr', 'list', '--repo', 'josemerca/ct-loop-sandbox',
         '--head', GhDouble.MILESTONE_BRANCH, '--state', 'merged',
-        '--json', 'number,url,body', '--limit', GhPullRequests.MERGED_READ,
+        '--json', 'number,url,body', '--limit', '10',
       ]])
     })
 

@@ -47,7 +47,7 @@ export class SpecReslicingRefusal {
 export class SpecReslicingRoute {
   static readonly PATH = '/spec-reslicing'
   static readonly METHODS = 'POST'
-  static readonly STATUS = 'published'
+  static readonly #STATUS = 'published'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL =
     'no coordinating session is held: there is no checkout whose slicing could be published'
@@ -94,7 +94,7 @@ export class SpecReslicingRoute {
         return
       }
       Answer.send(response, 200, {
-        status: SpecReslicingRoute.STATUS,
+        status: SpecReslicingRoute.#STATUS,
         pullRequest: published.pullRequest,
       })
     }

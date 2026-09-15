@@ -44,7 +44,7 @@ export class GroomSessionRefusal {
 export class GroomSessionRoute {
   static readonly PATH = '/groom-session'
   static readonly METHODS = 'POST'
-  static readonly STATUS = 'grooming'
+  static readonly #STATUS = 'grooming'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL =
     'no coordinating session is held: there is no checkout to open the groom conversation in'
@@ -100,7 +100,7 @@ export class GroomSessionRoute {
       attention: SessionAttention.working(),
     }))
     Answer.send(response, 202, {
-      status: GroomSessionRoute.STATUS,
+      status: GroomSessionRoute.#STATUS,
       conversation: opened.conversation!.id.text,
       repo: opened.conversation!.repository.text,
       root: opened.conversation!.root.text,

@@ -172,7 +172,7 @@ describe('GroomSessionRoute', () => {
 
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({
-      status: GroomSessionRoute.STATUS,
+      status: 'grooming',
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
