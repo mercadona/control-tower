@@ -72,17 +72,11 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(content).toMatch(/min-height:\s*0/)
   })
 
-  it('gives the work area the full width alone, with a single fluid column', () => {
+  it('gives the work area the full width beside a fixed right column', () => {
     const columns = Stylesheet.home().declarationsFor('.home__columns')
 
     expect(columns).toMatch(/display:\s*grid/)
-    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/)
-  })
-
-  it('splits the content into the work area and a fixed panel the width token controls', () => {
-    const columns = Stylesheet.home().declarationsFor('.home__columns--with-panel')
-
-    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*var\(--layout-panel-width\)/)
+    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*var\(--home-sessions-width\)/)
   })
 
   it('scrolls the work area and the right column on their own', () => {
@@ -93,6 +87,19 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(side).toMatch(/overflow:\s*auto/)
   })
 
+  it('stacks the right column as a flex column so the sessions panel and the history sit one under the other', () => {
+    const side = Stylesheet.home().declarationsFor('.home__side')
+
+    expect(side).toMatch(/flex-direction:\s*column/)
+  })
+
+  it('gives the sessions panel of the right column room to fit a terminal instead of collapsing to its content', () => {
+    const sessions = Stylesheet.home().declarationsFor('.home__side > .home__sessions')
+
+    expect(sessions).toMatch(/flex:\s*1 1 auto/)
+    expect(sessions).toMatch(/min-height:\s*var\(--home-sessions-min-height\)/)
+  })
+
   it('keeps a stage card at its own height instead of shrinking it below its content, so a card taller than the viewport lets the work area scroll to it', () => {
     const child = Stylesheet.home().declarationsFor('.home__content > *')
 
@@ -100,15 +107,15 @@ describe('the application shell gives the Navigation shell a height to fill', ()
   })
 })
 
-describe('the right column stacks under the content below 1180px without becoming a layer', () => {
+describe('the right column stacks under the content below 1280px without becoming a layer', () => {
   it('turns the grid into a single stacked column', () => {
-    const columns = Stylesheet.home().narrowDeclarationsFor('.home__columns', '@media (width < 1180px)')
+    const columns = Stylesheet.home().narrowDeclarationsFor('.home__columns', '@media (width < 1280px)')
 
     expect(columns).toMatch(/flex-direction:\s*column/)
   })
 
   it('gives the right column the full width below the content instead of an overlay', () => {
-    const narrow = Stylesheet.home().mediaQuery('@media (width < 1180px)')
+    const narrow = Stylesheet.home().mediaQuery('@media (width < 1280px)')
 
     expect(narrow).not.toMatch(/position:\s*(fixed|absolute|sticky)/)
     expect(narrow).not.toMatch(/z-index/)

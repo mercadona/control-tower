@@ -20,6 +20,7 @@ import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
 import { Navigation } from 'system-ui/navigation'
+import { Panel } from 'system-ui/panel'
 import { TopBar } from 'system-ui/top-bar'
 import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
@@ -333,7 +334,7 @@ const Home = () => {
           />
         }
       >
-        <div className={showHistory ? 'home__columns home__columns--with-panel' : 'home__columns'}>
+        <div className="home__columns">
         <main className="home__content">
           <nav className="home__flow" aria-label="Flujo del plan">
             <ol>
@@ -466,11 +467,6 @@ const Home = () => {
             )}
           </section>
 
-          <section className="home__sessions" aria-label="Sesiones en marcha" ref={sessionsRef}>
-            <SessionsPanel opened={openedSession} />
-            <CoordinatingSessionStatus read={coordinatingSession} />
-          </section>
-
           <SpecFreezePanel />
 
           {workflow !== null && (
@@ -508,16 +504,22 @@ const Home = () => {
             </section>
           )}
         </main>
-        {showHistory && workflow !== null && (
-          <aside className="home__side" aria-label="Progreso de la implementación">
-            <ImplementHistory
-              key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
-              issue={workflow.plan.issue.number}
-              root={workflow.plan.root ?? workflow.request.path}
-              repo={workflow.plan.repo}
-            />
-          </aside>
-        )}
+        <div className="home__side">
+          <Panel className="home__sessions" heading="Sesiones en marcha" ref={sessionsRef}>
+            <CoordinatingSessionStatus read={coordinatingSession} />
+            <SessionsPanel opened={openedSession} />
+          </Panel>
+          {showHistory && workflow !== null && (
+            <aside className="home__history" aria-label="Progreso de la implementación">
+              <ImplementHistory
+                key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
+                issue={workflow.plan.issue.number}
+                root={workflow.plan.root ?? workflow.request.path}
+                repo={workflow.plan.repo}
+              />
+            </aside>
+          )}
+        </div>
       </div>
       </Navigation>
     </div>

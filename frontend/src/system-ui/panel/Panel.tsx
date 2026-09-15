@@ -1,5 +1,5 @@
 import classNames from 'classnames'
-import { createElement, HTMLAttributes, ReactNode } from 'react'
+import { createElement, HTMLAttributes, ReactNode, Ref } from 'react'
 import './Panel.css'
 
 type PanelHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
@@ -9,6 +9,7 @@ interface PanelProps extends HTMLAttributes<HTMLElement> {
   level?: PanelHeadingLevel
   actions?: ReactNode
   children: ReactNode
+  ref?: Ref<HTMLElement>
 }
 
 const Panel = ({ heading, level = 2, actions, children, className, ...rest }: PanelProps) => {

@@ -7,22 +7,23 @@ describe('Home · layout', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps only the work area at first paint, and adds the right column once an implementation starts', async () => {
+  it('keeps only the work area and the right column at first paint, and folds the implementation history into the right column once implementation starts', async () => {
     const { unmount } = openHome()
 
     await screen.findByRole('navigation', { name: 'Navegación principal' })
     const columns = document.querySelector('.home__columns')
     expect(columns).not.toBeNull()
-    expect(columns?.children).toHaveLength(1)
+    expect(columns?.children).toHaveLength(2)
     expect(columns?.firstElementChild?.tagName).toBe('MAIN')
+    expect(columns?.lastElementChild).toHaveClass('home__side')
     expect(screen.queryByRole('complementary', { name: 'Progreso de la implementación' })).not.toBeInTheDocument()
     unmount()
 
     openRestored({ phase: 'implementing' })
     await screen.findByText('Agente asignado')
 
-    const implementingColumns = document.querySelector('.home__columns')
-    expect(implementingColumns?.lastElementChild).toBe(screen.getByRole('complementary', { name: 'Progreso de la implementación' }))
+    const side = document.querySelector('.home__side')
+    expect(side).toContainElement(screen.getByRole('complementary', { name: 'Progreso de la implementación' }))
     expect(document.querySelector('.top-bar')?.closest('.home__columns')).toBeNull()
   })
 
@@ -47,11 +48,12 @@ describe('Home · layout', () => {
       .toBe(columns)
   })
 
-  it('never turns the right column into a dialog: it is a sibling of main once implementation starts', async () => {
+  it('never turns the right column into a dialog: its home__side is a sibling of main once implementation starts', async () => {
     openRestored({ phase: 'implementing' })
 
-    const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
+    await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(side.previousElementSibling?.tagName).toBe('MAIN')
+    const side = document.querySelector('.home__side')
+    expect(side?.previousElementSibling?.tagName).toBe('MAIN')
   })
 })
