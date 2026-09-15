@@ -1111,8 +1111,13 @@ The spec exists and is not frozen yet:
 {"status":"draft"}
 ```
 
-The spec is frozen, but its committed copy is not yet readable on the default branch — the pull
-request gate 1 opened has to merge first:
+The spec is frozen, but what the default branch holds is **not the text this checkout holds** — the
+pull request that carries it has to merge first. Publication is decided by content and never by
+existence: `gh api repos/<owner>/<repo>/contents/<spec>` answers the file of the default branch with
+its git blob `sha`, and this backend compares it against the blob sha of the local spec
+(`sha1("blob " + byteLength + "\0" + text)`, git's own envelope). A path that exists on the default
+branch carrying an older table therefore reads as unpublished, which is what keeps the groom from
+creating issues from a table nobody approved:
 
 ```json
 {"status":"awaiting-publication",
@@ -1304,9 +1309,9 @@ None of these eight touches the milestone or an issue.
 
 From running the groom itself, once the eight above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
-(`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
+(`backend/src/infrastructure/start-plan-route.ts`). The first six are reached alike by `GET
 /epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the
-published copy and the milestone's issues through the same ports; the sixth is met only where an
+published copy and the milestone's issues through the same ports; the last is met only where an
 issue is actually edited:
 
 | `code` | Meaning |
@@ -1314,11 +1319,12 @@ issue is actually edited:
 | `epic-not-groomed` | `ct-groom` exited with something other than `0` (no divergence) or `3` (unreconciled divergence); `detail` is that program's own stderr, untranslated |
 | `groom-plan-not-understood` | `ct-groom --dry-run` printed something this backend cannot read as a plan |
 | `published-spec-not-read` | `gh api repos/<repo>/contents/<spec>` failed for a reason other than "not found" |
+| `published-spec-not-understood` | that call answered something naming no `sha` this backend can read, so publication could not be compared |
 | `epic-issues-not-read` | `gh issue list` failed while reading the milestone's issues |
 | `epic-issues-not-understood` | `gh` answered the milestone's issues without the shape this reads |
 | `epic-issue-not-promoted` | `gh issue edit` failed while moving one issue from `status:backlog` to `status:ready` — met only by `POST /epic-promotion`, the only caller of that edit |
 
-All six answer 400 and carry the tool's own message in `detail`, the same convention every other
+All seven answer 400 and carry the tool's own message in `detail`, the same convention every other
 tool refusal in this file follows.
 
 ```

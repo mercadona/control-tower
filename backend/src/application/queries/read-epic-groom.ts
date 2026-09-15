@@ -110,7 +110,7 @@ export class ReadEpicGroom {
       })
     }
 
-    const isPublished = await this.published.holds({ repository: params.repository, path: spec.path })
+    const isPublished = await this.published.holds({ repository: params.repository, spec })
     if (!isPublished) {
       return new EpicGroomRead({
         state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,

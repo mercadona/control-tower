@@ -545,7 +545,10 @@ class CtApi {
     const freezeSpec = new FreezeSpec({
       specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
     })
-    const publishedSpecs = new GhPublishedSpecs({ gh })
+    const publishedSpecs = new GhPublishedSpecs({
+      gh,
+      digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
+    })
     const epicIssues = new GhEpicIssues({ gh })
     const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
     const epicGroom = new CtGroomEpic({

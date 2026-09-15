@@ -15,7 +15,7 @@ import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
-type PublishedAsked = { repository: RepositoryName, path: string }
+type PublishedAsked = { repository: RepositoryName, spec: EpicSpec }
 type IssuesAsked = { repository: RepositoryName, milestone: string }
 type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryName, milestone: string }
 type PullRequestAsked = { branch: string, repository: RepositoryName }
@@ -343,6 +343,16 @@ describe('ReadEpicGroom', () => {
 
     expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.TWO_SLICE_PLAN))
     expect(read.planFingerprint).not.toBe(Mother.FINGERPRINT.of(Mother.PLAN))
+  })
+
+  it('publication is asked about the spec this checkout holds, so its content decides and not its path', async () => {
+    const frozen = Mother.frozen()
+    const flow = new Flow({ specs: new EpicSpecsDouble(frozen) })
+
+    await flow.run()
+
+    expect(flow.published.asked).toEqual([{ repository: Mother.REPOSITORY, spec: frozen }])
+    expect(flow.published.asked[0].spec.text).toBe(frozen.text)
   })
 
   it('no execution spec is no-spec and nothing is asked of github', async () => {

@@ -115,6 +115,8 @@ export class EpicPullRequestNotOpened extends SpecFreezeFailure {}
 
 export class PublishedSpecNotRead extends SpecFreezeFailure {}
 
+export class PublishedSpecNotUnderstood extends SpecFreezeFailure {}
+
 export class EpicGroomFailure extends PlanFailure {}
 
 export class EpicNotGroomed extends EpicGroomFailure {}
