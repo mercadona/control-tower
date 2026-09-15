@@ -1,12 +1,23 @@
 .panel {
   --panel-heading-gap: 24px;
+  --panel-padding: 32px;
 
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  padding: 32px;
+  padding: var(--panel-padding);
   background-color: var(--background-elevated);
   border-radius: var(--shape-container-sm);
+}
+
+.panel--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.panel--fill > .panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .panel__heading-block {

@@ -1,12 +1,16 @@
 .session-terminal {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .session-terminal__screen {
-  background-color: var(--background-inverse);
-  color: var(--foreground-inverse);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--neutral-950);
   border: 1px solid var(--border-subtle);
   border-radius: var(--shape-container-sm);
   padding: 8px;

@@ -2,24 +2,29 @@
    is a column of this layout and declares `height: 100%`, which only resolves
    against a containing block that has a height to give. */
 .home {
+  /* clamp(min, preferred, max): the 280px navigation rail already takes its
+     own share of the viewport, so the column's preferred width is relative
+     to the viewport rather than a fixed 680px that starves the work area. */
+  --home-sessions-width: clamp(480px, 40vw, 680px);
+  --home-sessions-min-height: 480px;
+  --home-sessions-stacked-height: 60vh;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-/* The columns of the Navigation content: the work area alone by default.
-   Once an implementation is running, `.home__columns--with-panel` adds a
-   fixed column beside it (`--layout-panel-width`), scrollable on its own.
-   Neither is a layer over the other. */
+/* The columns of the Navigation content: the work area, and a right column
+   that always holds the sessions panel and, once an implementation is
+   running, the history stacked under it. Neither is a layer over the other. */
 .home__columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto var(--home-sessions-width);
   height: 100%;
   min-height: 0;
 }
 
-.home__columns--with-panel {
-  grid-template-columns: minmax(0, 1fr) var(--layout-panel-width);
+.home__columns--resizing {
+  user-select: none;
 }
 
 .home__content {
@@ -42,12 +47,25 @@
 }
 
 .home__side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   box-sizing: border-box;
   min-height: 0;
-  padding: 24px;
+  min-width: 0;
+  padding: 16px;
   overflow: auto;
   background-color: var(--background-elevated);
   border-left: var(--borderwidth-sm) solid var(--border-secondary);
+}
+
+.home__side > .home__sessions {
+  --panel-padding: 16px;
+  min-height: var(--home-sessions-min-height);
+}
+
+.home__history {
+  flex: none;
 }
 
 .home__flow ol {
@@ -64,9 +82,12 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 8px;
   align-items: center;
+  min-width: 0;
   padding: 12px;
   color: var(--foreground-secondary);
   border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
+  overflow-wrap: normal;
+  hyphens: auto;
 }
 
 .home__flow-step > :last-child {
@@ -148,16 +169,6 @@
   color: var(--foreground-brand-primary);
 }
 
-.home__sessions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 24px;
-  background-color: var(--background-elevated);
-  border: var(--borderwidth-sm) solid var(--border-secondary);
-  border-radius: var(--shape-container-sm);
-}
-
 .home__completed {
   display: flex;
   flex-direction: column;
@@ -206,9 +217,9 @@
   border-radius: var(--shape-container-xs);
 }
 
-/* Under 1180px the right column stacks below the content: it stays a column
+/* Under 1280px the right column stacks below the content: it stays a column
    of the layout, not a layer over it, so it never becomes an overlay. */
-@media (width < 1180px) {
+@media (width < 1280px) {
   .home__columns {
     display: flex;
     flex-direction: column;
@@ -224,6 +235,16 @@
     overflow: visible;
     border-left: none;
     border-top: var(--borderwidth-sm) solid var(--border-secondary);
+  }
+
+  .home__side > .home__sessions {
+    flex: none;
+    height: var(--home-sessions-stacked-height);
+    min-height: 360px;
+  }
+
+  .column-resizer {
+    display: none;
   }
 }
 

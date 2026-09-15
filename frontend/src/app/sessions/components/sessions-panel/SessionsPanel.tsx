@@ -38,19 +38,21 @@ export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactEleme
 
   return (
     <div className="sessions-panel">
-      <ul className="sessions-panel__list">
-        {state.sessions.map((session) => (
-          <li key={session.id} className="sessions-panel__item">
-            <Button
-              variant={session.id === chosen.id ? 'primary' : 'secondary'}
-              aria-current={session.id === chosen.id ? 'true' : undefined}
-              onClick={() => setChosenId(session.id)}
-            >
-              {session.name}
-            </Button>
-          </li>
-        ))}
-      </ul>
+      {state.sessions.length > 1 && (
+        <ul className="sessions-panel__list">
+          {state.sessions.map((session) => (
+            <li key={session.id} className="sessions-panel__item">
+              <Button
+                variant={session.id === chosen.id ? 'primary' : 'secondary'}
+                aria-current={session.id === chosen.id ? 'true' : undefined}
+                onClick={() => setChosenId(session.id)}
+              >
+                {session.name}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
       <SessionTerminal session={chosen} onGone={refresh} />
     </div>
   )
