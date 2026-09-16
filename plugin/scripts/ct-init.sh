@@ -209,6 +209,48 @@ for regla in '.claude/worktrees/' '.claude/settings.local.json'; do
   fi
 done
 
+# Issue #376 — the scope gate. It was the one piece of the loop still installed
+# by hand: the workflow lived inside a fenced block of docs/loop/ct-scope-gate.md
+# and the bundle was copied out of dist/ by whoever remembered. Three documents
+# of the plugin's own repository already said /ct-init vendored it, and none of
+# them was true.
+#
+# Both files are COMMITTED in the target repo: a workflow only runs from a
+# committed file, and dist/scope-check.js is built self-contained precisely so
+# that CI needs neither the plugin nor node_modules.
+#
+# Create-if-absent, like every other seeding here. The bundle gets one thing the
+# others do not: a byte comparison against the copy this plugin version ships,
+# because a stale copy is the failure #346 describes — a bundle seeded before it
+# recognises `## Contexto del epic` and nothing else, so it fails the gate of
+# every new issue over a section it cannot find, and no merge in the plugin's
+# repository fixes it. It is a GENERATED file, so there is no hand-edited variant
+# to protect and no hash history to keep: bytes differ or they do not. It still
+# is not replaced without being asked — that is `--force`.
+GATE_WORKFLOW="$TARGET/.github/workflows/ct-scope-gate.yml"
+GATE_BUNDLE="$TARGET/.github/ct/scope-check.js"
+
+if [ ! -f "$GATE_WORKFLOW" ]; then
+  mkdir -p "$(dirname "$GATE_WORKFLOW")"
+  cp "$HERE/templates/ct-scope-gate.workflow.yml" "$GATE_WORKFLOW"
+  echo "creado $GATE_WORKFLOW"
+else
+  echo "$GATE_WORKFLOW ya existe, no se pisa"
+fi
+
+if [ ! -f "$GATE_BUNDLE" ]; then
+  mkdir -p "$(dirname "$GATE_BUNDLE")"
+  cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
+  echo "creado $GATE_BUNDLE"
+elif cmp -s "$HERE/dist/scope-check.js" "$GATE_BUNDLE"; then
+  echo "$GATE_BUNDLE coincide con el bundle de esta versión, no se pisa"
+elif [ "$FORCE" -eq 1 ]; then
+  cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
+  echo "actualizado $GATE_BUNDLE con el bundle de esta versión del plugin (--force)"
+else
+  echo "aviso: $GATE_BUNDLE no coincide con el bundle que trae esta versión del plugin. Es un fichero GENERADO, así que la diferencia es que la copia de este repo es de otra versión, no una edición a mano. Importa: una copia sembrada antes de #346 sólo reconoce \`## Contexto del epic\`, así que tumba la puerta de cada issue nuevo por una sección que no encuentra, y no hay merge en el repo del plugin que lo arregle. Para actualizarla: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
+fi
+
 # Issue #376 — `.claude/settings.json`: the file that tells Claude Code which
 # plugin this repository uses. Until now nothing here wrote it, so the plugin
 # was only ever enabled on the machine of whoever ran `/plugin install`: a fresh

@@ -1,0 +1,63 @@
+# Scope conformance gate — Control Tower loop
+#
+# WHAT IT DOES: fails the PR if it touches files OUTSIDE the scope its milestone
+# declared in the `Alcance:` line of the milestone's context section —
+# `## Contexto del epic` is what the issues carry today, and
+# `## Contexto del milestone` is read too. THIS FILE IS VENDORED: an old copy
+# in a governed repo only knows the first, which is why the groom still writes
+# it. Re-vendor with ct-init to get the tolerant one.
+#
+# WHY IT RUNS IN CI AND NOT IN THE PLUGIN: the dispatched agent runs with the
+# operator's GitHub credentials, so it can fabricate any GitHub artefact — a
+# review, an approval, an authorisation comment. Its record is prose nobody
+# cross-checks. What it CANNOT falsify without it showing is which files it
+# touched. This check judges that fact.
+#
+# WHY NOT IN `dispatch-check --release`: that one is invoked by the agent
+# itself. A guard the suspect runs is not a guard.
+#
+# HOW IT IS INSTALLED: `/ct-init` puts this file and the `scope-check.js` bundle
+# it runs in place, and a later run says when the vendored bundle is older than
+# the one the plugin ships. ONE step is left to a person, and it is the step that
+# decides whether any of this matters:
+#
+#   Add `ct-scope-gate` as a REQUIRED CHECK in the default branch's protection.
+#
+# Without it the check shows red and still lets the merge through — and relying
+# on somebody to look is exactly the failure this gate comes to close. It is not
+# automated on purpose: it needs admin rights over the repository, and a
+# scaffolder does not change a branch protection on its own.
+#
+# TUNE `--exempt` to your repo's own bookkeeping (a ledger, a logbook): files
+# YOUR conventions force every slice to touch. The loop's own exemptions
+# (`docs/superpowers/plans/**` and `docs/superpowers/specs/**`) already come as
+# standard and do not have to be repeated.
+name: ct-scope-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+# Read only: this workflow writes nothing to the repo or to the PR. Its only
+# product is its own status (green/red).
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  scope:
+    name: ct-scope-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the PR fits inside its milestone's scope
+        env:
+          # `gh` uses this token. With read-only `permissions`, the workflow
+          # itself cannot widen its own permissions from the PR.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/ct/scope-check.js \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}"

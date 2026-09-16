@@ -1790,6 +1790,91 @@ describe('ct-init.sh', () => {
     })
   })
 
+  // Issue #376 — the scope gate. Until now this was the one piece of the loop
+  // installed by hand: the workflow lived inside a fenced block of
+  // docs/loop/ct-scope-gate.md and the bundle was copied out of plugin/dist/ by
+  // whoever remembered. Three documents of this repository already stated that
+  // /ct-init vendored it, and none of them was true.
+  describe('the scope gate', () => {
+    const WORKFLOW = join('.github', 'workflows', 'ct-scope-gate.yml')
+    const BUNDLE = join('.github', 'ct', 'scope-check.js')
+
+    it('vendors the workflow and the bundle it runs', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, WORKFLOW), 'utf8')).toBe(
+        readFileSync(join(root, 'templates', 'ct-scope-gate.workflow.yml'), 'utf8')
+      )
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe(readFileSync(join(root, 'dist', 'scope-check.js'), 'utf8'))
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // The workflow only runs from a committed file, and the bundle is built
+    // self-contained precisely so CI needs neither the plugin nor node_modules.
+    // A rule that ignored either of them would leave the gate never running.
+    it('neither of the two is added to .gitignore', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
+      expect(gi).not.toContain('.github')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a workflow of the repo\'s own is not trodden on', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.github', 'workflows'), { recursive: true })
+      writeFileSync(join(dir, WORKFLOW), 'name: mine\n')
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, WORKFLOW), 'utf8')).toBe('name: mine\n')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('idempotent: the second run does not touch either file', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const before = [readFileSync(join(dir, WORKFLOW), 'utf8'), readFileSync(join(dir, BUNDLE), 'utf8')]
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect([readFileSync(join(dir, WORKFLOW), 'utf8'), readFileSync(join(dir, BUNDLE), 'utf8')]).toEqual(before)
+      expect(out).not.toMatch(/aviso/)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // A vendored bundle older than the one the plugin ships is the exact failure
+    // #346 describes: a copy seeded before it recognises `## Contexto del epic`
+    // and nothing else, so it fails the gate of every new issue over a section
+    // it cannot find. It is a generated file, so there is no hand-edited variant
+    // to protect — a byte comparison is the whole story, and saying so is what
+    // was missing.
+    it('a stale bundle is reported, and not replaced without being asked', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      writeFileSync(join(dir, BUNDLE), '// una copia de hace tres versiones\n')
+      const { status, stderr } = spawnSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toContain('scope-check.js')
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe('// una copia de hace tres versiones\n')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('--force re-vendors a stale bundle', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      writeFileSync(join(dir, BUNDLE), '// una copia de hace tres versiones\n')
+      execFileSync('bash', [script, dir, '--force'], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe(readFileSync(join(root, 'dist', 'scope-check.js'), 'utf8'))
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // The template is the only copy. While the doc carried the YAML inside a
+    // fenced block, nothing tied the two together and the block was free to
+    // drift from what anybody actually installed.
+    it('the documentation points at the template instead of carrying a second copy', () => {
+      const doc = readFileSync(join(root, '..', 'docs', 'loop', 'ct-scope-gate.md'), 'utf8')
+      expect(doc).toContain('templates/ct-scope-gate.workflow.yml')
+      expect(doc).not.toContain('on:\n  pull_request:')
+    })
+  })
+
   // -------------------------------------------------------------------------
   // The execution spec's template. The flow after /ct-init is brainstorming →
   // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8
