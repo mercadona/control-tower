@@ -66,11 +66,11 @@ whole and unsummarised:
 | `/ct-harvest` | [`ct-harvest.md`](ct-harvest.md) |
 
 One more document lives here and is not a command's reference:
-[`ct-scope-gate.md`](ct-scope-gate.md) carries the scope conformance workflow in
-full, moved out of `plugin/templates/scope-gate.yml` by the same sub-issue #93.
-It is installed by hand into each governed repository, which is why the
-instruction belongs in documentation rather than in the distributed package; the
-bundle it runs, `plugin/dist/scope-check.js`, is still built and tracked.
+[`ct-scope-gate.md`](ct-scope-gate.md) describes the scope conformance gate. The
+workflow itself is `plugin/templates/ct-scope-gate.workflow.yml`, and `/ct-init`
+vendors it into each governed repository along with the bundle it runs,
+`plugin/dist/scope-check.js` (sub-issue #376). One step stays with a person:
+making `ct-scope-gate` a required check on the default branch.
 
 They are documents of this repo, not of the plugin: they do not ship and they
 are not loaded into any session's context. `__tests__/ct-init.test.js` reads

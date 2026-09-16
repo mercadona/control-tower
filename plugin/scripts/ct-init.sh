@@ -178,6 +178,129 @@ for regla in '.agent/run-*.json' '.agent/run-*/'; do
   fi
 done
 
+# Issue #376 — the two rules under `.claude/`. Same reason as the three blocks
+# above: state that a `git add -A` would otherwise commit.
+#
+#   .claude/worktrees/          the harness creates session worktrees there,
+#                               inside the checkout itself. This is the same
+#                               accident `.worktrees/` covers for the slice
+#                               worktrees, and THIS plugin's own repository has
+#                               ignored it since the line was written — the
+#                               comment there points at the `.worktrees/` block
+#                               above as its precedent, and the rule never
+#                               travelled to the repositories bootstrapped from
+#                               here.
+#   .claude/settings.local.json the cabin writes the coordinating session's
+#                               hooks there, each one carrying a loopback URL
+#                               and an ephemeral port. It is one machine's live
+#                               local state, never product: committed, it points
+#                               every clone at a port that is not listening.
+#
+# The second rule names the FILE and not its directory on purpose. `.claude/`
+# also holds the `settings.json` this scaffolder writes, which declares the
+# plugin and IS committed; a rule on the directory would take it along and leave
+# the repository with no plugin declaration at all.
+for rule in '.claude/worktrees/' '.claude/settings.local.json'; do
+  if ! grep -qxF "$rule" "$GITIGNORE"; then
+    echo "$rule" >> "$GITIGNORE"
+    echo "added $rule to $GITIGNORE"
+  else
+    echo "$rule is already in $GITIGNORE, not duplicated"
+  fi
+done
+
+# Issue #376 — the scope gate. It was the one piece of the loop still installed
+# by hand: the workflow lived inside a fenced block of docs/loop/ct-scope-gate.md
+# and the bundle was copied out of dist/ by whoever remembered. Three documents
+# of the plugin's own repository already said /ct-init vendored it, and none of
+# them was true.
+#
+# Both files are COMMITTED in the target repo: a workflow only runs from a
+# committed file, and dist/scope-check.js is built self-contained precisely so
+# that CI needs neither the plugin nor node_modules.
+#
+# Create-if-absent, like every other seeding here. The bundle gets one thing the
+# others do not: a byte comparison against the copy this plugin version ships,
+# because a stale copy is the failure #346 describes — a bundle seeded before it
+# recognises `## Contexto del epic` and nothing else, so it fails the gate of
+# every new issue over a section it cannot find, and no merge in the plugin's
+# repository fixes it. It is a GENERATED file, so there is no hand-edited variant
+# to protect and no hash history to keep: bytes differ or they do not. It still
+# is not replaced without being asked — that is `--force`.
+#
+# The bundle is ESM and it is vendored as `.js`, so the format it is parsed with
+# is decided by the RECEIVING repository's nearest package.json — not by this
+# plugin. A target declaring `"type": "commonjs"` makes node read the bundle as
+# CommonJS and it dies on its first `import`, which turns a REQUIRED check red
+# on every pull request, correct ones included, for a reason that has nothing to
+# do with the work. `.github/ct/package.json` pins the format for that directory
+# alone: it is nearer than the repository's own, it says `module`, and the
+# vendored path stays the one the workflow and the documentation name.
+GATE_WORKFLOW="$TARGET/.github/workflows/ct-scope-gate.yml"
+GATE_DIR="$TARGET/.github/ct"
+GATE_BUNDLE="$GATE_DIR/scope-check.js"
+GATE_MODULE_TYPE="$GATE_DIR/package.json"
+
+if [ ! -f "$GATE_WORKFLOW" ]; then
+  mkdir -p "$(dirname "$GATE_WORKFLOW")"
+  cp "$HERE/templates/ct-scope-gate.workflow.yml" "$GATE_WORKFLOW"
+  echo "created $GATE_WORKFLOW"
+else
+  echo "$GATE_WORKFLOW already exists, not overwritten"
+fi
+
+if [ ! -f "$GATE_BUNDLE" ]; then
+  mkdir -p "$GATE_DIR"
+  cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
+  echo "created $GATE_BUNDLE"
+elif cmp -s "$HERE/dist/scope-check.js" "$GATE_BUNDLE"; then
+  echo "$GATE_BUNDLE matches the bundle this release ships, not overwritten"
+elif [ "$FORCE" -eq 1 ]; then
+  cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
+  echo "updated $GATE_BUNDLE with the bundle this release ships (--force)"
+else
+  echo "warning: $GATE_BUNDLE does not match the bundle this release of the plugin ships. It is a GENERATED file, so the difference means this repo's copy comes from another release, not that somebody edited it. It matters: a copy vendored before #346 recognises \`## Contexto del epic\` and nothing else, so it fails the gate of every new issue over a section it cannot find, and no merge in the plugin's repository fixes it. To update it: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
+fi
+
+if [ ! -f "$GATE_MODULE_TYPE" ]; then
+  mkdir -p "$GATE_DIR"
+  printf '{\n  "type": "module"\n}\n' > "$GATE_MODULE_TYPE"
+  echo "created $GATE_MODULE_TYPE"
+elif grep -q '"type"[[:space:]]*:[[:space:]]*"module"' "$GATE_MODULE_TYPE"; then
+  echo "$GATE_MODULE_TYPE already parses the gate as ESM, not overwritten"
+else
+  echo "warning: $GATE_MODULE_TYPE exists and does not declare \`\"type\": \"module\"\`. The scope gate's bundle is ESM, so node will read it with whatever format that file decides and it will die on its first \`import\` — a required check red on every pull request, correct ones included. Nothing has been changed: add \`\"type\": \"module\"\` to it by hand." >&2
+fi
+
+# Issue #376 — `.claude/settings.json`: the file that tells Claude Code which
+# plugin this repository uses. Until now nothing here wrote it, so the plugin
+# was only ever enabled on the machine of whoever ran `/plugin install`: a fresh
+# clone of a bootstrapped repository got no commands, no skills, no agents and
+# no hooks, and there was no way to tell that from a repository nobody had
+# bootstrapped at all.
+#
+# The logic is in node (scripts/claude-settings.js, pure + tests; the disk in
+# seed-claude-settings.mjs) and not here, for the same reason the two sweeps
+# below are: bash cannot merge a JSON file it does not own without replacing it,
+# and this file belongs to the repository — it may already carry other plugins,
+# other marketplaces and keys that have nothing to do with the loop.
+#
+# Same doctrine as those sweeps when `node` is not there: it is SAID. A silence
+# would be indistinguishable from "the plugin is wired up", which is the
+# expensive false negative here.
+SETTINGS_STATUS=0
+SETTINGS_OUT=''
+if command -v node >/dev/null 2>&1; then
+  SETTINGS_OUT="$(node "$HERE/scripts/seed-claude-settings.mjs" "$TARGET")" || SETTINGS_STATUS=$?
+else
+  SETTINGS_STATUS=127
+fi
+if [ "$SETTINGS_STATUS" -ne 0 ]; then
+  echo "warning: $TARGET/.claude/settings.json could neither be seeded nor checked — the operation needs \`node\` and it could not be run (status $SETTINGS_STATUS). Do NOT read that as \"the plugin is declared\": without that file, whoever clones this repo receives no command, skill, agent or hook of this plugin, and that is indistinguishable from a repo nobody has initialised." >&2
+elif [ -n "$SETTINGS_OUT" ]; then
+  printf '%s\n' "$SETTINGS_OUT"
+fi
+
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
   cat > "$AGENTS_MD" <<'EOF'

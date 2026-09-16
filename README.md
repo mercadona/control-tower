@@ -101,10 +101,29 @@ Then, **once per repository you want to govern**:
 
 `/ct-init` leaves `.agent/STATE.md`, `.agent/conventions.md`, the slice table
 contract in `docs/superpowers/CONTRATO-SLICES.md`, a short section in
-`AGENTS.md` that links to it, and the `.gitignore` rules. **It plans nothing**:
-filling in the repository's real commands — build, test, lint, CI — in
-`AGENTS.md` is up to you. If it warns that the repository already came with its
-own conventions, choosing which one rules is your decision, not the plugin's.
+`AGENTS.md` that links to it, the `.gitignore` rules, `.claude/settings.json`
+and the scope gate under `.github/` (the workflow, the bundle, and the one-line `package.json` that keeps node reading that bundle as ESM). **It plans nothing**: filling in the
+repository's real commands — build, test, lint, CI — in `AGENTS.md` is up to
+you. If it warns that the repository already came with its own conventions,
+choosing which one rules is your decision, not the plugin's.
+
+`.claude/settings.json` is what makes the repository carry the loop instead of
+your machine: it names this marketplace and this plugin, pinned at the release
+that wrote it (`ref: plugin-v<version>`, the tag every release already
+carries), so anyone who clones gets the same commands, skills, agents and hooks.
+Three things it cannot do for you, and it says so:
+
+```
+claude plugin install control-tower-loop@control-tower --scope project
+```
+
+run once per machine; **trust the folder**, because a project's marketplace only
+takes effect after that; and make `ct-scope-gate` a **required check** on the
+default branch, because until it is, the gate shows red and lets the merge
+through anyway.
+
+Moving a repository to a newer plugin release is one line — the `ref` — and
+`/ct-init` reports the mismatch rather than changing it.
 
 ### What the environment needs
 

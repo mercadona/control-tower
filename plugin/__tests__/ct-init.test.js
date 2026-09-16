@@ -1639,6 +1639,287 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  // Issue #376 — two more rules under `.claude/`, both of them state that a
+  // slice's `git add -A` could otherwise commit:
+  //
+  //   - `.claude/worktrees/`: the harness creates session worktrees there,
+  //     inside the checkout itself. The same accident `.worktrees/` above
+  //     already covers for the slice worktrees, and THIS repository's own
+  //     .gitignore has ignored it since it was written — the comment there
+  //     points at the .worktrees/ block of this very script as the precedent,
+  //     and the rule never travelled to the repositories the script bootstraps.
+  //   - `.claude/settings.local.json`: the cabin writes the coordinating
+  //     session's hooks there (backend/src/infrastructure/local-settings-session-hooks.ts),
+  //     each one carrying a loopback URL and an ephemeral port. It is live,
+  //     local state of one machine, never product, and committing it points
+  //     every clone at a port that is not listening.
+  it('adds the two .claude/ rules to .gitignore', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
+    expect(gi).toContain('.claude/worktrees/')
+    expect(gi).toContain('.claude/settings.local.json')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('idempotent for the .claude/ rules too: two runs, one line of each', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const lines = readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')
+    expect(lines.filter((l) => l === '.claude/worktrees/')).toHaveLength(1)
+    expect(lines.filter((l) => l === '.claude/settings.local.json')).toHaveLength(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  // `.claude/worktrees/` is a prefix of nothing, but `.claude/settings.local.json`
+  // shares its directory with the `.claude/settings.json` the scaffolder writes
+  // for real. A rule that ignored the directory instead of the file would take
+  // that one with it, and the repository would carry no plugin declaration at
+  // all — the very thing #376 comes to fix.
+  it('the .claude/ rules do not ignore the settings.json the scaffolder seeds', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const lines = readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')
+    expect(lines).not.toContain('.claude/')
+    expect(lines).not.toContain('.claude/settings.json')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  // Issue #376 — `.claude/settings.json`, the file that tells Claude Code which
+  // plugin this repository uses. The merge itself is unit-tested in
+  // __tests__/claude-settings.test.js; what is checked from here is that the
+  // scaffolder really reaches the disk, that a second run leaves the file alone,
+  // and that a missing `node` is SAID and not passed off as success.
+  describe('.claude/settings.json', () => {
+    const settingsOf = (dir) => JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'))
+
+    it('creates it, declaring the marketplace pinned at this plugin\'s release and the plugin enabled', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      const version = JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8')).version
+      expect(settings.extraKnownMarketplaces['control-tower'].source.ref).toBe(`plugin-v${version}`)
+      expect(settings.enabledPlugins['control-tower-loop@control-tower']).toBe(true)
+      expect(settings.permissions.allow).toContain('Bash(gh:*)')
+      expect(settings.permissions.deny.join('\n')).toContain('--no-verify')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('says what it declared, and the one command it does not run', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(out).toContain('claude plugin install control-tower-loop@control-tower --scope project')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a settings file of the repo\'s own → its keys survive and ours are added', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.claude'), { recursive: true })
+      writeFileSync(
+        join(dir, '.claude', 'settings.json'),
+        `${JSON.stringify({ model: 'opus', permissions: { allow: ['Bash(make:*)'] } }, null, 2)}\n`
+      )
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      expect(settings.model).toBe('opus')
+      expect(settings.permissions.allow).toContain('Bash(make:*)')
+      expect(settings.enabledPlugins['control-tower-loop@control-tower']).toBe(true)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('idempotent: the second run does not touch a single byte of the file', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const first = readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).toBe(first)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a ref pinned at another release → it warns with both versions and moves nothing', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      settings.extraKnownMarketplaces['control-tower'].source.ref = 'plugin-v0.1.0'
+      writeFileSync(join(dir, '.claude', 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`)
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(out).toContain('plugin-v0.1.0')
+      expect(settingsOf(dir).extraKnownMarketplaces['control-tower'].source.ref).toBe('plugin-v0.1.0')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // The file exists and is not the object these keys merge into. Reading it as
+    // empty would replace whatever the repository had, so nothing is written and
+    // the bootstrap still finishes: the rest of the scaffolding is unaffected by
+    // this file being broken.
+    it('a settings file that is not JSON → it says so on stderr, writes nothing, and still exits 0', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.claude'), { recursive: true })
+      writeFileSync(join(dir, '.claude', 'settings.json'), '{ not json')
+      const { status, stderr } = spawnSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toContain('.claude/settings.json')
+      expect(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).toBe('{ not json')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // "There is no node" is not "the plugin is declared". A silence here reads
+    // exactly like a bootstrapped repository, and the cost is a clone that gets
+    // no plugin at all.
+    it('no node on the PATH → it says nobody looked, and what that costs', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      // Same fake PATH as the "there is nothing to hash with" test above: the
+      // shell's own tools are symlinked in, and `node` deliberately is not.
+      const binDir = join(dir, 'fake-bin')
+      mkdirSync(binDir)
+      for (const tool of ['bash', 'awk', 'grep', 'sed', 'mkdir', 'cp', 'cat', 'mktemp', 'mv', 'rm', 'touch', 'tail', 'wc', 'head', 'dirname', 'pwd', 'shasum']) {
+        const found = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim()
+        if (found) symlinkSync(found, join(binDir, tool))
+      }
+      expect(existsSync(join(binDir, 'node'))).toBe(false)
+      const { status, stderr } = spawnSync('bash', [script, dir], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: binDir },
+      })
+      expect(status).toBe(0)
+      expect(stderr).toContain('.claude/settings.json')
+      expect(stderr).toMatch(/Do NOT read that as/)
+      expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(false)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // Whoever clones a repository that was bootstrapped long ago still has to
+    // install the plugin on their own machine. Tying the reminder to "the file
+    // changed" meant the only person who ever saw it was the one who did not
+    // need it.
+    it('the install step is named on every run, not only when the file changes', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const second = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(second).toContain('claude plugin install control-tower-loop@control-tower --scope project')
+      expect(second).toMatch(/trust the folder/)
+      rmSync(dir, { recursive: true, force: true })
+    })
+  })
+
+  // Issue #376 — the scope gate. Until now this was the one piece of the loop
+  // installed by hand: the workflow lived inside a fenced block of
+  // docs/loop/ct-scope-gate.md and the bundle was copied out of plugin/dist/ by
+  // whoever remembered. Three documents of this repository already stated that
+  // /ct-init vendored it, and none of them was true.
+  describe('the scope gate', () => {
+    const WORKFLOW = join('.github', 'workflows', 'ct-scope-gate.yml')
+    const BUNDLE = join('.github', 'ct', 'scope-check.js')
+
+    it('vendors the workflow and the bundle it runs', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, WORKFLOW), 'utf8')).toBe(
+        readFileSync(join(root, 'templates', 'ct-scope-gate.workflow.yml'), 'utf8')
+      )
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe(readFileSync(join(root, 'dist', 'scope-check.js'), 'utf8'))
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // The workflow only runs from a committed file, and the bundle is built
+    // self-contained precisely so CI needs neither the plugin nor node_modules.
+    // A rule that ignored either of them would leave the gate never running.
+    it('neither of the two is added to .gitignore', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
+      expect(gi).not.toContain('.github')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a workflow of the repo\'s own is not trodden on', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.github', 'workflows'), { recursive: true })
+      writeFileSync(join(dir, WORKFLOW), 'name: mine\n')
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, WORKFLOW), 'utf8')).toBe('name: mine\n')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('idempotent: the second run does not touch either file', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const before = [readFileSync(join(dir, WORKFLOW), 'utf8'), readFileSync(join(dir, BUNDLE), 'utf8')]
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect([readFileSync(join(dir, WORKFLOW), 'utf8'), readFileSync(join(dir, BUNDLE), 'utf8')]).toEqual(before)
+      expect(out).not.toMatch(/aviso/)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // A vendored bundle older than the one the plugin ships is the exact failure
+    // #346 describes: a copy seeded before it recognises `## Contexto del epic`
+    // and nothing else, so it fails the gate of every new issue over a section
+    // it cannot find. It is a generated file, so there is no hand-edited variant
+    // to protect — a byte comparison is the whole story, and saying so is what
+    // was missing.
+    it('a stale bundle is reported, and not replaced without being asked', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      writeFileSync(join(dir, BUNDLE), '// una copia de hace tres versiones\n')
+      const { status, stderr } = spawnSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toContain('scope-check.js')
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe('// una copia de hace tres versiones\n')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('--force re-vendors a stale bundle', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      writeFileSync(join(dir, BUNDLE), '// una copia de hace tres versiones\n')
+      execFileSync('bash', [script, dir, '--force'], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe(readFileSync(join(root, 'dist', 'scope-check.js'), 'utf8'))
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // Comparing the copied bytes cannot see this one. The bundle is ESM and it
+    // is vendored as `.js`, so the format node parses it with is decided by the
+    // RECEIVING repository: a target declaring `"type": "commonjs"` makes node
+    // read it as CommonJS and it dies on its first `import` — a required check
+    // red on every pull request, correct ones included. The only way to catch
+    // it is to start the thing where it will really run.
+    it('the vendored gate starts in a repository that declares itself CommonJS', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: 'x', type: 'commonjs' })}\n`)
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const started = spawnSync('node', [join(dir, BUNDLE)], { encoding: 'utf8', cwd: dir })
+      expect(started.stderr).not.toMatch(/Cannot use import statement outside a module/)
+      expect(started.stderr).toContain('usage: scope-check')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('pins the gate directory as ESM, and does not silently rewrite a package.json that says otherwise', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(JSON.parse(readFileSync(join(dir, '.github', 'ct', 'package.json'), 'utf8')).type).toBe('module')
+
+      const foreign = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(foreign, '.github', 'ct'), { recursive: true })
+      writeFileSync(join(foreign, '.github', 'ct', 'package.json'), '{ "type": "commonjs" }\n')
+      const { status, stderr } = spawnSync('bash', [script, foreign], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toMatch(/"type": "module"/)
+      expect(readFileSync(join(foreign, '.github', 'ct', 'package.json'), 'utf8')).toBe('{ "type": "commonjs" }\n')
+      rmSync(dir, { recursive: true, force: true })
+      rmSync(foreign, { recursive: true, force: true })
+    })
+
+    // The template is the only copy. While the doc carried the YAML inside a
+    // fenced block, nothing tied the two together and the block was free to
+    // drift from what anybody actually installed.
+    it('the documentation points at the template instead of carrying a second copy', () => {
+      const doc = readFileSync(join(root, '..', 'docs', 'loop', 'ct-scope-gate.md'), 'utf8')
+      expect(doc).toContain('templates/ct-scope-gate.workflow.yml')
+      expect(doc).not.toContain('on:\n  pull_request:')
+    })
+  })
+
   // -------------------------------------------------------------------------
   // The execution spec's template. The flow after /ct-init is brainstorming →
   // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8
