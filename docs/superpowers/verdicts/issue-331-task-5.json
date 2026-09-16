@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 5,
+  "task_name": "Compose file-based errands for the interim transport",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Rejudged the current task-5 review package and brief for attempt 2. The scoped adapter composes the three existing errands, starts planning with --session-id, and resumes implementation/fix with the same watch.agent after the injected resumability check. The production brief assigns publication and continuation to the backend, removes the invented plan approval, and preserves the ct-step oracle, release and human merge boundary. Controls 2 green is inherited; its evidence path is .agent/run-331/task-5-controls-2.log, not reread or rerun.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The named publication test asserts the literal backend ownership instruction, absence of the comment command and polling/nonce instructions, and absence of a human-closed-plan or plan-approval claim in the implementation errand. This matches the task's stated assertion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "ClaudePlanCalls extends PlanCalls and preserves the specified constructor dependencies, start parameter order and return type, and wait signature. PlanAgentBrief keeps its public signatures. Purpose dispatch is exhaustive; fix rejects null/blank changes and other purposes require null. The argv uses the specified flags, shared acceptEdits/opus constants, injected plugin root, stable conversation identity and CT_CALL_PROMPT opening. Missing resumability raises PlanAgentNotResumed. The concrete transcript reader belongs to the injected callback's composition, not an additional dependency constructed inside this adapter.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The affected decisions hold: D-3 removes the plan approval; D-7 retains human merging; D-8/D-15 assigns publication to the backend; D-10/D-11 uses TypeScript and existing plugin headings/yardstick; D-12 retains ct-step authority; D-19 preserves one conversation; D-25 carries outer errands through the file-based opening. Other closed decisions are not changed. No per-step conductor, billing, schema assembly or feature flag is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the package's rule-by-rule precedence. The new adapter follows constructor injection and typed collaborator results, consistent with DispatchCheckWorkbench; dependencies remain in infrastructure as architecture.md and boundaries.md prescribe. The brief's English translation preserves external headings and imported precedence text. defects.md, closed vocabulary: PlanCallPurpose and CallMode are closed and exhaustively dispatched; the required boolean callback expresses the single resumability predicate, with no demonstrated loss of a consumer-required distinction. Raw map as the return value of logic: none introduced; calls use CallInvocation and typed call results, while prompt/argv helpers return text/arrays. Two fields that have to agree: no redundant persisted state or newly encoded absence sentinel; mode is derived locally and an empty conversation is rejected. An error named for where it happens: none introduced; PlanAgentNotResumed names the failed operation and TypeError reports invalid purpose/change input.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The prior regression finding is resolved: the current diff includes expect(errand()).toContain('without rewriting the plan') alongside the anchor, existing-PR and no-new-worktree assertions. This restores the removed Spanish assertion's guarantee and would fail if the production instruction were deleted. Publication/approval expectation changes are explicitly required, and the remaining translated positive assertions retain their meaning. No unauthorized removal or weakening remains in the reviewed assertion changes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production code selects the errand and CLI mode, preserves identity, refuses an unavailable resume, and supplies the actual prompt to CallInvocation. Tests inspect those production-composed interactions; the doubles supply collaborator outcomes rather than implementing the promised routing or refusal themselves.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The four-file diff implements task 5's adapter, prompt translation and specified tests. It does not amend the plan or touch protected plugin production files, machine transitions, metrics or backend per-step execution. The translation is expressly requested. No broader slice integration is demanded from this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new adapter tests are deterministic and isolated: each constructs a fresh Subject, fixed identities and timestamps, and start/wait are overridden so the literal paths and imported spawn/fs do not perform external I/O. Assertions inspect the adapter's literal argv, conversation, cwd and typed refusal, including no launch on refusal. The publication test observes production-generated text. No new test's asserted behavior is supplied solely by its own scaffolding. No finer test-quality finding is made.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "e22526c547ab06f312082198dcaaacf1155c3ff1e2ad277b3078a40c31a5af94"
+  }
+}
