@@ -16,6 +16,14 @@ plugin/scripts/experiments/*-results/
 # `.claude/` also holds configuration that does get versioned.
 .claude/worktrees/
 
+# The local values a clone is not allowed to publish: CT_HARVEST_BQ_TABLE names
+# a real GCP project, dataset and table, and this repository is public. The
+# prefix form also covers .env.local and .env.production, which the bare name
+# above left committable; .env.example is the one meant to be versioned.
+.env
+.env.*
+!.env.example
+
 # Finder junk. It shows up on its own when any folder of the repo is opened on
 # macOS and dirties `git status` in every session — two of them were living
 # untracked at the same time this was being written.

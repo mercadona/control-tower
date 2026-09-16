@@ -270,6 +270,13 @@ Only `"ready": true` at the top means the setup is finished.
 
 ## 6. Configure
 
+Copy `.env.example` to `.env` and fill in your own values. `.env` is
+git-ignored, so a clone never publishes what you put there; `.gitignore`
+carries the same reason next to the line. `make check`, `make run-backend`
+and `make start` all read this file through the Makefile's own `-include`,
+so a value set there reaches every one of them. It is read once, at
+start-up, so a change still needs a restart.
+
 Three environment variables control the backend. All three are optional.
 
 | Variable | Default | Shape |
@@ -291,7 +298,8 @@ Three environment variables control the backend. All three are optional.
 
   This repository is public. Use an obvious placeholder when you write down
   a value, for example `my-project:my_dataset.my_table` — never a real GCP
-  project, dataset or table name.
+  project, dataset or table name. The same rule applies to your own `.env`:
+  git ignores the file, but treat it as a value that could still leak.
 
 ## 7. Update
 

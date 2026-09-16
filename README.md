@@ -244,6 +244,12 @@ change needs a restart.
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | an absolute path, if set |
 | `CT_HARVEST_BQ_TABLE` | unset | `project:dataset.table` |
 
+Copy `.env.example` to `.env` and fill in your own values there instead of
+exporting them in every terminal. Git ignores `.env`, and the Makefile reads
+it with `-include`, so `make check`, `make run-backend` and `make start` all
+see the same value. It is read at start-up like the three variables above, so
+a change still needs a restart.
+
 `CT_HARVEST_BQ_TABLE` off is not a failure: plans, dispatch and the collection
 of merged slices work the same. The only cost is that no merged pull request
 leaves a row in the harvest ledger, so those slices never show up when two
@@ -251,7 +257,8 @@ coding tools are compared. The rail's **Métricas** section says which of the
 two you are running.
 
 > This repository is public. Write a placeholder — `my-project:my_dataset.my_table` —
-> never a real GCP project, dataset or table name.
+> never a real GCP project, dataset or table name, whether in this file or in
+> your own `.env`.
 
 ---
 

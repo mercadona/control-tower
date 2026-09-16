@@ -16,11 +16,18 @@
 #   make update                                                 move this install to the newest app-v* tag, then reinstall
 #   make install                                                install backend deps, and build the frontend when its sources are present
 #   make start                                                  run the already-installed backend (no install step)
+#   .env                                                        local, git-ignored values read by every target above (see .env.example)
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 PACKAGES := plugin backend frontend
+
+# Local, machine-specific values: the BigQuery destination above all, which
+# names a real GCP project this public repository must not carry. The leading
+# dash is what makes the file optional — a clone with no .env builds the same.
+-include .env
+
 CT_API_PORT ?= 8787
 HARVEST_VARIABLE := CT_HARVEST_BQ_TABLE
 
@@ -50,7 +57,7 @@ build-frontend:
 	npm run build --prefix frontend --if-present
 
 run-backend: install-backend
-	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
+	CT_API_PORT=$(CT_API_PORT) CLAUDE_CONFIG_DIR=$(CLAUDE_CONFIG_DIR) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 run-frontend: install-frontend build-frontend run-backend
 
@@ -234,7 +241,7 @@ install:
 # run-backend installs first, for a checkout; start assumes install already ran,
 # which is the case once `make install` has been run on a fresh clone.
 start:
-	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
+	CT_API_PORT=$(CT_API_PORT) CLAUDE_CONFIG_DIR=$(CLAUDE_CONFIG_DIR) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 # Moves an installed clone to the newest app-v* tag and reinstalls. Refuses on a
 # dirty working tree instead of touching it: the user commits, stashes or discards
