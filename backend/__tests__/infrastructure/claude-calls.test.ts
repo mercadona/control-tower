@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
+import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
@@ -326,6 +326,7 @@ describe('ClaudeCalls', () => {
     const spawnFailure = CallMother.calls(spawnRoot, (() => { throw new Error('worker refused') }) as typeof import('node:child_process').spawn)
     const refused = spawnFailure.start(CallMother.invocation())
     await expect(refused).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+    await expect(refused).rejects.toBeInstanceOf(PlanAgentNeverLaunched)
     await expect(refused).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
     await expect(refused).rejects.toThrow('worker refused')
 
@@ -360,6 +361,48 @@ describe('ClaudeCalls', () => {
       conversation: CallMother.CONVERSATION,
       purpose: 'plan',
       requestId: null,
+    })
+    await expect(readFile(join(timeoutRoot, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('acceptance loss never authorizes cleanup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const calls = CallMother.calls(root, (() => new FakeChild(918)) as typeof import('node:child_process').spawn)
+
+    await expect(calls.start(CallMother.invocation())).rejects.toThrow('did not accept call')
+
+    await expect(readFile(join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('child spawn refusal records only initial non-launch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
+    const worker = new HeadlessCallWorker({
+      files: CallMother.files(root),
+      spawn: (() => { throw new Error('child refused') }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: clock.now,
+      schedule: clock.schedule,
+      cancel: clock.cancel,
+      acknowledge: () => {},
+    })
+
+    await worker.run(descriptor)
+
+    expect(JSON.parse(await readFile(
+      join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'),
+      'utf8',
+    ))).toEqual({
+      conversation: CallMother.CONVERSATION,
+      callId: CallMother.CALL,
+      source: 'child-spawn',
+      diagnostic: 'recorded child could not be spawned: child refused',
+      observedAt: CallMother.STARTED_AT,
     })
   })
 

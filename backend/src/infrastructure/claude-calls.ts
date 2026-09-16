@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
+import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
 import {
   CompletedPlanCall,
   StartedPlanCall,
@@ -8,6 +8,7 @@ import {
   type CallMeasurement,
   type PlanCallPurpose,
 } from '../domain/value-objects/plan-call.ts'
+import { PlanNonLaunch, type PlanNonLaunchSource } from '../domain/value-objects/plan-non-launch.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { HeadlessFiles } from './headless-files.ts'
 import { RecordedCall } from './recorded-call.ts'
@@ -433,8 +434,11 @@ export class ClaudeCalls {
       descriptorPath = join(directory, CallDescriptor.FILE)
       startedAt = this.now()
     } catch (cause) {
-      throw new PlanAgentNotLaunched(
-        `call preparation for conversation ${invocation.conversation} failed before validation: ${String(cause)}`
+      throw this.#neverLaunched(
+        invocation.conversation,
+        null,
+        'before-worker',
+        `call preparation for conversation ${invocation.conversation} failed before validation: ${String(cause)}`,
       )
     }
     let descriptor: CallDescriptor
@@ -456,9 +460,14 @@ export class ClaudeCalls {
         + `and argv ${JSON.stringify(invocation.argv)} is invalid: ${String(cause)}`
       )
     }
-    await this.#writeOnceOrMatch(join(directory, CallDescriptor.PROMPT), invocation.prompt)
-    await this.#writeOnceOrMatch(descriptorPath, descriptor.text())
-    await this.#launch(descriptorPath)
+    try {
+      await this.#writeOnceOrMatch(join(directory, CallDescriptor.PROMPT), invocation.prompt)
+      await this.#writeOnceOrMatch(descriptorPath, descriptor.text())
+    } catch (cause) {
+      if (cause instanceof PlanAgentNotNamed) throw cause
+      throw this.#neverLaunched(invocation.conversation, call.id, 'before-worker', String(cause))
+    }
+    await this.#launch(descriptorPath, call)
     this.accepted.set(ClaudeCalls.#callKey(call), call)
     return call
   }
@@ -640,7 +649,7 @@ export class ClaudeCalls {
     }
   }
 
-  #launch(descriptorPath: string): Promise<void> {
+  #launch(descriptorPath: string, call: StartedPlanCall): Promise<void> {
     let worker: import('node:child_process').ChildProcess
     try {
       worker = this.spawn(process.execPath, [this.worker, descriptorPath], {
@@ -649,11 +658,17 @@ export class ClaudeCalls {
         env: ClaudeCalls.#childEnvironment(this.env),
       })
     } catch (cause) {
-      throw new PlanAgentNotLaunched(`headless worker could not be spawned: ${String(cause)}`)
+      throw this.#neverLaunched(
+        call.conversation,
+        call.id,
+        'worker-spawn',
+        `headless worker could not be spawned: ${String(cause)}`,
+      )
     }
 
     return new Promise((resolve, reject) => {
       let settled = false
+      let spawned = false
       const timer = setTimeout(() => finish(new PlanAgentNotLaunched(
         `headless worker did not accept call within ${this.acceptanceMs}ms; launch outcome is uncertain`
       )), this.acceptanceMs)
@@ -673,11 +688,29 @@ export class ClaudeCalls {
       worker.on('message', (message: unknown) => {
         if (ClaudeCalls.#accepted(message)) finish(null)
       })
-      worker.once('error', (cause) => finish(new PlanAgentNotLaunched(`headless worker failed: ${cause.message}`)))
+      worker.once('spawn', () => { spawned = true })
+      worker.once('error', (cause) => finish(spawned
+        ? new PlanAgentNotLaunched(`headless worker failed: ${cause.message}`)
+        : this.#neverLaunched(call.conversation, call.id, 'worker-spawn', `headless worker failed: ${cause.message}`)))
       worker.once('exit', (code, signal) => finish(new PlanAgentNotLaunched(
         `headless worker exited before acceptance with code ${String(code)} and signal ${String(signal)}`
       )))
     })
+  }
+
+  #neverLaunched(
+    conversation: string,
+    callId: string | null,
+    source: PlanNonLaunchSource,
+    diagnostic: string,
+  ): PlanAgentNeverLaunched {
+    return new PlanAgentNeverLaunched(new PlanNonLaunch({
+      conversation,
+      callId,
+      source,
+      diagnostic,
+      observedAt: this.now(),
+    }))
   }
 
   static #accepted(value: unknown): boolean {

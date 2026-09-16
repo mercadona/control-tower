@@ -4,9 +4,11 @@ import * as fs from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
+import { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
 import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
 import { ClaudeCallResult } from './claude-call-result.ts'
 import { HeadlessFiles } from './headless-files.ts'
+import { NonLaunchRecord } from './non-launch-record.ts'
 
 type LeaderOutcome = { readonly kind: 'pending' }
   | { readonly kind: 'known', readonly code: number | null, readonly signal: string | null }
@@ -107,11 +109,12 @@ export class HeadlessCallWorker {
       )
       this.#budgetTimer = this.schedule(() => this.#deadline(), remainingBudget)
     } catch (cause) {
-      this.#spawnFailed(cause instanceof Error ? cause : new Error(String(cause)))
+      await this.#spawnFailed(cause instanceof Error ? cause : new Error(String(cause)))
     } finally {
       await stdout.close()
       await stderr.close()
     }
+    if (this.#publication !== null) await this.#publication
   }
 
   #accepted(): void {
@@ -122,9 +125,27 @@ export class HeadlessCallWorker {
     }
   }
 
-  #spawnFailed(cause: Error): void {
+  async #spawnFailed(cause: Error): Promise<void> {
     if (this.#leader.kind === 'known') return
-    this.#diagnostics.push(`recorded child could not be spawned: ${cause.message}`)
+    const diagnostic = `recorded child could not be spawned: ${cause.message}`
+    this.#diagnostics.push(diagnostic)
+    const descriptor = this.#descriptor
+    const descriptorPath = this.#descriptorPath
+    if (descriptor !== null && descriptorPath !== null && descriptor.purpose === 'plan') {
+      const proof = new PlanNonLaunch({
+        conversation: descriptor.conversation,
+        callId: basename(dirname(descriptorPath)),
+        source: 'child-spawn',
+        diagnostic,
+        observedAt: this.now(),
+      })
+      const path = join(this.files.root, 'harness', descriptor.conversation, 'non-launch.json')
+      try {
+        await this.files.writeOnce(path, NonLaunchRecord.text(proof))
+      } catch (proofCause) {
+        this.#diagnostics.push(`non-launch proof could not be recorded: ${String(proofCause)}`)
+      }
+    }
     this.#leader = Object.freeze({ kind: 'known', code: null, signal: null })
     this.#enforcement = Object.freeze({ kind: 'disappeared' })
     this.#settle()

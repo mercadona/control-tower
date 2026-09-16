@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanAgentNotLaunched } from '../../src/domain/exceptions.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryReference } from '../../src/domain/value-objects/user-story-reference.ts'
@@ -150,5 +151,40 @@ describe('DiskPlanRecords', () => {
 
     expect(missing.watches).toEqual([])
     expect(harvested.watches).toEqual([])
+  })
+
+  it('definite initial non-launch survives restart as proof', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-proof-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const watch = await records.prepare(PlanRecordMother.briefing('/checkout'))
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker preparation was refused before spawn',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    await records.recordNonLaunch(watch, proof)
+
+    const restarted = PlanRecordMother.records(root)
+
+    expect(await restarted.nonLaunch(watch)).toEqual(proof)
+  })
+
+  it('conflicting proof is not a launch outcome', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-proof-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const watch = await records.prepare(PlanRecordMother.briefing('/checkout'))
+    await records.recordNonLaunch(watch, new PlanNonLaunch({
+      conversation: '22222222-2222-4222-8222-222222222222',
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'foreign proof',
+      observedAt: PlanRecordMother.STARTED_AT,
+    }))
+
+    await expect(records.nonLaunch(watch)).rejects.toThrow('identity')
   })
 })

@@ -39,6 +39,15 @@ export class PlanAgentFailure extends PlanFailure {}
 
 export class PlanAgentNotLaunched extends PlanAgentFailure {}
 
+export class PlanAgentNeverLaunched extends PlanAgentNotLaunched {
+  readonly proof: import('./value-objects/plan-non-launch.ts').PlanNonLaunch
+
+  constructor(proof: import('./value-objects/plan-non-launch.ts').PlanNonLaunch) {
+    super(proof.diagnostic)
+    this.proof = proof
+  }
+}
+
 export class PlanAgentNotNamed extends PlanAgentFailure {}
 
 export class PlanAgentNotResumed extends PlanAgentFailure {}

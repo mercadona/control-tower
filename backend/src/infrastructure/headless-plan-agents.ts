@@ -1,5 +1,5 @@
 import { ContinuePlanParams, type ContinuePlan } from '../application/actions/continue-plan.ts'
-import { PlanAgentNotResumed } from '../domain/exceptions.ts'
+import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotResumed } from '../domain/exceptions.ts'
 import { PlanAgents } from '../domain/ports/plan-agents.ts'
 import type { PlanCalls } from '../domain/ports/plan-calls.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
@@ -32,7 +32,20 @@ export class HeadlessPlanAgents extends PlanAgents {
 
   override async launch(briefing: PlanBriefing): Promise<string> {
     const watch = await this.records.prepare(briefing)
-    const call = await this.calls.start(watch, 'plan', null)
+    let call: StartedPlanCall
+    try {
+      call = await this.calls.start(watch, 'plan', null)
+    } catch (cause) {
+      if (!(cause instanceof PlanAgentNeverLaunched)) throw cause
+      try {
+        await this.records.recordNonLaunch(watch, cause.proof)
+      } catch (proofCause) {
+        throw new PlanAgentNotLaunched(
+          `${cause.message}; non-launch proof could not be recorded: ${String(proofCause)}`
+        )
+      }
+      throw cause
+    }
     this.#supervise(watch, call, this.continuation.execute(new ContinuePlanParams({ watch, call })))
     return watch.agent
   }

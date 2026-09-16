@@ -5,13 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ContinuePlan, ContinuePlanParams } from '../../src/application/actions/continue-plan.ts'
-import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
+import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -35,6 +36,7 @@ class Deferred<T> {
 class RecordsDouble extends PlanRecords {
   readonly watch: PlanWatch
   readonly events: string[]
+  proofFailure: Error | null = null
 
   constructor(watch: PlanWatch, events: string[]) {
     super()
@@ -49,6 +51,11 @@ class RecordsDouble extends PlanRecords {
 
   override async find(): Promise<PlanWatch | null> {
     return this.watch
+  }
+
+  override async recordNonLaunch(_watch: PlanWatch, _proof: PlanNonLaunch): Promise<void> {
+    this.events.push('proof-recorded')
+    if (this.proofFailure !== null) throw this.proofFailure
   }
 }
 
@@ -191,6 +198,39 @@ describe('HeadlessPlanAgents', () => {
     expect(events).toEqual(['recorded', 'started'])
     expect(warnings.join('')).toContain('implementation failed')
     expect(warnings.join('')).toContain(HeadlessMother.CALL.id)
+  })
+
+  it('proof write failure preserves uncertainty', async () => {
+    const events: string[] = []
+    const records = new RecordsDouble(HeadlessMother.WATCH, events)
+    records.proofFailure = new Error('proof disk full')
+    const proof = new PlanNonLaunch({
+      conversation: HeadlessMother.CONVERSATION,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker was never started',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+    class NeverStartedCalls extends CallsDouble {
+      override async start(): Promise<StartedPlanCall> {
+        throw new PlanAgentNeverLaunched(proof)
+      }
+    }
+    const agents = new HeadlessPlanAgents({
+      records,
+      calls: new NeverStartedCalls(events, HeadlessMother.CALL),
+      continuation: new ContinuationDouble(new Deferred<void>(), new Deferred<void>()),
+      newId: () => '33333333-3333-4333-8333-333333333333',
+      stderr: () => {},
+    })
+
+    const failure = await agents.launch(HeadlessMother.BRIEFING).catch((cause) => cause)
+
+    expect(failure).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(failure).not.toBeInstanceOf(PlanAgentNeverLaunched)
+    expect(failure.message).toContain('worker was never started')
+    expect(failure.message).toContain('proof disk full')
+    expect(events).toEqual(['recorded', 'proof-recorded'])
   })
 
   it('restart observes the original planner deadline', async () => {

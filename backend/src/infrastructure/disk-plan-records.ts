@@ -3,6 +3,7 @@ import { PlanAgentFailure, PlanAgentNotLaunched, PlanAgentNotNamed } from '../do
 import { PlanRecords } from '../domain/ports/plan-records.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
+import type { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlansInFlight } from '../domain/value-objects/plans-in-flight.ts'
 import { PlanWatch } from '../domain/value-objects/plan-watch.ts'
@@ -10,6 +11,8 @@ import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
 import type { HeadlessFiles } from './headless-files.ts'
+import { CallDescriptor } from './claude-calls.ts'
+import { NonLaunchRecord } from './non-launch-record.ts'
 
 type JsonObject = Record<string, unknown>
 
@@ -143,6 +146,7 @@ class DispatchRecord {
 
 export class DiskPlanRecords extends PlanRecords {
   static readonly DIRECTORY = 'harness'
+  static readonly NON_LAUNCH = 'non-launch.json'
 
   readonly files: HeadlessFiles
   readonly newId: () => string
@@ -188,6 +192,34 @@ export class DiskPlanRecords extends PlanRecords {
       throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
     }
     return record.watch(agent)
+  }
+
+  async recordNonLaunch(watch: PlanWatch, proof: PlanNonLaunch): Promise<void> {
+    const path = this.#nonLaunchPath(watch.agent)
+    const text = NonLaunchRecord.text(proof)
+    try {
+      await this.files.writeOnce(path, text)
+    } catch (cause) {
+      if (!DiskPlanRecords.#hasCode(cause, 'EEXIST')) {
+        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+      }
+      const existing = await this.files.read(path)
+      if (existing !== text) throw new PlanAgentNotNamed(`${path} contains conflicting non-launch evidence`)
+    }
+  }
+
+  async nonLaunch(watch: PlanWatch): Promise<PlanNonLaunch | null> {
+    const path = this.#nonLaunchPath(watch.agent)
+    const text = await this.files.read(path)
+    if (text === null) return null
+    let proof: PlanNonLaunch
+    try {
+      proof = NonLaunchRecord.read(text)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(`${path} cannot be read as non-launch evidence: ${String(cause)}`)
+    }
+    await this.#validateNonLaunch(watch, proof, path)
+    return proof
   }
 
   async find(asked: { issue: number, repository: RepositoryName }): Promise<PlanWatch | null> {
@@ -256,6 +288,45 @@ export class DiskPlanRecords extends PlanRecords {
     } catch (cause) {
       throw new PlanAgentNotLaunched(`${path} could not be checked: ${String(cause)}`)
     }
+  }
+
+  async #validateNonLaunch(watch: PlanWatch, proof: PlanNonLaunch, path: string): Promise<void> {
+    if (proof.conversation !== watch.agent) {
+      throw new PlanAgentNotNamed(`${path} identity differs from dispatch ${watch.agent}`)
+    }
+    const calls = join(this.files.root, DiskPlanRecords.DIRECTORY, watch.agent, 'calls')
+    const names = await this.files.list(calls)
+    if (proof.callId === null) {
+      if (proof.source !== 'before-worker' || names.length !== 0) {
+        throw new PlanAgentNotNamed(`${path} conflicts with recorded call history`)
+      }
+      return
+    }
+    if (names.length !== 1 || names[0] !== proof.callId) {
+      throw new PlanAgentNotNamed(`${path} conflicts with recorded call history`)
+    }
+    const directory = join(calls, proof.callId)
+    const descriptorText = await this.files.read(join(directory, CallDescriptor.FILE))
+    if (descriptorText === null) {
+      if (proof.source === 'before-worker') return
+      throw new PlanAgentNotNamed(`${path} has no descriptor for ${proof.source}`)
+    }
+    let descriptor: CallDescriptor
+    try {
+      descriptor = CallDescriptor.from(descriptorText)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(`${path} conflicts with its call descriptor: ${String(cause)}`)
+    }
+    const completion = await this.files.read(join(directory, CallDescriptor.COMPLETION))
+    const stream = await this.files.read(join(directory, CallDescriptor.STREAM))
+    if (descriptor.conversation !== watch.agent || descriptor.purpose !== 'plan'
+      || completion !== null || (stream !== null && stream.length > 0)) {
+      throw new PlanAgentNotNamed(`${path} conflicts with recorded launch evidence`)
+    }
+  }
+
+  #nonLaunchPath(agent: string): string {
+    return join(this.files.root, DiskPlanRecords.DIRECTORY, agent, DiskPlanRecords.NON_LAUNCH)
   }
 
   #matching(watches: readonly PlanWatch[], asked: {
