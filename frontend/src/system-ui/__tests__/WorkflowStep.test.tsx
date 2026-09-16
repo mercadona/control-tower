@@ -49,10 +49,8 @@ describe('WorkflowStep', () => {
   })
 
   it('should render a non-collapsible step as a static header with no button and no chevron', () => {
-    const onExpandedChange = vi.fn()
-
     const { container } = render(
-      <WorkflowStep status="active" title="Plan preparado" isExpanded canCollapse={false} onExpandedChange={onExpandedChange}>
+      <WorkflowStep status="active" title="Plan preparado" canCollapse={false}>
         El plan está listo para implementar
       </WorkflowStep>,
     )
@@ -65,7 +63,7 @@ describe('WorkflowStep', () => {
 
   it('should render a non-collapsible step content as expanded and reachable', () => {
     render(
-      <WorkflowStep status="active" title="Plan preparado" isExpanded canCollapse={false} onExpandedChange={() => undefined}>
+      <WorkflowStep status="active" title="Plan preparado" canCollapse={false}>
         El plan está listo para implementar
       </WorkflowStep>,
     )
@@ -77,7 +75,7 @@ describe('WorkflowStep', () => {
 
   it('should render the static header title at the caller supplied heading level', () => {
     render(
-      <WorkflowStep status="active" title="Solicitud" level={1} isExpanded canCollapse={false} onExpandedChange={() => undefined}>
+      <WorkflowStep status="active" title="Solicitud" level={1} canCollapse={false}>
         Contenido
       </WorkflowStep>,
     )

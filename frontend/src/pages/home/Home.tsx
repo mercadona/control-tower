@@ -375,9 +375,7 @@ const Home = () => {
               level={1}
               subtitle="Cuéntanos qué quieres planificar y dónde está el repositorio."
               status="active"
-              isExpanded
               canCollapse={false}
-              onExpandedChange={() => undefined}
             >
               {recovery}
               {brainstormingRecovery}
@@ -419,9 +417,7 @@ const Home = () => {
               level={1}
               subtitle={reviewDescription}
               status="active"
-              isExpanded
               canCollapse={false}
-              onExpandedChange={() => undefined}
             >
               {recovery}
               <BaselineNotice baseline={workflow.plan.baseline} />
@@ -458,9 +454,7 @@ const Home = () => {
               level={1}
               subtitle="Seguimos la implementación. Aquí verás el progreso que comunica el backend."
               status="active"
-              isExpanded
               canCollapse={false}
-              onExpandedChange={() => undefined}
             >
               {recovery}
               {restoredIsConfirmed && (

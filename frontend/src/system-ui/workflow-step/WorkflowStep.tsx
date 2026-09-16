@@ -5,18 +5,29 @@ import './WorkflowStep.css'
 type WorkflowStepStatus = 'completed' | 'active' | 'pending'
 type WorkflowStepHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
 
-interface WorkflowStepProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
+type WorkflowStepSharedProps = {
   title: ReactNode
   level?: WorkflowStepHeadingLevel
   subtitle?: ReactNode
   status: WorkflowStepStatus
   children: ReactNode
+  contentId?: string
+}
+
+type CollapsibleWorkflowStep = WorkflowStepSharedProps & {
+  canCollapse?: true
   isExpanded: boolean
   onExpandedChange: (isExpanded: boolean) => void
-  canCollapse?: boolean
-  contentId?: string
   isAvailable?: boolean
 }
+
+type StaticWorkflowStep = WorkflowStepSharedProps & {
+  canCollapse: false
+}
+
+type WorkflowStepDisclosure = CollapsibleWorkflowStep | StaticWorkflowStep
+
+type WorkflowStepProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & WorkflowStepDisclosure
 
 const STATUS_CLASS: Record<WorkflowStepStatus, string> = {
   completed: 'workflow-step--completed',
@@ -30,20 +41,7 @@ const STATUS_LABEL: Record<WorkflowStepStatus, string> = {
   pending: 'Pendiente',
 }
 
-const WorkflowStep = ({
-  title,
-  level = 2,
-  subtitle,
-  status,
-  children,
-  isExpanded,
-  onExpandedChange,
-  canCollapse = true,
-  contentId,
-  isAvailable = status !== 'pending',
-  className,
-  ...rest
-}: WorkflowStepProps) => {
+const WorkflowStep = ({ title, level = 2, subtitle, status, children, contentId, className, ...disclosure }: WorkflowStepProps) => {
   const generatedId = useId()
   const headerId = `${generatedId}-header`
   const titleId = `${generatedId}-title`
@@ -58,38 +56,60 @@ const WorkflowStep = ({
     </span>
   )
   const statusLabel = <span className="workflow-step__status lg-caption1-regular">{STATUS_LABEL[status]}</span>
-  const header = canCollapse ? (
-    <button
-      id={headerId}
-      type="button"
-      className="workflow-step__header"
-      aria-expanded={isExpanded}
-      aria-controls={resolvedContentId}
-      disabled={!isAvailable}
-      onClick={() => onExpandedChange(!isExpanded)}
-    >
-      {indicator}
-      <span id={titleId} className="workflow-step__title lg-body-medium">
-        {title}
-        {subtitle !== undefined && <span className="workflow-step__subtitle lg-caption1-regular">{subtitle}</span>}
-      </span>
-      {statusLabel}
-      <span className="workflow-step__chevron-cell">
-        <svg viewBox="0 0 16 16" className="workflow-step__chevron" aria-hidden="true" focusable="false">
-          <path d="m3 6 5 5 5-5" />
-        </svg>
-      </span>
-    </button>
-  ) : (
-    <div id={headerId} className="workflow-step__header workflow-step__header--static">
-      {indicator}
-      <span className="workflow-step__title-group">
-        {createElement(`h${level}`, { id: titleId, className: 'workflow-step__title lg-body-medium' }, title)}
-        {subtitle !== undefined && <span className="workflow-step__subtitle lg-caption1-regular">{subtitle}</span>}
-      </span>
-      {statusLabel}
-    </div>
-  )
+
+  let rest: Omit<HTMLAttributes<HTMLElement>, 'title'>
+  let isExpanded: boolean
+  let header: ReactNode
+
+  if (disclosure.canCollapse === false) {
+    const { canCollapse: _canCollapse, ...htmlRest } = disclosure
+    rest = htmlRest
+    isExpanded = true
+    header = (
+      <div id={headerId} className="workflow-step__header workflow-step__header--static">
+        {indicator}
+        <span className="workflow-step__title-group">
+          {createElement(`h${level}`, { id: titleId, className: 'workflow-step__title lg-body-medium' }, title)}
+          {subtitle !== undefined && <span className="workflow-step__subtitle lg-caption1-regular">{subtitle}</span>}
+        </span>
+        {statusLabel}
+      </div>
+    )
+  } else {
+    const {
+      canCollapse: _canCollapse,
+      isExpanded: stepIsExpanded,
+      onExpandedChange,
+      isAvailable = status !== 'pending',
+      ...htmlRest
+    } = disclosure
+    rest = htmlRest
+    isExpanded = stepIsExpanded
+    header = (
+      <button
+        id={headerId}
+        type="button"
+        className="workflow-step__header"
+        aria-expanded={stepIsExpanded}
+        aria-controls={resolvedContentId}
+        disabled={!isAvailable}
+        onClick={() => onExpandedChange(!stepIsExpanded)}
+      >
+        {indicator}
+        <span id={titleId} className="workflow-step__title lg-body-medium">
+          {title}
+          {subtitle !== undefined && <span className="workflow-step__subtitle lg-caption1-regular">{subtitle}</span>}
+        </span>
+        {statusLabel}
+        <span className="workflow-step__chevron-cell">
+          <svg viewBox="0 0 16 16" className="workflow-step__chevron" aria-hidden="true" focusable="false">
+            <path d="m3 6 5 5 5-5" />
+          </svg>
+        </span>
+      </button>
+    )
+  }
+
   return (
     <section {...rest} className={classNames('workflow-step', STATUS_CLASS[status], className)}>
       {header}
