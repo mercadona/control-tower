@@ -171,34 +171,4 @@ describe('SessionsPanel', () => {
 
     expect(screen.getByRole('tabpanel', { name: 'zsh' })).toBeInTheDocument()
   })
-
-  it('the live session count is reported once the backend answers', async () => {
-    vi.stubGlobal('fetch', answering(TWO_SESSIONS))
-    const onLiveSessionCount = vi.fn()
-
-    render(<SessionsPanel onLiveSessionCount={onLiveSessionCount} />)
-
-    await screen.findByRole('tab', { name: 'zsh' })
-    expect(onLiveSessionCount).toHaveBeenCalledWith(2)
-  })
-
-  it('the live session count reaches zero once every session is gone', async () => {
-    vi.stubGlobal('fetch', answering(NO_SESSIONS))
-    const onLiveSessionCount = vi.fn()
-
-    render(<SessionsPanel onLiveSessionCount={onLiveSessionCount} />)
-
-    await screen.findByText('No hay ninguna sesión en marcha')
-    expect(onLiveSessionCount).toHaveBeenCalledWith(0)
-  })
-
-  it('the live session count is never zero while the backend has not answered yet', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
-    const onLiveSessionCount = vi.fn()
-
-    render(<SessionsPanel onLiveSessionCount={onLiveSessionCount} />)
-
-    expect(onLiveSessionCount).toHaveBeenCalledWith(null)
-    expect(onLiveSessionCount).not.toHaveBeenCalledWith(0)
-  })
 })

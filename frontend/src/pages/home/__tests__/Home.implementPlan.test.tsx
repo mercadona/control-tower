@@ -3,6 +3,7 @@ import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMoth
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WORKFLOW_SNAPSHOT_KEY } from 'app/workflow-snapshot/storage'
 import {
   backendAnswering,
   backendPending,
@@ -157,7 +158,7 @@ describe('Home · implement plan', () => {
 
     await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
     expect(oldStream.closes).toBe(1)
-    expect(localStorage).toHaveLength(0)
+    expect(localStorage.getItem(WORKFLOW_SNAPSHOT_KEY)).toBeNull()
     expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')

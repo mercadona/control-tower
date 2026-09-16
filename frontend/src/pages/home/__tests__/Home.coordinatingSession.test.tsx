@@ -1,4 +1,4 @@
-import { cleanup, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -54,6 +54,8 @@ describe('Home and the coordinating session', () => {
     backendHolding(CoordinatingSessionMother.ended())
 
     openHome()
+    await screen.findByRole('button', { name: 'Arrancar brainstorming' })
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('La conversación coordinadora ha terminado')
     expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()

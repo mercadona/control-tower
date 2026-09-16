@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -109,7 +109,7 @@ describe('Home · sessions panel', () => {
 
     openHome()
 
-    expect(screen.getByRole('region', { name: 'Sesión coordinadora' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Sesión coordinadora' })).toBeInTheDocument()
   })
 
   it('keeps the coordinating session reachable while a slice is implemented', async () => {
@@ -130,6 +130,8 @@ describe('Home · sessions panel', () => {
   it('replays what was already said when the page reloads', async () => {
     stubFetch(NO_ACTIVE_PLANS)
     const { unmount } = openHome()
+    await screen.findByRole('button', { name: 'Desplegar el panel' })
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
     await screen.findByRole('region', { name: 'Terminal de la sesión' })
     const firstStream = await waitFor(() => FakeEventSource.last())
     firstStream.receive('{"bytes":"scrollback"}')

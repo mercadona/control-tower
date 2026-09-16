@@ -22,17 +22,14 @@ import { useSessionsColumnWidth } from 'pages/home/useSessionsColumnWidth'
 import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
-import { MenuToggleIcon } from 'system-ui/icons/NavIcons'
+import { Drawer } from 'system-ui/drawer'
 import { Navigation } from 'system-ui/navigation'
-import { Panel } from 'system-ui/panel'
 import { TopBar } from 'system-ui/top-bar'
 import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
-const SESSIONS_TOGGLE_ICON_SIZE = 24
-const EXPAND_SESSIONS_LABEL = 'Expandir panel de sesiones'
-const COLLAPSE_SESSIONS_LABEL = 'Colapsar panel de sesiones'
+const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
@@ -60,12 +57,11 @@ const Home = () => {
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const [openedSession, setOpenedSession] = useState<LiveSession | null>(null)
-  const sessionsRef = useRef<HTMLElement | null>(null)
+  const sessionsRef = useRef<HTMLDivElement | null>(null)
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const sessionsColumnCollapse = useSessionsColumnCollapse()
-  const [liveSessionCount, setLiveSessionCount] = useState<number | null>(null)
-  const railCollapsed = sessionsColumnCollapse.collapsed || liveSessionCount === 0
+  const openSessionsColumn = sessionsColumnCollapse.open
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -166,6 +162,10 @@ const Home = () => {
     }
   }, [reconcile])
 
+  useEffect(() => {
+    if (workflow?.phase === 'implementing') openSessionsColumn()
+  }, [workflow, openSessionsColumn])
+
   const formInteracted = useCallback(() => {
     recoveryTokenRef.current = null
     setCandidates([])
@@ -179,8 +179,9 @@ const Home = () => {
   const sessionOpened = useCallback((opened: OpenedCoordinatingSession) => {
     setBrainstormingUnreachable(false)
     setOpenedSession(opened.session)
+    openSessionsColumn()
     sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  }, [])
+  }, [openSessionsColumn])
 
   const sessionUnreachable = useCallback(() => {
     setBrainstormingUnreachable(true)
@@ -349,11 +350,11 @@ const Home = () => {
         }
       >
         <div
-          className={`home__columns${railCollapsed ? ' home__columns--sessions-collapsed' : ''}`}
+          className={`home__columns${sessionsColumnCollapse.collapsed ? ' home__columns--sessions-collapsed' : ''}`}
           ref={columnsRef}
           style={
-            railCollapsed
-              ? ({ '--home-sessions-width': 'var(--home-sessions-collapsed-width)' } as CSSProperties)
+            sessionsColumnCollapse.collapsed
+              ? ({ '--home-sessions-width': `${SESSIONS_DRAWER_COLLAPSED_WIDTH_PX}px` } as CSSProperties)
               : sessionsColumnWidth.value === null ? undefined : ({ '--home-sessions-width': `${sessionsColumnWidth.value}px` } as CSSProperties)
           }
         >
@@ -530,39 +531,27 @@ const Home = () => {
           max={sessionsColumnWidth.max}
           onChange={sessionsColumnWidth.setValue}
           label={SESSIONS_COLUMN_LABEL}
-          disabled={railCollapsed}
+          disabled={sessionsColumnCollapse.collapsed}
         />
-        <div className={`home__side${railCollapsed ? ' home__side--collapsed' : ''}`}>
-          <Panel
-            className="home__sessions"
-            heading="Sesión coordinadora"
-            fill
-            ref={sessionsRef}
-            actions={
-              <Button
-                variant="tertiary"
-                size="desktop"
-                iconStart={<MenuToggleIcon size={SESSIONS_TOGGLE_ICON_SIZE} />}
-                aria-expanded={!railCollapsed}
-                aria-label={railCollapsed ? EXPAND_SESSIONS_LABEL : COLLAPSE_SESSIONS_LABEL}
-                disabled={liveSessionCount === 0}
-                onClick={sessionsColumnCollapse.toggle}
-              />
-            }
+        <div className="home__side" ref={sessionsRef}>
+          <Drawer
+            title="Sesión coordinadora"
+            collapsed={sessionsColumnCollapse.collapsed}
+            onToggle={() => sessionsColumnCollapse.toggle()}
           >
             <CoordinatingSessionStatus read={coordinatingSession} />
-            <SessionsPanel opened={openedSession} onLiveSessionCount={setLiveSessionCount} />
-          </Panel>
-          {showHistory && workflow !== null && (
-            <aside className="home__history" aria-label="Progreso de la implementación">
-              <ImplementHistory
-                key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
-                issue={workflow.plan.issue.number}
-                root={workflow.plan.root ?? workflow.request.path}
-                repo={workflow.plan.repo}
-              />
-            </aside>
-          )}
+            <SessionsPanel opened={openedSession} />
+            {showHistory && workflow !== null && (
+              <aside className="home__history" aria-label="Progreso de la implementación">
+                <ImplementHistory
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
+                  issue={workflow.plan.issue.number}
+                  root={workflow.plan.root ?? workflow.request.path}
+                  repo={workflow.plan.repo}
+                />
+              </aside>
+            )}
+          </Drawer>
         </div>
       </div>
       </Navigation>

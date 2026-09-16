@@ -6,7 +6,6 @@
      own share of the viewport, so the column's preferred width is relative
      to the viewport rather than a fixed 680px that starves the work area. */
   --home-sessions-width: clamp(480px, 40vw, 680px);
-  --home-sessions-collapsed-width: 56px;
   --home-sessions-min-height: 480px;
   --home-sessions-stacked-height: 60vh;
   height: 100vh;
@@ -50,34 +49,9 @@
 .home__side {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   box-sizing: border-box;
-  min-height: 0;
-  min-width: 0;
-  padding: 16px;
-  overflow: auto;
-  background-color: var(--background-elevated);
-  border-left: var(--borderwidth-sm) solid var(--border-secondary);
-}
-
-.home__side > .home__sessions {
-  --panel-padding: 16px;
   min-height: var(--home-sessions-min-height);
-}
-
-/* The rail narrows to a strip, and `SessionTerminal` stays mounted underneath:
-   `visibility: hidden` keeps its `ResizeObserver` reporting a legitimate zero
-   size, which `fitAndResize` already refuses to act on, instead of tearing
-   down the xterm instance and its SSE subscription. */
-.home__side--collapsed {
-  padding: 8px;
-}
-
-.home__side--collapsed .panel__body {
-  visibility: hidden;
-  width: 0;
-  height: 0;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .home__columns--sessions-collapsed .column-resizer {
@@ -227,20 +201,21 @@
   }
 
   .home__side {
-    overflow: visible;
-    border-left: none;
-    border-top: var(--borderwidth-sm) solid var(--border-secondary);
+    min-height: 0;
   }
 
-  .home__side > .home__sessions {
+  .home__side .drawer {
+    width: 100%;
+    height: auto;
+    box-shadow: none;
+    border-top: var(--borderwidth-sm) solid var(--border-primary);
+    border-left: none;
+  }
+
+  .home__side .drawer:not(.drawer--collapsed) {
     flex: none;
     height: var(--home-sessions-stacked-height);
     min-height: 360px;
-  }
-
-  .home__side--collapsed > .home__sessions {
-    height: auto;
-    min-height: 0;
   }
 
   .column-resizer {

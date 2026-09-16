@@ -231,11 +231,11 @@ the repo moves to the organisation:
   Open Sans, `lg-*` classes). It is not edited; `VENDORED.md` says how to
   refresh it.
 - the other directories under `src/system-ui/` — `banner`, `breadcrumbs`,
-  `button`, `collapsable-card`, `form-field`, `icons`, `input`, `loading`,
-  `menu-item`, `menu-section`, `nav-header`, `navbar`, `navigation`, `panel`,
-  `tabs`, `tag`, `text-area`, `timeline`, `top-bar` and `workflow-step` — are
-  **mirrors** of `logistics-ui`'s components, with the same tokens and a subset
-  of their props. The day the package arrives, the import changes. The `tabs` one traces
+  `button`, `collapsable-card`, `drawer`, `form-field`, `icons`, `input`,
+  `loading`, `menu-item`, `menu-section`, `nav-header`, `navbar`, `navigation`,
+  `panel`, `tabs`, `tag`, `text-area`, `timeline`, `top-bar` and `workflow-step`
+  — are **mirrors** of `logistics-ui`'s components, with the same tokens and a
+  subset of their props. The day the package arrives, the import changes. The `tabs` one traces
   `packages/logistics-ui/src/components/Tabs` at `4d946b4`: the ARIA tabs
   pattern (`tablist` / `tab`, one tab stop for the whole bar, `ArrowLeft` /
   `ArrowRight` / `Home` / `End` walking it with disabled tabs skipped), the
@@ -245,6 +245,21 @@ the repo moves to the organisation:
   Upstream's `focus-visible` outline reaches for `--border-brand`, which the
   vendored theme does not carry; the mirror uses `--border-brand-primary`
   instead, the closest token that exists.
+- The `drawer` one traces `packages/logistics-ui/src/components/Drawer` at
+  `4d946b4`: the persistent side panel that compresses the work area when open
+  and gives the space back when collapsed, never a layer over the content —
+  the `aside` region named by its own title, the 48px-wide collapsed rail with
+  only the toggle, the visually-hidden title that survives collapsing because
+  it is the region's accessible name, and the `Button` `tertiary` toggle
+  (`aria-expanded`, `aria-controls`) instead of a hand-rolled one. The mirror's
+  CSS module became plain BEM; every comment was stripped, matching every
+  other mirror in this tree; the scroll-ramp mask, its `@property` registrations
+  and the `animation-timeline` keyframes were left out, since no other mirror
+  here carries them and they are not what this component's use in Control Tower
+  is about. Upstream hardcodes a 390px open width; this repository's Home page
+  drives that width itself through `--home-sessions-width` (the same variable
+  `ColumnResizer` already wrote), so the mirror declares no width at all except
+  the 48px collapsed rail.
 - The tokens live under `[data-ds='logistics']`; the `<html>` carries that
   attribute and `data-theme`, which `Theme.followSystemPreference()` sets from
   the system preference (light or dark) and keeps following if it changes.
