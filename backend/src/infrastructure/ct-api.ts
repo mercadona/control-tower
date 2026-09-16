@@ -417,8 +417,10 @@ class CtApi {
       CtApi.#refuseUsage(asked.reason)
     }
     const git = CtApi.#tool(GitWorkspace.BIN)
+    const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const workspace = new GitWorkspace({
       run: git,
+      gh,
       write: Disk.write,
       read: Disk.read,
       stderr: (line) => process.stderr.write(line),
@@ -448,7 +450,6 @@ class CtApi {
         ctStep: PluginTree.ctStep(),
       }),
     })
-    const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const userStories = CtApi.#userStories(gh)
     const planIssues = new GhPlanIssues({
       gh,

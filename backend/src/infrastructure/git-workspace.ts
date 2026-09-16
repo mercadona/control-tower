@@ -1,7 +1,8 @@
 import { isAbsolute } from 'node:path'
 import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/state-paths.js'
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
-import { renderState } from '../../../plugin/scripts/state.js'
+import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
+import { mapGhIssue, NO_MILESTONE_KEY } from '../../../plugin/scripts/gh-issue-map.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import type { Baseline } from '../../../plugin/scripts/baseline.js'
 import { SownWorkspace } from '../domain/value-objects/sown-workspace.ts'
@@ -12,57 +13,32 @@ import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
 import {
-  WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
+  WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../domain/exceptions.ts'
 import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch } from './external-tool.ts'
+import type { Gh } from './gh.ts'
 
 export type NumberedIssue = { readonly number: number }
 export type DiskWrite = (path: string, text: string) => Promise<void>
 export type DiskRead = (path: string) => Promise<string | null>
 export type DiagnosticWriter = (line: string) => void
+export type SeedSlice = ReturnType<typeof mapGhIssue> & { readonly epic: string }
 
 export class SliceSeed {
   static readonly RELATIVE_PATH = SLICE_REL_PATH
-  static readonly PLAN_GATE = 'plan'
-  static readonly GATES =
-    `${SliceSeed.PLAN_GATE} — GATE HUMANO pendiente: lo cierra una persona desde la app cuando pide ` +
-    'implementar el plan, NO tú. ' +
-    'Ojo: la sección "## Gates" del issue describe el carril de /ct-next y aquí no aplica.'
   static readonly EXCLUDE_PATH = 'info/exclude'
   static readonly EXCLUDE_RULE = SliceSeed.RELATIVE_PATH
-  static readonly NOT_MEASURED = BaselineResult.notMeasured('nobody ran the baseline while sowing this seed')
 
-  static textFor({ issue, branch, base, cut, baseline = SliceSeed.NOT_MEASURED }: {
-    issue: NumberedIssue,
+  static textFor({ slice, branch, base, cut, baseline }: {
+    slice: SeedSlice,
     branch: string,
     base: string,
     cut: string,
-    baseline?: BaselineResult,
+    baseline: BaselineResult,
   }): string {
-    return renderState({
-      meta: {
-        baseline: baseline.seedField,
-        task: `escribir el plan del issue #${issue.number}`,
-        role: 'slice-agent: escribes el plan de este slice contra el código real y PARAS. No implementas nada.',
-        status: 'in_progress',
-        branch,
-        base,
-        base_sha: cut,
-        last_commit: cut,
-        gates: SliceSeed.GATES,
-        github_issue: issue.number,
-        you_are_here: 'worktree recién cortado, sin trabajo encima',
-        next_action: 'escribe el plan prescriptivo, valídalo con --check-plan, commitéalo y para',
-        blocked: null,
-      },
-      body: [
-        `Estado del slice del issue #${issue.number}. Lo sembró el backend de Control Tower al abrir esta sesión.`,
-        '',
-        'Este fichero está fuera de la vista de git a propósito: no puede entrar en el pull request.',
-      ].join('\n'),
-    })
+    return buildStateSeed(slice, { branch, base, baseSha: cut, baseline })
   }
 }
 
@@ -123,13 +99,15 @@ export class GitWorkspace extends Workspace {
   readonly read: DiskRead
   readonly stderr: DiagnosticWriter
   readonly baseline: Baseline
+  readonly gh: Gh
 
-  constructor({ run, write, read, stderr, baseline }: {
+  constructor({ run, write, read, stderr, baseline, gh }: {
     run: ToolLaunch,
     write: DiskWrite,
     read: DiskRead,
     stderr: DiagnosticWriter,
     baseline: Baseline,
+    gh: Gh,
   }) {
     super()
     this.run = run
@@ -137,6 +115,7 @@ export class GitWorkspace extends Workspace {
     this.read = read
     this.stderr = stderr
     this.baseline = baseline
+    this.gh = gh
   }
 
   static branchFor(issue: NumberedIssue): string {
@@ -178,8 +157,12 @@ export class GitWorkspace extends Workspace {
     return declared === null ? null : declared[1]
   }
 
-  static cutArgvFor(path: string): string[] {
-    return ['-C', path, 'rev-parse', 'HEAD']
+  static fetchArgvFor(root: string, base: string): string[] {
+    return ['-C', root, 'fetch', GitWorkspace.REMOTE, base]
+  }
+
+  static verifyBaseArgvFor(root: string, base: string): string[] {
+    return ['-C', root, 'rev-parse', '--verify', '--quiet', `${GitWorkspace.REMOTE}/${base}^{commit}`]
   }
 
   static commonDirArgvFor(path: string): string[] {
@@ -232,15 +215,28 @@ export class GitWorkspace extends Workspace {
     repository: RepositoryName,
     root: CheckoutRoot,
   }): Promise<SownWorkspace> {
+    const slice = await this.#sliceFor(issue, repository)
+    if (slice.gates.includes('plan')) {
+      throw new WorkspaceNotPrepared(`issue #${issue.number} declares the plan gate and cannot be prepared`)
+    }
     const base = await this.#declaredBase(root.text)
+    await this.#fetch(root.text, base)
+    const cut = await this.#verifiedCut(root.text, base)
     const path = GitWorkspace.pathFor(root.text, issue)
     const branch = GitWorkspace.branchFor(issue)
     await this.#cut(root.text, issue, base)
     const located = new WorkspaceLocation({ root: root.text, path, branch })
     try {
-      return new SownWorkspace({ located, baseline: await this.#seed(located, issue, base) })
+      return new SownWorkspace({ located, baseline: await this.#seed(located, slice, base, cut) })
     } catch (failure) {
-      await this.undo(located)
+      try {
+        await this.undo(located)
+      } catch (cleanup) {
+        throw new WorkspaceNotCleaned(
+          `workspace preparation failed after ${GitWorkspace.#cause(failure)}; ` +
+          `workspace cleanup failed: ${GitWorkspace.#cause(cleanup)}`
+        )
+      }
       throw failure
     }
   }
@@ -295,13 +291,17 @@ export class GitWorkspace extends Workspace {
   async undo(located: WorkspaceLocation): Promise<void> {
     const root = located.root as string
     const removed = await this.run(GitWorkspace.removeArgvFor(root, located.path))
-    if (removed.failed) this.#warn(`the worktree ${located.path}`, removed)
+    if (removed.failed) {
+      throw new WorkspaceNotCleaned(
+        `the worktree ${located.path} remains and branch cleanup was not attempted: ${GitWorkspace.#output(removed)}`
+      )
+    }
     const deleted = await this.run(GitWorkspace.deleteBranchArgvFor(root, located.branch))
-    if (deleted.failed) this.#warn(`the branch ${located.branch}`, deleted)
-  }
-
-  #warn(what: string, refused: ProcessOutput): void {
-    this.stderr(`git workspace: could not undo ${what}, it stays behind: ${refused.stderr.trim()}\n`)
+    if (deleted.failed) {
+      throw new WorkspaceNotCleaned(
+        `the worktree ${located.path} was removed but branch ${located.branch} remains: ${GitWorkspace.#output(deleted)}`
+      )
+    }
   }
 
   async #cut(root: string, issue: NumberedIssue, base: string): Promise<void> {
@@ -312,13 +312,12 @@ export class GitWorkspace extends Workspace {
     }
   }
 
-  async #seed(located: WorkspaceLocation, issue: NumberedIssue, base: string): Promise<BaselineResult> {
+  async #seed(located: WorkspaceLocation, slice: SeedSlice, base: string, cut: string): Promise<BaselineResult> {
     await this.#exclude(located)
-    const cut = await this.#cutOf(located)
     const baseline = await this.#baselineOf(located)
     await this.write(
       `${located.path}/${SliceSeed.RELATIVE_PATH}`,
-      SliceSeed.textFor({ issue, branch: located.branch, base, cut, baseline })
+      SliceSeed.textFor({ slice, branch: located.branch, base, cut, baseline })
     )
     await this.#verifyHidden(located)
 
@@ -363,17 +362,6 @@ export class GitWorkspace extends Workspace {
     return isAbsolute(answered) ? answered : `${located.root}/${answered}`
   }
 
-  async #cutOf(located: WorkspaceLocation): Promise<string> {
-    const measured = await this.run(GitWorkspace.cutArgvFor(located.path))
-    if (measured.failed) {
-      throw new WorkspaceNotPrepared(
-        `could not measure the commit of ${located.path}, so ${SliceSeed.RELATIVE_PATH} is not seeded without a cut: ${measured.stderr.trim()}`
-      )
-    }
-
-    return measured.stdout.trim()
-  }
-
   async #verifyHidden(located: WorkspaceLocation): Promise<void> {
     const status = await this.run(GitWorkspace.statusArgvFor(located.path))
     if (status.failed) {
@@ -387,5 +375,103 @@ export class GitWorkspace extends Workspace {
         `${SliceSeed.RELATIVE_PATH} is still visible to git in ${located.path} after seeding the exclusion rule`
       )
     }
+  }
+
+  async #sliceFor(issue: PlanIssue, repository: RepositoryName): Promise<SeedSlice> {
+    const output = await this.gh.run([
+      'issue', 'view', String(issue.number), '--repo', repository.text,
+      '--json', 'number,title,body,labels,milestone',
+    ], { safeToRepeat: true })
+    if (output.failed) {
+      throw new WorkspaceNotRead(`gh issue view failed: ${GitWorkspace.#output(output)}`)
+    }
+
+    return GitWorkspace.#sliceIn(output.stdout, issue.number)
+  }
+
+  static #sliceIn(printed: string, expectedNumber: number): SeedSlice {
+    let value: unknown
+    try {
+      value = JSON.parse(printed)
+    } catch {
+      throw new WorkspaceNotUnderstood(`gh issue view printed non-json: ${JSON.stringify(printed)}`)
+    }
+    const source = GitWorkspace.#record(value, `gh issue view printed no issue object`)
+    if (source.number !== expectedNumber || typeof source.title !== 'string' || typeof source.body !== 'string') {
+      throw new WorkspaceNotUnderstood(
+        `gh issue view printed malformed issue #${expectedNumber}: ${JSON.stringify(value)}`
+      )
+    }
+    if (!Array.isArray(source.labels)) {
+      throw new WorkspaceNotUnderstood(
+        `gh issue view printed malformed issue #${expectedNumber}: ${JSON.stringify(value)}`
+      )
+    }
+    const labels = source.labels.map((label, index) => {
+      const read = GitWorkspace.#record(label, `gh issue view printed malformed label ${index}`)
+      if (typeof read.name !== 'string') {
+        throw new WorkspaceNotUnderstood(`gh issue view printed malformed label ${index}: ${JSON.stringify(label)}`)
+      }
+
+      return { name: read.name }
+    })
+    let milestone: { title: string } | null
+    if (source.milestone === null) {
+      milestone = null
+    } else {
+      const read = GitWorkspace.#record(source.milestone, `gh issue view printed malformed milestone`)
+      if (typeof read.title !== 'string') {
+        throw new WorkspaceNotUnderstood(`gh issue view printed malformed milestone: ${JSON.stringify(source.milestone)}`)
+      }
+      milestone = { title: read.title }
+    }
+    const projected = {
+      number: source.number,
+      title: source.title,
+      body: source.body,
+      labels,
+      milestone,
+    }
+
+    return Object.freeze({
+      ...mapGhIssue(projected),
+      epic: projected.milestone?.title ?? NO_MILESTONE_KEY,
+    })
+  }
+
+  async #fetch(root: string, base: string): Promise<void> {
+    const output = await this.run(GitWorkspace.fetchArgvFor(root, base))
+    if (output.failed) {
+      throw new WorkspaceNotPrepared(`git fetch origin ${base} failed: ${GitWorkspace.#output(output)}`)
+    }
+  }
+
+  async #verifiedCut(root: string, base: string): Promise<string> {
+    const output = await this.run(GitWorkspace.verifyBaseArgvFor(root, base))
+    if (output.failed) {
+      throw new WorkspaceNotPrepared(`origin/${base} does not resolve to a commit: ${GitWorkspace.#output(output)}`)
+    }
+    const cut = output.stdout.trim()
+    if (cut.length === 0) {
+      throw new WorkspaceNotUnderstood(`git verified origin/${base} but printed no commit`)
+    }
+
+    return cut
+  }
+
+  static #output(output: ProcessOutput): string {
+    return `exit ${output.code}, stdout ${JSON.stringify(output.stdout)}, stderr ${JSON.stringify(output.stderr)}`
+  }
+
+  static #cause(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause)
+  }
+
+  static #record(value: unknown, context: string): Record<string, unknown> {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new WorkspaceNotUnderstood(`${context}: ${JSON.stringify(value)}`)
+    }
+
+    return Object.fromEntries(Object.entries(value))
   }
 }

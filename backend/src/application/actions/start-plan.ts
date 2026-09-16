@@ -1,7 +1,7 @@
 import { PlanBriefing } from '../../domain/value-objects/plan-briefing.ts'
 import { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
-import { PlanFailure } from '../../domain/exceptions.ts'
+import { PlanFailure, WorkspaceNotCleaned } from '../../domain/exceptions.ts'
 import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
 import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
 import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
@@ -137,6 +137,7 @@ export class StartPlan {
     try {
       return await this.workspace.prepare({ issue, repository: target.repository, root: target.root })
     } catch (failure) {
+      if (failure instanceof WorkspaceNotCleaned) throw failure
       await this.#release(target, issue)
       throw failure
     }
@@ -156,7 +157,13 @@ export class StartPlan {
         repository: target.repository,
       }))
     } catch (failure) {
-      await this.workspace.undo(located)
+      try {
+        await this.workspace.undo(located)
+      } catch (cleanup) {
+        throw new WorkspaceNotCleaned(
+          `workspace cleanup failed after ${StartPlan.#diagnostic(failure)}: ${StartPlan.#diagnostic(cleanup)}`
+        )
+      }
       await this.#release(target, issue)
       throw failure
     }
@@ -164,5 +171,9 @@ export class StartPlan {
 
   async #release(target: PlanTarget, issue: PlanIssue): Promise<void> {
     await this.planIssues.requeue({ issue, repository: target.repository })
+  }
+
+  static #diagnostic(cause: unknown): string {
+    return cause instanceof Error ? cause.message : String(cause)
   }
 }

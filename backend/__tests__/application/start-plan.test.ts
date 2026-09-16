@@ -21,7 +21,7 @@ import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import type { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import {
   PlanAgentNotLaunched, PlanIssueNotClaimed, PlanIssueNotCreated, UserStoryNotRead,
-  WorkspaceNotPrepared,
+  WorkspaceNotCleaned, WorkspaceNotPrepared,
 } from '../../src/domain/exceptions.ts'
 
 class UserStoriesDouble extends UserStories {
@@ -117,6 +117,7 @@ class WorkspaceDouble extends Workspace {
   confirmFailure: WorkspaceNotPrepared | null
   confirmedRoot: CheckoutRoot | null
   confirmFailureRoot: CheckoutRoot | null
+  undoFailure: WorkspaceNotCleaned | null
   asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
   undone: WorkspaceLocation[]
   confirmed: { root: CheckoutRoot, repository: RepositoryName }[]
@@ -124,10 +125,11 @@ class WorkspaceDouble extends Workspace {
 
   constructor(
     answer: SownWorkspace | Error = WorkspaceDouble.SOWN,
-    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null }: {
+    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null, undoFailure = null }: {
       confirmFailure?: WorkspaceNotPrepared | null,
       confirmedRoot?: CheckoutRoot | null,
       confirmFailureRoot?: CheckoutRoot | null,
+      undoFailure?: WorkspaceNotCleaned | null,
     } = {}
   ) {
     super()
@@ -135,6 +137,7 @@ class WorkspaceDouble extends Workspace {
     this.confirmFailure = confirmFailure
     this.confirmedRoot = confirmedRoot
     this.confirmFailureRoot = confirmFailureRoot
+    this.undoFailure = undoFailure
     this.asked = []
     this.undone = []
     this.confirmed = []
@@ -160,6 +163,12 @@ class WorkspaceDouble extends Workspace {
     return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmedRoot })
   }
 
+  static refusingToUndo(said: string): WorkspaceDouble {
+    return new WorkspaceDouble(WorkspaceDouble.SOWN, {
+      undoFailure: new WorkspaceNotCleaned(said),
+    })
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     this.confirmed.push({ root, repository })
     this.steps.push('confirm')
@@ -182,6 +191,7 @@ class WorkspaceDouble extends Workspace {
   async undo(located: WorkspaceLocation): Promise<void> {
     this.undone.push(located)
     this.steps.push('undo')
+    if (this.undoFailure !== null) throw this.undoFailure
   }
 }
 
@@ -529,6 +539,21 @@ describe('StartPlan claims the issue so no second dispatcher takes it', () => {
     ])
   })
 
+  it('failed seed cleanup retains both causes and the loose claim', async () => {
+    const cleanup = new WorkspaceNotCleaned(
+      'seed failed: state stayed visible; cleanup failed: worktree removal exited 17'
+    )
+    const flow = new Flow({ workspace: new WorkspaceDouble(cleanup) })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBe(cleanup)
+    expect(refusal.message).toContain('state stayed visible')
+    expect(refusal.message).toContain('worktree removal exited 17')
+    expect(flow.planIssues.requeued).toEqual([])
+    expect(flow.planAgents.asked).toEqual([])
+  })
+
   it('an_agent_that_never_launched_puts_the_issue_back_in_the_queue_after_the_worktree_is_undone', async () => {
     const flow = new Flow({ planAgents: PlanAgentsDouble.refusing('cmux is not reachable') })
 
@@ -540,6 +565,20 @@ describe('StartPlan claims the issue so no second dispatcher takes it', () => {
       { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY },
     ])
     expect(flow.steps).toEqual(['confirm', 'undo', 'requeue'])
+  })
+
+  it('failed launch cleanup retains both diagnostics and the loose claim', async () => {
+    const flow = new Flow({
+      planAgents: PlanAgentsDouble.refusing('launch was refused'),
+      workspace: WorkspaceDouble.refusingToUndo('worktree removal failed'),
+    })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBeInstanceOf(WorkspaceNotCleaned)
+    expect(refusal.message).toContain('launch was refused')
+    expect(refusal.message).toContain('worktree removal failed')
+    expect(flow.planIssues.requeued).toEqual([])
   })
 
   it('a_port_that_nobody_implemented_says_so_for_the_two_ends_of_the_claim_too', async () => {

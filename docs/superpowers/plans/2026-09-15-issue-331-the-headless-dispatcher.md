@@ -868,11 +868,11 @@ feeds generated text into parseStateSafe and compares actual mapped values with 
 'an explicit plan gate is refused before preparation',
 'failed removal rejects without deleting the branch',
 'failed branch cleanup rejects with the remaining branch diagnostic',
-'failed seed cleanup retains both causes and the loose claim'. Replace old assertions named
+'failed seed cleanup retains both causes and the loose claim'. removed on purpose:
 'a_worktree_git_refuses_to_remove_is_named_with_what_git_said_and_the_branch_is_still_deleted',
 'a_branch_git_refuses_to_delete_is_named_with_what_git_said',
 'a_cleanup_that_also_fails_after_a_common_dir_refusal_does_not_replace_the_original_failure'
-with the three checked-cleanup cases above; retain successful undo coverage.
+The three checked-cleanup cases above replace them; retain successful undo coverage.
 
 **Verification:**
 ```bash
