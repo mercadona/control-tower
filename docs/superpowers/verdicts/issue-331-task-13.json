@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 13,
+  "task_name": "Retire the obsolete manual-order acceptance scenarios",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The exact review diff removes all 17 scenarios declared for retirement: 15 ImplementPlanRoute cases and two ImplementRefusal cases. The two emptied describe wrappers are removed with them. Helpers and remaining coverage are preserved. Controls 1 green is inherited; log reference only: .agent/run-331/task-13-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The task explicitly declares No TDD for withdrawal of the manual-order contract; it requires no new red assertion.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "No signature, type, error, constant or export contract is introduced or changed. The Current state block identifies a scenario to remove, which the diff removes; retirement-list compliance is measured under objetivo and manipulacion-tests.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Checked the closed-decision rows against this deletion-only change. Retiring manual-order acceptance coverage is consistent with D-3 and D-8/D-15; D-10/D-11's TypeScript requirement remains satisfied. Other rows are untouched, including D-14's preservation of the distributed go protocol. Production retirement and replacement 404 coverage remain Task 14's work as explicitly declared.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the package's rule-by-rule precedence to the supplied conventions and repository rules. This existing TypeScript test module receives only declared deletions; no new implementation plays the role of the production exemplars, and no imports, construction, boundaries or delivery mechanisms change. Under CT370 conventions/defects.md: closed vocabulary — no classification or dispatch introduced or changed; raw map as the return value of logic — no return or consumer introduced or changed; two fields that have to agree — no coupled fields or absence sentinels introduced; an error named for where it happens — no error introduced or renamed. Testing-rule concerns about removed assertions are measured under manipulacion-tests; surviving assertions and fixtures are unchanged.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Compared every removed it name and its assertions with the brief's Tests list, entries 1 through 17: exact one-to-one match, in the same order, with no missing or extra retirement. All removed assertions belong to those explicitly named cases. The six ImplementCollapse cases and eleven watch/transition cases survive unchanged, as do PullRequestWatchSpy, ImplementPlanSpy, RunningApi, imports, constants and cleanup hooks.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The objective is explicitly test-contract retirement with no production behaviour change. There is no new behavioural effect to substantiate in production and no added or altered fixture simulating one.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "alcance",
+        "result": "All 165 deleted lines serve the exact retirement list, its emptied describe wrappers and separating whitespace in the sole declared test file. No helper cleanup, surviving-test modification, production change, plan amendment, protected plugin edit or other scope leakage appears in the supplied diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The diff adds no tests or assertions; it contains deletions only, so new-test determinism, isolation and real-behaviour checks have no subject.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "a2b11988de87e38d568ba7b95400a37579e8bec1624293a8a2d615f5193976fd"
+  }
+}
