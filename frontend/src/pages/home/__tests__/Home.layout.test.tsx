@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react'
-import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
-import { backendAnswering, openHome, openRestored } from './helpers'
+import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
+import { backendRecovering, openHome, openRestored } from './helpers'
 
 describe('Home · layout', () => {
   afterEach(() => {
@@ -21,16 +21,18 @@ describe('Home · layout', () => {
     unmount()
 
     openRestored({ phase: 'implementing' })
-    await screen.findByText('Agente asignado')
+    await screen.findByText('Implementación iniciada automáticamente')
     fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     const side = document.querySelector('.home__side')
-    expect(side).toContainElement(screen.getByRole('complementary', { name: 'Progreso de la implementación' }))
+    const implementationHistory = screen.getByRole('complementary', { name: 'Progreso de la implementación' })
+    expect(side).toContainElement(implementationHistory)
+    expect(implementationHistory.closest('.home__columns')).toBe(document.querySelector('.home__columns'))
     expect(document.querySelector('.top-bar')?.closest('.home__columns')).toBeNull()
   })
 
   it('keeps the baseline notice of a started plan inside the work area beside the right column', async () => {
-    const { user } = openRestored({
+    openRestored({
       phase: 'ready',
       plan: { baseline: { outcome: 'rojo', command: 'make test', summary: 'exit 2 · 2 failed' } },
     })
@@ -41,14 +43,18 @@ describe('Home · layout', () => {
     const columns = notice.closest('.home__columns')
     expect(columns).not.toBeNull()
 
-    await screen.findByRole('button', { name: 'Implementar plan' })
-    backendAnswering(ImplementPlanMother.implementing())
-    await user.click(screen.getByRole('button', { name: 'Implementar plan' }))
-    await screen.findByText('Agente asignado')
-    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
+    expect(notice.closest('.home__columns')).toBe(columns)
+  })
 
-    expect(screen.getByRole('complementary', { name: 'Progreso de la implementación' }).closest('.home__columns'))
-      .toBe(columns)
+  it('the coordinator remains writable during automatic progress', async () => {
+    backendRecovering(HeadlessPlanMother.implementing())
+
+    openHome()
+
+    await screen.findByRole('heading', { name: 'Implementación' })
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
+    expect(screen.getByText('Sesión coordinadora')).toBeVisible()
+    expect(screen.getByRole('complementary', { name: 'Sesión coordinadora' })).not.toHaveAttribute('aria-disabled', 'true')
   })
 
   it('never turns the right column into a dialog: its home__side is a sibling of main once implementation starts', async () => {
