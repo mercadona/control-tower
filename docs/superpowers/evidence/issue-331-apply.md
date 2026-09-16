@@ -58,11 +58,14 @@ owned process. It recovered the same conversation UUID as `uncertain` because
 the accepted implementation call had no completion, and its spawn boundary was
 not invoked. Cleanup published a deliberately unavailable completion, released
 the pending poll, observed the supervised failure and removed the temporary
-root; no pending wait, child or fixture remained. The HTTP status and worker
-acceptance waits are bounded. An unconditional `finally` stops the server and
-removes the root even when setup, the first spawn assertion or the HTTP request
-fails before supervision exists; cleanup waits for a diagnostic only after the
-implementation spawn proves supervised work exists.
+root; no pending wait, child or fixture remained. `BoundedDrain` gives the
+accepted-continuation wait and the supervised-diagnostic drain explicit 1000 ms
+bounds. The HTTP `fetch` itself has no explicit abort signal or deadline; its
+status is checked before the continuation wait so an early non-202 response does
+not wait for a supervisor that was never installed. An unconditional `finally`
+stops the server and removes the root even when setup, the first spawn assertion
+or the HTTP request fails before supervision exists; cleanup waits for a
+diagnostic only after the implementation spawn proves supervised work exists.
 
 ## Capture limits
 
