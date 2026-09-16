@@ -1639,6 +1639,53 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  // Issue #376 — two more rules under `.claude/`, both of them state that a
+  // slice's `git add -A` could otherwise commit:
+  //
+  //   - `.claude/worktrees/`: the harness creates session worktrees there,
+  //     inside the checkout itself. The same accident `.worktrees/` above
+  //     already covers for the slice worktrees, and THIS repository's own
+  //     .gitignore has ignored it since it was written — the comment there
+  //     points at the .worktrees/ block of this very script as the precedent,
+  //     and the rule never travelled to the repositories the script bootstraps.
+  //   - `.claude/settings.local.json`: the cabin writes the coordinating
+  //     session's hooks there (backend/src/infrastructure/local-settings-session-hooks.ts),
+  //     each one carrying a loopback URL and an ephemeral port. It is live,
+  //     local state of one machine, never product, and committing it points
+  //     every clone at a port that is not listening.
+  it('adds the two .claude/ rules to .gitignore', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
+    expect(gi).toContain('.claude/worktrees/')
+    expect(gi).toContain('.claude/settings.local.json')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('idempotent for the .claude/ rules too: two runs, one line of each', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const lines = readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')
+    expect(lines.filter((l) => l === '.claude/worktrees/')).toHaveLength(1)
+    expect(lines.filter((l) => l === '.claude/settings.local.json')).toHaveLength(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  // `.claude/worktrees/` is a prefix of nothing, but `.claude/settings.local.json`
+  // shares its directory with the `.claude/settings.json` the scaffolder writes
+  // for real. A rule that ignored the directory instead of the file would take
+  // that one with it, and the repository would carry no plugin declaration at
+  // all — the very thing #376 comes to fix.
+  it('the .claude/ rules do not ignore the settings.json the scaffolder seeds', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    const lines = readFileSync(join(dir, '.gitignore'), 'utf8').split('\n')
+    expect(lines).not.toContain('.claude/')
+    expect(lines).not.toContain('.claude/settings.json')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   // -------------------------------------------------------------------------
   // The execution spec's template. The flow after /ct-init is brainstorming →
   // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8

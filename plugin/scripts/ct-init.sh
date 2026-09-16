@@ -178,6 +178,37 @@ for regla in '.agent/run-*.json' '.agent/run-*/'; do
   fi
 done
 
+# Issue #376 — the two rules under `.claude/`. Same reason as the three blocks
+# above: state that a `git add -A` would otherwise commit.
+#
+#   .claude/worktrees/          the harness creates session worktrees there,
+#                               inside the checkout itself. This is the same
+#                               accident `.worktrees/` covers for the slice
+#                               worktrees, and THIS plugin's own repository has
+#                               ignored it since the line was written — the
+#                               comment there points at the `.worktrees/` block
+#                               above as its precedent, and the rule never
+#                               travelled to the repositories bootstrapped from
+#                               here.
+#   .claude/settings.local.json the cabin writes the coordinating session's
+#                               hooks there, each one carrying a loopback URL
+#                               and an ephemeral port. It is one machine's live
+#                               local state, never product: committed, it points
+#                               every clone at a port that is not listening.
+#
+# The second rule names the FILE and not its directory on purpose. `.claude/`
+# also holds the `settings.json` this scaffolder writes, which declares the
+# plugin and IS committed; a rule on the directory would take it along and leave
+# the repository with no plugin declaration at all.
+for regla in '.claude/worktrees/' '.claude/settings.local.json'; do
+  if ! grep -qxF "$regla" "$GITIGNORE"; then
+    echo "$regla" >> "$GITIGNORE"
+    echo "añadido $regla a $GITIGNORE"
+  else
+    echo "$regla ya está en $GITIGNORE, no se duplica"
+  fi
+done
+
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
   cat > "$AGENTS_MD" <<'EOF'
