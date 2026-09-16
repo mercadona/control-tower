@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -44,6 +44,7 @@ const planImplementing = async (historyAnswer: () => { status: number; body: str
 
   openHome()
   await screen.findByText('Agente asignado')
+  fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
   return fetching
 }

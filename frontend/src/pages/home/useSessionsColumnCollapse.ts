@@ -5,7 +5,6 @@ const STORAGE_KEY = 'ct.sessions-column-collapsed'
 type SessionsColumnCollapse = {
   collapsed: boolean
   toggle: () => void
-  open: () => void
 }
 
 const readStoredCollapsed = (): boolean => {
@@ -35,15 +34,7 @@ const useSessionsColumnCollapse = (): SessionsColumnCollapse => {
     })
   }, [])
 
-  const open = useCallback(() => {
-    setCollapsed((current) => {
-      if (!current) return current
-      writeStoredCollapsed(false)
-      return false
-    })
-  }, [])
-
-  return { collapsed, toggle, open }
+  return { collapsed, toggle }
 }
 
 export { useSessionsColumnCollapse }

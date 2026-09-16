@@ -35,22 +35,4 @@ describe('useSessionsColumnCollapse', () => {
 
     expect(result.current.collapsed).toBe(true)
   })
-
-  it('open sets collapsed to false and persists it', () => {
-    const { result } = renderHook(() => useSessionsColumnCollapse())
-
-    act(() => result.current.open())
-
-    expect(result.current.collapsed).toBe(false)
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('false')
-  })
-
-  it('open does nothing while already open', () => {
-    localStorage.setItem(STORAGE_KEY, 'false')
-    const { result } = renderHook(() => useSessionsColumnCollapse())
-
-    act(() => result.current.open())
-
-    expect(result.current.collapsed).toBe(false)
-  })
 })

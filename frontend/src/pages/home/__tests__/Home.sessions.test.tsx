@@ -117,6 +117,7 @@ describe('Home · sessions panel', () => {
     openHome()
 
     await screen.findByText('Agente asignado')
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
     expect(screen.getByRole('region', { name: 'Terminal de la sesión' })).toBeInTheDocument()
 
     const terminal = await waitFor(() => lastTerminal())
@@ -152,6 +153,7 @@ describe('Home · sessions panel', () => {
     const { user } = openHome()
 
     await openBrainstorming(user)
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     expect(await screen.findByRole('tab', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute(
       'aria-selected',

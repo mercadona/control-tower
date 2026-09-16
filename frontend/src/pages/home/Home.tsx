@@ -61,7 +61,6 @@ const Home = () => {
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const sessionsColumnCollapse = useSessionsColumnCollapse()
-  const openSessionsColumn = sessionsColumnCollapse.open
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -162,10 +161,6 @@ const Home = () => {
     }
   }, [reconcile])
 
-  useEffect(() => {
-    if (workflow?.phase === 'implementing') openSessionsColumn()
-  }, [workflow, openSessionsColumn])
-
   const formInteracted = useCallback(() => {
     recoveryTokenRef.current = null
     setCandidates([])
@@ -179,9 +174,8 @@ const Home = () => {
   const sessionOpened = useCallback((opened: OpenedCoordinatingSession) => {
     setBrainstormingUnreachable(false)
     setOpenedSession(opened.session)
-    openSessionsColumn()
     sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  }, [openSessionsColumn])
+  }, [])
 
   const sessionUnreachable = useCallback(() => {
     setBrainstormingUnreachable(true)

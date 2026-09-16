@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { backendAnswering, openHome, openRestored } from './helpers'
 
@@ -22,6 +22,7 @@ describe('Home · layout', () => {
 
     openRestored({ phase: 'implementing' })
     await screen.findByText('Agente asignado')
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     const side = document.querySelector('.home__side')
     expect(side).toContainElement(screen.getByRole('complementary', { name: 'Progreso de la implementación' }))
@@ -44,6 +45,7 @@ describe('Home · layout', () => {
     backendAnswering(ImplementPlanMother.implementing())
     await user.click(screen.getByRole('button', { name: 'Implementar plan' }))
     await screen.findByText('Agente asignado')
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     expect(screen.getByRole('complementary', { name: 'Progreso de la implementación' }).closest('.home__columns'))
       .toBe(columns)
@@ -52,6 +54,7 @@ describe('Home · layout', () => {
   it('never turns the right column into a dialog: its home__side is a sibling of main once implementation starts', async () => {
     openRestored({ phase: 'implementing' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Desplegar el panel' }))
     await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
     expect(screen.queryByRole('dialog')).toBeNull()
     const columns = document.querySelector('.home__columns')
