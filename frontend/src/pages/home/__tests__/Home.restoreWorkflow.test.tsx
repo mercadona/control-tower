@@ -23,6 +23,10 @@ type RecoveredPhase = 'planning' | 'implementing' | 'uncertain'
 
 const activePlan = (phase: RecoveredPhase = 'planning', repo = StartPlanMother.REPO, issue = StartPlanMother.ISSUE.number) => ({
   phase,
+  ...(phase === 'uncertain' ? {
+    diagnostic: 'The recorded call needs inspection',
+    recovery: { action: 'inspect', detail: 'Refresh evidence only' },
+  } : {}),
   request: { id: StartPlanMother.TICKET, repo, path: StartPlanMother.PATH },
   plan: {
     id: StartPlanMother.TICKET,
@@ -464,6 +468,126 @@ describe('Home · restore workflow', () => {
     expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
     expect(fetching).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+  })
+
+  it('uncertain recovery invokes the action without starting another plan', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(HeadlessPlanMother.awaitingContinuation().body)
+      }
+      if (input === '/recover-plan') {
+        expect(init?.body).toBe(JSON.stringify({
+          repo: StartPlanMother.REPO,
+          issue: StartPlanMother.ISSUE.number,
+          agent: StartPlanMother.AGENT,
+        }))
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 })
+      }
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.planning().body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+    expect(await screen.findByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Recuperar trabajo' }))
+
+    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
+    expect(calls).not.toContain('POST /start-plan')
+  })
+
+  it('finishes an earlier observation before recovering and then reads fresh state', async () => {
+    vi.useFakeTimers()
+    let answerObservation: (response: Response) => void = () => {}
+    const observation = new Promise<Response>((resolve) => { answerObservation = resolve })
+    const calls: string[] = []
+    let reads = 0
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans') {
+        reads += 1
+        if (reads === 1) return new Response(HeadlessPlanMother.awaitingContinuation().body)
+        if (reads === 2) return observation
+        return new Response(HeadlessPlanMother.planning().body)
+      }
+      if (input === '/recover-plan') {
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 })
+      }
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    openHome()
+    await act(async () => Promise.resolve())
+    const recover = screen.getByRole('button', { name: 'Recuperar trabajo' })
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    fireEvent.click(recover)
+    await act(async () => Promise.resolve())
+    expect(calls).toEqual(['GET /active-plans', 'GET /active-plans'])
+
+    await act(async () => {
+      answerObservation(new Response(HeadlessPlanMother.awaitingContinuation().body))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Plan arrancado')).toBeInTheDocument()
+    expect(calls).toEqual([
+      'GET /active-plans',
+      'GET /active-plans',
+      'POST /recover-plan',
+      'GET /active-plans',
+    ])
+  })
+
+  it('proven non-launch exposes checked cleanup', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(HeadlessPlanMother.unlaunched().body)
+      }
+      if (input === '/cleanup-plan') {
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 200 })
+      }
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.empty().body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: 'Limpiar arranque fallido' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
+    expect(calls).toEqual(['GET /active-plans', 'POST /cleanup-plan', 'GET /active-plans'])
+    expect(calls).not.toContain('POST /start-plan')
+  })
+
+  it('late recovery cannot replace the selected workflow', async () => {
+    let answerRecovery: (response: Response) => void = () => {}
+    const pendingRecovery = new Promise<Response>((resolve) => { answerRecovery = resolve })
+    const fetching = vi.fn(async (input: string | URL | Request) => {
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.awaitingObservation().body)
+      if (input === '/recover-plan') return pendingRecovery
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+    const recover = await screen.findByRole('button', { name: 'Recuperar trabajo' })
+
+    await user.click(recover)
+    expect(recover).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
+    answerRecovery(new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 }))
+    await act(async () => pendingRecovery)
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.queryByText('Plan arrancado')).toBeNull()
+    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(1)
   })
 
   it.each([

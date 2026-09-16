@@ -127,6 +127,18 @@ the drawer exposes the coordinating session as the interactive entrance in its
 PTY, while durable headless call records drive the selected slice without
 replacing that entrance.
 
+`app/active-plans` reads `GET /active-plans` on load and while following work.
+An uncertain entry carries a diagnostic, its original repo/issue/agent identity
+and one recovery action. `observe` and `continue` render **Recuperar trabajo**;
+`cleanup` renders **Limpiar arranque fallido**. A press sends the exact identity
+to `POST /recover-plan` or `POST /cleanup-plan` and then reads active plans
+again; it never calls `/start-plan`. The button is disabled while that request
+is pending, and late replies cannot replace a newer workflow or coordinating
+conversation. `inspect` stays read-only and offers **Reintentar recuperación**,
+which only repeats the GET. **Descartar estado** clears this page's local state
+and does not mutate backend work. The coordinating drawer and its live session
+remain mounted throughout recovery.
+
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
 operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
@@ -230,7 +242,7 @@ worst move available when nobody can tell what was created.
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
   CORS and no preflight.
 - **The client is `fetch` with no wrapper** (`src/app/start-plan/client.ts`,
-  `src/app/implement-plan/client.ts`) and native `EventSource` for the event
+  `src/app/active-plans/client.ts`) and native `EventSource` for the event
   stream (`src/app/plan-events/client.ts`).
   The in-house libraries are waiting for CI to have access to the private
   registry.
@@ -289,7 +301,8 @@ make test-frontend
 Or inside `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
 
 `vite.config.ts`'s proxy forwards every API path the page calls — the list is
-`API_PATHS` in that file, sixteen of them today — and strips the `Origin` header
+`API_PATHS` in that file, sixteen of them today, including `/recover-plan` and
+`/cleanup-plan` — and strips the `Origin` header
 from what it forwards: without it the backend refuses the call as a foreign
 origin. **A new endpoint has to be added to `API_PATHS`**, or the dev server
 answers the page's own HTML instead of the API. Stripping `Origin` is a
@@ -297,6 +310,10 @@ development exception with one cost worth knowing: no gate key is ever minted
 for a request that arrives without an origin, so the gate buttons cannot be
 pressed under `make dev-frontend`. In production the page comes out of the
 backend itself.
+
+The backend wire contract, refusal codes and recovery limits are documented in
+[`backend/API.md`](../backend/API.md). This repair made no live Claude call, so
+the real permission smoke remains explicitly unverified.
 
 ## Conventions
 

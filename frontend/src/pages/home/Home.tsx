@@ -72,6 +72,9 @@ const Home = () => {
   const recoveryTokenRef = useRef<symbol | null>(null)
   const recoveryGenerationRef = useRef(0)
   const recoveryInFlightRef = useRef<Promise<void> | null>(null)
+  const recoveryMutationRef = useRef<symbol | null>(null)
+  const [recoveryMutationPending, setRecoveryMutationPending] = useState(false)
+  const [recoveryFailure, setRecoveryFailure] = useState<string | null>(null)
   const discardedPlansRef = useRef(new Set<string>())
   const uncertainActiveRef = useRef<ActivePlan | null>(null)
   const mountedRef = useRef(false)
@@ -92,6 +95,7 @@ const Home = () => {
     workflowRef.current = selected
     restoredRef.current = restored
     uncertainActiveRef.current = null
+    setRecoveryFailure(null)
     setWorkflow(selected)
     setReconciliation(restored ? 'confirmed' : 'not-required')
     setCandidates([])
@@ -106,6 +110,7 @@ const Home = () => {
       workflowRef.current = null
       restoredRef.current = false
       uncertainActiveRef.current = active
+      setRecoveryFailure(null)
       setWorkflow(null)
       setUncertainRequest(active.request)
       setCandidates([])
@@ -276,6 +281,9 @@ const Home = () => {
     workflowRef.current = null
     restoredRef.current = false
     uncertainActiveRef.current = null
+    recoveryMutationRef.current = null
+    setRecoveryMutationPending(false)
+    setRecoveryFailure(null)
     setWorkflow(null)
     setReconciliation('not-required')
     setCandidates([])
@@ -294,6 +302,47 @@ const Home = () => {
     retryingRef.current = true
     setReconciliation('checking')
     void reconcile()
+  }
+
+  const runRecoveryAction = async () => {
+    const active = uncertainActiveRef.current
+    if (active === null || active.phase !== 'uncertain' || active.recovery.action === 'inspect'
+      || recoveryMutationRef.current !== null) return
+    const mutation = Symbol('recovery-mutation')
+    const generation = recoveryGenerationRef.current
+    const expectedCoordinator = coordinatingConversationRef.current
+    const identity = activePlanIdentity(active)
+    recoveryMutationRef.current = mutation
+    setRecoveryMutationPending(true)
+    setRecoveryFailure(null)
+    try {
+      await recoveryInFlightRef.current
+      const current = uncertainActiveRef.current
+      if (!mountedRef.current || generation !== recoveryGenerationRef.current
+        || expectedCoordinator !== coordinatingConversationRef.current
+        || current === null || current.phase !== 'uncertain'
+        || current.recovery.action === 'inspect'
+        || activePlanIdentity(current) !== identity) return
+      const outcome = current.recovery.action === 'cleanup'
+        ? await ActivePlansClient.cleanup(current)
+        : await ActivePlansClient.recover(current)
+      if (!mountedRef.current || generation !== recoveryGenerationRef.current
+        || expectedCoordinator !== coordinatingConversationRef.current
+        || uncertainActiveRef.current === null
+        || activePlanIdentity(uncertainActiveRef.current) !== identity) return
+      if (outcome.kind === 'unavailable') {
+        setRecoveryFailure('No se pudo contactar con el backend para ejecutar la recuperación.')
+        return
+      }
+      if (outcome.kind === 'refused') setRecoveryFailure(outcome.detail)
+      setReconciliation('checking')
+      await reconcile()
+    } finally {
+      if (recoveryMutationRef.current === mutation) {
+        recoveryMutationRef.current = null
+        setRecoveryMutationPending(false)
+      }
+    }
   }
 
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
@@ -315,6 +364,8 @@ const Home = () => {
     : workflow?.phase === 'planning'
       ? 'Seguimos el estado del plan. Aún no necesitas hacer nada.'
       : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
+  const activePlan = uncertainActiveRef.current
+  const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
 
   const recovery = (
     <>
@@ -377,10 +428,25 @@ const Home = () => {
             type="warning"
             role="alert"
             title="No se puede confirmar el estado de implementación"
-            description="No se iniciará otra ejecución ni se abrirán eventos hasta que el backend confirme el estado."
+            description={uncertainActive === null ? undefined : (
+              <>
+                {recoveryFailure ?? uncertainActive.diagnostic} {' '}
+                <code>{uncertainActive.plan.repo}#{uncertainActive.plan.issue.number}</code>
+                {' · '}<code>{uncertainActive.plan.agent}</code>
+              </>
+            )}
           />
           <div className="home__recovery-actions">
-            <Button onClick={retryReconciliation}>Reintentar recuperación</Button>
+            {uncertainActive?.recovery.action === 'inspect' && (
+              <Button onClick={retryReconciliation}>Reintentar recuperación</Button>
+            )}
+            {(uncertainActive?.recovery.action === 'observe'
+              || uncertainActive?.recovery.action === 'continue') && (
+              <Button disabled={recoveryMutationPending} onClick={() => void runRecoveryAction()}>Recuperar trabajo</Button>
+            )}
+            {uncertainActive?.recovery.action === 'cleanup' && (
+              <Button disabled={recoveryMutationPending} onClick={() => void runRecoveryAction()}>Limpiar arranque fallido</Button>
+            )}
             <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
           </div>
         </div>

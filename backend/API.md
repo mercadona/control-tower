@@ -156,6 +156,7 @@ From a tool refusing:
 | `dispatch-not-available` | the plugin found no eligible ready slice, or the selected slice still declares a plan gate |
 | `dispatch-not-read` | the complete open/closed GitHub issue table could not be read |
 | `dispatch-not-understood` | the issue table or plugin dispatch result was ambiguous |
+| `plan-agent-never-launched` | definite pre-worker or worker-spawn failure; this start refusal alone does not authorize cleanup |
 | `plan-agent-not-launched` | durable call preparation, worker acceptance or execution failed |
 | `plan-agent-not-named` | durable call evidence was malformed or conflicted with immutable evidence |
 | `workspace-not-prepared` | the worktree could not be cut |
@@ -378,9 +379,24 @@ recover a session it lost — a reload, or a backend restart.
     "worktree":"/repo/checkout/.worktrees/7"}}]}
 ```
 
-`plans` is empty when no durable dispatch record names an existing worktree.
-Each entry carries `request` — what started it — and `plan` — the durable
-identity and workspace.
+An `uncertain` entry also carries mandatory recovery metadata:
+
+```json
+{"phase":"uncertain","diagnostic":"planner call is incomplete within its recorded deadline",
+ "recovery":{"action":"observe","detail":"observe the recorded planner call"},
+ "request":{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"},
+ "plan":{"id":"ABC-123","repo":"owner/name","issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
+   "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7","worktree":"/repo/checkout/.worktrees/7"}}
+```
+
+The action is `observe`, `continue`, `cleanup` or `inspect`. Partial checked
+cleanup remains listed even after its worktree has gone, because the durable
+identity and cleanup receipt still need retirement. Planning and implementing
+entries do not carry recovery metadata.
+
+`plans` is empty when no recoverable durable dispatch record exists. Each entry
+carries `request` — what started it — and `plan` — the durable identity and
+workspace.
 
 | `phase` | Meaning | What the UI can do |
 |---|---|---|
@@ -400,11 +416,14 @@ The durable layout is:
 
 ```text
 harness/<conversation>/dispatch.json
+harness/<conversation>/non-launch.json
+harness/<conversation>/cleanup-evidence.json
 harness/<conversation>/calls/<call>/call.json
 harness/<conversation>/calls/<call>/prompt.md
 harness/<conversation>/calls/<call>/stream.ndjson
 harness/<conversation>/calls/<call>/stderr.log
 harness/<conversation>/calls/<call>/completion.json
+retired-harness/<conversation>/...
 ```
 
 `dispatch.json`, `call.json`, `prompt.md` and `completion.json` are immutable
@@ -428,6 +447,63 @@ a replacement conversation nor opens another pull request.
 ```
 curl -s http://127.0.0.1:8787/active-plans
 ```
+
+---
+
+## `POST /recover-plan`
+
+Requests supervision of the original recorded call. It never creates a new
+conversation. The body has exactly these fields:
+
+```json
+{"repo":"owner/name","issue":7,"agent":"11111111-1111-4111-8111-111111111111"}
+```
+
+**202 Accepted** answers `{"agent":"11111111-1111-4111-8111-111111111111"}`.
+Acceptance means supervision was registered, not that recovery completed. The
+caller reads `GET /active-plans` afterwards. `observe` waits only inside the
+immutable recorded deadline; `continue` resumes publication and implementation
+from the successful planner. Completed implementation/fix calls are never
+replayed. Legacy, expired, failed, corrupt or conflicting evidence remains
+inspect-only.
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `recover-plan-invalid-request` | 400 | body is not exactly the recorded identity shape |
+| `recover-plan-in-progress` | 400 | this API is already starting, recovering or cleaning work in the repository |
+| `recover-plan-not-found` | 400 | no active record has that identity |
+| `recover-plan-conflict` | 400 | identity or evidence is ineligible for mutation |
+| `recover-plan-failed` | 400 | an operational record/call read failed |
+| `recover-plan-unreadable` | 400 | durable evidence is malformed or contradictory |
+
+## `POST /cleanup-plan`
+
+Uses the same exact request body. It answers **200 OK** with the same `agent`
+shape only after checked workspace removal, checked issue requeue and durable
+retirement finish. Cleanup requires an immutable definite non-launch receipt;
+an absent worktree or `plan-agent-never-launched` response alone is not proof.
+Retries reuse cleanup evidence and never force-remove a worktree or branch.
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `cleanup-plan-invalid-request` | 400 | body is not exactly the recorded identity shape |
+| `cleanup-plan-in-progress` | 400 | this API is already starting, recovering or cleaning work in the repository |
+| `cleanup-plan-not-found` | 400 | no active or retired record has that identity |
+| `cleanup-plan-conflict` | 400 | proof, status, workspace or identity prevents cleanup |
+| `cleanup-plan-failed` | 400 | an operational record, status, git or claim call failed |
+| `cleanup-plan-unreadable` | 400 | durable or collaborator evidence is malformed |
+
+Both POSTs share the single-API repository reservation used by `/start-plan`.
+They require `Content-Type: application/json`, reject foreign origins, refuse
+oversized bodies, and expose only `POST` through the ordinary protocol codes.
+They need no gate key. The coordinating prompt discovers these endpoints from
+the origin of `CT_SESSION_HOOKS_URL` and preserves the returned repo, issue and
+agent identity. A missing Claude transcript is a refusal, never permission to
+open a replacement conversation.
+
+The no-live-Claude restriction remains in force for this repair. The fixture
+rehearsal verifies the production graph; a real permission smoke remains
+unverified.
 
 ---
 

@@ -2,6 +2,7 @@ import { StartPlanMother } from '__scenarios__/StartPlanMother'
 
 type Answer = { status: number; body: string }
 type HeadlessPhase = 'planning' | 'implementing' | 'uncertain'
+type RecoveryAction = 'observe' | 'continue' | 'cleanup' | 'inspect'
 
 class DeferredHeadlessPlanChanges {
   private pending: Array<(response: Response) => void> = []
@@ -36,19 +37,35 @@ class HeadlessPlanMother {
   }
 
   static uncertain(): Answer {
-    return HeadlessPlanMother.active('uncertain')
+    return HeadlessPlanMother.active('uncertain', 'inspect')
+  }
+
+  static awaitingObservation(): Answer {
+    return HeadlessPlanMother.active('uncertain', 'observe')
+  }
+
+  static awaitingContinuation(): Answer {
+    return HeadlessPlanMother.active('uncertain', 'continue')
+  }
+
+  static unlaunched(): Answer {
+    return HeadlessPlanMother.active('uncertain', 'cleanup')
   }
 
   static deferredChanges(): DeferredHeadlessPlanChanges {
     return new DeferredHeadlessPlanChanges()
   }
 
-  private static active(phase: HeadlessPhase): Answer {
+  private static active(phase: HeadlessPhase, recovery?: RecoveryAction): Answer {
     return {
       status: 200,
       body: JSON.stringify({
         plans: [{
           phase,
+          ...(recovery === undefined ? {} : {
+            diagnostic: `Recovery action ${recovery} requires operator attention`,
+            recovery: { action: recovery, detail: `Use ${recovery} for the recorded call` },
+          }),
           request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
           plan: {
             id: StartPlanMother.TICKET,

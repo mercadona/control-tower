@@ -52,7 +52,7 @@ describe('Home · automatic implementation', () => {
     expect(WorkflowSnapshotStorage.load()?.plan.agent).toBe(StartPlanMother.AGENT)
   })
 
-  it('uncertain recorded work offers no duplicate launch', async () => {
+  it('inspection never launches or cleans', async () => {
     const answer = HeadlessPlanMother.uncertain()
     const fetching = vi.fn(async (input: string | URL | Request) => {
       if (input === '/active-plans') return new Response(answer.body, { status: answer.status })
@@ -64,10 +64,14 @@ describe('Home · automatic implementation', () => {
     })
     vi.stubGlobal('fetch', fetching)
 
-    openHome()
+    const { user } = openHome()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se puede confirmar el estado de implementación')
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
+    expect(fetching.mock.calls.some(([input]) => (
+      input === '/recover-plan' || input === '/cleanup-plan' || input === '/start-plan'
+    ))).toBe(false)
   })
 })
