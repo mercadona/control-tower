@@ -52,6 +52,8 @@ Keep gate 1, gate 2, apply and merge human-owned. Keep loose starts, milestone s
 | Cleanup evidence | Write immutable `cleanup-evidence.json` before removal. Exact keys: `conversation`, `baseSha`, `branch`, `worktree`, `checkedAt`. |
 | Cleanup safety | Validate canonical identity, unchanged seed base, clean worktree, no remote branch and no PR before removal. Refuse inconclusive reads. |
 | Cleanup ordering | Check proof and workspace, record evidence, remove worktree and branch, call checked plugin requeue, then retire the evidence directory. |
+| Absence postcondition | Confirm fresh branch, registration and filesystem absence before requeue and again before archive. Removal eligibility is not absence. |
+| Worker terminal | Only a matching typed `child-spawn-failed` completion plus receipt can prove child-spawn non-launch. Generic failed completion grants nothing. |
 | Retirement | Atomically rename the whole directory to `retired-harness/<agent>`. Never overwrite another archive or change descriptor bytes. |
 | Partial cleanup | Keep active records visible without a worktree when cleanup evidence exists. Retry through the same endpoint and original identity. |
 | Requeue replay | After a lost answer, fresh exact-ready status plus absent local artifacts permits retirement. Do not edit labels outside the plugin. |
@@ -73,7 +75,7 @@ The record adapter maps this value to the cleanup schema. Reuse the existing sna
 
 `Workspace.inspectUnlaunched(watch, previous): Promise<UnusedWorkspace>` checks current facts; `previous` is `UnusedWorkspace | null`.
 `CleanupPlan` stores that evidence, then calls `Workspace.undoUnlaunched(evidence): Promise<void>`.
-This keeps snapshot storage outside the git adapter. No new constructor dependency enters `GitWorkspace`.
+This keeps snapshot storage outside the git adapter. `GitWorkspace` gains an injected `lstat` for explicit filesystem absence.
 
 Reuse `PlanIssues.statusOf` for exact status reads and `DispatchClaims.requeue` for the checked mutation.
 The existing status reader rejects multiple status labels. Do not use `PlanIssues.requeue`, which lacks checked workspace preconditions.
@@ -99,8 +101,9 @@ Both the projector and `HeadlessPlanAgents.recover` use it. Keep one decision, n
 `ClaudeCalls.deadlineOf(call): Promise<number>` reads the immutable descriptor deadline for this caller.
 Inject `nowMs: () => number` into `ClaudePlanCalls`; production passes `Date.now`, and tests control that clock.
 
-Read non-launch proof before history that might contain partial preparation. Validate any partial directory against the receipt's call identity.
-Only `before-worker` permits an absent descriptor. Every source refuses an extra call, successful execution or contradictory stream evidence.
+Read non-launch proof before strict history. Valid proof uses the proof-based policy branch without an ordinary history read.
+Only `before-worker` permits an absent descriptor or absent allocated directory. Every source checks stream and completion before that acceptance.
+Every source refuses an extra call, successful execution or contradictory stream evidence. Child-spawn needs its matching typed terminal receipt.
 
 Generic history-read failure never proves non-launch. Share receipt conversion between `DiskPlanRecords` and the worker through its boundary model.
 `PlanRecords.nonLaunch` validates those facts before it returns proof. Cleanup and recovery reuse that validation, not independent proof rules.
@@ -177,15 +180,72 @@ Keep already-typed recovery errors. Rethrow unrelated causes rather than wrap ev
 This preserves §2's operational/unreadable distinction without a generic `PlanFailure` or `Error` fallback at either route.
 Retain the planned HTTP 400 application-refusal contract; current draft 404/409/422/503 projections are not authority to change it.
 
-The `PlanRecovery` policy contract remains unchanged. Its immutable `decision` is `Readonly<RecoveryDecision>`.
-`RecoveryDecision` carries `{action: 'observe' | 'continue', detail: string, call: StartedPlanCall}` or `{action: 'cleanup' | 'inspect', detail: string}`.
-`RecoveryCall` carries `call: StartedPlanCall`, `purpose: PlanCallPurpose`, `startedAt: string`, `deadlineMs: number`, and `completion: CompletedPlanCall | null`.
+The judge correction below supersedes the structural internal `RecoveryDecision` contract. Keep the external action/detail wire shape unchanged.
+`RecoveryCall` becomes an immutable value with `call: StartedPlanCall`, `purpose: PlanCallPurpose`, `startedAt: string`, `deadlineMs: number`, and `completion: CompletedPlanCall | null`.
 `PlanRecovery.from(facts): PlanRecovery` takes `calls: readonly RecoveryCall[]`, `proof: PlanNonLaunch | null`, `cleanup: UnusedWorkspace | null`, and `nowMs: number`.
 
 Task 5 still wires both actions into `ct-api.ts` and `ApiServer`, shares repository reservations, and releases them in finally.
 Inject records into `ClaudePlanCalls` and plan calls into the projector. Use `recoveryFor` for projection and mutation eligibility.
 Uncertain output carries `recovery: {action, detail}`; partial cleanup remains visible without a worktree. Refresh projection after operations.
 Keep the production-collaborator HTTP rehearsal with exact scripted external requests.
+
+### Independent judge correction at be6ac275
+
+The same Sol session applies one correction batch from `be6ac2758d61b95e1998bfb85fbdef6614093f15`.
+The batched brief is `.agent/run-331/apply-feedback-corrections.md`; it maps all ten findings and test-integrity notes to these task scopes.
+Its source observations concern the reviewed tip, not code present at the original validation base.
+Keep six task headings and the original history. Do not create another delivered-run task sequence.
+
+The worker validates the canonical descriptor tuple `<root>/harness/<conversation>/calls/<call>/call.json` before output or spawn.
+Derive its file root from that tuple in the real entrypoint. Keep the single descriptor argument; do not use `/` as state root.
+Publish an initial child-spawn failure only before a child spawn event. Settle synchronously before awaits; error/close ordering must publish once.
+
+`CallExecution` gains `{kind: 'child-spawn-failed', conversation: string, callId: string, diagnostic: string}`.
+`StoredCompletion` validates exact identity and initial mode, null exit/signal, unavailable cost, null CLI measurements and measured wall duration.
+Write this terminal first, then the matching immutable receipt. Reuse one failure time for terminal `finishedAt` and receipt `observedAt`.
+Receipt failure leaves no cleanup grant. A generic completion or post-spawn error never becomes proof.
+
+For `before-worker`, allow zero directories or exactly the allocated directory; a descriptor can be absent.
+For `worker-spawn`, need exactly the matching directory and initial descriptor, with no terminal and no nonempty output.
+For `child-spawn`, need the matching descriptor, empty output, and the coherent typed terminal.
+Read contradictory output and completion even without a descriptor. Refuse extra, foreign or unreadable evidence before proof acceptance.
+
+`Workspace.confirmAbsent(watch: PlanWatch): Promise<void>` is a separate fresh check, not an alias for `inspectUnlaunched`.
+It confirms canonical identity, valid full porcelain without target registration, absent branch ref, filesystem ENOENT, and existing remote/PR absence checks.
+Use `rev-parse --verify --quiet refs/heads/<branch>`; only normal exit 1 with empty output/diagnostic means absent.
+Use injected `lstat`, so files, directories and dangling symlinks remain present. Malformed porcelain cannot certify absence.
+
+Wire `lstat: typeof import('node:fs/promises').lstat` into `GitWorkspace`, its production construction and fixtures.
+Replace the private raw workspace map with co-located immutable `UnlaunchedWorkspace`; its presence vocabulary is `present | absent`.
+After undo, confirm absence before requeue. Confirm it again before archive on success, exact-ready and lost-answer-ready paths.
+A failed check preserves evidence and the actual claim state. It never invokes a stronger removal command.
+
+Translate filesystem errno failures at the record adapter, including reads, directory listing, publication readback and archive preparation.
+Reuse `HeadlessFiles.isSystemFailure(cause: unknown): boolean` for Error objects with errno codes matching `E[A-Z0-9]+`.
+ENOENT and EEXIST retain their existing meanings. Other I/O failures map to `PlanAgentNotLaunched`; malformed conversion maps to `PlanAgentNotNamed`.
+Ordinary Error/TypeError bugs propagate. Keep recovery cause distinctions and reconcile lost requeue replies only for `PlanIssueNotClaimed`.
+
+Use `PlanRecovery` itself as the immutable internal decision. Its private selection is `cleanup | observe | continue | completed | inspect`.
+Derive outward action/detail from that selection. `successfulExecution()` returns only its typed completed call, never a match on diagnostic prose.
+Consumers use `action`, `detail`, `call()`, `purposeOf()` and `successfulExecution()` instead of a structural `decision` object.
+
+The new `recovery-call.ts` value carries the existing call facts. Do not add another stored phase or duplicate success flag.
+
+Extract `PlanOperationRequest` and shared `PlanProjectionRefresh` into `plan-operation-request.ts`.
+Both routes import that boundary model. Catch its `MalformedPlanOperationRequest`, not arbitrary parser bugs.
+Keep request shapes, origin controls, exact failure registries and all existing guards.
+
+Retain the start rehearsal under a truthful title. Add actual HTTP `/recover-plan` over a rebuilt production continuation after publication failure.
+Use durable successful planner evidence and exact external doubles. Prove one comment, one resumed implementation and no repeat after another recovery request.
+Await action-entry barriers before delayed HTTP assertions. A timer tick does not prove entry.
+
+Use `recoveryMutationRef` as a synchronous read barrier until the post-operation GET finishes.
+Drain pre-click reads and suppress polling/manual GETs during POST. Only the owning mutation token can request its fresh read after POST settles.
+Retain identity/generation guards and resume polling afterward. Unknown network outcomes never replay POST automatically.
+
+Two prior plan choices needed correction: inspection did not prove absence, and structural internal decisions conflicted with the value-object yardstick.
+This amendment closes both tensions explicitly. Keep wire shapes; replace only the unsafe internal contracts.
+Preserve prior green counts as history. Correct broad verification claims with dated new observations after Sol runs the missing cases and mutations.
 
 ### Caller and documentation contracts
 
@@ -303,6 +363,7 @@ Current state (backend/src/infrastructure/claude-plan-calls.ts, lines 60-67):
 
 Add the §2 grant as `ClaudePlanCalls.ALLOWED_TOOLS`. Keep normal setting sources and the exact conversation options.
 Do not change interactive coordinator argv. Preserve inherited denies and hooks; do not rewrite settings.
+Assert the adjacent grant pair for each distinct purpose. Three identical nested matchers do not prove three invocations.
 
 Contract (backend/src/domain/value-objects/phase-prompt.ts):
 ```ts
@@ -370,6 +431,7 @@ npm --prefix backend test -- __tests__/application/continue-plan.test.ts __tests
 
 **Files:** `backend/src/domain/exceptions.ts` (modify), `backend/src/domain/value-objects/plan-non-launch.ts` (create), `backend/src/domain/ports/plan-records.ts` (modify), `backend/src/infrastructure/disk-plan-records.ts` (modify), `backend/src/infrastructure/claude-calls.ts` (modify), `backend/src/infrastructure/headless-call-worker.ts` (modify).
 `backend/src/infrastructure/headless-plan-agents.ts` (modify), `backend/__tests__/infrastructure/claude-calls.test.ts` (modify), `backend/__tests__/infrastructure/disk-plan-records.test.ts` (modify), `backend/__tests__/infrastructure/headless-plan-agents.test.ts` (modify), `backend/src/infrastructure/non-launch-record.ts` (create).
+`backend/src/domain/value-objects/plan-call.ts` (modify), `backend/src/infrastructure/headless-files.ts` (modify), `backend/__tests__/infrastructure/claude-calls-real-process.test.ts` (modify).
 
 Contract (backend/src/domain/ports/plan-records.ts):
 ```ts
@@ -377,26 +439,21 @@ recordNonLaunch(watch: PlanWatch, proof: PlanNonLaunch): Promise<void>
 nonLaunch(watch: PlanWatch): Promise<PlanNonLaunch | null>
 ```
 
-`PlanNonLaunch` is immutable. Its validated facts match the §2 proof schema; its source uses the closed vocabulary there.
-Add `PlanAgentNeverLaunched` under `PlanAgentNotLaunched`; it carries the proof, not a parsed diagnostic string.
-Emit it only before any worker spawn attempt or from a definite OS worker-spawn failure before the spawn event.
-Keep malformed-descriptor exceptions distinct; do not convert their existing assertions into operational failures.
-
-`HeadlessPlanAgents.launch` records that proof for the newly prepared initial dispatch, then preserves the failure.
-The worker writes the same receipt on a definite initial Claude child-spawn failure. Use existing atomic write-once semantics.
-Record no proof for implementation/fix failure, lost IPC, timeout, exit-before-acknowledgement, or failed process-group signals.
-A proof-write failure leaves the dispatch uncertain and retains both diagnostics. Never fabricate completion to unblock the adapter.
-
-Cleanup will validate the receipt against all call history. Evidence conflicts mean unreadable data, never positive proof.
+Implement §2's coherent producer/reader contract and errno boundaries. Keep `PlanAgentNeverLaunched` inheritance and malformed evidence distinct.
+Test the actual worker entrypoint with an absolute nonexistent local binary, never Claude.
+Verify its produced terminal and receipt through the real record reader and recovery adapter in the same fixture.
+Cover error/close ordering, publication cuts and every partial-directory contradiction. Retain existing preservation tests and unconditional process cleanup.
 
 **TDD:** `it('definite initial non-launch survives restart as proof')` reads the receipt through a new record adapter.
 
-**Tests:** Added: `'definite initial non-launch survives restart as proof'`, `'acceptance loss never authorizes cleanup'`, `'child spawn refusal records only initial non-launch'`, `'proof write failure preserves uncertainty'`, `'conflicting proof is not a launch outcome'`. Removed: none.
+**Tests:** Added: `'definite initial non-launch survives restart as proof'`, `'acceptance loss never authorizes cleanup'`, `'child spawn refusal records only initial non-launch'`, `'proof write failure preserves uncertainty'`, `'conflicting proof is not a launch outcome'`.
+Added: `'worker entrypoint publishes consumable child-spawn failure'`, `'spawn error and close publish one truthful terminal'`, `'partial proof rejects contradictory execution evidence'`, `'record I/O failures retain their typed cause'`. Removed: none.
 
 **Verification:** Run proof and worker boundary tests. Existing record-preservation assertions must remain true.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/infrastructure/claude-calls.test.ts __tests__/infrastructure/disk-plan-records.test.ts __tests__/infrastructure/headless-plan-agents.test.ts
+npm --prefix backend test -- __tests__/infrastructure/claude-calls-real-process.test.ts
 ```
 
 ### Task 4 — Clean and retire only proven unused dispatches
@@ -406,34 +463,31 @@ npm --prefix backend test -- __tests__/infrastructure/claude-calls.test.ts __tes
 **Files:** `backend/src/application/actions/cleanup-plan.ts` (create), `backend/src/domain/ports/plan-records.ts` (modify), `backend/src/domain/ports/workspace.ts` (modify), `backend/src/infrastructure/disk-plan-records.ts` (modify), `backend/src/infrastructure/git-workspace.ts` (modify).
 `backend/src/infrastructure/recorded-plan-recovery.ts` (modify), `backend/__tests__/application/cleanup-plan.test.ts` (create), `backend/__tests__/infrastructure/disk-plan-records.test.ts` (modify), `backend/__tests__/infrastructure/git-workspace.test.ts` (modify), `backend/__tests__/infrastructure/recorded-plan-recovery.test.ts` (modify).
 `backend/src/domain/value-objects/unused-workspace.ts` (create).
+`backend/src/infrastructure/ct-api.ts` (modify), `backend/__tests__/infrastructure/headless-dispatch-dry-run.test.ts` (modify), `backend/__tests__/infrastructure/git-workspace-real-process.test.ts` (create), `backend/__tests__/infrastructure/gh-dispatch-candidates.test.ts` (modify).
 
 Contract (backend/src/domain/ports/workspace.ts):
 ```ts
 inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnusedWorkspace>
 undoUnlaunched(evidence: UnusedWorkspace): Promise<void>
+confirmAbsent(watch: PlanWatch): Promise<void>
 ```
 
-`CleanupPlanParams` carries agent, issue and repository. The action uses records, workspace, claims and plan issues.
-Look up immutable identity even when the worktree is absent. An archived identity returns success without any claim mutation.
-Check non-launch proof against history: no other call or successful spawn evidence may exist.
-
-Use the §2 inspection and snapshot contracts. Keep existing `undo` behavior for preparation compensation.
-Use non-forcing worktree removal and the existing checked branch removal only after proof that HEAD equals the seeded base.
-On retry, use the immutable snapshot and fresh git evidence. Absent worktree alone cannot authorize branch deletion.
-
-Use §2's existing status reader and checked requeue. Exact-ready permits retirement only with fresh absence of both local artifacts.
-Then call `PlanRecords.archive(watch)`. Failures retain evidence and never claim a release that did not occur.
-
-Keep cleanup records visible in recovery after partial removal. Preserve normal harvest disappearance behavior for other records.
+Implement §2's distinct eligibility and absence contracts. Preserve snapshot identity and checked requeue; archive last.
+Exercise real local Git through final absence and retirement. Script remote/identity, issue, PR and claim edges; make no network calls.
+Cut every cleanup effect, retry each partial removal, and refuse recreated or unregistered artifacts and malformed porcelain.
+Retain prior assertions, accurate test titles, visible partial cleanup and harmless archived retries.
 
 **TDD:** `it('non-launch cleanup orders workspace requeue and retirement')` cuts each effect and asserts the remaining claim and evidence.
 
-**Tests:** Added: `'non-launch cleanup orders workspace requeue and retirement'`, `'partial cleanup resumes from verified facts'`, `'changed or remote work prevents cleanup'`, `'lost requeue success does not repeat label writes'`, `'archive failure blocks redispatch'`, `'retired cleanup cannot affect a newer dispatch'`, `'retirement frees cap and permits preparation'`. Removed: none.
+**Tests:** Added: `'non-launch cleanup orders workspace requeue and retirement'`, `'partial cleanup resumes from verified facts'`, `'changed or remote work prevents cleanup'`, `'lost requeue success does not repeat label writes'`, `'archive failure blocks redispatch'`, `'retired cleanup cannot affect a newer dispatch'`, `'retirement preserves bytes and permits preparation'`.
+Added: `'real Git cleanup reaches verified absence and retirement'`, `'cleanup stops at every failed effect'`, `'fresh absence rejects remaining artifacts'`, `'malformed porcelain cannot prove absence'`, `'cap one releases only after checked cleanup'`.
+Removed on purpose: `'retirement frees cap and permits preparation'`; retain its assertions under the truthful title and add actual cap coverage.
 
 **Verification:** Run cleanup and related adapter tests. No real governed workspace may serve as a fixture.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/application/cleanup-plan.test.ts __tests__/infrastructure/disk-plan-records.test.ts __tests__/infrastructure/git-workspace.test.ts __tests__/infrastructure/dispatch-check-claims.test.ts __tests__/infrastructure/recorded-plan-recovery.test.ts
+npm --prefix backend test -- __tests__/infrastructure/git-workspace-real-process.test.ts __tests__/infrastructure/gh-dispatch-candidates.test.ts
 ```
 
 ### Task 5 — Wire recovery and cleanup into the real API
@@ -445,6 +499,7 @@ npm --prefix backend test -- __tests__/application/cleanup-plan.test.ts __tests_
 `backend/src/domain/policies/plan-recovery.ts` (create), `backend/src/domain/ports/plan-calls.ts` (modify), `backend/src/infrastructure/claude-plan-calls.ts` (modify), `backend/src/infrastructure/headless-plan-agents.ts` (modify), `backend/__tests__/infrastructure/claude-plan-calls.test.ts` (modify).
 `backend/src/infrastructure/claude-calls.ts` (modify), `backend/__tests__/infrastructure/api-server.test.ts` (modify), `backend/__tests__/infrastructure/recorded-plan-recovery.test.ts` (modify), `backend/__tests__/infrastructure/headless-plan-agents.test.ts` (modify).
 `backend/src/infrastructure/start-plan-route.ts` (modify), `backend/__tests__/infrastructure/plan-refusal.test.ts` (modify), `backend/__tests__/infrastructure/start-milestone-plan-route.test.ts` (modify).
+`backend/src/domain/value-objects/recovery-call.ts` (create), `backend/src/infrastructure/plan-operation-request.ts` (create).
 
 Contract (backend/src/infrastructure/start-plan-route.ts):
 ```ts
@@ -452,16 +507,18 @@ type PlanFailureClass = { readonly name: string; readonly prototype: PlanFailure
 ```
 
 Implement §2's policy, wiring and refusal correction. Preserve all existing guards and tests.
+Add rebuilt HTTP recovery and typed evidence. Extract shared parsing; keep wire contracts.
 
 **TDD:** `it('coordinator recovery reaches the production continuation')` proves a successful planner reaches publication and one implementation descriptor.
 
 **Tests:** Added: `'coordinator recovery reaches the production continuation'`, `'recovery and cleanup validate identity before action'`, `'foreign origins cannot recover or clean'`, `'start recovery and cleanup share repository exclusion'`, `'cleanup answers only after retirement'`, `'fix recovery observes the recorded call'`.
-Added: `'definite non-launch keeps its start refusal'`, `'loose start exposes definite non-launch'`, `'milestone start exposes definite non-launch'`, `'recovery family has exhaustive refusals'`, `'cleanup family has exhaustive refusals'`, `'cleanup collaborator causes retain their refusal kind'`. Removed: none.
+Added: `'definite non-launch keeps its start refusal'`, `'loose start exposes definite non-launch'`, `'milestone start exposes definite non-launch'`, `'recovery family has exhaustive refusals'`, `'cleanup family has exhaustive refusals'`, `'cleanup collaborator causes retain their refusal kind'`.
+Added: `'partial preparation exposes cleanup without strict history'`, `'planner evidence respects the recorded deadline'`, `'typed completion controls review supervision'`, `'shared request validation preserves unexpected bugs'`, `'headless start preserves publication'`. Removed: none.
 
 **Verification:** Run route, refusal catalogue and production-wiring checks.
 ```bash
 npm --prefix backend run typecheck
-npm --prefix backend test -- __tests__/infrastructure/plan-refusal.test.ts __tests__/infrastructure/refusal-codes.test.ts __tests__/infrastructure/recover-plan-route.test.ts __tests__/infrastructure/cleanup-plan-route.test.ts __tests__/infrastructure/api-server.test.ts __tests__/infrastructure/start-milestone-plan-route.test.ts
+npm --prefix backend test -- __tests__/infrastructure/headless-dispatch-dry-run.test.ts
 npm --prefix backend test -- --exclude '**/*-real-process.test.ts'
 ```
 
@@ -472,6 +529,7 @@ npm --prefix backend test -- --exclude '**/*-real-process.test.ts'
 **Files:** `frontend/src/app/active-plans/ActivePlan.types.ts` (modify), `frontend/src/app/active-plans/client.ts` (modify), `frontend/src/app/active-plans/client.test.ts` (modify), `frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx` (modify), `frontend/vite.config.ts` (modify).
 `frontend/src/__scenarios__/HeadlessPlanMother.ts` (modify), `frontend/src/pages/home/__tests__/Home.implementPlan.test.tsx` (modify), `backend/API.md` (modify), `frontend/README.md` (modify).
 `docs/superpowers/evidence/pr-375-apply-feedback-plan.md` (create), `docs/superpowers/evidence/pr-375-apply-feedback-analysis.md` (create), `docs/superpowers/evidence/pr-375-apply-feedback-implementation.md` (create).
+`docs/superpowers/evidence/pr-375-apply-feedback-corrections.md` (create).
 
 Contract (frontend/src/app/active-plans/ActivePlan.types.ts):
 ```ts
@@ -489,15 +547,17 @@ For `inspect`, show the diagnostic, original identity and read-only refresh. Nev
 
 Keep network retry as GET. Recovery presses call POST then GET, never start-plan.
 Disable duplicate presses; preserve generation guards, workflow identity and drawer/session mounts. Discard clears only page state.
+Use §2's read barrier through POST and the fresh GET. Cover timer ticks during a deferred POST for both endpoints.
 
 Add both proxy paths and document wire contracts, actions, refusals and limits in `backend/API.md` and `frontend/README.md`.
-Copy both architecture artifacts into the evidence paths. Report red/green checks, mutations, failure cuts, revisions and unverified smoke.
+Publish the architecture artifacts and correction brief. Append actual verification/mutation observations; retain historical counts and supersede unsupported conclusions.
 
-Give the clean Astra judge the repair diff and whole-PR context for independent spec and quality verdicts.
+Give Astra the correction diff and full repair context for independent spec and quality verdicts.
 
 **TDD:** `it('uncertain recovery invokes the action without starting another plan')` asserts POST then GET and unchanged coordinator identity.
 
-**Tests:** Added: `'uncertain recovery invokes the action without starting another plan'`, `'proven non-launch exposes checked cleanup'`, `'inspection never launches or cleans'`, `'late recovery cannot replace the selected workflow'`, `'uncertain scenarios satisfy the recovery wire contract'`, `'malformed recovery metadata is refused'`. Removed: none.
+**Tests:** Added: `'uncertain recovery invokes the action without starting another plan'`, `'proven non-launch exposes checked cleanup'`, `'inspection never launches or cleans'`, `'late recovery cannot replace the selected workflow'`, `'uncertain scenarios satisfy the recovery wire contract'`, `'malformed recovery metadata is refused'`.
+Added: `'polling during recovery cannot replace the fresh read'`. Removed: none.
 
 **Verification:** Run the frontend recovery tests and all issue-required checks before handoff.
 ```bash

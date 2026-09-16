@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PlanAgentNotLaunched } from '../../src/domain/exceptions.ts'
+import { PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -53,6 +53,29 @@ class PlanRecordMother {
       + '  "branch": "feat/332",\n'
       + '  "startedAt": "2026-09-14T09:00:00.000Z"\n'
       + '}\n'
+  }
+
+  static completion(kind: 'error' | 'success'): string {
+    return `${JSON.stringify({
+      code: kind === 'success' ? 0 : 1,
+      signal: null,
+      finishedAt: PlanRecordMother.STARTED_AT,
+      wallDurationMs: 0,
+      execution: kind === 'success' ? { kind } : { kind, diagnostic: 'generic failure' },
+      measurement: kind === 'success'
+        ? {
+          cost: { kind: 'reported', totalUsd: 0, attribution: 'initial-invocation' },
+          turns: 0,
+          durationMs: 0,
+          unavailable: [],
+        }
+        : {
+          cost: { kind: 'unavailable', reason: 'generic failure' },
+          turns: null,
+          durationMs: null,
+          unavailable: ['generic failure'],
+        },
+    })}\n`
   }
 }
 
@@ -127,7 +150,7 @@ describe('DiskPlanRecords', () => {
     const unreadable = await PlanRecordMother.records('/unreadable', {
       files: new HeadlessFiles({
         root: '/unreadable',
-        fs: { ...fs, readdir: async () => { throw new Error('permission denied') } },
+        fs: { ...fs, readdir: async () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) } },
         newId: () => 'temporary-record',
       }),
     }).inFlight()
@@ -189,7 +212,96 @@ describe('DiskPlanRecords', () => {
     await expect(records.nonLaunch(watch)).rejects.toThrow('identity')
   })
 
-  it('retirement frees cap and permits preparation', async () => {
+  it('partial proof rejects contradictory execution evidence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-proof-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const watch = await records.prepare(PlanRecordMother.briefing('/checkout'))
+    const call = '33333333-3333-4333-8333-333333333333'
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: call,
+      source: 'before-worker',
+      diagnostic: 'descriptor publication failed before worker spawn',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    await records.recordNonLaunch(watch, proof)
+
+    expect(await records.nonLaunch(watch)).toEqual(proof)
+
+    const directory = join(root, 'harness', watch.agent, 'calls', call)
+    await mkdir(directory, { recursive: true })
+    await writeFile(join(directory, 'stream.ndjson'), '\n', 'utf8')
+
+    await expect(records.nonLaunch(watch)).rejects.toBeInstanceOf(PlanAgentNotNamed)
+    await expect(records.nonLaunch(watch)).rejects.toThrow('launch evidence')
+  })
+
+  it.each([
+    ['a generic completion', async (directory: string) => writeFile(
+      join(directory, 'completion.json'), PlanRecordMother.completion('error'), 'utf8',
+    )],
+    ['a successful completion', async (directory: string) => writeFile(
+      join(directory, 'completion.json'), PlanRecordMother.completion('success'), 'utf8',
+    )],
+    ['a foreign call directory', async (directory: string) => mkdir(
+      join(directory, '..', '44444444-4444-4444-8444-444444444444'), { recursive: true },
+    )],
+  ] as const)('partial proof refuses %s', async (_name, contradict) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-proof-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const watch = await records.prepare(PlanRecordMother.briefing('/checkout'))
+    const call = '33333333-3333-4333-8333-333333333333'
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: call,
+      source: 'before-worker',
+      diagnostic: 'descriptor publication failed before worker spawn',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    await records.recordNonLaunch(watch, proof)
+    const directory = join(root, 'harness', watch.agent, 'calls', call)
+    await mkdir(directory, { recursive: true })
+    await contradict(directory)
+
+    await expect(records.nonLaunch(watch)).rejects.toBeInstanceOf(PlanAgentNotNamed)
+  })
+
+  it('record I/O failures retain their typed cause while implementation defects escape', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-io-'))
+    roots.push(root)
+    const original = PlanRecordMother.records(root)
+    const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker preparation failed',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    const readFailure = Object.assign(new Error('input/output error'), { code: 'EIO' })
+    const unreadableFiles = Object.assign(
+      new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+      { read: async () => { throw readFailure } },
+    )
+    await expect(PlanRecordMother.records(root, { files: unreadableFiles }).nonLaunch(watch))
+      .rejects.toBeInstanceOf(PlanAgentNotLaunched)
+
+    const writeFailure = Object.assign(new Error('disk full'), { code: 'ENOSPC' })
+    const unwritableFiles = Object.assign(
+      new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+      { writeOnce: async () => { throw writeFailure } },
+    )
+    await expect(PlanRecordMother.records(root, { files: unwritableFiles }).recordNonLaunch(watch, proof))
+      .rejects.toBeInstanceOf(PlanAgentNotLaunched)
+
+    const defect = new TypeError('existence implementation defect')
+    const defective = PlanRecordMother.records(root, { exists: async () => { throw defect } })
+    await expect(defective.find({ issue: watch.issue.number, repository: watch.repository })).rejects.toBe(defect)
+  })
+
+  it('retirement preserves bytes and permits preparation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-retirement-'))
     roots.push(root)
     const records = PlanRecordMother.records(root, {

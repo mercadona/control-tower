@@ -86,10 +86,13 @@ describe('CleanupPlanRoute', () => {
 
   it('cleanup answers only after retirement and projection refresh', async () => {
     let retire: () => void = () => {}
+    let enter: () => void = () => {}
     const retirement = new Promise<void>((resolve) => { retire = resolve })
+    const entered = new Promise<void>((resolve) => { enter = resolve })
     class DeferredCleanup extends CleanupPlanSpy {
       override async execute(params: CleanupPlanParams): Promise<void> {
         this.asked.push(params)
+        enter()
         await retirement
       }
     }
@@ -104,7 +107,7 @@ describe('CleanupPlanRoute', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repo: 'mercadona/control-tower-plugin', issue: 331, agent }),
     }).then((value) => { answered = true; return value })
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await entered
     expect(answered).toBe(false)
     retire()
 

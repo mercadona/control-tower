@@ -7,9 +7,12 @@ import {
   PlanRecoveryNotRead,
   PlanRecoveryNotUnderstood,
 } from '../domain/exceptions.ts'
-import { ConversationId } from '../domain/value-objects/conversation-id.ts'
-import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { Answer, JsonBody, Refusal } from './http.ts'
+import {
+  MalformedPlanOperationRequest,
+  PlanOperationRequest,
+  type PlanProjectionRefresh,
+} from './plan-operation-request.ts'
 import { Projection } from './projection.ts'
 import { Reservation, type WorkInFlight } from './work-in-flight.ts'
 
@@ -22,47 +25,8 @@ export const RecoverPlanOutcome = Object.freeze({
   UNREADABLE: 'recover-plan-unreadable',
 } as const)
 
-export type PlanProjectionRefresh = { recover(): Promise<string | null> }
 type PlanFailureClass = { readonly name: string, readonly prototype: PlanRecoveryFailure }
 type RecoveryRefusalOf = (cause: PlanRecoveryFailure) => Refusal
-
-export class PlanOperationRequest {
-  readonly repository: RepositoryName
-  readonly issue: number
-  readonly agent: string
-
-  private constructor(asked: { repository: RepositoryName, issue: number, agent: string }) {
-    this.repository = asked.repository
-    this.issue = asked.issue
-    this.agent = asked.agent
-    Object.freeze(this)
-  }
-
-  static from(raw: string): PlanOperationRequest {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      throw new TypeError('body must be exactly {"repo":"owner/name","issue":123,"agent":"uuid"}')
-    }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new TypeError('body must be a JSON object')
-    }
-    const record = parsed as Record<string, unknown>
-    const fields = Object.keys(record).sort()
-    if (fields.join(',') !== 'agent,issue,repo') throw new TypeError('body must contain exactly repo, issue and agent')
-    if (!RepositoryName.isWellFormed(record.repo)) throw new TypeError('repo must be owner/name')
-    if (typeof record.issue !== 'number' || !Number.isSafeInteger(record.issue) || record.issue <= 0) {
-      throw new TypeError('issue must be a positive integer')
-    }
-    if (!ConversationId.isWellFormed(record.agent)) throw new TypeError('agent must be a conversation id')
-    return new PlanOperationRequest({
-      repository: new RepositoryName(record.repo),
-      issue: record.issue,
-      agent: record.agent,
-    })
-  }
-}
 
 export class RecoverPlanRoute {
   static readonly PATH = '/recover-plan'
@@ -80,6 +44,7 @@ export class RecoverPlanRoute {
       try {
         asked = PlanOperationRequest.from(JsonBody.textOf(request))
       } catch (cause) {
+        if (!(cause instanceof MalformedPlanOperationRequest)) throw cause
         Answer.refuse(response, 400, RecoverPlanOutcome.INVALID_REQUEST, String(cause))
         return
       }

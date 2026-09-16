@@ -445,6 +445,7 @@ class CtApi {
       gh,
       write: Disk.write,
       read: Disk.read,
+      lstat: fs.lstat,
       stderr: (line) => process.stderr.write(line),
       baseline: CtApi.#baseline(),
     })

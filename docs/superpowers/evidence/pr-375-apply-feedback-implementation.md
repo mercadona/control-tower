@@ -102,3 +102,50 @@ The repair did not change the original issue plan, historical run JSON,
 historical verdicts, counters, metrics, `ct-next.mjs`, `ct-step.mjs`, or
 `run-machine.js`. It did not perform GitHub writes, pushes, PR actions, governed
 repository actions, nested-agent work, or delivered-run mutation.
+
+## Correction Batch
+
+The independent review of `b26554378b437b77362699cef1d867756c559283..be6ac2758d61b95e1998bfb85fbdef6614093f15`
+superseded the earlier claims that every behavioral cut and the production
+recovery graph were already proven. The same Sol session corrected all ten
+findings without amending those six commits.
+
+- The actual worker entrypoint derives the configured state root from its
+  validated descriptor path and publishes one typed `child-spawn-failed`
+  completion before the matching receipt. The durable reader accepts only the
+  closed coherent shapes and handles valid prompt-only preparation directly.
+- Recovery keeps operational I/O, malformed evidence and unrelated defects
+  distinct. `PlanRecovery` now retains a typed private selection, and both
+  mutation routes consume one shared request model that catches only malformed
+  boundary input.
+- Cleanup separates pre-removal eligibility from fresh absence. It uses real
+  quiet Git missing-ref semantics, validates complete porcelain, checks the
+  filesystem with `lstat`, confirms remote/PR absence, checks all absence facts
+  before requeue and again before archive, and keeps archive last.
+- The production rehearsal now starts with an operational publication refusal,
+  rebuilds recovery collaborators over the durable files, sends real HTTP
+  `POST /recover-plan`, publishes once and creates one stable original-session
+  implementation descriptor.
+- The page blocks timer/manual GETs throughout a recovery or cleanup POST and
+  performs exactly one fresh GET after the answer. Both endpoint races are
+  covered with a deferred POST and timer advancement.
+
+Correction verification retained the historical counts above as provenance.
+After the post-shutdown audit, the worker/record group passed 45 tests, the
+cleanup group passed 125 tests, the refusal group passed 118 tests, the real
+Git/runner group passed 20 tests, the worker real-process file passed 3 tests,
+the production HTTP recovery rehearsal passed, and the focused frontend group
+passed 79 tests. Backend typecheck passed. The fresh full backend suite passed
+110 files and 2,177 tests; the fresh full frontend suite passed 70 files and
+1,350 tests; the frontend production build passed with its existing chunk-size
+advisory. `git diff --check` and the protected-path comparison passed.
+
+Three performed mutation cuts are recorded in
+`pr-375-apply-feedback-corrections.md`: removing timeout classification,
+changing the stable implementation request identity, and removing the frontend
+mutation read barrier each failed its owning assertion before source restoration.
+
+No live Claude call was made. The local nonexistent-binary fixture proves OS
+spawn/evidence behavior, not Claude permissions. Unknown legacy evidence remains
+inspect-only; resumed attributable cost remains unavailable; issue #332,
+human apply and merge ownership are unchanged.

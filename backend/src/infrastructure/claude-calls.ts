@@ -217,8 +217,9 @@ export class StoredCompletion {
     const code = StoredCompletion.#nullableInteger('code', raw.code)
     const signal = StoredCompletion.#nullableString('signal', raw.signal)
     const execution = StoredCompletion.#execution(raw.execution)
-    StoredCompletion.#requireCoherentTermination(code, signal, execution)
+    StoredCompletion.#requireCoherentTermination(code, signal, execution, call, mode)
     const measurement = StoredCompletion.#measurement(raw.measurement, mode)
+    StoredCompletion.#requireChildSpawnMeasurement(execution, measurement)
     return new CompletedPlanCall({
       call,
       code,
@@ -234,14 +235,26 @@ export class StoredCompletion {
     code: number | null,
     signal: string | null,
     execution: CallExecution,
+    call: StartedPlanCall,
+    mode: CallMode,
   ): void {
     const contradictoryTermination = code !== null && signal !== null
     const contradictorySuccess = execution.kind === 'success' && (code !== 0 || signal !== null)
-    if (!contradictoryTermination && !contradictorySuccess) return
+    const contradictoryChildSpawn = execution.kind === 'child-spawn-failed'
+      && (code !== null || signal !== null || mode !== 'initial'
+        || execution.conversation !== call.conversation || execution.callId !== call.id)
+    if (!contradictoryTermination && !contradictorySuccess && !contradictoryChildSpawn) return
     throw new Error(
       `completion termination is incoherent: code=${JSON.stringify(code)}, `
       + `signal=${JSON.stringify(signal)}, execution.kind=${JSON.stringify(execution.kind)}`
     )
+  }
+
+  static #requireChildSpawnMeasurement(execution: CallExecution, measurement: CallMeasurement): void {
+    if (execution.kind !== 'child-spawn-failed') return
+    if (measurement.cost.kind !== 'unavailable' || measurement.turns !== null || measurement.durationMs !== null) {
+      throw new Error('child-spawn-failed completion cannot report CLI cost, turns or duration')
+    }
   }
 
   static #measurement(value: unknown, mode: CallMode): CallMeasurement {
@@ -295,6 +308,14 @@ export class StoredCompletion {
       case 'unavailable':
         StoredCompletion.#exactKeys(value, ['kind', 'diagnostic'])
         return Object.freeze({ kind: value.kind, diagnostic: StoredCompletion.#string('execution.diagnostic', value.diagnostic) })
+      case 'child-spawn-failed':
+        StoredCompletion.#exactKeys(value, ['kind', 'conversation', 'callId', 'diagnostic'])
+        return Object.freeze({
+          kind: value.kind,
+          conversation: StoredCompletion.#string('execution.conversation', value.conversation),
+          callId: StoredCompletion.#string('execution.callId', value.callId),
+          diagnostic: StoredCompletion.#string('execution.diagnostic', value.diagnostic),
+        })
       default:
         throw new Error(`execution.kind is unknown: ${JSON.stringify(value.kind)}`)
     }

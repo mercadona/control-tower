@@ -13,7 +13,7 @@ import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import {
   WorkspaceFailure, WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood,
-  CheckoutNotConfirmed,
+  CheckoutNotConfirmed, PlanCleanupNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -867,6 +867,15 @@ class UnlaunchedWorkspaceDouble {
   remote = ''
   worktreePresent = true
   branchPresent = true
+  pathPresent = false
+  malformedListing = false
+  remoteUrl = GitDouble.REMOTE_URL
+  canonicalRoot = GitDouble.ROOT
+  head = UnlaunchedWorkspaceDouble.BASE
+  pulls = '[]'
+  removeFailure: ProcessOutput | null = null
+  deleteFailure: ProcessOutput | null = null
+  pathFailure: Error | null = null
 
   workspace(): GitWorkspace {
     return new GitWorkspace({
@@ -879,15 +888,20 @@ class UnlaunchedWorkspaceDouble {
           { branch: 'feat/331', base: 'main', baseSha: UnlaunchedWorkspaceDouble.BASE },
         )
         : null,
+      lstat: (async () => {
+        if (this.pathFailure !== null) throw this.pathFailure
+        if (this.pathPresent) return {} as Awaited<ReturnType<typeof import('node:fs/promises').lstat>>
+        throw Object.assign(new Error('absent fixture path'), { code: 'ENOENT' })
+      }) as typeof import('node:fs/promises').lstat,
       run: async (argv) => {
         this.calls.push(argv)
-        if (argv.includes('get-url')) return GitDouble.naming(GitDouble.REMOTE_URL)
-        if (argv.includes('--show-toplevel')) return GitDouble.canonical()
+        if (argv.includes('get-url')) return GitDouble.naming(this.remoteUrl)
+        if (argv.includes('--show-toplevel')) return GitDouble.printing(`${this.canonicalRoot}\n`)
         if (argv.includes('worktree') && argv.includes('list')) return GitDouble.printing(this.worktrees())
         if (argv.includes('status')) return GitDouble.printing(this.status)
         if (argv.includes('ls-remote')) return GitDouble.printing(this.remote)
         if (argv.includes('rev-parse') && argv.includes('HEAD')) {
-          return GitDouble.printing(`${UnlaunchedWorkspaceDouble.BASE}\n`)
+          return GitDouble.printing(`${this.head}\n`)
         }
         if (argv.includes('rev-parse') && argv.includes('refs/heads/feat/331')) {
           return this.branchPresent
@@ -895,10 +909,12 @@ class UnlaunchedWorkspaceDouble {
             : new ProcessOutput({ code: 1, stdout: '', stderr: '' })
         }
         if (argv.includes('remove')) {
+          if (this.removeFailure !== null) return this.removeFailure
           this.worktreePresent = false
           return GitDouble.ok()
         }
         if (argv.includes('-d')) {
+          if (this.deleteFailure !== null) return this.deleteFailure
           this.branchPresent = false
           return GitDouble.ok()
         }
@@ -907,7 +923,7 @@ class UnlaunchedWorkspaceDouble {
       gh: new Gh({
         launch: async (argv) => {
           this.ghCalls.push(argv)
-          return GitDouble.printing('[]')
+          return GitDouble.printing(this.pulls)
         },
         policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
         sleep: async () => {},
@@ -916,6 +932,7 @@ class UnlaunchedWorkspaceDouble {
   }
 
   worktrees(): string {
+    if (this.malformedListing) return 'not porcelain\n'
     const blocks = [
       `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main`,
     ]
@@ -959,6 +976,43 @@ describe('GitWorkspace unused dispatch cleanup', () => {
       .rejects.toThrow('remote branch')
   })
 
+  it('changed base canonical identity and pull requests prevent cleanup', async () => {
+    const changedBase = new UnlaunchedWorkspaceDouble()
+    changedBase.head = 'b'.repeat(40)
+    await expect(changedBase.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('HEAD changed')
+
+    const repository = new UnlaunchedWorkspaceDouble()
+    repository.remoteUrl = 'https://github.com/another/repository.git'
+    await expect(repository.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('does not hold')
+
+    const root = new UnlaunchedWorkspaceDouble()
+    root.canonicalRoot = '/another/root'
+    await expect(root.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('canonical checkout root')
+
+    const pull = new UnlaunchedWorkspaceDouble()
+    pull.pulls = '[{"number":375}]'
+    await expect(pull.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('pull request')
+  })
+
+  it('worktree and branch removal failures stop cleanup without stronger commands', async () => {
+    const worktree = new UnlaunchedWorkspaceDouble()
+    worktree.removeFailure = new ProcessOutput({ code: 1, stdout: '', stderr: 'remove refused' })
+    const worktreeEvidence = await worktree.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+    await expect(worktree.workspace().undoUnlaunched(worktreeEvidence)).rejects.toThrow('remove refused')
+    expect(worktree.calls.some((argv) => argv.includes('-d'))).toBe(false)
+    expect(worktree.calls.flat()).not.toContain('--force')
+
+    const branch = new UnlaunchedWorkspaceDouble()
+    branch.deleteFailure = new ProcessOutput({ code: 1, stdout: '', stderr: 'delete refused' })
+    const branchEvidence = await branch.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+    await expect(branch.workspace().undoUnlaunched(branchEvidence)).rejects.toThrow('delete refused')
+    expect(branch.calls.flat()).not.toContain('-D')
+  })
+
   it('an absent worktree uses the immutable snapshot before branch deletion', async () => {
     const fixture = new UnlaunchedWorkspaceDouble()
     fixture.worktreePresent = false
@@ -972,6 +1026,48 @@ describe('GitWorkspace unused dispatch cleanup', () => {
 
     expect(fixture.calls.some((argv) => argv.includes('remove'))).toBe(false)
     expect(fixture.calls).toContainEqual(['-C', GitDouble.ROOT, 'branch', '-d', 'feat/331'])
+  })
+
+  it('fresh absence refuses a remaining registration branch path and malformed listing', async () => {
+    const registration = new UnlaunchedWorkspaceDouble()
+    await expect(registration.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toThrow('registration')
+
+    const branch = new UnlaunchedWorkspaceDouble()
+    branch.worktreePresent = false
+    await expect(branch.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toThrow('local branch')
+
+    const path = new UnlaunchedWorkspaceDouble()
+    path.worktreePresent = false
+    path.branchPresent = false
+    path.pathPresent = true
+    await expect(path.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toThrow('worktree path')
+
+    const malformed = new UnlaunchedWorkspaceDouble()
+    malformed.malformedListing = true
+    await expect(malformed.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBeInstanceOf(PlanCleanupNotUnderstood)
+
+    const unreadablePath = new UnlaunchedWorkspaceDouble()
+    unreadablePath.worktreePresent = false
+    unreadablePath.branchPresent = false
+    unreadablePath.pathFailure = Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    await expect(unreadablePath.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toThrow('absence could not be confirmed')
+  })
+
+  it('fresh absence uses the quiet missing-ref query exactly', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    fixture.worktreePresent = false
+    fixture.branchPresent = false
+
+    await fixture.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+
+    expect(fixture.calls).toContainEqual([
+      '-C', GitDouble.ROOT, 'rev-parse', '--verify', '--quiet', 'refs/heads/feat/331',
+    ])
   })
 })
 

@@ -7,8 +7,9 @@ import {
 } from '../domain/exceptions.ts'
 import { PlanCalls } from '../domain/ports/plan-calls.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
-import { PlanRecovery, type RecoveryCall } from '../domain/policies/plan-recovery.ts'
+import { PlanRecovery } from '../domain/policies/plan-recovery.ts'
 import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
+import { RecoveryCall } from '../domain/value-objects/recovery-call.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
@@ -96,15 +97,16 @@ export class ClaudePlanCalls extends PlanCalls {
     try {
       const proof = await this.records.nonLaunch(watch)
       const cleanup = await this.records.cleanupEvidence(watch)
+      if (proof !== null) return PlanRecovery.from({ calls: [], proof, cleanup, nowMs: this.nowMs() })
       const history = await this.calls.history(watch.agent)
       const facts: RecoveryCall[] = []
-      for (const recorded of history) facts.push({
+      for (const recorded of history) facts.push(new RecoveryCall({
         call: recorded.call,
         purpose: recorded.purpose,
         startedAt: recorded.startedAt,
         deadlineMs: await this.calls.deadlineOf(recorded.call),
         completion: recorded.completion,
-      })
+      }))
       return PlanRecovery.from({ calls: facts, proof, cleanup, nowMs: this.nowMs() })
     } catch (cause) {
       if (cause instanceof PlanRecoveryNotRead || cause instanceof PlanRecoveryNotUnderstood) throw cause

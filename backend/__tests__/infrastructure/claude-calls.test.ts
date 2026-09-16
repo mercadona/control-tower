@@ -384,7 +384,7 @@ describe('ClaudeCalls', () => {
     const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
     const worker = new HeadlessCallWorker({
       files: CallMother.files(root),
-      spawn: (() => { throw new Error('child refused') }) as typeof import('node:child_process').spawn,
+      spawn: (() => { throw Object.assign(new Error('child refused'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
       kill: () => {},
       now: clock.now,
       schedule: clock.schedule,
@@ -404,6 +404,179 @@ describe('ClaudeCalls', () => {
       diagnostic: 'recorded child could not be spawned: child refused',
       observedAt: CallMother.STARTED_AT,
     })
+    expect(JSON.parse(await readFile(CallMother.completionPath(root), 'utf8'))).toMatchObject({
+      code: null,
+      signal: null,
+      finishedAt: CallMother.STARTED_AT,
+      execution: {
+        kind: 'child-spawn-failed',
+        conversation: CallMother.CONVERSATION,
+        callId: CallMother.CALL,
+        diagnostic: 'recorded child could not be spawned: child refused',
+      },
+      measurement: {
+        cost: { kind: 'unavailable' },
+        turns: null,
+        durationMs: null,
+      },
+    })
+  })
+
+  it('worker refuses descriptor location identity before spawning', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const foreignConversation = '33333333-3333-4333-8333-333333333333'
+    const directory = join(root, 'harness', foreignConversation, 'calls', CallMother.CALL)
+    await fs.mkdir(directory, { recursive: true })
+    const descriptor = join(directory, 'call.json')
+    await writeFile(descriptor, CallMother.descriptor(root), 'utf8')
+    let spawns = 0
+    const worker = new HeadlessCallWorker({
+      files: CallMother.files(root),
+      spawn: (() => { spawns += 1; return new FakeChild(921) }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: () => CallMother.STARTED_AT,
+      schedule: () => ({ cancel: () => {} }),
+      cancel: () => {},
+      acknowledge: () => {},
+    })
+
+    await expect(worker.run(descriptor)).rejects.toThrow('differs from path')
+    expect(spawns).toBe(0)
+    await expect(readFile(join(directory, 'stream.ndjson'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('spawn error and close publish one truthful terminal', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const child = new FakeChild(919)
+    const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
+    let acknowledgements = 0
+    const worker = new HeadlessCallWorker({
+      files: CallMother.files(root),
+      spawn: (() => {
+        queueMicrotask(() => {
+          child.failed(Object.assign(new Error('binary absent'), { code: 'ENOENT' }))
+          child.closed(-2, null)
+        })
+        return child
+      }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: clock.now,
+      schedule: clock.schedule,
+      cancel: clock.cancel,
+      acknowledge: () => { acknowledgements += 1 },
+    })
+
+    await worker.run(descriptor)
+
+    const completion = JSON.parse(await readFile(CallMother.completionPath(root), 'utf8')) as Record<string, unknown>
+    expect(completion).toMatchObject({
+      code: null,
+      signal: null,
+      execution: {
+        kind: 'child-spawn-failed',
+        conversation: CallMother.CONVERSATION,
+        callId: CallMother.CALL,
+        diagnostic: 'recorded child could not be spawned: binary absent',
+      },
+    })
+    expect(await readFile(join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .toContain('recorded child could not be spawned: binary absent')
+    expect(acknowledgements).toBe(0)
+    expect(clock.scheduled.every((timer) => timer.cancelled)).toBe(true)
+  })
+
+  it('receipt write failure leaves terminal evidence without cleanup proof', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const files = CallMother.files(root)
+    const writeOnce = files.writeOnce.bind(files)
+    files.writeOnce = async (path, text) => {
+      if (path.endsWith('non-launch.json')) throw Object.assign(new Error('receipt disk full'), { code: 'ENOSPC' })
+      await writeOnce(path, text)
+    }
+    const worker = new HeadlessCallWorker({
+      files,
+      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: () => CallMother.STARTED_AT,
+      schedule: () => ({ cancel: () => {} }),
+      cancel: () => {},
+      acknowledge: () => {},
+    })
+
+    await worker.run(descriptor)
+
+    expect(JSON.parse(await readFile(CallMother.completionPath(root), 'utf8'))).toMatchObject({
+      execution: { kind: 'child-spawn-failed' },
+    })
+    await expect(readFile(join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(dirname(descriptor), 'stderr.log'), 'utf8')).toContain('receipt disk full')
+  })
+
+  it('completion write failure cannot publish cleanup proof', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const files = CallMother.files(root)
+    const writeOnce = files.writeOnce.bind(files)
+    files.writeOnce = async (path, text) => {
+      if (path.endsWith('completion.json')) throw Object.assign(new Error('completion disk full'), { code: 'ENOSPC' })
+      await writeOnce(path, text)
+    }
+    const worker = new HeadlessCallWorker({
+      files,
+      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: () => CallMother.STARTED_AT,
+      schedule: () => ({ cancel: () => {} }),
+      cancel: () => {},
+      acknowledge: () => {},
+    })
+
+    await worker.run(descriptor)
+
+    await expect(readFile(CallMother.completionPath(root), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(dirname(descriptor), 'stderr.log'), 'utf8')).toContain('completion disk full')
+  })
+
+  it('an error after spawn publishes ordinary failure without non-launch proof', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const child = new FakeChild(920)
+    let acknowledgements = 0
+    const worker = new HeadlessCallWorker({
+      files: CallMother.files(root),
+      spawn: (() => {
+        queueMicrotask(() => {
+          child.accepted()
+          child.failed(Object.assign(new Error('post-spawn failure'), { code: 'EIO' }))
+        })
+        return child
+      }) as typeof import('node:child_process').spawn,
+      kill: () => {},
+      now: () => CallMother.STARTED_AT,
+      schedule: () => ({ cancel: () => {} }),
+      cancel: () => {},
+      acknowledge: () => { acknowledgements += 1 },
+    })
+
+    await worker.run(descriptor)
+    await worker.terminal()
+
+    expect(JSON.parse(await readFile(CallMother.completionPath(root), 'utf8'))).toMatchObject({
+      execution: { kind: 'unavailable' },
+    })
+    await expect(readFile(join(root, 'harness', CallMother.CONVERSATION, 'non-launch.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    expect(acknowledgements).toBe(1)
   })
 
   it('missing completion is uncertain rather than an automatic retry', async () => {

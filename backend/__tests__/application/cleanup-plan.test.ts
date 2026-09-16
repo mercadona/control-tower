@@ -4,7 +4,7 @@ import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
-import { PlanCleanupConflict } from '../../src/domain/exceptions.ts'
+import { PlanCleanupConflict, PlanIssueNotClaimed } from '../../src/domain/exceptions.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import type { PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
@@ -67,6 +67,8 @@ class RecordsDouble extends PlanRecords {
 class WorkspaceDouble extends Workspace {
   readonly events: string[]
   refusal: Error | null = null
+  failedEffect: string | null = null
+  confirmations = 0
   evidence = CleanupMother.EVIDENCE
 
   constructor(events: string[]) { super(); this.events = events }
@@ -77,7 +79,16 @@ class WorkspaceDouble extends Workspace {
     return this.evidence
   }
 
-  override async undoUnlaunched(): Promise<void> { this.events.push('undo') }
+  override async undoUnlaunched(): Promise<void> { this.effect('undo') }
+  override async confirmAbsent(): Promise<void> {
+    this.confirmations += 1
+    this.effect(`confirm-absent-${this.confirmations}`)
+  }
+
+  private effect(name: string): void {
+    this.events.push(name)
+    if (this.failedEffect === name) throw new Error(`${name} refused`)
+  }
 }
 
 class ClaimsDouble extends DispatchClaims {
@@ -134,7 +145,10 @@ describe('CleanupPlan', () => {
 
     await flow.run()
 
-    expect(flow.events).toEqual(['inspect', 'evidence', 'undo', 'requeue', 'inspect', 'archive'])
+    expect(flow.events).toEqual([
+      'inspect', 'evidence', 'undo',
+      'confirm-absent-1', 'requeue', 'confirm-absent-2', 'archive',
+    ])
     expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
   })
 
@@ -146,7 +160,9 @@ describe('CleanupPlan', () => {
     await flow.run()
 
     expect(flow.claims.calls).toBe(0)
-    expect(flow.events).toEqual(['inspect', 'undo', 'inspect', 'archive'])
+    expect(flow.events).toEqual([
+      'inspect', 'undo', 'confirm-absent-1', 'confirm-absent-2', 'archive',
+    ])
   })
 
   it('workspace refusal preserves evidence and claim', async () => {
@@ -158,15 +174,41 @@ describe('CleanupPlan', () => {
     expect(flow.events).toEqual(['inspect'])
   })
 
+  it.each([
+    ['undo', ['inspect', 'evidence', 'undo'], 0],
+    ['confirm-absent-1', ['inspect', 'evidence', 'undo', 'confirm-absent-1'], 0],
+    ['confirm-absent-2', ['inspect', 'evidence', 'undo', 'confirm-absent-1', 'requeue', 'confirm-absent-2'], 1],
+  ] as const)('cleanup stops at a failed %s effect', async (effect, expected, claims) => {
+    const flow = new Flow()
+    flow.workspace.failedEffect = effect
+
+    await expect(flow.run()).rejects.toThrow(`${effect} refused`)
+
+    expect(flow.events).toEqual(expected)
+    expect(flow.claims.calls).toBe(claims)
+    expect(flow.records.active).toBe(CleanupMother.WATCH)
+  })
+
   it('lost requeue success does not repeat label writes', async () => {
     const flow = new Flow()
-    flow.claims.failure = new Error('requeue answer was lost')
+    flow.claims.failure = new PlanIssueNotClaimed('requeue answer was lost')
     flow.issues.statuses = [PlanIssueStatus.IN_PROGRESS, PlanIssueStatus.IN_PROGRESS, PlanIssueStatus.READY]
 
     await flow.run()
 
     expect(flow.claims.calls).toBe(1)
     expect(flow.events.at(-1)).toBe('archive')
+  })
+
+  it('an unexpected requeue bug escapes without authorizing retirement', async () => {
+    const flow = new Flow()
+    const defect = new Error('requeue implementation defect')
+    flow.claims.failure = defect
+
+    await expect(flow.run()).rejects.toBe(defect)
+
+    expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.events).not.toContain('archive')
   })
 
   it('archive refusal keeps the active descriptor', async () => {

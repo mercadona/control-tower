@@ -195,13 +195,13 @@ The validation process imported the real `validatePlan` and `planFilesForIssue` 
 It read the scratch plan with `readFileSync`. Its `readFile` callback used `git show b26554378b437b77362699cef1d867756c559283:<path>` for each reference and current-state citation.
 It did not use the parent checkout, change the validator, or call dispatch/release/run commands.
 
-Final plan SHA-256 after the Task 5 correction: `3f2bd98babb02b6e556fdd277e678cd55a3212261f156a8c66668cc0aa20258c`.
+Latest plan SHA-256 after the independent-judge correction: `4a6493b58bf3b21c3daff87f9f8b9aef9562cecb9d41d3bd00d42e1b89418e65`.
 
 ```json
 {
   "base": "b26554378b437b77362699cef1d867756c559283",
   "validatePlan": { "ok": true, "violations": [] },
-  "extractTasks": { "tasks": 6, "problems": [], "testsAdded": 40, "testsRemoved": 0, "globalCommands": 4 },
+  "extractTasks": { "tasks": 6, "problems": [], "testsAdded": 55, "testsRemoved": 1, "globalCommands": 4 },
   "missingModifyPathsAtBase": [],
   "discoverableIssuePlans": [
     "docs/superpowers/plans/2026-09-15-issue-331-the-headless-dispatcher.md"
@@ -210,7 +210,8 @@ Final plan SHA-256 after the Task 5 correction: `3f2bd98babb02b6e556fdd277e678cd
 }
 ```
 
-All six TDD names and command blocks extracted. The final task test-name counts are 4, 6, 5, 7, 12 and 6.
+All six TDD names and command blocks extracted. The latest task test-name counts are 4, 6, 9, 12, 17 and 7.
+The one removed title is `retirement frees cap and permits preparation`: its assertions remain under the truthful retirement title, with separate actual cap coverage added.
 The real validator accepted the normal 3500-character task limit, block taxonomy, line budgets, literal citation and Simplified Technical English checks.
 Initial validation caught paragraph/wording issues and one 3544-character task. I corrected the prose and removed duplicate wording; I did not change any control.
 I also corrected the test-list quoting after extraction initially returned empty test-name arrays. Final extraction measures the declared tests, not merely the headings.
@@ -397,3 +398,90 @@ The complete validation and extraction JSON appeared directly in session output.
 The protected/history diff against `b26554378b437b77362699cef1d867756c559283` exited zero.
 The final status listing still contains Sol's original Task 5 modifications and untracked files; no source or test path was changed by this architecture correction.
 I did not run typecheck or tests on the partial implementation. Those checks and their actual results belong to Sol's correction handoff.
+
+## Independent judge correction — reviewed tip be6ac275
+
+### Authority and verification boundary
+
+I read `.agent/run-331/apply-feedback-review.md` in full, including all ten findings, the test-integrity section, rubric notes and shared-parser finding.
+Current HEAD is `be6ac2758d61b95e1998bfb85fbdef6614093f15`; the initial status read for this session was clean.
+The judge reviewed the six-commit range from `b26554378b437b77362699cef1d867756c559283` and returned CHANGES_REQUESTED for both specification and quality.
+I verified the findings against the current worktree sources and tests rather than treating the verdict as proof.
+This session did not run tests, Git fixture experiments, workers, Claude, network operations or implementation commands.
+The new worker/Git/mutation observations described below remain Sol's required work; source inspection does not substitute for them.
+
+### Findings verified against the current code
+
+| Finding | Classification | Verified cause and owning correction |
+|---|---|---|
+| 1. Missing-ref query | Confirmed by source and existing repository contract | `git-workspace.ts:197-199,275-280` omits `--quiet` while accepting only exit 1. `plugin/scripts/ct-next.mjs:2423-2431` uses and explains quiet missing-ref semantics. The fixture at `git-workspace.test.ts:892-896` supplies an unmeasured exit for the non-quiet command. Task 4 pins real local Git semantics and final retirement. No new Git execution was observed here. |
+| 2. Worker receipt root | Confirmed | `headless-call-worker.ts:142-144` writes through `files.root`, while `main():278-293` constructs root `/`. `ct-api.ts:458-468` uses the configured state root. Task 3 derives and validates the actual call location before output/spawn; its real-process test invokes the script entrypoint. |
+| 3. Producer/reader terminal conflict | Confirmed | Worker `:128-151,217-255` writes proof then settles ordinary completion; `disk-plan-records.ts:438-442` rejects every completion. The direct worker test at `claude-calls.test.ts:380-406` checks receipt bytes but never the complete reader path. Task 3 introduces an exact typed child-spawn terminal contract and validates receipt plus terminal together. |
+| 4. Partial preparation becomes inconclusive | Confirmed | `claude-plan-calls.ts:95-108` always calls history after proof; `claude-calls.ts:560-570,610-618` demands a descriptor. `disk-plan-records.ts:423-430` also rejects an allocated ID with zero directories. Tasks 3/5 accept only validated empty partial shapes and choose cleanup without strict history or invented calls. |
+| 5. Contradiction bypass without descriptor | Confirmed | `disk-plan-records.ts:427-441` returns for `before-worker` before reading stream/completion. Task 3 moves contradiction validation ahead of descriptor-absence acceptance and tests nonempty/generic/successful terminal evidence at this cut. |
+| 6. Eligibility mistaken for absence | Confirmed | `cleanup-plan.ts:62-65` calls the same eligibility method before archive. `git-workspace.ts:219-220,250-295,344-353` discards presence facts, accepts present clean work and treats unmatched malformed porcelain as absence. No filesystem check exists. Task 4 adds a separate fresh registration/ref/lstat absence postcondition and an immutable private workspace value. |
+| 7. Cause erasure and raw I/O leaks | Confirmed | `headless-plan-agents.ts:76-81` still wraps all lookup failures; `disk-plan-records.ts:251,274,287-292,310,317,416` has untyped I/O cuts. `HeadlessFiles.read/list` only special-case ENOENT. `ClaudePlanCalls:109-114` already rethrows unrelated causes and must keep that improvement. Tasks 3/5 translate errno failures at adapters, distinguish malformed data and preserve unexpected bugs. |
+| 8. Renamed start rehearsal | Confirmed | `headless-dispatch-dry-run.test.ts:385,530-558` constructs no recover action and calls `/start-plan`. `:629-646` invokes the read projector with the old `planCalls`, not rebuilt continuation. Task 5 keeps the start assertions and adds actual `/recover-plan` over a rebuilt graph after publication failure. |
+| 9. During-POST GET race | Confirmed | `Home.tsx:124-125` shares the in-flight GET; polling at `:223-238` ignores `recoveryMutationRef`; POST at `:319-339` waits only for the earlier read. A during-POST read can become the supposed post-answer read. Task 6 blocks all ordinary read starts during mutation and lets only the owner request the fresh GET. |
+| 10. Diagnostic prose controls execution | Confirmed | `plan-recovery.ts:79-87` compares detail to the sentence produced at `:119`; `recorded-plan-recovery.ts:113-114,152-155` uses the result to activate implementation/review. Task 5 retains one typed selection and derives wire detail from it. |
+
+The original authorization omission is repaired in the common argv builder, but live tool behavior remains unverified.
+Publication/restart recovery and definite non-launch cleanup remain partially repaired until these corrections and their missing tests pass.
+The genuine legacy limitation remains: ambiguous or contradictory evidence grants no automatic cleanup or replacement call.
+
+### Test-integrity notes independently checked
+
+- `claude-plan-calls.test.ts:132-146` contains three identical `arrayContaining` matchers. They do not bind distinct purposes or adjacent option/value positions. Keep the common production builder; strengthen each purpose's assertion and perform purpose-specific mutations.
+- `headless-plan-agents.test.ts:258-283` supplies a doubled continuation and fixed policy outcome, so it proves delegation rather than deadline enforcement. `:285-308` uses empty history rather than failed, ambiguous and expired planner cases. Preserve those assertions with truthful names and add the actual histories/deadline-boundary cases through the adapter/policy path.
+- `cleanup-plan.test.ts:67-80,132-149` cannot distinguish removable from absent and never fails undo. Its event sequence is not evidence that every cut ran. Add typed failures at every effect and independent absence failures.
+- `disk-plan-records.test.ts:192-214` archives and prepares a new record without consulting cap selection. Preserve that evidence with a truthful title; prove the cap-1 property through the actual imported selection in the candidate adapter.
+- The new Git tests at `git-workspace.test.ts:931-975` cover happy removal, dirty files, remote branch and snapshot-based branch removal. They do not cover a PR, changed HEAD/base, canonical identity failure, failed removal or final absence. The double selects replies by broad argv membership, so it also hides the missing quiet option. Add exact-request cases and real local Git checks.
+- `cleanup-plan-route.test.ts:87-114` waits a zero-delay timer rather than action entry. Add an entered barrier before the no-answer assertion and a separate release barrier for retirement.
+- `Home.restoreWorkflow.test.tsx:502-545` starts its deferred GET before the click; it does not cover a timer waking during POST. Parameterize the new pending-POST race over both actions while retaining this earlier-read test.
+- The current shared parser is defined in `recover-plan-route.ts:29-65` and imported by `cleanup-plan-route.ts:17`. It has two endpoint consumers, so Task 5 extracts the boundary model to `plan-operation-request.ts` instead of making one endpoint own the other.
+
+The previous exact-constructor guard correction remains useful. These changes do not suppress guards or change domain exception inheritance.
+The user requested one batched corrective brief, now written at `.agent/run-331/apply-feedback-corrections.md` for the same Sol session.
+
+### Closed decisions and plan-mandated tensions
+
+I accept responsibility for the prior plan's underspecified final inspection and structural internal decision contracts.
+Calling `inspectUnlaunched` again did not establish removal. The revised port is `confirmAbsent(watch)`, with fresh branch, registration and lstat checks both before requeue and before archive.
+The prior structural `RecoveryDecision` contract also conflicted with the value-object yardstick. The revised internal result is `PlanRecovery` itself, backed by one private typed selection; `RecoveryCall` becomes a frozen domain value.
+The outward action/detail JSON stays the same. These are explicit plan amendments, not findings to waive because the old plan requested them.
+
+The producer contract now uses the validated actual descriptor tuple to derive the worker root.
+An initial failed OS child spawn publishes one typed `child-spawn-failed` terminal completion, then its matching receipt. Null exit/signal means no child execution, not a fabricated Claude exit.
+Only that exact matching terminal can coexist with a child-spawn receipt. Generic error/unavailable completion, success, wrong identity/mode, measured CLI cost/turns or nonempty stream still refuse proof.
+Before-worker partial preparation permits a missing allocated directory or descriptor only after every possible contradiction has been checked.
+Validated proof selects the proof-based policy branch; ordinary history remains strict and receives no fictional descriptor or reset deadline.
+
+The Git correction uses the existing quiet-ref idiom and a new explicit postcondition rather than another dispatch/requeue policy.
+The real-process Git fixture executes local Git and filesystem operations; repository-identity, remote, issue, PR and claim edges are scripted to avoid network calls. It is not represented as a fully live GitHub environment.
+The worker fixture invokes Node and the real worker entrypoint with a nonexistent local binary. It supplies no Claude/model response and makes no permission-smoke claim.
+
+### Evidence accuracy and next verification
+
+`docs/superpowers/evidence/pr-375-apply-feedback-implementation.md:70-85` retains Sol's previous reported test/build results as provenance.
+Its all-cuts statement at `:87-92` and production-recovery conclusion at `:95-97` are unsupported by the bodies inspected above. Its cause-distinction claim at `:26-29` also needs correction.
+Do not erase those historical results or pretend a review observation is a performed mutation. Sol must append a dated correction section with actual commands, red/green outputs, mutation cuts, restored source identities and new fixture observations.
+`backend/API.md:499-506` needs the explicit limitation for already-running/resumed coordinators and narrower evidence wording; a newly generated PhasePrompt does not update an existing transcript.
+
+The same Sol session receives all corrections together. New source and regression paths are explicit in the amended six task scopes.
+The added actual-process coverage is `claude-calls-real-process.test.ts` and new `git-workspace-real-process.test.ts`; both need unconditional child/root cleanup.
+The other new modules are the shared request model and immutable recovery-call value. Existing policy, record, worker, workspace, publication and UI primitives retain their jobs.
+No model call, new run machine, blanket retry, hidden budget reset, cost estimate, force cleanup, canonical plan change or protected-script edit belongs to this batch.
+
+### Final validation of the batched corrective handoff
+
+The real `validatePlan` and `extractTasks` APIs passed against `b26554378b437b77362699cef1d867756c559283`: zero violations and zero extraction problems.
+There are still six tasks. Their measured sizes are 3140, 3166, 2831, 3408, 3459 and 3449 characters, all within the unchanged 3500-character budget.
+All role/block budgets and Simplified Technical English checks pass. All modify paths exist at the original repair base.
+The current-tip findings use prose citations, not new Current-state blocks that pretend this code existed at the base.
+The supplemental plan/correction evidence filenames leave only the original canonical issue execution plan discoverable.
+
+The 55 declared addition/revised names include the missing producer, Git, partial-effect, HTTP recovery and polling regressions. They are requirements, not claims of executed tests.
+The recorded title replacement removes no test assertions or guard. It stops a disk-only test from claiming cap selection and assigns that guarantee to a real candidate-adapter test.
+The protected/history diff, tracked status check and `git diff --check` exited zero with no output at the reviewed tip.
+Only `.agent/run-331/apply-feedback-plan.md`, `.agent/run-331/apply-feedback-analysis.md`, and the new `.agent/run-331/apply-feedback-corrections.md` changed in this session.
+No tests, live calls, implementation edits, GitHub writes, commits, run-state changes or nested sessions occurred.

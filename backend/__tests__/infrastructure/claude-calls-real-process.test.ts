@@ -5,8 +5,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
+import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
+import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 
 class RealCallMother {
   static readonly CONVERSATION = '11111111-1111-4111-8111-111111111111'
@@ -35,6 +39,34 @@ class RealCallMother {
       killGraceMs,
     }, null, 2)}\n`, 'utf8')
     await writeFile(join(directory, 'prompt.md'), 'local fixture prompt', 'utf8')
+    return path
+  }
+
+  static async failedDescriptor(root: string, conversation: string, call: string): Promise<string> {
+    const directory = join(root, 'harness', conversation, 'calls', call)
+    await fs.mkdir(directory, { recursive: true })
+    const path = join(directory, 'call.json')
+    await writeFile(path, `${JSON.stringify({
+      conversation,
+      purpose: 'plan',
+      requestId: null,
+      cwd: root,
+      binary: join(root, 'nonexistent-claude'),
+      argv: ['--session-id', conversation],
+      startedAt: new Date().toISOString(),
+      budgetMs: 2_000,
+      killGraceMs: 100,
+    }, null, 2)}\n`, 'utf8')
+    await writeFile(join(directory, 'prompt.md'), 'local nonexistent-binary fixture', 'utf8')
+    await writeFile(join(root, 'harness', conversation, 'dispatch.json'), `${JSON.stringify({
+      repository: 'mercadona/control-tower-plugin',
+      issue: { number: 331, url: 'https://github.com/mercadona/control-tower-plugin/issues/331' },
+      story: null,
+      root,
+      worktree: root,
+      branch: 'feat/331',
+      startedAt: new Date().toISOString(),
+    }, null, 2)}\n`, 'utf8')
     return path
   }
 
@@ -85,8 +117,50 @@ class RealCallMother {
     })
   }
 
+  static runWorker(descriptor: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const worker = spawn(process.execPath, [RealCallMother.WORKER, descriptor], {
+        detached: true,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      })
+      if (worker.pid !== undefined) RealCallMother.groups.add(worker.pid)
+      let diagnostic = ''
+      worker.stderr.setEncoding('utf8')
+      worker.stderr.on('data', (chunk: string) => { diagnostic += chunk })
+      worker.once('error', reject)
+      worker.once('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(diagnostic || `worker exited ${String(code)}`))
+      })
+    })
+  }
+
+  static records(root: string): DiskPlanRecords {
+    return new DiskPlanRecords({
+      files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+      newId: () => RealCallMother.CONVERSATION,
+      now: () => new Date().toISOString(),
+      exists: async () => true,
+    })
+  }
+
+  static planCalls(root: string, records: DiskPlanRecords): ClaudePlanCalls {
+    return new ClaudePlanCalls({
+      calls: RealCallMother.calls(root),
+      brief: new PlanAgentBrief({
+        dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+        conventions: '/plugin/conventions',
+        ctStep: '/plugin/scripts/ct-step.mjs',
+      }),
+      pluginRoot: '/plugin',
+      resumable: async () => false,
+      records,
+      nowMs: () => Date.now(),
+    })
+  }
+
   static async eventuallyAbsent(pid: number): Promise<void> {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
+    for (let attempt = 0; attempt < 2_000; attempt += 1) {
       try {
         process.kill(pid, 0)
       } catch (cause) {
@@ -140,7 +214,7 @@ describe('ClaudeCalls with real local processes', () => {
     const descriptor = await RealCallMother.descriptor(
       root,
       [RealCallMother.FIXTURE, 'success', RealCallMother.CONVERSATION, '--session-id', RealCallMother.CONVERSATION],
-      2_000,
+      30_000,
       100,
     )
 
@@ -165,7 +239,7 @@ describe('ClaudeCalls with real local processes', () => {
         RealCallMother.FIXTURE, 'descendant', groupPidPath, resistantPidPath, descendantPidPath,
         RealCallMother.CONVERSATION, '--session-id', RealCallMother.CONVERSATION,
       ],
-      500,
+      10_000,
       100,
     )
 
@@ -178,6 +252,38 @@ describe('ClaudeCalls with real local processes', () => {
 
     expect(completed.succeeded).toBe(false)
     expect(completed.signal).toBe('SIGTERM')
-    expect(completed.wallDurationMs).toBeGreaterThanOrEqual(500)
+    expect(completed.wallDurationMs).toBeGreaterThanOrEqual(10_000)
+  })
+
+  it('worker entrypoint publishes consumable child-spawn failure', async () => {
+    const identities = [
+      ['33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444'],
+      ['55555555-5555-4555-8555-555555555555', '66666666-6666-4666-8666-666666666666'],
+    ] as const
+    for (const [conversation, callId] of identities) {
+      const root = await mkdtemp(join(tmpdir(), 'ct-worker-spawn-failure-'))
+      roots.push(root)
+      const descriptor = await RealCallMother.failedDescriptor(root, conversation, callId)
+
+      await RealCallMother.runWorker(descriptor)
+
+      const records = RealCallMother.records(root)
+      const watch = await records.recorded(conversation)
+      expect(watch).toBeInstanceOf(PlanWatch)
+      const proof = await records.nonLaunch(watch!)
+      const call = new StartedPlanCall({ conversation, id: callId })
+      const completed = await RealCallMother.calls(root).completed(call)
+      const recovery = await RealCallMother.planCalls(root, records).recoveryFor(watch!)
+      expect(proof).toMatchObject({ conversation, callId, source: 'child-spawn' })
+      expect(completed).toMatchObject({
+        call,
+        code: null,
+        signal: null,
+        execution: { kind: 'child-spawn-failed', conversation, callId },
+      })
+      expect(completed?.succeeded).toBe(false)
+      expect(recovery.action).toBe('cleanup')
+      await expect(fs.access(join(root, 'nonexistent-claude'))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
   })
 })

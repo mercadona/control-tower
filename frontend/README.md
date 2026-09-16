@@ -139,6 +139,12 @@ which only repeats the GET. **Descartar estado** clears this page's local state
 and does not mutate backend work. The coordinating drawer and its live session
 remain mounted throughout recovery.
 
+The mutation owns the active-plan read barrier from the click until its fresh
+GET completes. It first drains a GET that predates the click; timer and manual
+polls that wake while POST is pending start no read. After an accepted or
+refused answer, the mutation alone bypasses its barrier for exactly one new GET,
+so pre-operation state cannot stand in for post-operation reconciliation.
+
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
 operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click

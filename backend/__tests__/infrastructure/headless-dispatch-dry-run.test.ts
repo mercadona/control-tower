@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { ContinuePlan } from '../../src/application/actions/continue-plan.ts'
+import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
 import { StartMilestonePlan } from '../../src/application/actions/start-milestone-plan.ts'
 import {
   EpicGroomRead, EpicGroomState, ReadEpicGroom,
@@ -30,6 +31,7 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ClaudeCallResult } from '../../src/infrastructure/claude-call-result.ts'
@@ -81,6 +83,18 @@ class BoundedDrain {
     })
     try {
       await Promise.race([promise, timeout])
+    } finally {
+      if (timer !== null) clearTimeout(timer)
+    }
+  }
+
+  static async value<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+    let timer: NodeJS.Timeout | null = null
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`operation did not settle within ${milliseconds}ms`)), milliseconds)
+    })
+    try {
+      return await Promise.race([promise, timeout])
     } finally {
       if (timer !== null) clearTimeout(timer)
     }
@@ -150,6 +164,7 @@ class ScriptedBoundaries {
   readonly seedPath: string
   readonly publicationBodyPath: string
   postedBody: string | null = null
+  publicationAttempts = 0
 
   constructor(root: string, trace: string[]) {
     this.trace = trace
@@ -200,6 +215,11 @@ class ScriptedBoundaries {
     ])) {
       this.accept('gh', argv, null)
       this.postedBody = await readFile(this.publicationBodyPath, 'utf8')
+      this.publicationAttempts += 1
+      if (this.publicationAttempts === 1) {
+        this.trace.push('publication-refused')
+        return new ProcessOutput({ code: 1, stdout: '', stderr: 'scripted publication refusal' })
+      }
       this.trace.push('publish')
       return ScriptedBoundaries.output('')
     }
@@ -557,7 +577,7 @@ describe('headless dispatch dry run', () => {
       body: JSON.stringify({ milestone: Rehearsal.MILESTONE }),
     })
     expect(response.status).toBe(202)
-    await BoundedDrain.wait(implementationAccepted.promise, 1_000)
+    await BoundedDrain.wait(diagnostic, 1_000)
     expect(await response.json()).toEqual({
       status: 'started',
       id: null,
@@ -569,20 +589,13 @@ describe('headless dispatch dry run', () => {
       root: boundaries.checkoutRoot,
       baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
     })
-    expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
-    expect(spawnedDescriptors).toHaveLength(2)
+    expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publication-refused'])
+    expect(spawnedDescriptors).toHaveLength(1)
     const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
-    const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
     expect(plannerDescriptor.argv).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
       '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
       '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
-      ClaudePlanCalls.OPENING,
-    ])
-    expect(implementationDescriptor.argv).toEqual([
-      '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
-      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
-      '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
       ClaudePlanCalls.OPENING,
     ])
     expect(plannerCompletion.measurement).toEqual({
@@ -598,53 +611,141 @@ describe('headless dispatch dry run', () => {
     )
     expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
 
-    let recoverySpawns = 0
     const restartedCalls = new ClaudeCalls({
       files,
       binary: '/usr/local/bin/claude',
       worker: '/backend/headless-call-worker.ts',
-      spawn: (() => {
-        recoverySpawns += 1
-        throw new Error('restart recovery must not spawn')
+      spawn: ((binary: string, argv: readonly string[]) => {
+        const descriptorPath = argv[1]
+        const descriptor = JSON.parse(readFileSync(descriptorPath, 'utf8')) as Record<string, unknown>
+        expect(binary).toBe(process.execPath)
+        expect(descriptor.purpose).toBe('implementation')
+        spawnedDescriptors.push(descriptorPath)
+        trace.push('spawn-implementation')
+        implementationAccepted.release()
+        const worker = new AcceptedWorker()
+        queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
+        return worker
       }) as typeof import('node:child_process').spawn,
       env: {},
-      newId: () => { throw new Error('restart recovery must not mint an identity') },
-      now: () => Rehearsal.STARTED_AT,
+      newId: () => Rehearsal.IMPLEMENTATION_CALL,
+      now: () => '2026-09-16T09:00:02.000Z',
       budgetMs: 7_200_000,
       killGraceMs: 5_000,
       acceptanceMs: 10_000,
       pollMs: 250,
-      sleep: async () => { throw new Error('restart recovery must not poll') },
+      sleep: async () => releasePendingWait.promise,
+    })
+    const restartedPlanCalls = new ClaudePlanCalls({
+      calls: restartedCalls,
+      brief: new PlanAgentBrief({
+        dispatchCheck: '/plugin/dispatch-check.mjs',
+        conventions: '/plugin/conventions',
+        ctStep: '/plugin/ct-step.mjs',
+      }),
+      pluginRoot: '/plugin',
+      resumable: async () => true,
+      records,
+      nowMs: () => Date.parse(Rehearsal.STARTED_AT),
+    })
+    const restartedPublication = new GhPlanPublication({
+      gh,
+      git: boundaries.git,
+      progress: new PlanContractProgress({
+        node: boundaries.node,
+        git: boundaries.git,
+        dispatchCheck: '/plugin/dispatch-check.mjs',
+      }),
+      files,
+      digest: (text) => createHash('sha256').update(text).digest('hex'),
+    })
+    const restartedAgents = new HeadlessPlanAgents({
+      records,
+      calls: restartedPlanCalls,
+      continuation: new ContinuePlan({ calls: restartedPlanCalls, publication: restartedPublication }),
+      newId: () => { throw new Error('fix identity is not requested') },
+      stderr: () => {},
     })
     const recoveredSessions = new PlanSessions()
     const recoveredPlans = new ActivePlans({ sessions: recoveredSessions })
     const reviews = new ReviewWatch({
       asked: async () => ({ changes: [] }),
       review: async () => {},
-      sleep: async () => {},
+      sleep: () => new Promise<void>(() => {}),
       stderr: () => {},
       label: 'headless rehearsal recovery',
       log: new ReviewLog(),
     })
     const recovery = new RecordedPlanRecovery({
       records,
-      calls: planCalls,
+      calls: restartedPlanCalls,
       ownership: restartedCalls,
       checkouts: new RememberingCheckouts(),
       activePlans: recoveredPlans,
       reviews,
     })
-
-    expect(await recovery.recover()).toBeNull()
-    expect(recoveredPlans.known()).toEqual([
-      expect.objectContaining({
-        phase: 'uncertain',
-        diagnostic: expect.stringContaining('not owned'),
-        plan: expect.objectContaining({ agent: Rehearsal.CONVERSATION }),
+    const recoveredServer = new ApiServer({
+      port: 0,
+      recoverPlan: new RecoverPlan({ agents: restartedAgents }),
+      recovery,
+      frontendRoot: join(root, 'frontend-not-built'),
+    })
+    servers.push(recoveredServer)
+    const recoveredPort = await recoveredServer.start()
+    const recovered = await fetch(`http://127.0.0.1:${recoveredPort}/recover-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo: Rehearsal.REPOSITORY,
+        issue: Rehearsal.ISSUE,
+        agent: Rehearsal.CONVERSATION,
       }),
+    })
+    expect(recovered.status).toBe(202)
+    expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    await BoundedDrain.wait(implementationAccepted.promise, 1_000)
+    expect(boundaries.publicationAttempts).toBe(2)
+    expect(trace).toEqual([
+      'claim', 'seed-slice', 'spawn-plan', 'publication-refused', 'publish', 'spawn-implementation',
     ])
-    expect(recoverySpawns).toBe(0)
+    expect(spawnedDescriptors).toHaveLength(2)
+    const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
+    expect(implementationDescriptor.requestId).toBe(`implementation:${Rehearsal.PLAN_CALL}`)
+    expect(implementationDescriptor.argv).toEqual([
+      '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
+      '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
+      ClaudePlanCalls.OPENING,
+    ])
+    expect(boundaries.publicationAttempts).toBe(2)
+    expect(spawnedDescriptors).toHaveLength(2)
     expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
+
+    const repeated = await BoundedDrain.value(fetch(`http://127.0.0.1:${recoveredPort}/recover-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo: Rehearsal.REPOSITORY,
+        issue: Rehearsal.ISSUE,
+        agent: Rehearsal.CONVERSATION,
+      }),
+    }), 1_000)
+    expect(repeated.status).toBe(202)
+    expect(await repeated.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    expect(boundaries.publicationAttempts).toBe(2)
+    expect(spawnedDescriptors).toHaveLength(2)
+
+    writeFileSync(join(dirname(spawnedDescriptors[1]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
+    releasePendingWait.release()
+    const completedImplementation = await BoundedDrain.value(restartedCalls.wait(new StartedPlanCall({
+      conversation: Rehearsal.CONVERSATION,
+      id: Rehearsal.IMPLEMENTATION_CALL,
+    })), 1_000)
+    expect(completedImplementation).toMatchObject({
+      succeeded: false,
+      execution: { kind: 'unavailable', diagnostic: 'scripted rehearsal closed after accepted continuation' },
+    })
+
     expect(boundaries.calls.filter((call) => call.tool === 'node' && !call.argv.includes('--check-plan'))).toEqual([
       {
         tool: 'node',

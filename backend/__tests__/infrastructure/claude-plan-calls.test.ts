@@ -12,6 +12,7 @@ import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
 
 class CallsDouble extends ClaudeCalls {
@@ -62,8 +63,10 @@ class CallsDouble extends ClaudeCalls {
 }
 
 class RecordsDouble extends PlanRecords {
-  override async nonLaunch(): Promise<null> {
-    return null
+  proof: PlanNonLaunch | null = null
+
+  override async nonLaunch(): Promise<PlanNonLaunch | null> {
+    return this.proof
   }
 
   override async cleanupEvidence(): Promise<null> {
@@ -104,6 +107,23 @@ class PlanCallMother {
       },
     })
   }
+
+  static failed(call = PlanCallMother.CALL): CompletedPlanCall {
+    return new CompletedPlanCall({
+      call,
+      code: 1,
+      signal: null,
+      finishedAt: '2026-09-16T10:01:00.000Z',
+      wallDurationMs: 60_000,
+      execution: { kind: 'error', diagnostic: 'planner failed' },
+      measurement: {
+        cost: { kind: 'unavailable', reason: 'failed call' },
+        turns: null,
+        durationMs: null,
+        unavailable: ['failed call'],
+      },
+    })
+  }
 }
 
 class Subject {
@@ -136,13 +156,14 @@ describe('ClaudePlanCalls', () => {
     await subject.adapter.start(PlanCallMother.watch(), 'implementation', null)
     await subject.adapter.start(PlanCallMother.watch(), 'fix', 'Address the review')
 
-    expect(subject.calls.invocations.map((invocation) => invocation.argv)).toEqual(
-      expect.arrayContaining([
-        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
-        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
-        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
-      ])
-    )
+    expect(subject.calls.invocations.map((invocation) => invocation.purpose)).toEqual(['plan', 'implementation', 'fix'])
+    for (const invocation of subject.calls.invocations) {
+      const grant = invocation.argv.indexOf('--allowedTools')
+      expect(grant, invocation.purpose).toBeGreaterThan(-1)
+      expect(invocation.argv[grant + 1], invocation.purpose).toBe('Read,Glob,Grep,Edit,Write,Bash,Skill,Agent')
+      const identity = invocation.purpose === 'plan' ? '--session-id' : '--resume'
+      expect(invocation.argv.slice(-3, -1), invocation.purpose).toEqual([identity, PlanCallMother.CONVERSATION])
+    }
   })
 
   it('headless authorization preserves settings hooks and conversation identity', async () => {
@@ -225,7 +246,24 @@ describe('ClaudePlanCalls', () => {
 
     const recovery = await subject.adapter.recoveryFor(PlanCallMother.watch())
 
-    expect(recovery.decision).toEqual(expect.objectContaining({ action: 'continue', call: PlanCallMother.CALL }))
+    expect(recovery.action).toBe('continue')
+    expect(recovery.call()).toBe(PlanCallMother.CALL)
+  })
+
+  it('partial preparation exposes cleanup without strict history', async () => {
+    const subject = new Subject()
+    subject.records.proof = new PlanNonLaunch({
+      conversation: PlanCallMother.CONVERSATION,
+      callId: PlanCallMother.CALL.id,
+      source: 'before-worker',
+      diagnostic: 'descriptor publication failed before worker spawn',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+    subject.calls.history = async () => { throw new Error('strict history must not be read') }
+
+    const recovery = await subject.adapter.recoveryFor(PlanCallMother.watch())
+
+    expect(recovery.action).toBe('cleanup')
   })
 
   it('incomplete implementation recovery observes only within its recorded deadline', async () => {
@@ -237,13 +275,40 @@ describe('ClaudePlanCalls', () => {
       completion: null,
     })]
 
-    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
-      expect.objectContaining({ action: 'observe', call: PlanCallMother.CALL }),
-    )
+    const observing = await subject.adapter.recoveryFor(PlanCallMother.watch())
+    expect(observing.action).toBe('observe')
+    expect(observing.call()).toBe(PlanCallMother.CALL)
     subject.calls.deadline = Date.parse('2026-09-16T09:59:59.000Z')
-    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
-      expect.objectContaining({ action: 'inspect' }),
-    )
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).action).toBe('inspect')
+    subject.calls.deadline = Date.parse('2026-09-16T10:00:00.000Z')
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).action).toBe('inspect')
+    subject.calls.deadline = Date.parse('2026-09-16T10:00:00.001Z')
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).action).toBe('observe')
+  })
+
+  it('failed planner and multiple unfinished calls remain inspect-only', async () => {
+    const subject = new Subject()
+    subject.calls.historyRows = [new RecordedCall({
+      call: PlanCallMother.CALL,
+      purpose: 'plan',
+      startedAt: '2026-09-16T09:00:00.000Z',
+      completion: PlanCallMother.failed(),
+    })]
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).action).toBe('inspect')
+
+    const other = new StartedPlanCall({
+      conversation: PlanCallMother.CONVERSATION,
+      id: '33333333-3333-4333-8333-333333333333',
+    })
+    subject.calls.historyRows = [
+      new RecordedCall({
+        call: PlanCallMother.CALL, purpose: 'plan', startedAt: '2026-09-16T09:00:00.000Z', completion: null,
+      }),
+      new RecordedCall({
+        call: other, purpose: 'fix', startedAt: '2026-09-16T09:01:00.000Z', completion: null,
+      }),
+    ]
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).action).toBe('inspect')
   })
 
   it('timestamp ties remain inspect-only', async () => {
@@ -267,8 +332,8 @@ describe('ClaudePlanCalls', () => {
       }),
     ]
 
-    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
-      expect.objectContaining({ action: 'inspect', detail: expect.stringContaining('ambiguous') }),
-    )
+    const recovery = await subject.adapter.recoveryFor(PlanCallMother.watch())
+    expect(recovery.action).toBe('inspect')
+    expect(recovery.detail).toContain('ambiguous')
   })
 })

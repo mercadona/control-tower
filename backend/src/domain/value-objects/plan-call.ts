@@ -28,6 +28,12 @@ export type CallMeasurement = {
 
 export type CallExecution = { readonly kind: 'success' }
   | { readonly kind: 'error' | 'unavailable', readonly diagnostic: string }
+  | {
+    readonly kind: 'child-spawn-failed',
+    readonly conversation: string,
+    readonly callId: string,
+    readonly diagnostic: string,
+  }
 
 export class CompletedPlanCall {
   readonly call: StartedPlanCall

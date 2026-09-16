@@ -4,6 +4,7 @@ import { PlanRecords } from '../domain/ports/plan-records.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import type { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
+import { StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import { UnusedWorkspace } from '../domain/value-objects/unused-workspace.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlansInFlight } from '../domain/value-objects/plans-in-flight.ts'
@@ -11,8 +12,8 @@ import { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
-import type { HeadlessFiles } from './headless-files.ts'
-import { CallDescriptor } from './claude-calls.ts'
+import { HeadlessFiles } from './headless-files.ts'
+import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
 import { NonLaunchRecord } from './non-launch-record.ts'
 
 type JsonObject = Record<string, unknown>
@@ -228,7 +229,10 @@ export class DiskPlanRecords extends PlanRecords {
       await this.files.writeOnce(path, record.text())
     } catch (cause) {
       if (DiskPlanRecords.#hasCode(cause, 'EEXIST')) await this.#recordAt(agent)
-      throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+      }
+      throw cause
     }
     return record.watch(agent)
   }
@@ -248,7 +252,7 @@ export class DiskPlanRecords extends PlanRecords {
       watch.agent,
       DiskPlanRecords.CLEANUP_EVIDENCE,
     )
-    const text = await this.files.read(path)
+    const text = await this.#read(path)
     if (text === null) return null
     try {
       return CleanupEvidenceRecord.read(text, watch)
@@ -269,9 +273,12 @@ export class DiskPlanRecords extends PlanRecords {
       await this.files.writeOnce(path, text)
     } catch (cause) {
       if (!DiskPlanRecords.#hasCode(cause, 'EEXIST')) {
-        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+        if (HeadlessFiles.isSystemFailure(cause)) {
+          throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+        }
+        throw cause
       }
-      const existing = await this.files.read(path)
+      const existing = await this.#read(path)
       if (existing !== text) throw new PlanAgentNotNamed(`${path} contains conflicting cleanup evidence`)
     }
   }
@@ -289,12 +296,20 @@ export class DiskPlanRecords extends PlanRecords {
       await this.files.fs.stat(destination)
       throw new PlanAgentNotNamed(`${destination} already exists`)
     } catch (cause) {
-      if (!DiskPlanRecords.#hasCode(cause, 'ENOENT')) throw cause
+      if (!DiskPlanRecords.#hasCode(cause, 'ENOENT') && HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${destination} could not be checked before retirement: ${String(cause)}`)
+      }
+      if (!DiskPlanRecords.#hasCode(cause, 'ENOENT')) {
+        throw cause
+      }
     }
     try {
       await this.files.fs.rename(source, destination)
     } catch (cause) {
-      throw new PlanAgentNotLaunched(`${source} could not be retired to ${destination}: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${source} could not be retired to ${destination}: ${String(cause)}`)
+      }
+      throw cause
     }
   }
 
@@ -305,16 +320,19 @@ export class DiskPlanRecords extends PlanRecords {
       await this.files.writeOnce(path, text)
     } catch (cause) {
       if (!DiskPlanRecords.#hasCode(cause, 'EEXIST')) {
-        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+        if (HeadlessFiles.isSystemFailure(cause)) {
+          throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+        }
+        throw cause
       }
-      const existing = await this.files.read(path)
+      const existing = await this.#read(path)
       if (existing !== text) throw new PlanAgentNotNamed(`${path} contains conflicting non-launch evidence`)
     }
   }
 
   async nonLaunch(watch: PlanWatch): Promise<PlanNonLaunch | null> {
     const path = this.#nonLaunchPath(watch.agent)
-    const text = await this.files.read(path)
+    const text = await this.#read(path)
     if (text === null) return null
     let proof: PlanNonLaunch
     try {
@@ -353,7 +371,10 @@ export class DiskPlanRecords extends PlanRecords {
     try {
       names = await this.files.list(directory)
     } catch (cause) {
-      throw new PlanAgentNotLaunched(`${directory} could not be listed: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${directory} could not be listed: ${String(cause)}`)
+      }
+      throw cause
     }
     const watches: PlanWatch[] = []
     for (const name of names) {
@@ -390,7 +411,10 @@ export class DiskPlanRecords extends PlanRecords {
     try {
       text = await this.files.read(path)
     } catch (cause) {
-      throw new PlanAgentNotLaunched(`${path} could not be read: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${path} could not be read: ${String(cause)}`)
+      }
+      throw cause
     }
     if (text === null) return null
     try {
@@ -404,7 +428,10 @@ export class DiskPlanRecords extends PlanRecords {
     try {
       return await this.exists(path)
     } catch (cause) {
-      throw new PlanAgentNotLaunched(`${path} could not be checked: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${path} could not be checked: ${String(cause)}`)
+      }
+      throw cause
     }
   }
 
@@ -413,20 +440,26 @@ export class DiskPlanRecords extends PlanRecords {
       throw new PlanAgentNotNamed(`${path} identity differs from dispatch ${watch.agent}`)
     }
     const calls = join(this.files.root, DiskPlanRecords.DIRECTORY, watch.agent, 'calls')
-    const names = await this.files.list(calls)
+    const names = await this.#list(calls)
     if (proof.callId === null) {
       if (proof.source !== 'before-worker' || names.length !== 0) {
         throw new PlanAgentNotNamed(`${path} conflicts with recorded call history`)
       }
       return
     }
+    if (proof.source === 'before-worker' && names.length === 0) return
     if (names.length !== 1 || names[0] !== proof.callId) {
       throw new PlanAgentNotNamed(`${path} conflicts with recorded call history`)
     }
     const directory = join(calls, proof.callId)
-    const descriptorText = await this.files.read(join(directory, CallDescriptor.FILE))
+    const stream = await this.#read(join(directory, CallDescriptor.STREAM))
+    const completionText = await this.#read(join(directory, CallDescriptor.COMPLETION))
+    if (stream !== null && stream.length > 0) {
+      throw new PlanAgentNotNamed(`${path} conflicts with recorded launch evidence`)
+    }
+    const descriptorText = await this.#read(join(directory, CallDescriptor.FILE))
     if (descriptorText === null) {
-      if (proof.source === 'before-worker') return
+      if (proof.source === 'before-worker' && completionText === null) return
       throw new PlanAgentNotNamed(`${path} has no descriptor for ${proof.source}`)
     }
     let descriptor: CallDescriptor
@@ -435,11 +468,53 @@ export class DiskPlanRecords extends PlanRecords {
     } catch (cause) {
       throw new PlanAgentNotNamed(`${path} conflicts with its call descriptor: ${String(cause)}`)
     }
-    const completion = await this.files.read(join(directory, CallDescriptor.COMPLETION))
-    const stream = await this.files.read(join(directory, CallDescriptor.STREAM))
     if (descriptor.conversation !== watch.agent || descriptor.purpose !== 'plan'
-      || completion !== null || (stream !== null && stream.length > 0)) {
+      || descriptor.cwd !== watch.located.path || descriptor.mode() !== 'initial') {
       throw new PlanAgentNotNamed(`${path} conflicts with recorded launch evidence`)
+    }
+    if (proof.source === 'child-spawn') {
+      if (completionText === null) throw new PlanAgentNotNamed(`${path} has no child-spawn terminal evidence`)
+      let completion
+      try {
+        completion = StoredCompletion.read(
+          completionText,
+          new StartedPlanCall({ conversation: watch.agent, id: proof.callId }),
+          descriptor.mode(),
+        )
+      } catch (cause) {
+        throw new PlanAgentNotNamed(`${path} conflicts with its child-spawn terminal: ${String(cause)}`)
+      }
+      if (completion.execution.kind !== 'child-spawn-failed'
+        || completion.execution.conversation !== proof.conversation
+        || completion.execution.callId !== proof.callId
+        || completion.execution.diagnostic !== proof.diagnostic
+        || completion.finishedAt !== proof.observedAt) {
+        throw new PlanAgentNotNamed(`${path} conflicts with its child-spawn terminal`)
+      }
+      return
+    }
+    if (completionText !== null) throw new PlanAgentNotNamed(`${path} conflicts with recorded launch evidence`)
+  }
+
+  async #read(path: string): Promise<string | null> {
+    try {
+      return await this.files.read(path)
+    } catch (cause) {
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${path} could not be read: ${String(cause)}`)
+      }
+      throw cause
+    }
+  }
+
+  async #list(path: string): Promise<string[]> {
+    try {
+      return await this.files.list(path)
+    } catch (cause) {
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanAgentNotLaunched(`${path} could not be listed: ${String(cause)}`)
+      }
+      throw cause
     }
   }
 

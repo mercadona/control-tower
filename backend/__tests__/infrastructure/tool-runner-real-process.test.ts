@@ -52,7 +52,19 @@ describe('ToolRunner', () => {
     const output = await Node.running(250).run(Node.sleeping())
 
     expect(output.failed).toBe(true)
+    expect(output.stderr).not.toBe('')
     expect(Date.now() - started).toBeLessThan(Node.SLOW_MS)
+  })
+
+  it('timeout exits keep a diagnostic even when the child exits numerically', async () => {
+    const output = await Node.running(5_000).run(['-e', [
+      'process.stdout.write("ready\\n")',
+      'process.on("SIGTERM", () => process.exit(1))',
+      'setInterval(() => {}, 1_000)',
+    ].join(';')])
+
+    expect(output).toMatchObject({ code: 1, stdout: 'ready\n' })
+    expect(output.stderr).not.toBe('')
   })
 
   it('a_tool_that_refuses_is_a_code_and_a_reason_and_not_something_thrown_at_the_caller', async () => {
@@ -61,6 +73,12 @@ describe('ToolRunner', () => {
 
     expect(output.code).toBe(3)
     expect(output.stderr).toBe('no such work item')
+  })
+
+  it('a normal nonzero exit preserves an actually empty stderr channel', async () => {
+    const output = await Node.running(30_000).run(['-e', 'process.exit(1)'])
+
+    expect(output).toMatchObject({ code: 1, stdout: '', stderr: '' })
   })
 
   it('what_the_tool_printed_before_refusing_is_kept_because_the_adapter_may_have_to_read_it', async () => {

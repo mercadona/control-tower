@@ -2,6 +2,7 @@ import {
   PlanCleanupConflict,
   PlanCleanupNotFound,
   PlanCleanupNotRead,
+  PlanIssueNotClaimed,
 } from '../../domain/exceptions.ts'
 import type { DispatchClaims } from '../../domain/ports/dispatch-claims.ts'
 import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
@@ -60,8 +61,9 @@ export class CleanupPlan {
     const evidence = await this.workspace.inspectUnlaunched(watch, previous)
     if (previous === null) await this.records.recordCleanupEvidence(evidence)
     await this.workspace.undoUnlaunched(evidence)
+    await this.workspace.confirmAbsent(watch)
     await this.#release(watch)
-    await this.workspace.inspectUnlaunched(watch, evidence)
+    await this.workspace.confirmAbsent(watch)
     await this.records.archive(watch)
   }
 
@@ -78,6 +80,7 @@ export class CleanupPlan {
         root: new CheckoutRoot(watch.located.root),
       })
     } catch (cause) {
+      if (!(cause instanceof PlanIssueNotClaimed)) throw cause
       let refreshed: PlanIssueStatusValue
       try {
         refreshed = await this.#status(watch)

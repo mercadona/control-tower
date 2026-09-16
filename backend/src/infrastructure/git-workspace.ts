@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { lstat as inspectPath } from 'node:fs/promises'
 import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/state-paths.js'
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
@@ -29,7 +30,23 @@ export type DiskWrite = (path: string, text: string) => Promise<void>
 export type DiskRead = (path: string) => Promise<string | null>
 export type DiagnosticWriter = (line: string) => void
 export type SeedSlice = ReturnType<typeof mapGhIssue> & { readonly epic: string }
-type UnlaunchedState = { readonly evidence: UnusedWorkspace, readonly worktree: boolean, readonly branch: boolean }
+type Presence = 'present' | 'absent'
+
+class UnlaunchedWorkspace {
+  readonly evidence: UnusedWorkspace
+  readonly worktree: Presence
+  readonly branch: Presence
+
+  constructor(asked: { evidence: UnusedWorkspace, worktree: boolean, branch: boolean }) {
+    this.evidence = asked.evidence
+    this.worktree = asked.worktree ? 'present' : 'absent'
+    this.branch = asked.branch ? 'present' : 'absent'
+    Object.freeze(this)
+  }
+
+  removeWorktree(): boolean { return this.worktree === 'present' }
+  removeBranch(): boolean { return this.branch === 'present' }
+}
 
 export class SliceSeed {
   static readonly RELATIVE_PATH = SLICE_REL_PATH
@@ -89,6 +106,40 @@ class WorktreeListing {
 
     return new PreparedWorkspace({ issueNumber: issue.number, located: new WorkspaceLocation({ root, path, branch }) })
   }
+
+  static requireAbsent(printed: string, watch: PlanWatch): void {
+    const blocks = printed.split('\n\n').map((block) => block.trim()).filter((block) => block.length > 0)
+    if (blocks.length === 0) throw new PlanCleanupNotUnderstood('git worktree list printed no checkout')
+    const paths = new Set<string>()
+    for (const block of blocks) {
+      const lines = block.split('\n')
+      if (!lines[0].startsWith(WorktreeListing.HEADING)) {
+        throw new PlanCleanupNotUnderstood(`malformed worktree heading ${JSON.stringify(lines[0])}`)
+      }
+      const path = lines[0].slice(WorktreeListing.HEADING.length)
+      if (!isAbsolute(path) || paths.has(path)) {
+        throw new PlanCleanupNotUnderstood(`invalid or duplicate worktree path ${JSON.stringify(path)}`)
+      }
+      paths.add(path)
+      const fields = lines.slice(1)
+      const heads = fields.filter((line) => line.startsWith('HEAD '))
+      const branches = fields.filter((line) => line.startsWith('branch '))
+      const detached = fields.filter((line) => line === 'detached')
+      const bare = fields.filter((line) => line === 'bare')
+      const recognized = fields.every((line) => /^(HEAD [0-9a-f]{40}|branch refs\/heads\/.+|detached|bare|locked(?: .*)?|prunable(?: .*)?)$/.test(line))
+      const normal = heads.length === 1 && branches.length + detached.length === 1 && bare.length === 0
+      const bareRecord = bare.length === 1 && heads.length === 0 && branches.length === 0 && detached.length === 0
+      if (!recognized || (!normal && !bareRecord)) {
+        throw new PlanCleanupNotUnderstood(`malformed worktree block for ${JSON.stringify(path)}`)
+      }
+      if (path === watch.located.path) {
+        throw new WorkspaceNotCleaned(`worktree registration ${path} remains after cleanup`)
+      }
+      if (branches.includes(`branch refs/heads/${watch.located.branch}`)) {
+        throw new WorkspaceNotCleaned(`branch ${watch.located.branch} remains registered at ${path}`)
+      }
+    }
+  }
 }
 
 export class GitWorkspace extends Workspace {
@@ -105,14 +156,16 @@ export class GitWorkspace extends Workspace {
   readonly stderr: DiagnosticWriter
   readonly baseline: Baseline
   readonly gh: Gh
+  readonly inspectPath: typeof inspectPath
 
-  constructor({ run, write, read, stderr, baseline, gh }: {
+  constructor({ run, write, read, stderr, baseline, gh, lstat }: {
     run: ToolLaunch,
     write: DiskWrite,
     read: DiskRead,
     stderr: DiagnosticWriter,
     baseline: Baseline,
     gh: Gh,
+    lstat?: typeof inspectPath,
   }) {
     super()
     this.run = run
@@ -121,6 +174,7 @@ export class GitWorkspace extends Workspace {
     this.stderr = stderr
     this.baseline = baseline
     this.gh = gh
+    this.inspectPath = lstat ?? inspectPath
   }
 
   static branchFor(issue: NumberedIssue): string {
@@ -195,7 +249,7 @@ export class GitWorkspace extends Workspace {
   }
 
   static branchTipArgvFor(root: string, branch: string): string[] {
-    return ['-C', root, 'rev-parse', '--verify', `refs/heads/${branch}`]
+    return ['-C', root, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
   }
 
   static remoteBranchArgvFor(root: string, branch: string): string[] {
@@ -223,7 +277,7 @@ export class GitWorkspace extends Workspace {
   async undoUnlaunched(evidence: UnusedWorkspace): Promise<void> {
     const state = await this.#inspectUnlaunched(evidence.watch, evidence)
     const root = GitWorkspace.#requiredRoot(evidence.watch)
-    if (state.worktree) {
+    if (state.removeWorktree()) {
       const removed = await this.run(GitWorkspace.removeUnlaunchedArgvFor(
         root,
         evidence.watch.located.path,
@@ -234,7 +288,7 @@ export class GitWorkspace extends Workspace {
         )
       }
     }
-    if (state.branch) {
+    if (state.removeBranch()) {
       const deleted = await this.run(GitWorkspace.deleteUnusedBranchArgvFor(
         root,
         evidence.watch.located.branch,
@@ -247,7 +301,38 @@ export class GitWorkspace extends Workspace {
     }
   }
 
-  async #inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnlaunchedState> {
+  async confirmAbsent(watch: PlanWatch): Promise<void> {
+    const root = GitWorkspace.#requiredRoot(watch)
+    await this.#requireCleanupIdentity(watch, root)
+    const listed = await this.run(GitWorkspace.surveyArgvFor(root))
+    if (listed.failed) {
+      throw new PlanCleanupNotRead(`worktree registration absence could not be confirmed: ${GitWorkspace.#output(listed)}`)
+    }
+    WorktreeListing.requireAbsent(listed.stdout, watch)
+    const checked = await this.run(GitWorkspace.branchTipArgvFor(root, watch.located.branch))
+    if (!checked.failed) {
+      if (!/^[0-9a-f]{40}\n?$/.test(checked.stdout) || checked.stderr.length !== 0) {
+        throw new PlanCleanupNotUnderstood(`local branch query printed malformed evidence: ${GitWorkspace.#output(checked)}`)
+      }
+      throw new WorkspaceNotCleaned(`local branch ${watch.located.branch} remains after cleanup`)
+    }
+    if (checked.code !== 1 || checked.stdout.length !== 0 || checked.stderr.length !== 0) {
+      throw new PlanCleanupNotRead(`local branch absence could not be confirmed: ${GitWorkspace.#output(checked)}`)
+    }
+    const path = watch.located.path
+    try {
+      await this.inspectPath(path)
+    } catch (cause) {
+      if (cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT') {
+        await this.#requireNoRemoteWork(watch, root)
+        return
+      }
+      throw new PlanCleanupNotRead(`worktree path absence could not be confirmed: ${String(cause)}`)
+    }
+    throw new WorkspaceNotCleaned(`worktree path ${path} remains after cleanup`)
+  }
+
+  async #inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnlaunchedWorkspace> {
     const root = GitWorkspace.#requiredRoot(watch)
     await this.#requireCleanupIdentity(watch, root)
     const listed = await this.run(GitWorkspace.surveyArgvFor(root))
@@ -274,7 +359,7 @@ export class GitWorkspace extends Workspace {
       baseSha = previous.baseSha
       const tip = await this.run(GitWorkspace.branchTipArgvFor(root, watch.located.branch))
       if (tip.failed) {
-        if (tip.code !== 1 || tip.stdout.length !== 0) {
+        if (tip.code !== 1 || tip.stdout.length !== 0 || tip.stderr.length !== 0) {
           throw new PlanCleanupNotRead(`local branch state could not be read: ${GitWorkspace.#output(tip)}`)
         }
         branch = false
@@ -288,11 +373,11 @@ export class GitWorkspace extends Workspace {
       throw new PlanCleanupConflict(`cleanup evidence base ${previous.baseSha} differs from seeded base ${baseSha}`)
     }
     await this.#requireNoRemoteWork(watch, root)
-    return {
+    return new UnlaunchedWorkspace({
       evidence: previous ?? new UnusedWorkspace({ watch, baseSha, checkedAt: new Date().toISOString() }),
       worktree,
       branch,
-    }
+    })
   }
 
   async #seedBase(watch: PlanWatch): Promise<string> {

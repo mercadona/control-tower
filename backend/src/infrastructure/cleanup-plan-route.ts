@@ -14,7 +14,11 @@ import {
 } from '../domain/exceptions.ts'
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
-import { PlanOperationRequest, type PlanProjectionRefresh } from './recover-plan-route.ts'
+import {
+  MalformedPlanOperationRequest,
+  PlanOperationRequest,
+  type PlanProjectionRefresh,
+} from './plan-operation-request.ts'
 import { Reservation, type WorkInFlight } from './work-in-flight.ts'
 
 export const CleanupPlanOutcome = Object.freeze({
@@ -49,6 +53,7 @@ export class CleanupPlanRoute {
       try {
         asked = PlanOperationRequest.from(JsonBody.textOf(request))
       } catch (cause) {
+        if (!(cause instanceof MalformedPlanOperationRequest)) throw cause
         Answer.refuse(response, 400, CleanupPlanOutcome.INVALID_REQUEST, String(cause))
         return
       }

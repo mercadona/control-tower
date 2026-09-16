@@ -54,6 +54,14 @@ export class HeadlessFiles {
     }
   }
 
+  static isSystemFailure(cause: unknown): cause is Error & { readonly code: string } {
+    return cause instanceof Error
+      && 'code' in cause
+      && typeof cause.code === 'string'
+      && /^E[A-Z0-9]+$/.test(cause.code)
+      && cause.code !== 'ERR_INVALID_ARG_TYPE'
+  }
+
   static #hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
   }

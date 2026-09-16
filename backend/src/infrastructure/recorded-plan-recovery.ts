@@ -109,15 +109,15 @@ export class RecordedPlanRecovery {
   }
 
   #project(watch: PlanWatch, recovery: PlanRecovery): RecoveredPlan {
-    const decision = recovery.decision
     if (recovery.successfulExecution() !== null) {
       return new RecoveredPlan({ watch, outcome: { phase: ActivePlanPhase.IMPLEMENTING } })
     }
-    if (decision.action === 'observe' && this.ownership.owns(decision.call)) {
+    if (recovery.action === 'observe' && this.ownership.owns(recovery.call())) {
+      const call = recovery.call()
       return new RecoveredPlan({
         watch,
         outcome: {
-          phase: recovery.purposeOf(decision.call) === 'plan'
+          phase: recovery.purposeOf(call) === 'plan'
             ? ActivePlanPhase.PLANNING
             : ActivePlanPhase.IMPLEMENTING,
         },
@@ -127,10 +127,10 @@ export class RecordedPlanRecovery {
       watch,
       outcome: {
         phase: ActivePlanPhase.UNCERTAIN,
-        diagnostic: decision.action === 'observe'
-          ? `incomplete call ${decision.call.id} is not owned by this API process; ${decision.detail}`
-          : decision.detail,
-        recovery: { action: decision.action, detail: decision.detail },
+        diagnostic: recovery.action === 'observe'
+          ? `incomplete call ${recovery.call().id} is not owned by this API process; ${recovery.detail}`
+          : recovery.detail,
+        recovery: { action: recovery.action, detail: recovery.detail },
       },
     })
   }

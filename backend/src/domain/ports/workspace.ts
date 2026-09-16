@@ -18,6 +18,10 @@ export class Workspace {
     throw new Error(`${this.constructor.name} must implement undoUnlaunched(evidence), asked for ${evidence.watch.agent}`)
   }
 
+  async confirmAbsent(watch: PlanWatch): Promise<void> {
+    throw new Error(`${this.constructor.name} must implement confirmAbsent(watch), asked for ${watch.agent}`)
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     throw new Error(
       `${this.constructor.name} must implement confirm({ root, repository }) and answer the canonical checkout root, asked whether ${root} holds ${repository}`

@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
 import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
@@ -16,6 +17,51 @@ type GroupEnforcement = { readonly kind: 'pending' }
   | { readonly kind: 'disappeared' }
   | { readonly kind: 'escalated' }
 type WorkerTimer = { cancel: () => void }
+type ChildSpawnFailure = {
+  readonly diagnostic: string,
+  readonly observedAt: string,
+  readonly conversation: string,
+  readonly callId: string,
+}
+
+class WorkerCallLocation {
+  readonly root: string
+  readonly directory: string
+  readonly conversation: string
+  readonly callId: string
+
+  private constructor(asked: { root: string, directory: string, conversation: string, callId: string }) {
+    this.root = asked.root
+    this.directory = asked.directory
+    this.conversation = asked.conversation
+    this.callId = asked.callId
+    Object.freeze(this)
+  }
+
+  static from(descriptorPath: string, descriptor: CallDescriptor): WorkerCallLocation {
+    if (!isAbsolute(descriptorPath) || basename(descriptorPath) !== CallDescriptor.FILE) {
+      throw new Error(`worker descriptor must be an absolute ${CallDescriptor.FILE} path`)
+    }
+    const directory = dirname(descriptorPath)
+    const callId = new ConversationId(basename(directory)).text
+    const calls = dirname(directory)
+    const conversationDirectory = dirname(calls)
+    const conversation = new ConversationId(basename(conversationDirectory)).text
+    const harness = dirname(conversationDirectory)
+    if (basename(calls) !== 'calls' || basename(harness) !== 'harness') {
+      throw new Error('worker descriptor path must match <root>/harness/<conversation>/calls/<call>/call.json')
+    }
+    if (descriptor.conversation !== conversation) {
+      throw new Error(`worker descriptor conversation ${descriptor.conversation} differs from path ${conversation}`)
+    }
+    descriptor.mode()
+    return new WorkerCallLocation({ root: dirname(harness), directory, conversation, callId })
+  }
+
+  nonLaunchPath(): string {
+    return join(this.root, 'harness', this.conversation, 'non-launch.json')
+  }
+}
 
 class WorkerOutcome {
   readonly code: number | null
@@ -56,6 +102,7 @@ export class HeadlessCallWorker {
   readonly acknowledge: () => void
   #descriptor: CallDescriptor | null = null
   #descriptorPath: string | null = null
+  #location: WorkerCallLocation | null = null
   #leader: LeaderOutcome = Object.freeze({ kind: 'pending' })
   #enforcement: GroupEnforcement = Object.freeze({ kind: 'pending' })
   #pid: number | null = null
@@ -63,6 +110,10 @@ export class HeadlessCallWorker {
   #graceTimer: WorkerTimer | null = null
   #diagnostics: string[] = []
   #publication: Promise<void> | null = null
+  #childSpawnFailure: ChildSpawnFailure | null = null
+  #spawned = false
+  readonly #terminal: Promise<void>
+  readonly #finishTerminal: () => void
 
   constructor(ports: {
     files: HeadlessFiles,
@@ -80,12 +131,19 @@ export class HeadlessCallWorker {
     this.schedule = ports.schedule
     this.cancel = ports.cancel
     this.acknowledge = ports.acknowledge
+    let finish!: () => void
+    this.#terminal = new Promise<void>((resolve) => { finish = resolve })
+    this.#finishTerminal = finish
   }
 
   async run(descriptorPath: string): Promise<void> {
     this.#descriptorPath = descriptorPath
     this.#descriptor = CallDescriptor.from(await this.files.fs.readFile(descriptorPath, 'utf8'))
-    const directory = dirname(descriptorPath)
+    this.#location = WorkerCallLocation.from(descriptorPath, this.#descriptor)
+    if (this.files.root !== this.#location.root) {
+      throw new Error(`worker file root ${this.files.root} differs from descriptor root ${this.#location.root}`)
+    }
+    const directory = this.#location.directory
     const stdout = await this.files.fs.open(join(directory, CallDescriptor.STREAM), 'wx')
     const stderr = await this.files.fs.open(join(directory, CallDescriptor.STDERR), 'wx')
     let child: import('node:child_process').ChildProcess
@@ -100,7 +158,10 @@ export class HeadlessCallWorker {
         stdio: ['ignore', stdout.fd, stderr.fd],
       })
       this.#pid = child.pid ?? null
-      child.once('spawn', () => this.#accepted())
+      child.once('spawn', () => {
+        this.#spawned = true
+        this.#accepted()
+      })
       child.once('error', (cause) => this.#spawnFailed(cause))
       child.once('close', (code, signal) => this.#closed(code, signal))
       const remainingBudget = Math.max(
@@ -109,12 +170,17 @@ export class HeadlessCallWorker {
       )
       this.#budgetTimer = this.schedule(() => this.#deadline(), remainingBudget)
     } catch (cause) {
-      await this.#spawnFailed(cause instanceof Error ? cause : new Error(String(cause)))
+      if (!HeadlessFiles.isSystemFailure(cause)) throw cause
+      this.#spawnFailed(cause)
     } finally {
       await stdout.close()
       await stderr.close()
     }
     if (this.#publication !== null) await this.#publication
+  }
+
+  terminal(): Promise<void> {
+    return this.#terminal
   }
 
   #accepted(): void {
@@ -125,26 +191,21 @@ export class HeadlessCallWorker {
     }
   }
 
-  async #spawnFailed(cause: Error): Promise<void> {
+  #spawnFailed(cause: Error): void {
     if (this.#leader.kind === 'known') return
     const diagnostic = `recorded child could not be spawned: ${cause.message}`
     this.#diagnostics.push(diagnostic)
     const descriptor = this.#descriptor
-    const descriptorPath = this.#descriptorPath
-    if (descriptor !== null && descriptorPath !== null && descriptor.purpose === 'plan') {
-      const proof = new PlanNonLaunch({
-        conversation: descriptor.conversation,
-        callId: basename(dirname(descriptorPath)),
-        source: 'child-spawn',
+    const location = this.#location
+    if (!this.#spawned && HeadlessFiles.isSystemFailure(cause)
+      && descriptor !== null && location !== null && descriptor.purpose === 'plan') {
+      const observedAt = this.now()
+      this.#childSpawnFailure = Object.freeze({
         diagnostic,
-        observedAt: this.now(),
+        observedAt,
+        conversation: descriptor.conversation,
+        callId: location.callId,
       })
-      const path = join(this.files.root, 'harness', descriptor.conversation, 'non-launch.json')
-      try {
-        await this.files.writeOnce(path, NonLaunchRecord.text(proof))
-      } catch (proofCause) {
-        this.#diagnostics.push(`non-launch proof could not be recorded: ${String(proofCause)}`)
-      }
     }
     this.#leader = Object.freeze({ kind: 'known', code: null, signal: null })
     this.#enforcement = Object.freeze({ kind: 'disappeared' })
@@ -218,7 +279,7 @@ export class HeadlessCallWorker {
     if (this.#publication !== null || this.#leader.kind !== 'known' || this.#enforcement.kind === 'pending') return
     if (this.#budgetTimer !== null) this.cancel(this.#budgetTimer)
     if (this.#graceTimer !== null) this.cancel(this.#graceTimer)
-    const finishedAt = this.now()
+    const finishedAt = this.#childSpawnFailure?.observedAt ?? this.now()
     const descriptor = this.#descriptor
     if (descriptor === null) return
     const outcome = new WorkerOutcome({
@@ -235,12 +296,45 @@ export class HeadlessCallWorker {
         `completion could not be published: ${String(cause)}\n`,
         'utf8',
       ).catch(() => {})
-    })
+    }).finally(this.#finishTerminal)
   }
 
   async #publish(descriptor: CallDescriptor, outcome: WorkerOutcome): Promise<void> {
     const descriptorPath = this.#descriptorPath
-    if (descriptorPath === null) return
+    const location = this.#location
+    if (descriptorPath === null || location === null) return
+    const childSpawnFailure = this.#childSpawnFailure
+    if (childSpawnFailure !== null) {
+      const completed = new CompletedPlanCall({
+        call: new StartedPlanCall({ conversation: childSpawnFailure.conversation, id: childSpawnFailure.callId }),
+        code: null,
+        signal: null,
+        finishedAt: childSpawnFailure.observedAt,
+        wallDurationMs: outcome.wallDurationMs,
+        execution: {
+          kind: 'child-spawn-failed',
+          conversation: childSpawnFailure.conversation,
+          callId: childSpawnFailure.callId,
+          diagnostic: childSpawnFailure.diagnostic,
+        },
+        measurement: {
+          cost: { kind: 'unavailable', reason: 'Claude child was not spawned' },
+          turns: null,
+          durationMs: null,
+          unavailable: Object.freeze(['Claude child was not spawned']),
+        },
+      })
+      await this.files.writeOnce(join(location.directory, CallDescriptor.COMPLETION), StoredCompletion.text(completed))
+      const proof = new PlanNonLaunch({
+        conversation: childSpawnFailure.conversation,
+        callId: childSpawnFailure.callId,
+        source: 'child-spawn',
+        diagnostic: childSpawnFailure.diagnostic,
+        observedAt: childSpawnFailure.observedAt,
+      })
+      await this.files.writeOnce(location.nonLaunchPath(), NonLaunchRecord.text(proof))
+      return
+    }
     const stream = await this.files.fs.readFile(join(dirname(descriptorPath), CallDescriptor.STREAM), 'utf8')
     const converted = await ClaudeCallResult.read({
       lines: RecordedStream.of(stream),
@@ -277,7 +371,10 @@ export class HeadlessCallWorker {
 
   static async main(argv: readonly string[]): Promise<void> {
     if (argv.length !== 1) throw new Error(`expected one descriptor path, got ${argv.length}`)
-    const files = new HeadlessFiles({ root: '/', fs, newId: () => randomUUID() })
+    const descriptorPath = argv[0]
+    const descriptor = CallDescriptor.from(await fs.readFile(descriptorPath, 'utf8'))
+    const location = WorkerCallLocation.from(descriptorPath, descriptor)
+    const files = new HeadlessFiles({ root: location.root, fs, newId: () => randomUUID() })
     const worker = new HeadlessCallWorker({
       files,
       spawn,
@@ -290,7 +387,8 @@ export class HeadlessCallWorker {
       cancel: (timer) => timer.cancel(),
       acknowledge: () => HeadlessCallWorker.#acknowledge(),
     })
-    await worker.run(argv[0])
+    await worker.run(descriptorPath)
+    await worker.terminal()
   }
 
   static #acknowledge(): void {

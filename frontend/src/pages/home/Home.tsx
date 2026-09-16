@@ -121,7 +121,8 @@ const Home = () => {
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
 
-  const reconcile = useCallback((): Promise<void> => {
+  const reconcile = useCallback((afterMutation = false): Promise<void> => {
+    if (recoveryMutationRef.current !== null && !afterMutation) return Promise.resolve()
     if (recoveryInFlightRef.current !== null) return recoveryInFlightRef.current
 
     const token = Symbol('recovery')
@@ -332,11 +333,10 @@ const Home = () => {
         || activePlanIdentity(uncertainActiveRef.current) !== identity) return
       if (outcome.kind === 'unavailable') {
         setRecoveryFailure('No se pudo contactar con el backend para ejecutar la recuperación.')
-        return
       }
       if (outcome.kind === 'refused') setRecoveryFailure(outcome.detail)
       setReconciliation('checking')
-      await reconcile()
+      await reconcile(true)
     } finally {
       if (recoveryMutationRef.current === mutation) {
         recoveryMutationRef.current = null

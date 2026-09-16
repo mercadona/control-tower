@@ -544,6 +544,62 @@ describe('Home · restore workflow', () => {
     ])
   })
 
+  it.each([
+    ['recover', HeadlessPlanMother.awaitingContinuation(), '/recover-plan', 'Recuperar trabajo', HeadlessPlanMother.planning()],
+    ['cleanup', HeadlessPlanMother.unlaunched(), '/cleanup-plan', 'Limpiar arranque fallido', HeadlessPlanMother.empty()],
+  ] as const)('polling during %s cannot replace the fresh read', async (_name, initial, endpoint, action, fresh) => {
+    vi.useFakeTimers()
+    let answerMutation: (response: Response) => void = () => {}
+    const mutation = new Promise<Response>((resolve) => { answerMutation = resolve })
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(initial.body)
+      }
+      if (input === endpoint) return mutation
+      if (input === '/active-plans') return new Response(fresh.body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    openHome()
+    await act(async () => Promise.resolve())
+
+    fireEvent.click(screen.getByRole('button', { name: action }))
+    await act(async () => Promise.resolve())
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(calls).toEqual(['GET /active-plans', `POST ${endpoint}`])
+
+    await act(async () => {
+      answerMutation(new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), {
+        status: endpoint === '/recover-plan' ? 202 : 200,
+      }))
+      await mutation
+      await Promise.resolve()
+    })
+
+    expect(calls).toEqual(['GET /active-plans', `POST ${endpoint}`, 'GET /active-plans'])
+  })
+
+  it('an unavailable recovery keeps its diagnostic and performs a fresh read', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.awaitingContinuation().body)
+      if (input === '/recover-plan') throw new TypeError('Failed to fetch')
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: 'Recuperar trabajo' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo contactar con el backend para ejecutar la recuperación.',
+    )
+    expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
+  })
+
   it('proven non-launch exposes checked cleanup', async () => {
     const calls: string[] = []
     const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

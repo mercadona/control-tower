@@ -2,11 +2,12 @@ import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RecoverPlan, type RecoverPlanParams } from '../../src/application/actions/recover-plan.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { Browsers, JsonBody } from '../../src/infrastructure/http.ts'
 import { RecoverPlanRoute } from '../../src/infrastructure/recover-plan-route.ts'
+import { PlanOperationRequest } from '../../src/infrastructure/plan-operation-request.ts'
 import { Reservation, WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
 
@@ -58,7 +59,10 @@ class RunningApi {
   }
 }
 
-afterEach(async () => RunningApi.stop())
+afterEach(async () => {
+  vi.restoreAllMocks()
+  await RunningApi.stop()
+})
 
 describe('RecoverPlanRoute', () => {
   const request = {
@@ -80,6 +84,21 @@ describe('RecoverPlanRoute', () => {
     expect(await response.json()).toEqual(expect.objectContaining({ code: 'recover-plan-invalid-request' }))
     expect(action.asked).toEqual([])
     expect(projection.calls).toBe(0)
+  })
+
+  it('shared request validation preserves unexpected bugs', async () => {
+    const action = new RecoverPlanSpy()
+    vi.spyOn(PlanOperationRequest, 'from').mockImplementation(() => {
+      throw new Error('unexpected parser defect')
+    })
+    const port = await RunningApi.start(action, new RecoveryProjectionSpy())
+
+    const response = await fetch(`http://127.0.0.1:${port}${RecoverPlanRoute.PATH}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request),
+    })
+
+    expect(response.status).toBe(500)
+    expect(action.asked).toEqual([])
   })
 
   it('recovery accepts the original identity and refreshes projection', async () => {

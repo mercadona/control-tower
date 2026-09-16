@@ -2,6 +2,7 @@ import { ContinuePlanParams, type ContinuePlan } from '../application/actions/co
 import {
   PlanAgentNeverLaunched,
   PlanAgentNotLaunched,
+  PlanAgentNotNamed,
   PlanAgentNotResumed,
   PlanRecoveryConflict,
   PlanRecoveryNotFound,
@@ -77,7 +78,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     try {
       watch = await this.records.find({ issue: asked.issue, repository: asked.repository })
     } catch (cause) {
-      throw new PlanRecoveryNotRead(cause instanceof Error ? cause.message : String(cause))
+      if (cause instanceof PlanRecoveryNotRead || cause instanceof PlanRecoveryNotUnderstood) throw cause
+      if (cause instanceof PlanAgentNotNamed) throw new PlanRecoveryNotUnderstood(cause.message)
+      if (cause instanceof PlanAgentNotLaunched) throw new PlanRecoveryNotRead(cause.message)
+      throw cause
     }
     if (watch === null) throw new PlanRecoveryNotFound(`no active plan is recorded for ${asked.repository.text}#${asked.issue}`)
     if (watch.agent !== asked.agent) {
@@ -86,23 +90,25 @@ export class HeadlessPlanAgents extends PlanAgents {
       )
     }
     const recovery = await this.calls.recoveryFor(watch)
-    const decision = recovery.decision
-    switch (decision.action) {
+    switch (recovery.action) {
       case 'cleanup':
       case 'inspect':
-        throw new PlanRecoveryConflict(decision.detail)
-      case 'continue':
+        throw new PlanRecoveryConflict(recovery.detail)
+      case 'continue': {
+        const call = recovery.call()
         this.#supervise(
           watch,
-          decision.call,
-          this.continuation.execute(new ContinuePlanParams({ watch, call: decision.call })),
+          call,
+          this.continuation.execute(new ContinuePlanParams({ watch, call })),
         )
         return
+      }
       case 'observe': {
-        const work = recovery.purposeOf(decision.call) === 'plan'
-          ? this.continuation.execute(new ContinuePlanParams({ watch, call: decision.call }))
-          : this.#waitForSuccess(decision.call)
-        this.#supervise(watch, decision.call, work)
+        const call = recovery.call()
+        const work = recovery.purposeOf(call) === 'plan'
+          ? this.continuation.execute(new ContinuePlanParams({ watch, call }))
+          : this.#waitForSuccess(call)
+        this.#supervise(watch, call, work)
         return
       }
     }

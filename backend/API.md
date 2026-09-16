@@ -432,6 +432,15 @@ enclosing conversation and call directories. A descriptor records the
 conversation, purpose, nullable request identity, cwd, binary, argv, start time,
 call budget and kill grace, but no process id or environment dump.
 
+An initial OS child-spawn failure writes a typed `child-spawn-failed` terminal
+before its matching non-launch receipt. The terminal has no exit code, signal or
+CLI measurement because no Claude process ran. Cleanup accepts that pair only
+when its conversation, call, diagnostic and timestamp agree and the stream is
+byte-empty. A generic failed completion, successful completion, output bytes or
+foreign call directory contradicts non-launch proof. A `before-worker` receipt
+may legitimately have no call directory or only an empty prompt-only directory;
+it does not need a descriptor that failed before publication.
+
 Missing state means no plans. A successful plan with no implementation
 descriptor is uncertain because publication/continuation may still be pending;
 an incomplete call not owned by this API process is uncertain even when other
@@ -461,7 +470,7 @@ conversation. The body has exactly these fields:
 
 **202 Accepted** answers `{"agent":"11111111-1111-4111-8111-111111111111"}`.
 Acceptance means supervision was registered, not that recovery completed. The
-caller reads `GET /active-plans` afterwards. `observe` waits only inside the
+caller starts a new `GET /active-plans` only after the POST answers. `observe` waits only inside the
 immutable recorded deadline; `continue` resumes publication and implementation
 from the successful planner. Completed implementation/fix calls are never
 replayed. Legacy, expired, failed, corrupt or conflicting evidence remains
@@ -483,6 +492,11 @@ shape only after checked workspace removal, checked issue requeue and durable
 retirement finish. Cleanup requires an immutable definite non-launch receipt;
 an absent worktree or `plan-agent-never-launched` response alone is not proof.
 Retries reuse cleanup evidence and never force-remove a worktree or branch.
+Before changing the issue and again before retirement, cleanup freshly confirms
+the canonical repository, complete worktree registration, absent local branch,
+absent filesystem path, absent remote branch and absent pull request. Only an
+`ENOENT` filesystem result and Git's quiet missing-ref result establish local
+absence; malformed or inconclusive evidence preserves the active record.
 
 | `code` | Status | Meaning |
 |---|---|---|
@@ -500,6 +514,11 @@ They need no gate key. The coordinating prompt discovers these endpoints from
 the origin of `CT_SESSION_HOOKS_URL` and preserves the returned repo, issue and
 agent identity. A missing Claude transcript is a refusal, never permission to
 open a replacement conversation.
+
+Only coordinating sessions opened after this capability was installed receive
+the recovery instruction in their prompt. An already-running or resumed
+coordinator must receive the same bounded instruction through its existing
+terminal; opening code does not retroactively change its prompt.
 
 The no-live-Claude restriction remains in force for this repair. The fixture
 rehearsal verifies the production graph; a real permission smoke remains

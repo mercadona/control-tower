@@ -151,6 +151,20 @@ describe('GhDispatchCandidates', () => {
     })
   })
 
+  it('cap one releases a candidate only after the previous claim is ready again', async () => {
+    const held = GhDouble.listing([
+      CandidateMother.issue({ number: 11, order: 1, status: 'in-progress' }),
+      CandidateMother.issue({ number: 12, order: 2 }),
+    ])
+    const released = GhDouble.listing([
+      CandidateMother.issue({ number: 11, order: 1 }),
+      CandidateMother.issue({ number: 12, order: 2 }),
+    ])
+
+    await expect(held.next()).rejects.toBeInstanceOf(DispatchNotAvailable)
+    await expect(released.next()).resolves.toMatchObject({ number: 11 })
+  })
+
   it('not planned closure does not satisfy a dependency', async () => {
     const gh = GhDouble.listing(
       [CandidateMother.issue({ number: 11, order: 2, dependencies: [1] })],
