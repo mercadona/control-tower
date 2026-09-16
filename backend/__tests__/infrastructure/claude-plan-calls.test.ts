@@ -15,6 +15,7 @@ import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 class CallsDouble extends ClaudeCalls {
   readonly invocations: CallInvocation[] = []
   readonly result: CompletedPlanCall
+  recordedCall: StartedPlanCall | null = null
 
   constructor() {
     super({
@@ -37,6 +38,10 @@ class CallsDouble extends ClaudeCalls {
   override async start(invocation: CallInvocation): Promise<StartedPlanCall> {
     this.invocations.push(invocation)
     return PlanCallMother.CALL
+  }
+
+  override async startedFor(): Promise<StartedPlanCall | null> {
+    return this.recordedCall
   }
 
   override async wait(): Promise<CompletedPlanCall> {
@@ -166,6 +171,21 @@ describe('ClaudePlanCalls', () => {
     const refusal = await subject.adapter.start(PlanCallMother.watch(), 'implementation', null).catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(subject.calls.invocations).toEqual([])
+  })
+
+  it('existing implementation needs no transcript', async () => {
+    const subject = new Subject()
+    subject.resumable = false
+    subject.calls.recordedCall = PlanCallMother.CALL
+
+    expect(await subject.adapter.start(
+      PlanCallMother.watch(),
+      'implementation',
+      null,
+      `implementation:${PlanCallMother.CALL.id}`,
+    )).toBe(PlanCallMother.CALL)
+    expect(subject.resumableWatches).toEqual([])
     expect(subject.calls.invocations).toEqual([])
   })
 })

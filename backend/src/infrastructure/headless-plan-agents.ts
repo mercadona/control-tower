@@ -47,6 +47,22 @@ export class HeadlessPlanAgents extends PlanAgents {
     )
   }
 
+  override async recover(asked: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+  }): Promise<void> {
+    const watch = await this.records.find({ issue: asked.issue, repository: asked.repository })
+    if (watch === null || watch.agent !== asked.agent) {
+      throw new PlanAgentNotResumed(
+        `conversation ${JSON.stringify(asked.agent)} is not the recorded plan for `
+        + `${asked.repository.text}#${asked.issue}`
+      )
+    }
+    const call = await this.calls.planningFor(watch)
+    this.#supervise(watch, call, this.continuation.execute(new ContinuePlanParams({ watch, call })))
+  }
+
   override async fix(asked: {
     agent: string,
     issue: number,

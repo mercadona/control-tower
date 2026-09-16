@@ -66,6 +66,11 @@ class CallsDouble extends PlanCalls {
     this.events.push('started')
     return this.call
   }
+
+  override async planningFor(): Promise<StartedPlanCall> {
+    this.events.push('planner-read')
+    return this.call
+  }
 }
 
 class PublicationDouble extends PlanPublication {}
@@ -186,6 +191,56 @@ describe('HeadlessPlanAgents', () => {
     expect(events).toEqual(['recorded', 'started'])
     expect(warnings.join('')).toContain('implementation failed')
     expect(warnings.join('')).toContain(HeadlessMother.CALL.id)
+  })
+
+  it('restart observes the original planner deadline', async () => {
+    const events: string[] = []
+    const entered = new Deferred<void>()
+    const completion = new Deferred<void>()
+    const continuation = new ContinuationDouble(entered, completion)
+    const agents = new HeadlessPlanAgents({
+      records: new RecordsDouble(HeadlessMother.WATCH, events),
+      calls: new CallsDouble(events, HeadlessMother.CALL),
+      continuation,
+      newId: () => '33333333-3333-4333-8333-333333333333',
+      stderr: () => {},
+    })
+
+    await agents.recover({
+      agent: HeadlessMother.CONVERSATION,
+      issue: HeadlessMother.ISSUE.number,
+      repository: HeadlessMother.REPOSITORY,
+    })
+    await entered.promise
+
+    expect(events).toEqual(['planner-read'])
+    expect(continuation.params).toEqual([
+      new ContinuePlanParams({ watch: HeadlessMother.WATCH, call: HeadlessMother.CALL }),
+    ])
+    completion.resolve()
+  })
+
+  it('failed ambiguous or expired calls cannot relaunch', async () => {
+    const events: string[] = []
+    class RefusingCalls extends CallsDouble {
+      override async planningFor(): Promise<StartedPlanCall> {
+        throw new PlanAgentNotResumed('recorded planner is expired or ambiguous')
+      }
+    }
+    const agents = new HeadlessPlanAgents({
+      records: new RecordsDouble(HeadlessMother.WATCH, events),
+      calls: new RefusingCalls(events, HeadlessMother.CALL),
+      continuation: new ContinuationDouble(new Deferred<void>(), new Deferred<void>()),
+      newId: () => '33333333-3333-4333-8333-333333333333',
+      stderr: () => {},
+    })
+
+    await expect(agents.recover({
+      agent: HeadlessMother.CONVERSATION,
+      issue: HeadlessMother.ISSUE.number,
+      repository: HeadlessMother.REPOSITORY,
+    })).rejects.toThrow('expired or ambiguous')
+    expect(events).toEqual([])
   })
 
   it('review retries reuse a recorded request without launching again', async () => {

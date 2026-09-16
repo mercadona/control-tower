@@ -18,17 +18,41 @@ export class ContinuePlanParams {
 export class ContinuePlan {
   readonly calls: PlanCalls
   readonly publication: PlanPublication
+  readonly continuing: Map<string, Promise<void>>
 
   constructor({ calls, publication }: { calls: PlanCalls, publication: PlanPublication }) {
     this.calls = calls
     this.publication = publication
+    this.continuing = new Map()
   }
 
   async execute(params: ContinuePlanParams): Promise<void> {
+    const existing = this.continuing.get(params.watch.agent)
+    if (existing !== undefined) return existing
+    const continuing = this.#continue(params)
+    this.continuing.set(params.watch.agent, continuing)
+    try {
+      await continuing
+    } finally {
+      if (this.continuing.get(params.watch.agent) === continuing) this.continuing.delete(params.watch.agent)
+    }
+  }
+
+  async #continue(params: ContinuePlanParams): Promise<void> {
+    const existing = await this.calls.implementationFor(params.watch)
+    if (existing !== null) {
+      ContinuePlan.#requireSuccess(await this.calls.wait(existing))
+      return
+    }
     const plan = await this.calls.wait(params.call)
     ContinuePlan.#requireSuccess(plan)
     await this.#publish(params.watch)
-    const implementation = await this.calls.start(params.watch, 'implementation', null)
+    const implementation = await this.calls.start(
+      params.watch,
+      'implementation',
+      null,
+      `implementation:${params.call.id}`,
+    )
     ContinuePlan.#requireSuccess(await this.calls.wait(implementation))
   }
 

@@ -43,6 +43,26 @@ export class PlanAgentNotNamed extends PlanAgentFailure {}
 
 export class PlanAgentNotResumed extends PlanAgentFailure {}
 
+export class PlanRecoveryFailure extends PlanFailure {}
+
+export class PlanRecoveryNotFound extends PlanRecoveryFailure {}
+
+export class PlanRecoveryConflict extends PlanRecoveryFailure {}
+
+export class PlanRecoveryNotRead extends PlanRecoveryFailure {}
+
+export class PlanRecoveryNotUnderstood extends PlanRecoveryFailure {}
+
+export class PlanCleanupFailure extends PlanFailure {}
+
+export class PlanCleanupNotFound extends PlanCleanupFailure {}
+
+export class PlanCleanupConflict extends PlanCleanupFailure {}
+
+export class PlanCleanupNotRead extends PlanCleanupFailure {}
+
+export class PlanCleanupNotUnderstood extends PlanCleanupFailure {}
+
 export class WorkspaceFailure extends PlanFailure {}
 
 export class WorkspaceNotPrepared extends WorkspaceFailure {}

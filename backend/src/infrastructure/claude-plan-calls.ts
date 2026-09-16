@@ -5,6 +5,7 @@ import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { PlanAgentBrief } from './plan-agent-brief.ts'
+import type { RecordedCall } from './recorded-call.ts'
 
 type CallMode = 'initial' | 'resume'
 
@@ -38,22 +39,58 @@ export class ClaudePlanCalls extends PlanCalls {
   ): Promise<StartedPlanCall> {
     const prompt = this.#prompt(watch, purpose, changes)
     const mode = ClaudePlanCalls.#modeFor(purpose)
-    if (mode === 'resume' && (watch.agent.length === 0 || !await this.resumable(watch))) {
-      throw new PlanAgentNotResumed(`conversation ${JSON.stringify(watch.agent)} is not resumable`)
-    }
-
-    return this.calls.start(new CallInvocation({
+    const invocation = new CallInvocation({
       conversation: watch.agent,
       purpose,
       cwd: watch.located.path,
       argv: this.#argv(watch.agent, mode),
       prompt,
       requestId,
-    }))
+    })
+    const recorded = await this.calls.startedFor(invocation)
+    if (recorded !== null) return recorded
+    if (mode === 'resume' && (watch.agent.length === 0 || !await this.resumable(watch))) {
+      throw new PlanAgentNotResumed(`conversation ${JSON.stringify(watch.agent)} is not resumable`)
+    }
+
+    return this.calls.start(invocation)
+  }
+
+  async planningFor(watch: PlanWatch): Promise<StartedPlanCall> {
+    const calls = await this.#history(watch)
+    const planners = calls.filter((recorded) => recorded.purpose === 'plan')
+    if (planners.length !== 1) {
+      throw new PlanAgentNotResumed(
+        `conversation ${JSON.stringify(watch.agent)} has ${planners.length} recorded planner calls`
+      )
+    }
+    return planners[0].call
+  }
+
+  async implementationFor(watch: PlanWatch): Promise<StartedPlanCall | null> {
+    const calls = await this.#history(watch)
+    const implementations = calls.filter((recorded) => recorded.purpose === 'implementation')
+    if (implementations.length > 1) {
+      throw new PlanAgentNotResumed(
+        `conversation ${JSON.stringify(watch.agent)} has multiple recorded implementation calls`
+      )
+    }
+    return implementations[0]?.call ?? null
   }
 
   wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
     return this.calls.wait(call)
+  }
+
+  async #history(watch: PlanWatch): Promise<readonly RecordedCall[]> {
+    const history = await this.calls.history(watch.agent)
+    const unfinished = history.filter((recorded) => recorded.completion === null)
+    if (unfinished.length > 1) {
+      throw new PlanAgentNotResumed(
+        `conversation ${JSON.stringify(watch.agent)} has conflicting unfinished calls`
+      )
+    }
+    return history
   }
 
   #argv(conversation: string, mode: CallMode): readonly string[] {

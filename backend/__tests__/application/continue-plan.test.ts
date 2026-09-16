@@ -89,6 +89,7 @@ type StartSubject = {
   watch: PlanWatch,
   purpose: PlanCallPurpose,
   changes: string | null,
+  requestId?: string,
 }
 
 class PlanCallsDouble extends PlanCalls {
@@ -96,6 +97,7 @@ class PlanCallsDouble extends PlanCalls {
   readonly implementation: CompletedPlanCall
   readonly started: StartSubject[]
   readonly waited: StartedPlanCall[]
+  existingImplementation: StartedPlanCall | null
 
   constructor({ planner, implementation }: {
     planner?: CompletedPlanCall,
@@ -106,11 +108,21 @@ class PlanCallsDouble extends PlanCalls {
     this.implementation = implementation ?? PlanCallMother.completed({ call: PlanCallMother.IMPLEMENTATION })
     this.started = []
     this.waited = []
+    this.existingImplementation = null
   }
 
-  async start(watch: PlanWatch, purpose: PlanCallPurpose, changes: string | null): Promise<StartedPlanCall> {
-    this.started.push({ watch, purpose, changes })
+  async start(
+    watch: PlanWatch,
+    purpose: PlanCallPurpose,
+    changes: string | null,
+    requestId?: string,
+  ): Promise<StartedPlanCall> {
+    this.started.push({ watch, purpose, changes, requestId })
     return PlanCallMother.IMPLEMENTATION
+  }
+
+  async implementationFor(): Promise<StartedPlanCall | null> {
+    return this.existingImplementation
   }
 
   async wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
@@ -146,6 +158,7 @@ class Flow {
 
   readonly calls: PlanCallsDouble
   readonly publication: PlanPublicationDouble
+  readonly continuation: ContinuePlan
 
   constructor({ calls, publication }: {
     calls?: PlanCallsDouble,
@@ -153,10 +166,11 @@ class Flow {
   } = {}) {
     this.calls = calls ?? new PlanCallsDouble()
     this.publication = publication ?? new PlanPublicationDouble()
+    this.continuation = new ContinuePlan(this)
   }
 
   run(): Promise<void> {
-    return new ContinuePlan(this).execute(new ContinuePlanParams({
+    return this.continuation.execute(new ContinuePlanParams({
       watch: Flow.WATCH, call: PlanCallMother.PLANNER,
     }))
   }
@@ -168,6 +182,8 @@ describe('ContinuePlan', () => {
     const flow = new Flow({ publication: new PlanPublicationDouble(publication.promise) })
     const continued = flow.run()
     await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
 
     expect(flow.publication.published).toEqual([Flow.WATCH])
     expect(flow.calls.started).toEqual([])
@@ -175,7 +191,12 @@ describe('ContinuePlan', () => {
     publication.resolve()
     await continued
 
-    expect(flow.calls.started).toEqual([{ watch: Flow.WATCH, purpose: 'implementation', changes: null }])
+    expect(flow.calls.started).toEqual([{
+      watch: Flow.WATCH,
+      purpose: 'implementation',
+      changes: null,
+      requestId: 'implementation:call-plan',
+    }])
     expect(flow.calls.waited).toEqual([PlanCallMother.PLANNER, PlanCallMother.IMPLEMENTATION])
   })
 
@@ -199,6 +220,53 @@ describe('ContinuePlan', () => {
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal.message).toBe('issue publication failed')
     expect(flow.calls.started).toEqual([])
+  })
+
+  it('publication recovery resumes the original conversation exactly once', async () => {
+    const first = new Flow({ publication: new PlanPublicationDouble(Promise.reject(new Error('lost publication'))) })
+    await expect(first.run()).rejects.toThrow('lost publication')
+    const recoveredCalls = new PlanCallsDouble()
+    const recovered = new Flow({ calls: recoveredCalls })
+
+    await recovered.run()
+    recoveredCalls.existingImplementation = PlanCallMother.IMPLEMENTATION
+    await recovered.run()
+
+    expect(recovered.publication.published).toEqual([Flow.WATCH])
+    expect(recoveredCalls.started).toEqual([{
+      watch: Flow.WATCH,
+      purpose: 'implementation',
+      changes: null,
+      requestId: 'implementation:call-plan',
+    }])
+  })
+
+  it('concurrent supervisors share publication', async () => {
+    const publication = new Deferred<void>()
+    const flow = new Flow({ publication: new PlanPublicationDouble(publication.promise) })
+
+    const first = flow.run()
+    const second = flow.run()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(flow.publication.published).toEqual([Flow.WATCH])
+    publication.resolve()
+    await Promise.all([first, second])
+    expect(flow.calls.started).toHaveLength(1)
+  })
+
+  it('legacy implementation prevents another launch', async () => {
+    const calls = new PlanCallsDouble()
+    calls.existingImplementation = PlanCallMother.IMPLEMENTATION
+    const flow = new Flow({ calls })
+
+    await flow.run()
+
+    expect(flow.publication.published).toEqual([])
+    expect(calls.started).toEqual([])
+    expect(calls.waited).toEqual([PlanCallMother.IMPLEMENTATION])
   })
 
   it('continuation parameters are immutable beside the action', () => {
@@ -304,6 +372,8 @@ describe('ContinuePlan', () => {
 
     await expect(calls.start(Flow.WATCH, 'implementation', null)).rejects.toThrow(/must implement start/)
     await expect(calls.wait(PlanCallMother.PLANNER)).rejects.toThrow(/must implement wait/)
+    await expect(calls.planningFor(Flow.WATCH)).rejects.toThrow(/must implement planningFor/)
+    await expect(calls.implementationFor(Flow.WATCH)).rejects.toThrow(/must implement implementationFor/)
     await expect(new PlanPublication().publish(Flow.WATCH)).rejects.toThrow(/must implement publish/)
   })
 })

@@ -2,6 +2,14 @@ import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../val
 import type { PlanWatch } from '../value-objects/plan-watch.ts'
 
 export class PlanCalls {
+  async planningFor(watch: PlanWatch): Promise<StartedPlanCall> {
+    throw new Error(`${this.constructor.name} must implement planningFor(watch), asked for ${watch.agent}`)
+  }
+
+  async implementationFor(watch: PlanWatch): Promise<StartedPlanCall | null> {
+    throw new Error(`${this.constructor.name} must implement implementationFor(watch), asked for ${watch.agent}`)
+  }
+
   async start(
     watch: PlanWatch,
     purpose: PlanCallPurpose,

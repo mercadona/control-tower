@@ -415,6 +415,11 @@ export class ClaudeCalls {
     }
   }
 
+  async startedFor(invocation: CallInvocation): Promise<StartedPlanCall | null> {
+    await (this.starts.get(invocation.conversation) ?? Promise.resolve())
+    return this.#recorded(invocation)
+  }
+
   async #start(invocation: CallInvocation): Promise<StartedPlanCall> {
     const recorded = await this.#recorded(invocation)
     if (recorded !== null) return recorded
