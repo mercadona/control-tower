@@ -11,6 +11,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
@@ -361,6 +362,28 @@ describe('RecordedPlanRecovery', () => {
 
     expect(fixture.activePlans.known()).toEqual([])
     expect(fixture.reviews.stopped).toContain(`${RecoveryMother.REPOSITORY}#${RecoveryMother.ISSUE}`)
+  })
+
+  it('partial cleanup remains visible without its worktree', async () => {
+    const fixture = await RecoveryMother.recorded()
+    fixtures.push(fixture)
+    const watch = await fixture.records.recorded(RecoveryMother.CONVERSATION)
+    if (watch === null) throw new Error('fixture dispatch is absent')
+    await fixture.records.recordCleanupEvidence(new UnusedWorkspace({
+      watch,
+      baseSha: 'a'.repeat(40),
+      checkedAt: RecoveryMother.STARTED_AT,
+    }))
+    await rm(fixture.worktree, { recursive: true, force: true })
+
+    await fixture.recovery.recover()
+
+    expect(fixture.activePlans.known()).toEqual([
+      expect.objectContaining({
+        phase: 'uncertain',
+        plan: expect.objectContaining({ agent: RecoveryMother.CONVERSATION }),
+      }),
+    ])
   })
 
   it('uncertainty and renewed implementation cannot revive the stopped review loop', async () => {

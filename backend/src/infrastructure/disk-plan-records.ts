@@ -4,6 +4,7 @@ import { PlanRecords } from '../domain/ports/plan-records.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import type { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
+import { UnusedWorkspace } from '../domain/value-objects/unused-workspace.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlansInFlight } from '../domain/value-objects/plans-in-flight.ts'
 import { PlanWatch } from '../domain/value-objects/plan-watch.ts'
@@ -144,9 +145,47 @@ class DispatchRecord {
   }
 }
 
+class CleanupEvidenceRecord {
+  static readonly #FIELDS = Object.freeze(['conversation', 'baseSha', 'branch', 'worktree', 'checkedAt'])
+
+  static text(evidence: UnusedWorkspace): string {
+    return `${JSON.stringify({
+      conversation: evidence.watch.agent,
+      baseSha: evidence.baseSha,
+      branch: evidence.watch.located.branch,
+      worktree: evidence.watch.located.path,
+      checkedAt: evidence.checkedAt,
+    }, null, 2)}\n`
+  }
+
+  static read(text: string, watch: PlanWatch): UnusedWorkspace {
+    const parsed: unknown = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('cleanup evidence must be a JSON object')
+    }
+    const record = Object.fromEntries(Object.entries(parsed))
+    const fields = Object.keys(record).sort()
+    const expected = [...CleanupEvidenceRecord.#FIELDS].sort()
+    if (fields.length !== expected.length || fields.some((field, index) => field !== expected[index])) {
+      throw new Error(`cleanup evidence must contain exactly ${expected.join(', ')}, got ${fields.join(', ')}`)
+    }
+    if (record.conversation !== watch.agent || record.branch !== watch.located.branch
+      || record.worktree !== watch.located.path) {
+      throw new Error('cleanup evidence identity differs from its dispatch')
+    }
+    return new UnusedWorkspace({
+      watch,
+      baseSha: String(record.baseSha),
+      checkedAt: String(record.checkedAt),
+    })
+  }
+}
+
 export class DiskPlanRecords extends PlanRecords {
   static readonly DIRECTORY = 'harness'
+  static readonly RETIRED_DIRECTORY = 'retired-harness'
   static readonly NON_LAUNCH = 'non-launch.json'
+  static readonly CLEANUP_EVIDENCE = 'cleanup-evidence.json'
 
   readonly files: HeadlessFiles
   readonly newId: () => string
@@ -194,6 +233,71 @@ export class DiskPlanRecords extends PlanRecords {
     return record.watch(agent)
   }
 
+  async recorded(agent: string): Promise<PlanWatch | null> {
+    return this.#recordedIn(agent, DiskPlanRecords.DIRECTORY)
+  }
+
+  async retired(agent: string): Promise<PlanWatch | null> {
+    return this.#recordedIn(agent, DiskPlanRecords.RETIRED_DIRECTORY)
+  }
+
+  async cleanupEvidence(watch: PlanWatch): Promise<UnusedWorkspace | null> {
+    const path = join(
+      this.files.root,
+      DiskPlanRecords.DIRECTORY,
+      watch.agent,
+      DiskPlanRecords.CLEANUP_EVIDENCE,
+    )
+    const text = await this.files.read(path)
+    if (text === null) return null
+    try {
+      return CleanupEvidenceRecord.read(text, watch)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(`${path} cannot be read as cleanup evidence: ${String(cause)}`)
+    }
+  }
+
+  async recordCleanupEvidence(evidence: UnusedWorkspace): Promise<void> {
+    const path = join(
+      this.files.root,
+      DiskPlanRecords.DIRECTORY,
+      evidence.watch.agent,
+      DiskPlanRecords.CLEANUP_EVIDENCE,
+    )
+    const text = CleanupEvidenceRecord.text(evidence)
+    try {
+      await this.files.writeOnce(path, text)
+    } catch (cause) {
+      if (!DiskPlanRecords.#hasCode(cause, 'EEXIST')) {
+        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
+      }
+      const existing = await this.files.read(path)
+      if (existing !== text) throw new PlanAgentNotNamed(`${path} contains conflicting cleanup evidence`)
+    }
+  }
+
+  async archive(watch: PlanWatch): Promise<void> {
+    const recorded = await this.recorded(watch.agent)
+    if (recorded === null || !DiskPlanRecords.#sameIdentity(recorded, watch)) {
+      throw new PlanAgentNotNamed(`active plan ${watch.agent} differs before retirement`)
+    }
+    const source = join(this.files.root, DiskPlanRecords.DIRECTORY, watch.agent)
+    const destinationRoot = join(this.files.root, DiskPlanRecords.RETIRED_DIRECTORY)
+    const destination = join(destinationRoot, watch.agent)
+    try {
+      await this.files.fs.mkdir(destinationRoot, { recursive: true })
+      await this.files.fs.stat(destination)
+      throw new PlanAgentNotNamed(`${destination} already exists`)
+    } catch (cause) {
+      if (!DiskPlanRecords.#hasCode(cause, 'ENOENT')) throw cause
+    }
+    try {
+      await this.files.fs.rename(source, destination)
+    } catch (cause) {
+      throw new PlanAgentNotLaunched(`${source} could not be retired to ${destination}: ${String(cause)}`)
+    }
+  }
+
   async recordNonLaunch(watch: PlanWatch, proof: PlanNonLaunch): Promise<void> {
     const path = this.#nonLaunchPath(watch.agent)
     const text = NonLaunchRecord.text(proof)
@@ -225,7 +329,7 @@ export class DiskPlanRecords extends PlanRecords {
   async find(asked: { issue: number, repository: RepositoryName }): Promise<PlanWatch | null> {
     const found = this.#matching(await this.#descriptors(), asked)
     if (found === null) return null
-    if (!(await this.#exists(found.located.path))) return null
+    if (!(await this.#exists(found.located.path)) && await this.cleanupEvidence(found) === null) return null
     return found
   }
 
@@ -234,7 +338,7 @@ export class DiskPlanRecords extends PlanRecords {
       const watches = await this.#descriptors()
       const existing: PlanWatch[] = []
       for (const watch of watches) {
-        if (await this.#exists(watch.located.path)) existing.push(watch)
+        if (await this.#exists(watch.located.path) || await this.cleanupEvidence(watch) !== null) existing.push(watch)
       }
       return PlansInFlight.listed(existing)
     } catch (cause) {
@@ -267,7 +371,21 @@ export class DiskPlanRecords extends PlanRecords {
   }
 
   async #recordAt(agent: ConversationId): Promise<PlanWatch | null> {
-    const path = this.files.dispatchPath(agent.text)
+    return this.#recordAtIn(agent, DiskPlanRecords.DIRECTORY)
+  }
+
+  async #recordedIn(agent: string, directory: string): Promise<PlanWatch | null> {
+    let conversation: ConversationId
+    try {
+      conversation = new ConversationId(agent)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(`${agent} cannot name a prepared plan: ${String(cause)}`)
+    }
+    return this.#recordAtIn(conversation, directory)
+  }
+
+  async #recordAtIn(agent: ConversationId, directory: string): Promise<PlanWatch | null> {
+    const path = join(this.files.root, directory, agent.text, 'dispatch.json')
     let text: string | null
     try {
       text = await this.files.read(path)
@@ -350,5 +468,15 @@ export class DiskPlanRecords extends PlanRecords {
 
   static #hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
+  }
+
+  static #sameIdentity(left: PlanWatch, right: PlanWatch): boolean {
+    return left.agent === right.agent
+      && left.issue.number === right.issue.number
+      && left.issue.url === right.issue.url
+      && left.repository.text === right.repository.text
+      && left.located.root === right.located.root
+      && left.located.path === right.located.path
+      && left.located.branch === right.located.branch
   }
 }

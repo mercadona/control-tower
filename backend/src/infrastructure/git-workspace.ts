@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path'
 import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/state-paths.js'
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
+import { parseStateSafe } from '../../../plugin/scripts/state.js'
 import { mapGhIssue, NO_MILESTONE_KEY } from '../../../plugin/scripts/gh-issue-map.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import type { Baseline } from '../../../plugin/scripts/baseline.js'
@@ -12,10 +13,13 @@ import { PreparedWorkspace } from '../domain/value-objects/prepared-workspace.ts
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
+import { UnusedWorkspace } from '../domain/value-objects/unused-workspace.ts'
 import {
+  PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
   WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../domain/exceptions.ts'
 import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
+import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch } from './external-tool.ts'
 import type { Gh } from './gh.ts'
@@ -25,6 +29,7 @@ export type DiskWrite = (path: string, text: string) => Promise<void>
 export type DiskRead = (path: string) => Promise<string | null>
 export type DiagnosticWriter = (line: string) => void
 export type SeedSlice = ReturnType<typeof mapGhIssue> & { readonly epic: string }
+type UnlaunchedState = { readonly evidence: UnusedWorkspace, readonly worktree: boolean, readonly branch: boolean }
 
 export class SliceSeed {
   static readonly RELATIVE_PATH = SLICE_REL_PATH
@@ -181,6 +186,22 @@ export class GitWorkspace extends Workspace {
     return ['-C', root, 'branch', '-D', branch]
   }
 
+  static removeUnlaunchedArgvFor(root: string, path: string): string[] {
+    return ['-C', root, 'worktree', 'remove', path]
+  }
+
+  static deleteUnusedBranchArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'branch', '-d', branch]
+  }
+
+  static branchTipArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'rev-parse', '--verify', `refs/heads/${branch}`]
+  }
+
+  static remoteBranchArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'ls-remote', '--heads', GitWorkspace.REMOTE, branch]
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     let held
     try {
@@ -193,6 +214,150 @@ export class GitWorkspace extends Workspace {
     }
 
     return await this.#canonicalRootOf(root.text, repository.text)
+  }
+
+  async inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnusedWorkspace> {
+    return (await this.#inspectUnlaunched(watch, previous)).evidence
+  }
+
+  async undoUnlaunched(evidence: UnusedWorkspace): Promise<void> {
+    const state = await this.#inspectUnlaunched(evidence.watch, evidence)
+    const root = GitWorkspace.#requiredRoot(evidence.watch)
+    if (state.worktree) {
+      const removed = await this.run(GitWorkspace.removeUnlaunchedArgvFor(
+        root,
+        evidence.watch.located.path,
+      ))
+      if (removed.failed) {
+        throw new PlanCleanupNotRead(
+          `the verified unused worktree ${evidence.watch.located.path} could not be removed: ${GitWorkspace.#output(removed)}`
+        )
+      }
+    }
+    if (state.branch) {
+      const deleted = await this.run(GitWorkspace.deleteUnusedBranchArgvFor(
+        root,
+        evidence.watch.located.branch,
+      ))
+      if (deleted.failed) {
+        throw new PlanCleanupNotRead(
+          `the verified unused branch ${evidence.watch.located.branch} could not be removed: ${GitWorkspace.#output(deleted)}`
+        )
+      }
+    }
+  }
+
+  async #inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnlaunchedState> {
+    const root = GitWorkspace.#requiredRoot(watch)
+    await this.#requireCleanupIdentity(watch, root)
+    const listed = await this.run(GitWorkspace.surveyArgvFor(root))
+    if (listed.failed) {
+      throw new PlanCleanupNotRead(`git worktree list failed: ${GitWorkspace.#output(listed)}`)
+    }
+    const worktree = GitWorkspace.#worktreeState(listed.stdout, watch)
+    let branch = worktree
+    let baseSha: string
+    if (worktree) {
+      baseSha = await this.#seedBase(watch)
+      const head = await this.run(['-C', watch.located.path, 'rev-parse', 'HEAD'])
+      if (head.failed) throw new PlanCleanupNotRead(`worktree HEAD could not be read: ${GitWorkspace.#output(head)}`)
+      if (head.stdout.trim() !== baseSha) {
+        throw new PlanCleanupConflict(`worktree HEAD changed from seeded base ${baseSha}`)
+      }
+      const status = await this.run(GitWorkspace.statusArgvFor(watch.located.path))
+      if (status.failed) throw new PlanCleanupNotRead(`worktree status could not be read: ${GitWorkspace.#output(status)}`)
+      if (status.stdout.length !== 0) throw new PlanCleanupConflict(`worktree ${watch.located.path} is not clean`)
+    } else {
+      if (previous === null) {
+        throw new PlanCleanupConflict(`worktree ${watch.located.path} is absent without cleanup evidence`)
+      }
+      baseSha = previous.baseSha
+      const tip = await this.run(GitWorkspace.branchTipArgvFor(root, watch.located.branch))
+      if (tip.failed) {
+        if (tip.code !== 1 || tip.stdout.length !== 0) {
+          throw new PlanCleanupNotRead(`local branch state could not be read: ${GitWorkspace.#output(tip)}`)
+        }
+        branch = false
+      } else if (tip.stdout.trim() !== baseSha) {
+        throw new PlanCleanupConflict(`local branch ${watch.located.branch} changed from seeded base ${baseSha}`)
+      } else {
+        branch = true
+      }
+    }
+    if (previous !== null && previous.baseSha !== baseSha) {
+      throw new PlanCleanupConflict(`cleanup evidence base ${previous.baseSha} differs from seeded base ${baseSha}`)
+    }
+    await this.#requireNoRemoteWork(watch, root)
+    return {
+      evidence: previous ?? new UnusedWorkspace({ watch, baseSha, checkedAt: new Date().toISOString() }),
+      worktree,
+      branch,
+    }
+  }
+
+  async #seedBase(watch: PlanWatch): Promise<string> {
+    const path = `${watch.located.path}/${SliceSeed.RELATIVE_PATH}`
+    const text = await this.read(path)
+    if (text === null) throw new PlanCleanupNotUnderstood(`${path} is absent`)
+    const parsed = parseStateSafe(text)
+    if (parsed.error !== null) throw new PlanCleanupNotUnderstood(`${path} cannot be parsed: ${parsed.error}`)
+    if (parsed.meta.branch !== watch.located.branch || parsed.meta.github_issue !== watch.issue.number
+      || typeof parsed.meta.base_sha !== 'string' || !/^[0-9a-f]{40}$/.test(parsed.meta.base_sha)) {
+      throw new PlanCleanupNotUnderstood(`${path} does not carry the recorded branch, issue and 40-hex base`)
+    }
+    return parsed.meta.base_sha
+  }
+
+  async #requireCleanupIdentity(watch: PlanWatch, root: string): Promise<void> {
+    const remote = await this.run(GitWorkspace.remoteArgvFor(root))
+    if (remote.failed) throw new PlanCleanupNotRead(`checkout remote could not be read: ${GitWorkspace.#output(remote)}`)
+    const named = remote.stdout.trim().match(GitWorkspace.#NAMED)
+    if (named === null || named[1] !== watch.repository.text) {
+      throw new PlanCleanupConflict(`${root} does not hold ${watch.repository.text}`)
+    }
+    const top = await this.run(GitWorkspace.toplevelArgvFor(root))
+    if (top.failed) throw new PlanCleanupNotRead(`checkout root could not be resolved: ${GitWorkspace.#output(top)}`)
+    if (top.stdout.trim() !== root) throw new PlanCleanupConflict(`${root} is not the canonical checkout root`)
+  }
+
+  async #requireNoRemoteWork(watch: PlanWatch, root: string): Promise<void> {
+    const remote = await this.run(GitWorkspace.remoteBranchArgvFor(root, watch.located.branch))
+    if (remote.failed) throw new PlanCleanupNotRead(`remote branch state could not be read: ${GitWorkspace.#output(remote)}`)
+    if (remote.stdout.trim().length !== 0) {
+      throw new PlanCleanupConflict(`remote branch ${watch.located.branch} exists`)
+    }
+    const pulls = await this.gh.run([
+      'pr', 'list', '--repo', watch.repository.text, '--state', 'all', '--head', watch.located.branch,
+      '--json', 'number', '--limit', '1',
+    ], { safeToRepeat: true })
+    if (pulls.failed) throw new PlanCleanupNotRead(`pull requests could not be read: ${GitWorkspace.#output(pulls)}`)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(pulls.stdout)
+    } catch {
+      throw new PlanCleanupNotUnderstood(`gh pr list printed non-json: ${JSON.stringify(pulls.stdout)}`)
+    }
+    if (!Array.isArray(parsed)) throw new PlanCleanupNotUnderstood('gh pr list did not print an array')
+    if (parsed.length > 0) throw new PlanCleanupConflict(`a pull request exists for ${watch.located.branch}`)
+  }
+
+  static #worktreeState(printed: string, watch: PlanWatch): boolean {
+    const blocks = printed.split('\n\n').map((block) => block.trim()).filter((block) => block.length > 0)
+    if (blocks.length === 0) throw new PlanCleanupNotUnderstood('git worktree list printed no checkout')
+    const matching = blocks.filter((block) => block.split('\n')[0] === `worktree ${watch.located.path}`)
+    if (matching.length > 1) throw new PlanCleanupNotUnderstood(`worktree ${watch.located.path} is listed more than once`)
+    if (matching.length === 0) return false
+    if (!matching[0].split('\n').includes(`branch refs/heads/${watch.located.branch}`)) {
+      throw new PlanCleanupConflict(`worktree ${watch.located.path} does not hold ${watch.located.branch}`)
+    }
+    return true
+  }
+
+  static #requiredRoot(watch: PlanWatch): string {
+    if (watch.located.root === undefined) {
+      throw new PlanCleanupNotUnderstood(`dispatch ${watch.agent} has no checkout root`)
+    }
+    return watch.located.root
   }
 
   async #canonicalRootOf(root: string, repository: string): Promise<CheckoutRoot> {

@@ -20,6 +20,8 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 
 class BaselineDouble extends Baseline {
   readonly #result: BaselineResult
@@ -842,6 +844,134 @@ describe('GitWorkspace checks every cleanup operation', () => {
     await git.workspace().undo(GitDouble.located())
 
     expect(git.stderr).toEqual([])
+  })
+})
+
+class UnlaunchedWorkspaceDouble {
+  static readonly BASE = 'a'.repeat(40)
+  static readonly WATCH = new PlanWatch({
+    story: null,
+    issue: GitDouble.issue(331),
+    repository: GitDouble.REPOSITORY,
+    located: new WorkspaceLocation({
+      root: GitDouble.ROOT,
+      path: `${GitDouble.ROOT}/.worktrees/331`,
+      branch: 'feat/331',
+    }),
+    agent: '11111111-1111-4111-8111-111111111111',
+  })
+
+  readonly calls: string[][] = []
+  readonly ghCalls: string[][] = []
+  status = ''
+  remote = ''
+  worktreePresent = true
+  branchPresent = true
+
+  workspace(): GitWorkspace {
+    return new GitWorkspace({
+      baseline: new BaselineDouble(),
+      stderr: () => {},
+      write: async () => {},
+      read: async (path) => path.endsWith(SliceSeed.RELATIVE_PATH)
+        ? buildStateSeed(
+          { name: 'unused', issue: '#331', ac: ['unused workspace stays untouched'] },
+          { branch: 'feat/331', base: 'main', baseSha: UnlaunchedWorkspaceDouble.BASE },
+        )
+        : null,
+      run: async (argv) => {
+        this.calls.push(argv)
+        if (argv.includes('get-url')) return GitDouble.naming(GitDouble.REMOTE_URL)
+        if (argv.includes('--show-toplevel')) return GitDouble.canonical()
+        if (argv.includes('worktree') && argv.includes('list')) return GitDouble.printing(this.worktrees())
+        if (argv.includes('status')) return GitDouble.printing(this.status)
+        if (argv.includes('ls-remote')) return GitDouble.printing(this.remote)
+        if (argv.includes('rev-parse') && argv.includes('HEAD')) {
+          return GitDouble.printing(`${UnlaunchedWorkspaceDouble.BASE}\n`)
+        }
+        if (argv.includes('rev-parse') && argv.includes('refs/heads/feat/331')) {
+          return this.branchPresent
+            ? GitDouble.printing(`${UnlaunchedWorkspaceDouble.BASE}\n`)
+            : new ProcessOutput({ code: 1, stdout: '', stderr: '' })
+        }
+        if (argv.includes('remove')) {
+          this.worktreePresent = false
+          return GitDouble.ok()
+        }
+        if (argv.includes('-d')) {
+          this.branchPresent = false
+          return GitDouble.ok()
+        }
+        throw new Error(`nobody wrote an answer for git ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async (argv) => {
+          this.ghCalls.push(argv)
+          return GitDouble.printing('[]')
+        },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+  }
+
+  worktrees(): string {
+    const blocks = [
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main`,
+    ]
+    if (this.worktreePresent) {
+      blocks.push(
+        `worktree ${UnlaunchedWorkspaceDouble.WATCH.located.path}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/feat/331`,
+      )
+    }
+    return `${blocks.join('\n\n')}\n`
+  }
+}
+
+describe('GitWorkspace unused dispatch cleanup', () => {
+  it('an untouched unlaunched workspace is rechecked and removed without force', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    const workspace = fixture.workspace()
+    const evidence = await workspace.inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+
+    await workspace.undoUnlaunched(evidence)
+
+    expect(evidence.baseSha).toBe(UnlaunchedWorkspaceDouble.BASE)
+    expect(fixture.calls).toContainEqual([
+      '-C', GitDouble.ROOT, 'worktree', 'remove', UnlaunchedWorkspaceDouble.WATCH.located.path,
+    ])
+    expect(fixture.calls).toContainEqual(['-C', GitDouble.ROOT, 'branch', '-d', 'feat/331'])
+    expect(fixture.calls.flat()).not.toContain('--force')
+    expect(fixture.ghCalls).toContainEqual([
+      'pr', 'list', '--repo', 'owner/name', '--state', 'all', '--head', 'feat/331', '--json', 'number', '--limit', '1',
+    ])
+  })
+
+  it('changed or remote work prevents cleanup', async () => {
+    const changed = new UnlaunchedWorkspaceDouble()
+    changed.status = '?? local.txt\n'
+    await expect(changed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('not clean')
+
+    const remote = new UnlaunchedWorkspaceDouble()
+    remote.remote = `${UnlaunchedWorkspaceDouble.BASE}\trefs/heads/feat/331\n`
+    await expect(remote.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('remote branch')
+  })
+
+  it('an absent worktree uses the immutable snapshot before branch deletion', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    fixture.worktreePresent = false
+    const evidence = new UnusedWorkspace({
+      watch: UnlaunchedWorkspaceDouble.WATCH,
+      baseSha: UnlaunchedWorkspaceDouble.BASE,
+      checkedAt: '2026-09-16T10:00:00.000Z',
+    })
+
+    await fixture.workspace().undoUnlaunched(evidence)
+
+    expect(fixture.calls.some((argv) => argv.includes('remove'))).toBe(false)
+    expect(fixture.calls).toContainEqual(['-C', GitDouble.ROOT, 'branch', '-d', 'feat/331'])
   })
 })
 

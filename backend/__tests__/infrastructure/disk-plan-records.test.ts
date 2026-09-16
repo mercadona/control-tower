@@ -10,6 +10,7 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryReference } from '../../src/domain/value-objects/user-story-reference.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 
@@ -186,5 +187,43 @@ describe('DiskPlanRecords', () => {
     }))
 
     await expect(records.nonLaunch(watch)).rejects.toThrow('identity')
+  })
+
+  it('retirement frees cap and permits preparation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-retirement-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root, {
+      ids: [PlanRecordMother.FIRST_AGENT, PlanRecordMother.SECOND_AGENT],
+    })
+    const briefing = PlanRecordMother.briefing('/checkout')
+    const watch = await records.prepare(briefing)
+    const descriptor = await readFile(join(root, 'harness', watch.agent, 'dispatch.json'), 'utf8')
+    await records.recordCleanupEvidence(new UnusedWorkspace({
+      watch,
+      baseSha: 'a'.repeat(40),
+      checkedAt: PlanRecordMother.STARTED_AT,
+    }))
+
+    await records.archive(watch)
+
+    expect(await records.recorded(watch.agent)).toBeNull()
+    expect(await records.retired(watch.agent)).toEqual(watch)
+    expect(await readFile(join(root, 'retired-harness', watch.agent, 'dispatch.json'), 'utf8')).toBe(descriptor)
+    const prepared = await records.prepare(briefing)
+    expect(prepared.agent).toBe(PlanRecordMother.SECOND_AGENT)
+  })
+
+  it('archive failure blocks redispatch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-retirement-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const briefing = PlanRecordMother.briefing('/checkout')
+    const watch = await records.prepare(briefing)
+    await mkdir(join(root, 'retired-harness', watch.agent), { recursive: true })
+
+    await expect(records.archive(watch)).rejects.toThrow('already exists')
+
+    expect(await records.recorded(watch.agent)).toEqual(watch)
+    await expect(records.prepare(briefing)).rejects.toBeInstanceOf(PlanAgentNotLaunched)
   })
 })

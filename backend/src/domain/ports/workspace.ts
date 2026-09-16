@@ -4,8 +4,20 @@ import type { RepositoryName } from '../value-objects/repository-name.ts'
 import type { SownWorkspace } from '../value-objects/sown-workspace.ts'
 import type { WorkspaceLocation } from '../value-objects/workspace-location.ts'
 import type { WorkspaceSurvey } from '../value-objects/workspace-survey.ts'
+import type { PlanWatch } from '../value-objects/plan-watch.ts'
+import type { UnusedWorkspace } from '../value-objects/unused-workspace.ts'
 
 export class Workspace {
+  async inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnusedWorkspace> {
+    throw new Error(
+      `${this.constructor.name} must implement inspectUnlaunched(watch, previous), asked for ${watch.agent}`
+    )
+  }
+
+  async undoUnlaunched(evidence: UnusedWorkspace): Promise<void> {
+    throw new Error(`${this.constructor.name} must implement undoUnlaunched(evidence), asked for ${evidence.watch.agent}`)
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     throw new Error(
       `${this.constructor.name} must implement confirm({ root, repository }) and answer the canonical checkout root, asked whether ${root} holds ${repository}`
