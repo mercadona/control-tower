@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -22,11 +24,10 @@ import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
-import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
+import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
-import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
@@ -36,10 +37,10 @@ import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
-import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
-import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
-import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
+import { ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
+import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import type { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
@@ -183,20 +184,6 @@ class ExternalToolsSpy extends SurveyExternalTools {
   }
 }
 
-class PlansRefusing extends WorktreePlans {
-  constructor(reason: string) {
-    super({
-      checkouts: new CheckoutRegistry(),
-      survey: () => { throw new Error('a plans double never surveys a checkout') },
-      sessions: () => { throw new Error('a plans double never asks cmux') },
-      story: () => { throw new Error('a plans double never reads a user story') },
-      realpathOf: () => null,
-      stderr: () => undefined,
-    })
-    this.inFlight = async () => PlansInFlight.refused(reason)
-  }
-}
-
 class NeverWatching extends ReviewWatch {
   constructor(label: string) {
     super({
@@ -210,30 +197,59 @@ class NeverWatching extends ReviewWatch {
   }
 }
 
-class RecoveryFixture {
-  static readonly #STATE_ROOT = '/state'
+class RecoveryRecords extends PlanRecords {
+  readonly found: PlansInFlight
 
-  static refusingWith(reason: string): ActivePlanRecovery {
+  constructor(found: PlansInFlight) {
+    super()
+    this.found = found
+  }
+
+  async inFlight(): Promise<PlansInFlight> {
+    return this.found
+  }
+}
+
+class RecoveryCalls extends ClaudeCalls {
+  readonly recorded: readonly RecordedCall[]
+
+  constructor(recorded: readonly RecordedCall[]) {
+    super({
+      files: new HeadlessFiles({ root: '/state', fs, newId: () => 'unused' }),
+      binary: 'claude',
+      worker: 'worker',
+      spawn,
+      env: {},
+      newId: () => { throw new Error('a recovery double never mints a call') },
+      now: () => { throw new Error('a recovery double never asks for the current time') },
+      budgetMs: 1,
+      killGraceMs: 1,
+      acceptanceMs: 1,
+      pollMs: 1,
+      sleep: () => { throw new Error('a recovery double never sleeps') },
+    })
+    this.recorded = recorded
+  }
+
+  async history(): Promise<readonly RecordedCall[]> {
+    return this.recorded
+  }
+}
+
+class RecoveryFixture {
+  static refusingWith(reason: string): RecordedPlanRecovery {
+    return RecoveryFixture.with(PlansInFlight.refused(reason), [])
+  }
+
+  static with(records: PlansInFlight, calls: readonly RecordedCall[]): RecordedPlanRecovery {
     const sessions = new PlanSessions()
 
-    return new ActivePlanRecovery({
-      plans: new PlansRefusing(reason),
+    return new RecordedPlanRecovery({
+      records: new RecoveryRecords(records),
+      calls: new RecoveryCalls(calls),
       checkouts: new CheckoutRegistry(),
-      implementationStarts: new DiskImplementationStartRegistry({
-        read: () => { throw new Error('a recovery double never reads an implementation marker') },
-        stat: () => { throw new Error('a recovery double never stats an implementation marker') },
-        write: () => { throw new Error('a recovery double never writes an implementation marker') },
-        root: RecoveryFixture.#STATE_ROOT,
-      }),
-      goRegistry: new DiskGoRegistry({
-        random: () => { throw new Error('a recovery double never mints a go nonce') },
-        write: () => { throw new Error('a recovery double never writes a go record') },
-        root: RecoveryFixture.#STATE_ROOT,
-      }),
-      implementationProgress: new ImplementationProgress(),
-      sessions,
-      pullRequestReviews: new NeverWatching('pull request review watch double'),
       activePlans: new ActivePlans({ sessions }),
+      reviews: new NeverWatching('pull request review watch double'),
     })
   }
 }
@@ -274,7 +290,6 @@ class RunningApi {
     return new ApiServer({
       port: 0,
       startPlan: RunningApi.spy,
-      implementPlan: null,
       planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
@@ -664,9 +679,8 @@ describe('ApiServer', () => {
     expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
   })
 
-  it('the retired implementation endpoint is not found and cannot mint a go', async () => {
-    const implementPlan = { execute: vi.fn().mockRejectedValue(new Error('the retired endpoint minted a go')) }
-    const port = await RunningApi.listening({ implementPlan })
+  it('the retired implementation endpoint is not found', async () => {
+    const port = await RunningApi.listening()
 
     const posted = await RunningApi.post(
       port,
@@ -679,7 +693,6 @@ describe('ApiServer', () => {
     expect(await posted.json()).toEqual({ code: 'not-found', detail: 'not found' })
     expect(read.status).toBe(404)
     expect(await read.json()).toEqual({ code: 'not-found', detail: 'not found' })
-    expect(implementPlan.execute).not.toHaveBeenCalled()
   })
 
   it('a_request_from_a_foreign_page_is_refused_because_any_site_can_post_to_localhost', async () => {
@@ -1299,7 +1312,7 @@ describe('ApiServer', () => {
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {
-    const recovery = { recover: vi.fn().mockReturnValueOnce('cmux said no').mockReturnValueOnce(null) }
+    const recovery = { recover: vi.fn().mockReturnValueOnce('records could not be listed').mockReturnValueOnce(null) }
     const port = await RunningApi.listening({ recovery })
 
     const unknown = await fetch(`http://127.0.0.1:${port}/active-plans`)
@@ -1308,15 +1321,15 @@ describe('ApiServer', () => {
     expect(unknown.status).toBe(400)
     expect(await unknown.json()).toEqual({
       code: 'active-plans-recovery-inconclusive',
-      detail: 'cmux said no',
+      detail: 'records could not be listed',
     })
     expect(recovered.status).toBe(200)
     expect(await recovered.json()).toEqual({ plans: [] })
     expect(recovery.recover).toHaveBeenCalledTimes(2)
   })
 
-  it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
-    const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
+  it('the_detail_of_an_inconclusive_recovery_carries_what_the_records_answered_and_not_a_fixed_sentence', async () => {
+    const answered = 'the state root could not be read'
     const recovery = RecoveryFixture.refusingWith(answered)
     const port = await RunningApi.listening({ recovery })
 

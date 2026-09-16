@@ -160,7 +160,6 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementPlan: null,
       frontendRoot: RunningApi.NO_FRONTEND,
       openCoordinatingSession: open,
       coordinatingSessions: held,

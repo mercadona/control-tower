@@ -24,7 +24,6 @@ import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
-import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
@@ -51,12 +50,6 @@ import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 
 export const LOOPBACK = '127.0.0.1'
-
-type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
-
-type PullRequestReviews = { start(watch: PlanWatch): void }
-
-type ImplementationStarts = { remember(watch: PlanWatch): Promise<void> }
 
 type ImplementationProgressReader = {
   execute(params: ReadImplementationProgressParams): Promise<{ readonly state: ImplementationState }>,
@@ -107,10 +100,8 @@ export type ApiCollaborators = {
   startPlan?: StartPlan | null,
   startMilestonePlan?: StartMilestonePlan | null,
   startsInFlight?: WorkInFlight | null,
-  implementPlan?: PlanImplementer | null,
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
-  pullRequestReviews?: PullRequestReviews | null,
   planEvents?: PlanEvents | null,
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
@@ -120,7 +111,6 @@ export type ApiCollaborators = {
   watchLiveSession?: WatchLiveSession | null,
   typeIntoSession?: TypeIntoSession | null,
   resizeSession?: ResizeSession | null,
-  implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
@@ -173,10 +163,8 @@ export class ApiServer {
   readonly startPlan: StartPlan | null | undefined
   readonly startMilestonePlan: StartMilestonePlan | null | undefined
   readonly startsInFlight: WorkInFlight
-  readonly implementPlan: PlanImplementer | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
-  readonly pullRequestReviews: PullRequestReviews | null | undefined
   readonly planEvents: PlanEvents | null | undefined
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
@@ -186,7 +174,6 @@ export class ApiServer {
   readonly watchLiveSession: WatchLiveSession | null | undefined
   readonly typeIntoSession: TypeIntoSession | null | undefined
   readonly resizeSession: ResizeSession | null | undefined
-  readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
@@ -206,9 +193,9 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, startMilestonePlan, startsInFlight, implementPlan, implementProgress, implementHistory, pullRequestReviews,
+    port, startPlan, startMilestonePlan, startsInFlight, implementProgress, implementHistory,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
-    watchLiveSession, typeIntoSession, resizeSession, implementationStarts, recovery = null,
+    watchLiveSession, typeIntoSession, resizeSession, recovery = null,
     openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
@@ -217,10 +204,8 @@ export class ApiServer {
     this.startPlan = startPlan
     this.startMilestonePlan = startMilestonePlan
     this.startsInFlight = startsInFlight ?? new WorkInFlight()
-    this.implementPlan = implementPlan
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
-    this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
     this.sessions = sessions
     this.activePlans = activePlans
@@ -230,7 +215,6 @@ export class ApiServer {
     this.watchLiveSession = watchLiveSession
     this.typeIntoSession = typeIntoSession
     this.resizeSession = resizeSession
-    this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession

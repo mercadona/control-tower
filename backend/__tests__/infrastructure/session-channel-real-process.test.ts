@@ -55,7 +55,6 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementPlan: null,
       implementProgress: undefined,
       implementHistory: undefined,
       externalTools: undefined,
@@ -63,10 +62,8 @@ class RunningApi {
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
       typeIntoSession: new TypeIntoSession({ liveSessions }),
-      pullRequestReviews: undefined,
       sessions: new PlanSessions(),
       activePlans: undefined,
-      implementationStarts: undefined,
       planEvents: RunningApi.#NO_EVENTS,
       stderr: undefined,
       frontendRoot: RunningApi.#NO_FRONTEND,
