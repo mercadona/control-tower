@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 18 (`POST` 8, `GET` 10) |
+| Endpoints | 21 (`POST` 11, `GET` 10) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -673,6 +673,52 @@ the keyboard.
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/sessions/<id>/input \
   -d '{"text":"echo hello\n"}'
+```
+
+---
+
+## `POST /sessions/:id/resize`
+
+Tells that session's pseudo-terminal what size the page is showing it at, so the
+pty and the on-screen emulator agree on where a line wraps. The page sends it
+after every fitted resize, and it is the one endpoint whose failure the front end
+swallows: a size that never arrived is not something a person can act on.
+
+**Request**
+
+| Field | Type | Shape |
+|---|---|---|
+| `cols` | number | a positive integer, at most 500 |
+| `rows` | number | a positive integer, at most 300 |
+
+Both are required, and they are judged together: one bad value refuses the pair.
+A zero, a negative, a non-integer, a string of digits and a value over its cap
+all answer the same `malformed-size`.
+
+**202 Accepted**
+
+```json
+{"status":"resized","id":"f8479639-6123-4d2d-8495-7c093a8bbd68","cols":120,"rows":40}
+```
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
+| `unknown-field` | 400 | `detail` names the fields, sorted |
+| `malformed-size` | 400 | `cols` or `rows` is not a positive integer inside its cap |
+| `session-not-live` | 400 | no live session answers to that id |
+
+`session-not-live` covers two different moments with one code: an id nothing
+holds, and a session whose pty had already closed its descriptor when the resize
+reached it. The second one is why it is a refusal and not a `request-failed` —
+a terminal that died is an answer, not a crash.
+
+```
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/sessions/<id>/resize \
+  -d '{"cols":120,"rows":40}'
 ```
 
 ---

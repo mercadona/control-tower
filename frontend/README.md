@@ -9,41 +9,39 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the progress) and `docs/superpowers/specs/2026-09-03-frontend-implement-plan-design.md`
 (the implementation).
 
-Vite + React 19 + TypeScript. Today one screen over three endpoints: the ticket
-key and the repository, a button that calls `POST /start-plan`, the plan's
-progress arriving over `GET /plan-events/:issue` (Server-Sent Events) and, once
-the plan is ready, a button that calls `POST /implement-plan`.
+Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
+the ticket key and the repository, a button that calls `POST /start-plan`, the
+plan's progress arriving over `GET /plan-events/:issue` (Server-Sent Events), a
+button that calls `POST /implement-plan` once the plan is ready, the panels of
+gates 1 and 2, and the live terminals of the sessions the backend owns. Each
+one has its own directory under `src/app/`, and the endpoint each directory
+consumes is named in the sections below.
 
-`ToolsStatus` surveys `GET /external-tools` and renders it as the design
-system's **Drawer**: a persistent column at the right of the work area, 390 px
-open and a 48 px rail folded, that starts folded. It is not a modal — it neither
-dims the page nor traps the focus — and it is a column of the layout rather than
-a layer over it, so opening it compresses the main content instead of covering
-it. The status dot and its summary live in the drawer header, and the summary
-also travels in the toggle's accessible name so the folded rail is not mute.
+`app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
+as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
+collapsed, held by `system-ui/navigation` (`Navigation`) together with the
+`TopBar` above the work area. It is not an overlay — it is a flex child of the
+shell, so collapsing it widens the work area instead of uncovering it. The
+collapsed state is this browser's alone: `ToolsNavbar` reads and writes
+`localStorage` under `control-tower.navbar-collapsed`, inside a `try`, and falls
+back to expanded when the accessor throws.
 
-**The page owes it a height.** The drawer declares `height: 100%`, so `Home` is
-an application shell exactly one viewport tall (`height: 100dvh`,
-`overflow: hidden`) with the top bar across the top and a bounded work-area row
-below it; `main` and the drawer body each scroll on their own inside it. A shell
-with only `min-height` is not a height a percentage can resolve against: the
-drawer then falls back to its content height, its body contributes nothing
-(`flex: 1 1 0`, `min-height: 0`) and the panel ends at its header, clipping the
-rest. That shipped once and `Home.shell.test.ts` now pins every declaration that
-prevents it.
+**The page owes the rail a height.** `Navigation` declares `height: 100%`, so
+`Home` is an application shell exactly one viewport tall (`height: 100dvh`,
+`overflow: hidden`), with the top bar across the top and a bounded work-area row
+below it; `main` and the right column each scroll on their own inside it. A shell
+with only `min-height` is not a height a percentage can resolve against.
+`Home.shell.test.ts` pins every declaration that keeps the shell bounded.
 
-Under 768 px the row stacks and the shell hands the scrolling back to the page
-(`height: auto`): the drawer becomes a full-width band below the content, and its
-body switches to `flex: 0 0 auto` so it sizes the column instead of collapsing
-into it. It stays a column of the layout there too — no `position: fixed`, no
-`z-index`, no overlay.
-
-Its body holds the tool rows and **Entrega de métricas**, read-only: whether the
-backend was started with `CT_HARVEST_BQ_TABLE`, which table it uploads a merged
-slice to, and — when the variable is unset — that no merged pull request will
-reach the harvest ledger nor any comparison of coding tools until the backend is
-restarted with it. The drawer never offers to change it: the value is an option
-of the backend's start-up, so there is no endpoint that writes it.
+The rail carries two `MenuSection`s. **Herramientas** holds one `MenuItem` per
+tool, with the row's state as a `Tag` — `falta` when the binary is absent,
+`sin confirmar` when its credential cannot be observed from the backend process,
+and no tag at all when it is ready. **Métricas** holds one read-only row,
+**Entrega a BigQuery**: `on` with the table it uploads a merged slice to, `off`
+with the name of the variable that would turn it on. The rail never offers to
+change it — the value is an option of the backend's start-up, so no endpoint
+writes it. The footer is one button, **Reintentar comprobación**, which asks
+`GET /external-tools` again and is disabled while a check is in flight.
 
 `app/sessions` (`SessionsPanel`, rendered by `Home`) consumes four session
 endpoints: `GET /sessions` lists what the backend owns, `GET /sessions/:id/stream`
@@ -232,14 +230,12 @@ the repo moves to the organisation:
 - `src/system-ui/theme/` is a **literal copy** of the package's theme (tokens,
   Open Sans, `lg-*` classes). It is not edited; `VENDORED.md` says how to
   refresh it.
-- `src/system-ui/{button,input,form-field,banner,top-bar,panel,drawer}` are
+- the other directories under `src/system-ui/` — `banner`, `breadcrumbs`,
+  `button`, `collapsable-card`, `form-field`, `icons`, `input`, `loading`,
+  `menu-item`, `menu-section`, `nav-header`, `navbar`, `navigation`, `panel`,
+  `tabs`, `tag`, `text-area`, `timeline`, `top-bar` and `workflow-step` — are
   **mirrors** of `logistics-ui`'s components, with the same tokens and a subset
-  of their props. The day the package arrives, the import changes. The `drawer`
-  one traces `packages/logistics-ui/src/components/Drawer` at
-  `4300308`: same 390/48 px column, 72 px header, the `sidebar-right` glyph in a
-  tertiary 40 px `Button`, `aria-expanded` + `aria-controls`, a body that is
-  `hidden` when folded, and the width transition switched off under
-  `prefers-reduced-motion`. The `tabs` one traces
+  of their props. The day the package arrives, the import changes. The `tabs` one traces
   `packages/logistics-ui/src/components/Tabs` at `4d946b4`: the ARIA tabs
   pattern (`tablist` / `tab`, one tab stop for the whole bar, `ArrowLeft` /
   `ArrowRight` / `Home` / `End` walking it with disabled tabs skipped), the
@@ -263,11 +259,15 @@ make test-frontend
 
 Or inside `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
 
-`vite.config.ts`'s proxy forwards `/start-plan`, `/plan-events` and
-`/implement-plan` and strips
-the `Origin` header from what it forwards: without it the backend treats the
-request as a non-browser client. It is a
-development exception; in production the page comes out of the backend itself.
+`vite.config.ts`'s proxy forwards every API path the page calls — the list is
+`API_PATHS` in that file, sixteen of them today — and strips the `Origin` header
+from what it forwards: without it the backend refuses the call as a foreign
+origin. **A new endpoint has to be added to `API_PATHS`**, or the dev server
+answers the page's own HTML instead of the API. Stripping `Origin` is a
+development exception with one cost worth knowing: no gate key is ever minted
+for a request that arrives without an origin, so the gate buttons cannot be
+pressed under `make dev-frontend`. In production the page comes out of the
+backend itself.
 
 ## Conventions
 
