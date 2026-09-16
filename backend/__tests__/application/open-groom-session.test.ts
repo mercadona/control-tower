@@ -158,7 +158,20 @@ describe('OpenGroomSession', () => {
       PhasePrompt.ISSUES_ARE_NOT_YOURS,
       PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       `The milestone is "${Flow.MILESTONE}" and its frozen execution spec is ${Flow.SPEC_PATH}.`,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
+  })
+
+  it('groom explains recovery without granting human gates', async () => {
+    const flow = Flow.reading(Flow.frozenSpec())
+
+    await flow.run()
+
+    const [recorded] = flow.records.prepared
+    expect(recorded.prompt.text).toContain('Read GET /active-plans')
+    expect(recorded.prompt.text).toContain('POST /recover-plan with exactly {repo, issue, agent} as JSON')
+    expect(recorded.prompt.text).toContain('POST /cleanup-plan with the same identity')
+    expect(recorded.prompt.text).toContain('gates 1 and 2 and merge remain human-owned')
   })
 
   it('a checkout with no execution spec opens no conversation at all', async () => {

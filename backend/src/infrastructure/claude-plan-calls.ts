@@ -10,6 +10,7 @@ type CallMode = 'initial' | 'resume'
 
 export class ClaudePlanCalls extends PlanCalls {
   static readonly OPENING = `Read the file at $${CallDescriptor.PROMPT_VARIABLE} and do exactly what it says.`
+  static readonly ALLOWED_TOOLS = 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent'
 
   readonly calls: ClaudeCalls
   readonly brief: PlanAgentBrief
@@ -61,6 +62,7 @@ export class ClaudePlanCalls extends PlanCalls {
       '--output-format', 'stream-json',
       '--verbose',
       '--permission-mode', ClaudeConversations.PERMISSION_MODE,
+      '--allowedTools', ClaudePlanCalls.ALLOWED_TOOLS,
       '--model', ClaudeConversations.MODEL,
       '--plugin-dir', this.pluginRoot,
       mode === 'resume' ? '--resume' : '--session-id', conversation,

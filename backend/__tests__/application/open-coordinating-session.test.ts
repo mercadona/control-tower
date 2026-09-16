@@ -192,6 +192,7 @@ describe('OpenCoordinatingSession', () => {
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
       Flow.COMMENT.text,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -207,6 +208,7 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       Flow.COMMENT.text,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -258,6 +260,18 @@ describe('OpenCoordinatingSession', () => {
     expect(lines.indexOf(ideaLine)).toBe(lines.indexOf(PhasePrompt.FREEZE_IS_NOT_YOURS) + 1)
   })
 
+  it('brainstorming explains recovery without granting human gates', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    const [recorded] = flow.records.prepared
+    expect(recorded.prompt.text).toContain('Read GET /active-plans')
+    expect(recorded.prompt.text).toContain('POST /recover-plan with exactly {repo, issue, agent} as JSON')
+    expect(recorded.prompt.text).toContain('POST /cleanup-plan with the same identity')
+    expect(recorded.prompt.text).toContain('gates 1 and 2 and merge remain human-owned')
+  })
+
   it('leaves the description out of the phase prompt when the ticket has none', async () => {
     const flow = new Flow({
       userStories: UserStoriesDouble.reading('rename the button', ''),
@@ -271,6 +285,7 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 })

@@ -99,6 +99,40 @@ class Subject {
 }
 
 describe('ClaudePlanCalls', () => {
+  it('headless tools are explicitly authorized for every call purpose', async () => {
+    const subject = new Subject()
+
+    await subject.adapter.start(PlanCallMother.watch(), 'plan', null)
+    await subject.adapter.start(PlanCallMother.watch(), 'implementation', null)
+    await subject.adapter.start(PlanCallMother.watch(), 'fix', 'Address the review')
+
+    expect(subject.calls.invocations.map((invocation) => invocation.argv)).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
+        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
+        expect.arrayContaining(['--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent']),
+      ])
+    )
+  })
+
+  it('headless authorization preserves settings hooks and conversation identity', async () => {
+    const subject = new Subject()
+
+    await subject.adapter.start(PlanCallMother.watch(), 'implementation', null)
+
+    const [invocation] = subject.calls.invocations
+    expect(invocation.conversation).toBe(PlanCallMother.CONVERSATION)
+    expect(invocation.argv).toEqual(expect.arrayContaining([
+      '--permission-mode', 'acceptEdits',
+      '--plugin-dir', '/installed/control-tower-loop',
+      '--resume', PlanCallMother.CONVERSATION,
+    ]))
+    expect(invocation.argv).not.toContain('--settings')
+    expect(invocation.argv).not.toContain('--setting-sources')
+    expect(invocation.argv).not.toContain('--disable-hooks')
+    expect(invocation.argv).not.toContain('--dangerously-skip-permissions')
+  })
+
   it('resumes preserve conversation identity and carry only the prompt path', async () => {
     const subject = new Subject()
     const watch = PlanCallMother.watch()
@@ -115,6 +149,7 @@ describe('ClaudePlanCalls', () => {
       '--output-format', 'stream-json',
       '--verbose',
       '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
       '--model', 'opus',
       '--plugin-dir', '/installed/control-tower-loop',
       '--resume', PlanCallMother.CONVERSATION,
