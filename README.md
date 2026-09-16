@@ -56,7 +56,9 @@ names its package: `make test-backend`, `make build-frontend`, `make run-backend
 and `make run-frontend` builds the front end and starts the backend serving it at
 `http://127.0.0.1:8787/`. `CT_HARVEST_BQ_TABLE=project:dataset.table make run-backend`
 additionally makes every collected slice leave its row in that BigQuery table;
-without the variable, the harvest loads nothing. `make help` lists the targets.
+without the variable, the harvest loads nothing. A local, git-ignored `.env`
+(see `.env.example`) sets the same variable so every target reads it without
+re-exporting it in each terminal. `make help` lists the targets.
 
 **That variable is read once, when the backend starts.** A malformed value
 refuses the start naming what it got; an absent one starts with metrics delivery
