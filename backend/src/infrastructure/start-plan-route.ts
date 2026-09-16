@@ -10,9 +10,10 @@ import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PlanTarget } from '../domain/value-objects/plan-target.ts'
 import {
   PlanFailure,
+  DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood,
   UserStoryNotRead, UserStoryNotUnderstood, PlanIssueNotCreated, PlanIssueNotNamed,
   PlanIssueNotClaimed,
-  PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotRead,
+  PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotCleaned, WorkspaceNotRead,
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
   ConversationNotStarted, ConversationNotRecorded, ConversationNotUnderstood,
   SessionHooksNotWritten, SessionHooksNotUnderstood,
@@ -230,8 +231,12 @@ export class PlanCollapse {
     [UserStoryNotRead, PlanCollapse.#collapsed('user-story-not-read')],
     [PlanIssueNotCreated, PlanCollapse.#collapsed('plan-issue-not-created')],
     [PlanIssueNotClaimed, PlanCollapse.#collapsed('plan-issue-not-claimed')],
+    [DispatchNotAvailable, PlanCollapse.#collapsed('dispatch-not-available')],
+    [DispatchNotRead, PlanCollapse.#collapsed('dispatch-not-read')],
+    [DispatchNotUnderstood, PlanCollapse.#collapsed('dispatch-not-understood')],
     [PlanAgentNotLaunched, PlanCollapse.#collapsed('plan-agent-not-launched')],
     [WorkspaceNotPrepared, PlanCollapse.#collapsed('workspace-not-prepared')],
+    [WorkspaceNotCleaned, PlanCollapse.#collapsed('workspace-not-cleaned')],
     [WorkspaceNotRead, PlanCollapse.#collapsed('workspace-not-read')],
     [CheckoutNotConfirmed, (cause) => new Refusal({
       status: PlanCollapse.#STATUS,

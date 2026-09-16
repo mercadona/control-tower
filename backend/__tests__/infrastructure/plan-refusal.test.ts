@@ -43,7 +43,7 @@ describe('PlanCollapse', () => {
     'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
-    'EpicIssuesFailure',
+    'EpicIssuesFailure', 'DispatchFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -111,8 +111,12 @@ describe('PlanCollapse', () => {
       new exceptions.UserStoryNotRead('acli is not authenticated'),
       new exceptions.PlanIssueNotCreated('nope'),
       new exceptions.PlanIssueNotClaimed('gh issue edit failed: nope'),
+      new exceptions.DispatchNotAvailable('no issue is eligible'),
+      new exceptions.DispatchNotRead('dispatch-check refused'),
+      new exceptions.DispatchNotUnderstood('dispatch-check changed'),
       new exceptions.PlanAgentNotLaunched('nope'),
       new exceptions.WorkspaceNotPrepared('branch is taken'),
+      new exceptions.WorkspaceNotCleaned('worktree removal failed'),
       new exceptions.WorkspaceNotRead('no such remote'),
       new exceptions.CheckoutNotConfirmed('owner/name: /repo holds someone/else'),
       new exceptions.UserStoryNotUnderstood('nope'),
@@ -145,6 +149,13 @@ describe('PlanCollapse', () => {
 
     expect(collapse.code).toBe('plan-issue-not-claimed')
     expect(collapse.detail).toBe('gh issue edit failed: nope')
+  })
+
+  it('dispatch_and_cleanup_failures_keep_distinct_boundary_codes', () => {
+    expect(PlanCollapse.of(new exceptions.DispatchNotAvailable('none')).code).toBe('dispatch-not-available')
+    expect(PlanCollapse.of(new exceptions.DispatchNotRead('refused')).code).toBe('dispatch-not-read')
+    expect(PlanCollapse.of(new exceptions.DispatchNotUnderstood('changed')).code).toBe('dispatch-not-understood')
+    expect(PlanCollapse.of(new exceptions.WorkspaceNotCleaned('not removed')).code).toBe('workspace-not-cleaned')
   })
 
   it('a_tool_that_answered_something_we_cannot_read_has_its_own_code_too', () => {

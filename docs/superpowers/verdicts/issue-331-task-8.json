@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 8,
+  "task_name": "Start selected milestone work through application ports",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "StartMilestonePlan dispatches the existing PlanIssue returned by DispatchCandidates. It confirms the checkout, refuses an existing record, claims, prepares, launches, remembers the checkout and returns PlanStarted. It neither opens an issue nor reproduces eligibility, dependency, ordering or token rules.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The literally named TDD test asserts the confirm/candidate/find/claim/prepare/launch/remember sequence, the requested repository and milestone, the selected issue passed to claim and preparation, its identity in the launch briefing and returned watch, null story, baseline and agent. The remaining named tests exercise the specified refusal and compensation cuts.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The exported parameters, constructor dependencies, execute return type and both port signatures match the brief. DispatchFailure and its three leaves have the required hierarchy and explicit boundary codes; WorkspaceNotCleaned extends WorkspaceNotPrepared and has its own exact-constructor projection. Preparation failure requeues the confirmed claim except for WorkspaceNotCleaned. Launch failure compensates only after a conclusive absent record, undo precedes requeue, and failed undo prevents requeue. Existing or unreadable records preserve work. Cleanup and requeue failures retain the original diagnostic, and refused earlier ports cannot reach launch.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The applicable decisions remain closed: application orchestration uses injected ports, selection and claiming remain delegated, new backend modules and tests are TypeScript, no extra gate or model selection is introduced, and record presence or uncertainty prevents destructive launch compensation. The existing loose action is preserved. Other decisions concern later integration rather than this task. Controls are inherited as green; the log is referenced only by path: .agent/run-331/task-8-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the CT370 yardstick, the brief's local conventions, and the relevant StartPlan, RequestFixes, Workspace, PlanRecords and PlanCollapse source patterns. Dependencies enter by name through the constructor; application imports no infrastructure, ports carry domain values, and boundary failure codes are explicit. New code uses English and erasable TypeScript. Closed vocabulary: the added failure distinctions are typed; the private absence predicate combines present and inconclusive only for their identical required preservation action, without erasing a distinction its consumer needs. Raw map as the return value of logic: no new logical result is a raw map; results are PlanIssue, SownWorkspace, PlanStarted or the existing scalar/void port contracts, and typed named argument objects implement the prescribed signatures. Two fields that have to agree: no new redundant status flag or absence sentinel is introduced; the existing PlanStarted agent/watch contract is reused consistently. An error named for where it happens: the new concrete errors name unavailable dispatch, unreadable dispatch, unrecognized dispatch and unsuccessful cleanup, with the prescribed families. The additive action and unchanged loose entry path fit the task's delivery scope; the brief explicitly approves no feature flag.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing assertion is removed or weakened. The refusal tests add the new abstract family to the family census and expand the concrete failure cases; the existing assertions remain in force.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The action's production awaits, guards and catch paths produce the observed selection forwarding, refusal, preservation and compensation behavior. Doubles replace the explicitly scoped ports, while real domain values pass through the real action. The boundary-code assertions invoke the production PlanCollapse projection. Implementing the external selection and claim adapters is not part of this task's promised application-port behavior.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All seven changed files serve the declared action, ports, exception contracts, explicit refusal mappings or named tests. There is no plan amendment, plugin production edit, new gate, subsequent-issue dispatch, backend run machine or unrelated refactor in the supplied diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The added tests are deterministic and isolated: each flow has fresh mutable doubles and event arrays, domain fixtures are immutable, and path strings are only in-memory values rather than filesystem dependencies. No network, process, clock, sleep or randomness is used. Assertions observe production-directed port inputs, returned values, propagated diagnostics and absence of forbidden compensation; removing the relevant production guards or compensation calls changes those observations. The new refusal-code test exercises the real projection. No finding beyond the three required test properties is asserted.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "48e712a81aede9816c8591ed3803c4dd82f534f69ce58a39b883511899737962"
+  }
+}
