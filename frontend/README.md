@@ -10,12 +10,16 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the implementation).
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
-the ticket key and the repository, a button that calls `POST /start-plan`, the
-plan's progress arriving over `GET /plan-events/:issue` (Server-Sent Events), a
-button that calls `POST /implement-plan` once the plan is ready, the panels of
-gates 1 and 2, and the live terminals of the sessions the backend owns. Each
-one has its own directory under `src/app/`, and the endpoint each directory
-consumes is named in the sections below.
+the ticket or free-text request and repository open a coordinating session,
+plan progress arrives over `GET /plan-events/:issue` (Server-Sent Events), and
+the page shows implementation progress, the panels of gates 1 and 2, and the
+live terminals of the sessions the backend owns. `POST /start-plan` accepts the
+retained loose request or a milestone-only command. The milestone path selects
+and starts the next eligible slice; after the committed plan is published, the
+backend resumes the same headless conversation automatically. `POST
+/implement-plan` is not routed, so the page offers no implementation button.
+Each area has its own directory under `src/app/`, and the endpoint it consumes
+is named in the sections below.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
@@ -103,16 +107,25 @@ label in the brand colour and every earlier one muted. It declares no
 `min-width`, so it renders correctly at the panel's narrowest width.
 
 `Home` lays out a right column (`home__side`), a sibling of `main` rather than
-an overlay, that always holds a `Panel` heading **Sesión coordinadora** with
-`CoordinatingSessionStatus` and `SessionsPanel` inside it — on the page in
-every phase, never hidden and never disabled by which stage is showing. Once
-an implementation is running, `ImplementHistory` stacks under that panel in
-the same column. Above 1280 px the column sits beside `main` at
-`clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a fixed
-680px, because the 280 px navigation rail already takes its own share of a
-1440 px viewport and a fixed column left the work area too narrow for its own
-flow bar; below 1280 px the column stacks under the work area with no
-overlay.
+an overlay, that holds a `Drawer` titled **Sesión coordinadora** with
+`CoordinatingSessionStatus`, `SessionsPanel` and, while implementation runs,
+`ImplementHistory` inside it. The drawer starts collapsed to a 48 px rail and
+persists the person's choice under `ct.sessions-column-collapsed`; its toggle is
+available in every phase. Collapsing applies the native `hidden` attribute to
+the content instead of unmounting it, so the terminal keeps its xterm scrollback
+and SSE subscription. `useLiveSessions` polls `GET /sessions` every three
+seconds, so the list discovers a session opened outside the page without
+requiring the drawer to be open. Above 1280 px the open column sits beside
+`main` at `clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a
+fixed 680px, because the 280 px navigation rail already takes its own share of
+a 1440 px viewport and a fixed column left the work area too narrow for its own
+flow bar; below 1280 px the column stacks under the work area with no overlay.
+
+The coordinating session remains available and recoverable while a headless
+plan conversation plans and implements. They have different roles: expanding
+the drawer exposes the coordinating session as the interactive entrance in its
+PTY, while durable headless call records drive the selected slice without
+replacing that entrance.
 
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
@@ -130,7 +143,8 @@ Spanish) instead of breaking mid-word.
 clamp and persists the chosen width per browser in `localStorage` under
 `ct.sessions-column-width` — a convenience for that browser alone, restored
 on mount and re-clamped to the viewport; it is never sent to the backend and
-the handle is hidden below 1280 px, where the column is already full width.
+the handle is disabled while the drawer is collapsed and hidden below 1280 px,
+where the column is already full width.
 
 `app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
 the workspace, outside every `currentStage` branch) is gate 1's panel.
