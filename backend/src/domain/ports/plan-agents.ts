@@ -18,14 +18,16 @@ export class PlanAgents {
     )
   }
 
-  async fix({ agent, issue, repository, changes }: {
+  async fix({ agent, issue, repository, changes, requestId }: {
     agent: string,
     issue: number,
     repository: RepositoryName,
     changes: string,
+    requestId?: string,
   }): Promise<void> {
     throw new Error(
-      `${this.constructor.name} must implement fix({ agent, issue, repository, changes }), asked for ${agent} on ${issue} in ${repository}`
+      `${this.constructor.name} must implement fix({ agent, issue, repository, changes, requestId }), `
+      + `asked for ${agent} on ${issue} in ${repository} as ${String(requestId)}`
     )
   }
 }

@@ -29,7 +29,12 @@ export class ClaudePlanCalls extends PlanCalls {
     this.resumable = ports.resumable
   }
 
-  async start(watch: PlanWatch, purpose: PlanCallPurpose, changes: string | null): Promise<StartedPlanCall> {
+  async start(
+    watch: PlanWatch,
+    purpose: PlanCallPurpose,
+    changes: string | null,
+    requestId?: string,
+  ): Promise<StartedPlanCall> {
     const prompt = this.#prompt(watch, purpose, changes)
     const mode = ClaudePlanCalls.#modeFor(purpose)
     if (mode === 'resume' && (watch.agent.length === 0 || !await this.resumable(watch))) {
@@ -42,6 +47,7 @@ export class ClaudePlanCalls extends PlanCalls {
       cwd: watch.located.path,
       argv: this.#argv(watch.agent, mode),
       prompt,
+      requestId,
     }))
   }
 

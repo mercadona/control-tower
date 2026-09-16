@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
@@ -223,7 +223,7 @@ export class HeadlessCallWorker {
     const stream = await this.files.fs.readFile(join(dirname(descriptorPath), CallDescriptor.STREAM), 'utf8')
     const converted = await ClaudeCallResult.read({
       lines: RecordedStream.of(stream),
-      call: new StartedPlanCall({ conversation: descriptor.conversation, id: descriptor.requestId }),
+      call: new StartedPlanCall({ conversation: descriptor.conversation, id: basename(dirname(descriptorPath)) }),
       code: outcome.code,
       signal: outcome.signal,
       finishedAt: outcome.finishedAt,

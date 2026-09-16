@@ -2,9 +2,15 @@ import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../val
 import type { PlanWatch } from '../value-objects/plan-watch.ts'
 
 export class PlanCalls {
-  async start(watch: PlanWatch, purpose: PlanCallPurpose, changes: string | null): Promise<StartedPlanCall> {
+  async start(
+    watch: PlanWatch,
+    purpose: PlanCallPurpose,
+    changes: string | null,
+    requestId?: string,
+  ): Promise<StartedPlanCall> {
     throw new Error(
-      `${this.constructor.name} must implement start(watch, purpose, changes), asked for ${purpose} on ${watch.issue.number} with ${changes}`
+      `${this.constructor.name} must implement start(watch, purpose, changes, requestId), `
+      + `asked for ${purpose} on ${watch.issue.number} with ${changes} as ${String(requestId)}`
     )
   }
 

@@ -20,6 +20,7 @@ export class CallInvocation {
   readonly cwd: string
   readonly argv: readonly string[]
   readonly prompt: string
+  readonly requestId: string | null
 
   constructor(asked: {
     conversation: string,
@@ -27,12 +28,14 @@ export class CallInvocation {
     cwd: string,
     argv: readonly string[],
     prompt: string,
+    requestId?: string,
   }) {
     this.conversation = asked.conversation
     this.purpose = asked.purpose
     this.cwd = asked.cwd
     this.argv = Object.freeze([...asked.argv])
     this.prompt = asked.prompt
+    this.requestId = asked.requestId ?? null
     Object.freeze(this)
   }
 }
@@ -50,7 +53,7 @@ export class CallDescriptor {
 
   readonly conversation: string
   readonly purpose: PlanCallPurpose
-  readonly requestId: string
+  readonly requestId: string | null
   readonly cwd: string
   readonly binary: string
   readonly argv: readonly string[]
@@ -61,7 +64,7 @@ export class CallDescriptor {
   constructor(asked: {
     conversation: string,
     purpose: PlanCallPurpose,
-    requestId: string,
+    requestId: string | null,
     cwd: string,
     binary: string,
     argv: readonly string[],
@@ -71,7 +74,7 @@ export class CallDescriptor {
   }) {
     this.conversation = CallDescriptor.#nonempty('conversation', asked.conversation)
     this.purpose = CallDescriptor.#purpose(asked.purpose)
-    this.requestId = CallDescriptor.#nonempty('requestId', asked.requestId)
+    this.requestId = CallDescriptor.#nullableNonempty('requestId', asked.requestId)
     this.cwd = CallDescriptor.#nonempty('cwd', asked.cwd)
     this.binary = CallDescriptor.#nonempty('binary', asked.binary)
     this.argv = Object.freeze(CallDescriptor.#argv(asked.argv))
@@ -89,7 +92,7 @@ export class CallDescriptor {
     return new CallDescriptor({
       conversation: CallDescriptor.#nonempty('conversation', raw.conversation),
       purpose: CallDescriptor.#purpose(raw.purpose),
-      requestId: CallDescriptor.#nonempty('requestId', raw.requestId),
+      requestId: CallDescriptor.#nullableNonempty('requestId', raw.requestId),
       cwd: CallDescriptor.#nonempty('cwd', raw.cwd),
       binary: CallDescriptor.#nonempty('binary', raw.binary),
       argv: CallDescriptor.#argv(raw.argv),
@@ -147,6 +150,11 @@ export class CallDescriptor {
       throw new Error(`${field} must be a nonempty string, got ${JSON.stringify(value)}`)
     }
     return value
+  }
+
+  static #nullableNonempty(field: string, value: unknown): string | null {
+    if (value === null) return null
+    return CallDescriptor.#nonempty(field, value)
   }
 
   static #purpose(value: unknown): PlanCallPurpose {
@@ -359,6 +367,7 @@ export class ClaudeCalls {
   readonly acceptanceMs: number
   readonly pollMs: number
   readonly sleep: (ms: number) => Promise<void>
+  readonly starts: Map<string, Promise<void>>
 
   constructor(ports: {
     files: HeadlessFiles,
@@ -386,9 +395,26 @@ export class ClaudeCalls {
     this.acceptanceMs = ports.acceptanceMs
     this.pollMs = ports.pollMs
     this.sleep = ports.sleep
+    this.starts = new Map()
   }
 
   async start(invocation: CallInvocation): Promise<StartedPlanCall> {
+    const previous = this.starts.get(invocation.conversation) ?? Promise.resolve()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    this.starts.set(invocation.conversation, gate)
+    await previous
+    try {
+      return await this.#start(invocation)
+    } finally {
+      release()
+      if (this.starts.get(invocation.conversation) === gate) this.starts.delete(invocation.conversation)
+    }
+  }
+
+  async #start(invocation: CallInvocation): Promise<StartedPlanCall> {
+    const recorded = await this.#recorded(invocation)
+    if (recorded !== null) return recorded
     let call: StartedPlanCall
     let directory: string
     let descriptorPath: string
@@ -408,7 +434,7 @@ export class ClaudeCalls {
       descriptor = new CallDescriptor({
         conversation: invocation.conversation,
         purpose: invocation.purpose,
-        requestId: call.id,
+        requestId: invocation.requestId,
         cwd: invocation.cwd,
         binary: this.binary,
         argv: invocation.argv,
@@ -426,6 +452,66 @@ export class ClaudeCalls {
     await this.#writeOnceOrMatch(descriptorPath, descriptor.text())
     await this.#launch(descriptorPath)
     return call
+  }
+
+  async #recorded(invocation: CallInvocation): Promise<StartedPlanCall | null> {
+    const directory = join(this.files.root, 'harness', invocation.conversation, 'calls')
+    let names: string[]
+    try {
+      names = await this.files.list(directory)
+    } catch (cause) {
+      throw new PlanAgentNotLaunched(`${directory} could not be listed: ${String(cause)}`)
+    }
+    let matching: StartedPlanCall | null = null
+    let unfinishedCompetitor: StartedPlanCall | null = null
+    for (const name of names.sort()) {
+      const call = new StartedPlanCall({ conversation: invocation.conversation, id: name })
+      const descriptor = await this.#descriptor(call)
+      if (descriptor.requestId !== null && descriptor.requestId === invocation.requestId) {
+        if (matching !== null) {
+          throw new PlanAgentNotNamed(
+            `request ${JSON.stringify(invocation.requestId)} has multiple records in conversation `
+            + JSON.stringify(invocation.conversation)
+          )
+        }
+        await this.#requireMatchingRequest(call, descriptor, invocation)
+        await this.#completionAbsent(call)
+        matching = call
+        continue
+      }
+      if (await this.#completionAbsent(call)) unfinishedCompetitor = call
+    }
+    if (unfinishedCompetitor !== null) {
+      throw new PlanAgentNotLaunched(
+        `conversation ${JSON.stringify(invocation.conversation)} already has unfinished call ${unfinishedCompetitor.id}`
+      )
+    }
+    return matching
+  }
+
+  async #requireMatchingRequest(
+    call: StartedPlanCall,
+    descriptor: CallDescriptor,
+    invocation: CallInvocation,
+  ): Promise<void> {
+    const promptPath = join(this.files.callDirectory(call), CallDescriptor.PROMPT)
+    let prompt: string | null
+    try {
+      prompt = await this.files.read(promptPath)
+    } catch (cause) {
+      throw new PlanAgentNotLaunched(`${promptPath} could not be read: ${String(cause)}`)
+    }
+    if (prompt === null) throw new PlanAgentNotLaunched(`${promptPath} is absent`)
+    if (descriptor.purpose !== invocation.purpose || prompt !== invocation.prompt) {
+      throw new PlanAgentNotNamed(
+        `request ${JSON.stringify(invocation.requestId)} for conversation ${JSON.stringify(invocation.conversation)} `
+        + 'was already recorded with a different purpose or prompt'
+      )
+    }
+  }
+
+  async #completionAbsent(call: StartedPlanCall): Promise<boolean> {
+    return await this.completed(call) === null
   }
 
   async wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
@@ -473,11 +559,10 @@ export class ClaudeCalls {
     if (text === null) throw new PlanAgentNotLaunched(`${path} is absent`)
     try {
       const descriptor = CallDescriptor.from(text)
-      if (descriptor.conversation !== call.conversation || descriptor.requestId !== call.id) {
+      if (descriptor.conversation !== call.conversation) {
         throw new Error(
           `descriptor identity differs from its directory: expected conversation=${JSON.stringify(call.conversation)}, `
-          + `requestId=${JSON.stringify(call.id)}, got conversation=${JSON.stringify(descriptor.conversation)}, `
-          + `requestId=${JSON.stringify(descriptor.requestId)}`
+          + `got conversation=${JSON.stringify(descriptor.conversation)}`
         )
       }
       return descriptor

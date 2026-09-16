@@ -53,6 +53,7 @@ class Flow {
   static ISSUE_NUMBER = 7
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static CHANGES = 'src/foo.js:42: revienta con []'
+  static REQUEST_ID = 'PRR_kwDOT9lB5c8AAAABRCF0GG'
 
   readonly workbench: WorkbenchDouble
   readonly planAgents: PlanAgentsDouble
@@ -79,12 +80,13 @@ class Flow {
       issue: Flow.ISSUE_NUMBER,
       repository: Flow.REPOSITORY,
       changes: Flow.CHANGES,
+      requestId: Flow.REQUEST_ID,
     }))
   }
 }
 
 describe('RequestFixes', () => {
-  it('the_issue_goes_back_to_the_workbench_before_the_agent_is_told_anything', async () => {
+  it('reopening still precedes delivery to the original conversation', async () => {
     const flow = Flow.reopened()
 
     await flow.run()
@@ -95,6 +97,7 @@ describe('RequestFixes', () => {
       issue: Flow.ISSUE_NUMBER,
       repository: Flow.REPOSITORY,
       changes: Flow.CHANGES,
+      requestId: Flow.REQUEST_ID,
     }])
   })
 

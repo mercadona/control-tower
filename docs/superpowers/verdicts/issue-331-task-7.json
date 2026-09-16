@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 7,
+  "task_name": "Own the background bridge and preserve PR fix delivery",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "HeadlessPlanAgents prepares the record before starting the plan, invokes ContinuePlan with a rejection handler, and returns the recorded conversation without awaiting completion. Fix delivery validates the recorded conversation, mints an ID for direct fixes, returns after call acceptance, and supervises completion without replay. Background failure diagnostics include repository, issue, conversation, call and cause. ReviewWatch now binds asynchronous work to its registration Set. Controls1 green is inherited; log reference only: .agent/run-331/task-7-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test, 'launch records before starting and automatically supervises the bridge', awaits launch while the continuation completion remains unresolved, checks the recorded-before-started sequence and the continuation parameters, and only then resolves completion. This pins the deferred-completion assertion required by the brief.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The HeadlessPlanAgents constructor and launch/resume/fix signatures match the contract; resume refuses with PlanAgentNotResumed. Optional requestId travels through Delivered, RequestFixesParams/execute, PlanAgents.fix, the fourth PlanCalls/ClaudePlanCalls.start argument and CallInvocation. Non-fix callers persist null; the worker derives call identity from the descriptor directory. ClaudeCalls serializes starts per conversation, checks matching request purpose and prompt, rejects duplicate matching records, reuses recorded requests without spawning, and blocks unfinished competitors. ReviewWatch checks registration identity across sleep, baseline, read and delivery boundaries, guards note/attended mutations, and prevents stale catches from deleting replacements.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Relevant closed decisions remain intact: RequestFixes awaits reopen before delivering to the original conversation; no direct resume gate is restored; the background bridge delegates to ContinuePlan rather than interpreting ct-step; descriptors remain immutable and uncertain calls are not replayed. The worker change separates review request identity from call identity without changing execution or measurement semantics. No plugin production change, persisted phase/lock/pid, billing calculation or new PR-writing authority is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Compared the diff with the eight CT conventions, backend conventions, glossary, acknowledgements, local prescriptive-planning skill/template and relevant application/persistence exemplars. Dependencies remain constructor-injected with infrastructure depending on application/domain and application depending on ports. Descriptor corruption and operational failures retain distinct domain errors. Closed vocabulary: call purposes retain their existing union; request IDs are opaque identifiers, not classifications, and the new predicates do not discard an outcome needed by their consumers. Raw map as the return value of logic: the new record scan returns StartedPlanCall or null; no new raw-map result is introduced. Two fields that have to agree: call identity comes from the directory and request identity has its separate purpose; absence uses null/undefined rather than a sentinel. An error named for where it happens: no new error class is introduced; existing NotNamed, NotLaunched and NotResumed causes are retained. The backend-best-practices skill could not be loaded; the available written yardsticks were applied. No finding rests on that unavailable skill.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The rewritten descriptor expectations implement the expressly changed requestId contract rather than weakening identity validation. Null and distinct review IDs replace the obsolete call-ID expectation; invalid type, empty and missing requestId plus a foreign conversation retain corruption coverage. Spawn failure and acceptance timeout now use independent roots so the new unfinished-record refusal does not mask the timeout. Collision fixtures still exercise EEXIST with conflicting bytes and operational read failures after enumeration, preserving error subclasses, diagnostics, retained bytes and zero launches. Existing reopen/refusal assertions remain and requestId forwarding is added.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production code supplies the observed effects: HeadlessPlanAgents invokes and supervises continuation, RequestFixes forwards the review identity after reopening, ClaudeCalls reads immutable history to prevent duplicate spawns, and ReviewWatch checks Set identity before stale effects. Deferred promises and child doubles provide controlled boundary events; they do not implement the production serialization or generation checks. The collision seam delegates to the real immutable writer after independently arranging conflicting bytes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every implementation hunk serves task 7's background ownership, review identity, immutable-call reuse or generation-safe watcher requirements. The plan amendment adds the previously omitted claude-calls regression test path and an additional three-suite verification command, retaining all original paths, named tests, commands and 23 tasks. Its wording compression preserves the prior obligations; section 9 supplies correction provenance and explicitly distinguishes reported execution from architecture validation. It expands regression coverage rather than disarming a control. Protected files and excluded slice capabilities remain outside the diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "New cases use explicit deferred promises/microtask ordering, fixed timestamps and IDs, injected boundaries, and temporary filesystem roots removed in afterEach. Their assertions observe production sequencing, diagnostics, request reuse/distinction and replacement-watcher survival; removing the relevant implementation would break those observations. No new test depends on a live service, a real date assertion, random expected data or a sleep used as synchronization. The control-tower-loop:test-driven-development skill loader was unavailable; its repository-local SKILL.md was read, and this item reports only the three mandatory instrument properties rather than finer skill-based findings. Tests were judged by reading, not executed.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "42ba5565796b4c79a397662c4931c601d5a17bde9c6b9ce090223f9e721a19d9"
+  }
+}

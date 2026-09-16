@@ -7,17 +7,20 @@ export class RequestFixesParams {
   readonly issueNumber: number
   readonly repository: RepositoryName
   readonly changes: string
+  readonly requestId: string | undefined
 
-  constructor({ agent, issue, repository, changes }: {
+  constructor({ agent, issue, repository, changes, requestId }: {
     agent: string,
     issue: number,
     repository: RepositoryName,
     changes: string,
+    requestId?: string,
   }) {
     this.agent = agent
     this.issueNumber = issue
     this.repository = repository
     this.changes = changes
+    this.requestId = requestId
     Object.freeze(this)
   }
 }
@@ -38,6 +41,7 @@ export class RequestFixes {
       issue: params.issueNumber,
       repository: params.repository,
       changes: params.changes,
+      requestId: params.requestId,
     })
   }
 }

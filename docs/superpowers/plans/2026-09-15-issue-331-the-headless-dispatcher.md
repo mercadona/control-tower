@@ -641,7 +641,7 @@ npm --prefix backend test -- __tests__/infrastructure/gh-plan-publication.test.t
 
 ### Task 7 — Own the background bridge and preserve PR fix delivery
 
-**Objective:** supervise headless continuation and fixes.
+**Objective:** own continuation/fixes.
 
 **Files:** `backend/src/infrastructure/headless-plan-agents.ts` (create),
 `backend/src/domain/ports/plan-agents.ts` (modify),
@@ -652,6 +652,7 @@ npm --prefix backend test -- __tests__/infrastructure/gh-plan-publication.test.t
 `backend/src/infrastructure/headless-call-worker.ts` (modify),
 `backend/src/domain/ports/plan-calls.ts` (modify),
 `backend/__tests__/infrastructure/headless-plan-agents.test.ts` (create),
+`backend/__tests__/infrastructure/claude-calls.test.ts` (modify),
 `backend/__tests__/application/request-fixes.test.ts` (modify),
 `backend/__tests__/infrastructure/review-watch.test.ts` (modify)
 
@@ -667,26 +668,24 @@ export class HeadlessPlanAgents extends PlanAgents {
 }
 ```
 
-launch prepares, starts plan, supervises ContinuePlan with a rejection handler and returns
-watch.agent. Failures log issue/conversation/call/cause and preserve work. resume refuses
-as PlanAgentNotResumed. fix validates recorded identity, accepts and supervises wait;
-return on acceptance; never replay failed model work.
+launch prepares/starts plan, handles ContinuePlan rejections, returns watch.agent.
+Failures log issue/conversation/call/cause; preserve work. resume throws
+PlanAgentNotResumed. fix validates identity, supervises wait, returns on acceptance;
+never replay failed work.
 
-Carry optional requestId through PlanAgents.fix, RequestFixesParams/execute and Delivered;
-ReviewWatch passes ChangeAsked.id. Add fourth requestId to PlanCalls/ClaudePlanCalls.start
-and optional requestId to CallInvocation; align worker reader, persist null for non-fixes.
-Direct fixes mint ids; old adapter may ignore them. ClaudeCalls reuses recorded
-conversation/requestId without spawning, including uncertain acceptance; different prompt/
-purpose refuses. Serialise conversation starts; unfinished records block competitors.
-Same text with a different review id is new work.
+Optional requestId: PlanAgents.fix, RequestFixesParams/execute, Delivered,
+CallInvocation; fourth PlanCalls/ClaudePlanCalls.start argument. ReviewWatch passes
+ChangeAsked.id. Align worker; persist null for non-fixes. Direct fixes mint ids;
+old adapter may ignore them. ClaudeCalls reuses conversation/requestId without spawning,
+even if acceptance is uncertain; new prompt/purpose refuses. Serialise conversation
+starts; unfinished records block competitors. New review id means new work, even same text.
 
-Bind each ReviewWatch loop to its registration's Set identity: live.get(key) === attended,
-not live.has(key). Check before/after every await, before note/delivery/attended mutation;
-stale catch/finally deletes only its own registration. stop/restart cannot revive an old
-sleeper, reader or delivery completion. Keep recovered-review baselining intact.
+ReviewWatch: live.get(key) === attended, not live.has(key), before/after every await
+and before note/delivery/attended mutation. Stale catch/finally deletes only its Set.
+stop/restart cannot revive sleepers/readers/deliveries. Retain recovery baselining.
 
 **TDD:** `it('launch records before starting and automatically supervises the bridge')`
-defers completion until after launch returns.
+defers completion past launch return.
 
 **Tests:** 'launch records before starting and automatically supervises the bridge',
 'background failures preserve recorded work without an unhandled rejection',
@@ -700,6 +699,7 @@ defers completion until after launch returns.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/infrastructure/headless-plan-agents.test.ts __tests__/application/request-fixes.test.ts __tests__/infrastructure/review-watch.test.ts
+npm --prefix backend test -- __tests__/infrastructure/claude-calls.test.ts __tests__/infrastructure/claude-calls-real-process.test.ts __tests__/infrastructure/claude-plan-calls.test.ts
 ```
 
 ### Task 8 — Start selected milestone work through application ports
@@ -1560,6 +1560,19 @@ git diff --check
 ```
 
 ## 9. Assumptions
+
+**Task 7 correction (2026-09-16):** the user/coordinator reports the three-suite
+call regression command now recorded in Task 7 produced 4 failures and 17 passes.
+Source inspection confirms Task 7 already requires nullable review requestId, separate
+from the call-directory UUID, but omitted Task 4's claude-calls.test.ts from its edit
+scope and regression verification. Add that file and retain all prior files/tests/commands;
+compact only Task 7 wording to retain its 3500-character budget. This is missing test
+scope, not new behaviour. Identity expectations change; corruption/operational failure,
+immutable conflicts and no-replay guarantees remain. Precise fixture/error decisions are
+in `.agent/run-331/task-7-correction-guidance.md`. The reported test run is not an
+architect-run pass. Validate using this worktree's original-cut e50cbc3 contract and
+base-backed citations; this predates main's newer STE validator (the user reports #370
+reconciliation). No newer-STE final validation is claimed; original citations remain.
 
 1. **Accepted amendment:** this correction request reports user approval of #331 call-record
    telemetry and interim agent-conducted implementation, with #332 owning backend step

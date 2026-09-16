@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
@@ -119,7 +119,7 @@ class CallMother {
     return `${JSON.stringify({
       conversation: CallMother.CONVERSATION,
       purpose: 'plan',
-      requestId: CallMother.CALL,
+      requestId: null,
       cwd: root,
       binary: process.execPath,
       argv: ['--session-id', CallMother.CONVERSATION],
@@ -207,6 +207,12 @@ class CallMother {
     })}\n`
   }
 
+  static descriptorWithoutRequest(root: string): string {
+    const descriptor = JSON.parse(CallMother.descriptor(root)) as Record<string, unknown>
+    delete descriptor.requestId
+    return `${JSON.stringify(descriptor, null, 2)}\n`
+  }
+
   static worker(root: string, child: FakeChild, clock: ManualClock, asked: {
     present: () => boolean,
     signals: NodeJS.Signals[],
@@ -264,7 +270,7 @@ describe('ClaudeCalls', () => {
     const spawn = ((binary: string, argv: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
       const directory = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
       expect(readFileSync(join(directory, 'prompt.md'), 'utf8')).toBe('Plan the recorded issue.')
-      expect(JSON.parse(readFileSync(join(directory, 'call.json'), 'utf8'))).toMatchObject({ requestId: CallMother.CALL })
+      expect(JSON.parse(readFileSync(join(directory, 'call.json'), 'utf8'))).toMatchObject({ requestId: null })
       observed = { argv, env: options.env ?? {} }
       expect(binary).toBe(process.execPath)
       queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
@@ -272,14 +278,14 @@ describe('ClaudeCalls', () => {
     }) as unknown as typeof import('node:child_process').spawn
     const calls = CallMother.calls(root, spawn)
 
-    await calls.start(CallMother.invocation())
+    const started = await calls.start(CallMother.invocation())
     const directory = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
 
     expect(await readFile(join(directory, 'prompt.md'), 'utf8')).toBe('Plan the recorded issue.')
     expect(JSON.parse(await readFile(join(directory, 'call.json'), 'utf8'))).toEqual({
       conversation: CallMother.CONVERSATION,
       purpose: 'plan',
-      requestId: CallMother.CALL,
+      requestId: null,
       cwd: '/checkout/.worktrees/331',
       binary: '/usr/local/bin/claude',
       argv: ['-p', '--session-id', CallMother.CONVERSATION],
@@ -290,6 +296,7 @@ describe('ClaudeCalls', () => {
     expect(observed).toMatchObject({
       argv: ['/backend/src/infrastructure/headless-call-worker.ts', join(directory, 'call.json')],
     })
+    expect(started.id).toBe(CallMother.CALL)
     expect(observed).not.toMatchObject({ env: { CT_PHASE_PROMPT: expect.anything() } })
     expect(observed).not.toMatchObject({ env: { CT_SESSION_HOOKS_URL: expect.anything() } })
   })
@@ -314,24 +321,46 @@ describe('ClaudeCalls', () => {
   })
 
   it('spawn and acceptance failures preserve records', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
-    roots.push(root)
-    const spawnFailure = CallMother.calls(root, (() => { throw new Error('worker refused') }) as typeof import('node:child_process').spawn)
+    const spawnRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(spawnRoot)
+    const spawnFailure = CallMother.calls(spawnRoot, (() => { throw new Error('worker refused') }) as typeof import('node:child_process').spawn)
     const refused = spawnFailure.start(CallMother.invocation())
     await expect(refused).rejects.toBeInstanceOf(PlanAgentNotLaunched)
     await expect(refused).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
     await expect(refused).rejects.toThrow('worker refused')
 
-    const directory = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
-    expect(await readFile(join(directory, 'prompt.md'), 'utf8')).toBe('Plan the recorded issue.')
-    expect(await readFile(join(directory, 'call.json'), 'utf8')).toContain(CallMother.CALL)
+    const spawnDirectory = join(spawnRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
+    expect(await readFile(join(spawnDirectory, 'prompt.md'), 'utf8')).toBe('Plan the recorded issue.')
+    expect(JSON.parse(await readFile(join(spawnDirectory, 'call.json'), 'utf8'))).toMatchObject({
+      conversation: CallMother.CONVERSATION,
+      purpose: 'plan',
+      requestId: null,
+    })
 
-    const waiting = CallMother.calls(root, (() => new FakeChild(909)) as typeof import('node:child_process').spawn)
+    let retryLaunches = 0
+    const retry = CallMother.calls(spawnRoot, (() => {
+      retryLaunches += 1
+      return new FakeChild(908)
+    }) as typeof import('node:child_process').spawn).start(CallMother.invocation())
+    await expect(retry).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+    await expect(retry).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
+    await expect(retry).rejects.toThrow('unfinished call')
+    expect(retryLaunches).toBe(0)
+
+    const timeoutRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(timeoutRoot)
+    const timeoutDirectory = join(timeoutRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
+    const waiting = CallMother.calls(timeoutRoot, (() => new FakeChild(909)) as typeof import('node:child_process').spawn)
     const unacknowledged = waiting.start(CallMother.invocation())
     await expect(unacknowledged).rejects.toBeInstanceOf(PlanAgentNotLaunched)
     await expect(unacknowledged).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
     await expect(unacknowledged).rejects.toThrow('did not accept call')
-    expect(await readFile(join(directory, 'call.json'), 'utf8')).toContain(CallMother.CALL)
+    expect(await readFile(join(timeoutDirectory, 'prompt.md'), 'utf8')).toBe('Plan the recorded issue.')
+    expect(JSON.parse(await readFile(join(timeoutDirectory, 'call.json'), 'utf8'))).toMatchObject({
+      conversation: CallMother.CONVERSATION,
+      purpose: 'plan',
+      requestId: null,
+    })
   })
 
   it('missing completion is uncertain rather than an automatic retry', async () => {
@@ -373,6 +402,7 @@ describe('ClaudeCalls', () => {
     expect(completed?.measurement.cost).toEqual({
       kind: 'reported', totalUsd: 1.25, attribution: 'unverified-resume',
     })
+    expect(completed?.call.id).toBe(CallMother.CALL)
     expect(completed?.attributableCostUsd).toBeNull()
   })
 
@@ -506,10 +536,17 @@ describe('ClaudeCalls', () => {
       launches += 1
       return new FakeChild(915)
     }) as typeof import('node:child_process').spawn
+    const foreign = '33333333-3333-4333-8333-333333333333'
     for (const descriptor of [
       '{bad',
       CallMother.descriptor('/checkout', { argv: ['--resume', 'another-conversation'] }),
-      CallMother.descriptor('/checkout', { requestId: '33333333-3333-4333-8333-333333333333' }),
+      CallMother.descriptor('/checkout', { requestId: 7 }),
+      CallMother.descriptor('/checkout', { requestId: '' }),
+      CallMother.descriptorWithoutRequest('/checkout'),
+      CallMother.descriptor('/checkout', {
+        conversation: foreign,
+        argv: ['--session-id', foreign],
+      }),
     ]) {
       const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
       roots.push(root)
@@ -520,6 +557,20 @@ describe('ClaudeCalls', () => {
       await expect(malformed).rejects.not.toBeInstanceOf(PlanAgentNotLaunched)
       await expect(malformed).rejects.toThrow(path)
     }
+
+    const fixRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(fixRoot)
+    await CallMother.prepared(fixRoot, {
+      purpose: 'fix',
+      requestId: 'PRR_kwDOT9lB5c8AAAABRCF0GG',
+      argv: ['--resume', CallMother.CONVERSATION],
+    })
+    expect(await CallMother.calls(fixRoot, spawn).completed(CallMother.call())).toBeNull()
+
+    const nonFixRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(nonFixRoot)
+    await CallMother.prepared(nonFixRoot)
+    expect(await CallMother.calls(nonFixRoot, spawn).completed(CallMother.call())).toBeNull()
 
     const descriptorReadRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(descriptorReadRoot)
@@ -590,33 +641,67 @@ describe('ClaudeCalls', () => {
       launches += 1
       return new FakeChild(917)
     }) as typeof import('node:child_process').spawn
+    const partialRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(partialRoot)
+    const partialDirectory = join(partialRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
+    await fs.mkdir(partialDirectory, { recursive: true })
+    await writeFile(join(partialDirectory, 'prompt.md'), 'different prompt', 'utf8')
+    const partial = CallMother.calls(partialRoot, spawn).start(CallMother.invocation())
+    await expect(partial).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+    await expect(partial).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
+    await expect(partial).rejects.toThrow('call.json is absent')
+    expect(await readFile(join(partialDirectory, 'prompt.md'), 'utf8')).toBe('different prompt')
+
+    const malformedRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(malformedRoot)
+    const malformedDirectory = join(malformedRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
+    await fs.mkdir(malformedDirectory, { recursive: true })
+    await writeFile(join(malformedDirectory, 'prompt.md'), 'Plan the recorded issue.', 'utf8')
+    await writeFile(join(malformedDirectory, 'call.json'), 'different descriptor', 'utf8')
+    const malformed = CallMother.calls(malformedRoot, spawn).start(CallMother.invocation())
+    await expect(malformed).rejects.toBeInstanceOf(PlanAgentNotNamed)
+    await expect(malformed).rejects.not.toBeInstanceOf(PlanAgentNotLaunched)
+    expect(await readFile(join(malformedDirectory, 'call.json'), 'utf8')).toBe('different descriptor')
+
     for (const existing of [
       { file: 'prompt.md', text: 'different prompt' },
       { file: 'call.json', text: 'different descriptor' },
     ]) {
       const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
       roots.push(root)
-      const directory = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
-      await fs.mkdir(directory, { recursive: true })
-      if (existing.file === 'call.json') await writeFile(join(directory, 'prompt.md'), 'Plan the recorded issue.', 'utf8')
-      await writeFile(join(directory, existing.file), existing.text, 'utf8')
-      const conflict = CallMother.calls(root, spawn).start(CallMother.invocation())
-      await expect(conflict).rejects.toBeInstanceOf(PlanAgentNotNamed)
-      await expect(conflict).rejects.not.toBeInstanceOf(PlanAgentNotLaunched)
-      expect(await readFile(join(directory, existing.file), 'utf8')).toBe(existing.text)
-    }
-
-    for (const existing of ['read-refused', 'disappeared']) {
-      const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
-      roots.push(root)
-      const directory = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
-      await fs.mkdir(directory, { recursive: true })
-      await writeFile(join(directory, 'prompt.md'), 'existing prompt', 'utf8')
       const base = CallMother.files(root)
       const files = CallMother.files(root, {
+        writeOnce: async (path, text) => {
+          if (path.endsWith(existing.file)) {
+            await fs.mkdir(dirname(path), { recursive: true })
+            await writeFile(path, existing.text, 'utf8')
+          }
+          return base.writeOnce(path, text)
+        },
+      })
+      const conflict = CallMother.calls(root, spawn, { files }).start(CallMother.invocation())
+      await expect(conflict).rejects.toBeInstanceOf(PlanAgentNotNamed)
+      await expect(conflict).rejects.not.toBeInstanceOf(PlanAgentNotLaunched)
+      const path = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL, existing.file)
+      expect(await readFile(path, 'utf8')).toBe(existing.text)
+    }
+
+    for (const evidence of ['read-refused', 'disappeared']) {
+      const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+      roots.push(root)
+      const prompt = join(root, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL, 'prompt.md')
+      const base = CallMother.files(root)
+      const files = CallMother.files(root, {
+        writeOnce: async (path, text) => {
+          if (path === prompt) {
+            await fs.mkdir(dirname(path), { recursive: true })
+            await writeFile(path, 'existing prompt', 'utf8')
+          }
+          return base.writeOnce(path, text)
+        },
         read: async (path) => {
-          if (path.endsWith('prompt.md')) {
-            if (existing === 'read-refused') throw new Error('immutable record read refused')
+          if (path === prompt) {
+            if (evidence === 'read-refused') throw new Error('immutable record read refused')
             return null
           }
           return base.read(path)
@@ -625,8 +710,8 @@ describe('ClaudeCalls', () => {
       const failed = CallMother.calls(root, spawn, { files }).start(CallMother.invocation())
       await expect(failed).rejects.toBeInstanceOf(PlanAgentNotLaunched)
       await expect(failed).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
-      await expect(failed).rejects.toThrow(existing === 'read-refused' ? 'immutable record read refused' : 'is absent')
-      expect(await readFile(join(directory, 'prompt.md'), 'utf8')).toBe('existing prompt')
+      await expect(failed).rejects.toThrow(evidence === 'read-refused' ? 'immutable record read refused' : 'is absent')
+      expect(await readFile(prompt, 'utf8')).toBe('existing prompt')
     }
     expect(launches).toBe(0)
   })
