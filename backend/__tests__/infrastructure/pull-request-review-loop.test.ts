@@ -1,13 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.ts'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
-import { LaunchPolicy, LaunchBudget } from '../../src/domain/policies/launch-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -17,6 +15,7 @@ import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/quer
 import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
+import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 
 class GhProcessDouble {
   readonly answers: ProcessOutput[]
@@ -52,45 +51,13 @@ class NodeDouble {
   }
 }
 
-class CmuxDouble {
-  readonly calls: string[][]
+type FixRequest = { agent: string, issue: number, repository: RepositoryName, changes: string, requestId?: string }
 
-  constructor() {
-    this.calls = []
-  }
+class RecordedPlanAgentsDouble extends PlanAgents {
+  readonly fixes: FixRequest[] = []
 
-  async run(argv: string[]): Promise<ProcessOutput> {
-    this.calls.push(argv)
-
-    return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
-  }
-}
-
-class Untouched {
-  static readonly RUNS_IN = '/tmp/ct-plan'
-
-  static write(path: string): Promise<void> {
-    throw new Error(`asking an agent for fixes writes no launcher, it was asked to write ${path}`)
-  }
-
-  static read(path: string): Promise<string | null> {
-    throw new Error(`asking an agent for fixes reads no sentinel, it was asked to read ${path}`)
-  }
-
-  static remove(path: string): Promise<void> {
-    throw new Error(`asking an agent for fixes removes no sentinel, it was asked to remove ${path}`)
-  }
-
-  static sleep(): Promise<void> {
-    throw new Error('asking an agent for fixes waits for no sentinel')
-  }
-
-  static realpathOf(path: string): string | null {
-    throw new Error(`asking an agent for fixes resolves no directory, it was asked for ${path}`)
-  }
-
-  static policy(): LaunchPolicy {
-    return new LaunchPolicy({ budget: new LaunchBudget({ attempts: 1, resends: 0 }) })
+  async fix(asked: FixRequest): Promise<void> {
+    this.fixes.push(asked)
   }
 }
 
@@ -136,7 +103,7 @@ class PullRequestReviewLoop {
   })
 
   readonly node: NodeDouble
-  readonly cmux: CmuxDouble
+  readonly agents: RecordedPlanAgentsDouble
   readonly ghProcess: GhProcessDouble
   readonly pullRequests: GhPullRequests
   readonly planIssues: GhPlanIssues
@@ -144,7 +111,7 @@ class PullRequestReviewLoop {
 
   constructor() {
     this.node = new NodeDouble()
-    this.cmux = new CmuxDouble()
+    this.agents = new RecordedPlanAgentsDouble()
     this.ghProcess = new GhProcessDouble([
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.PULL_REQUEST_LISTED, stderr: '' }),
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.IN_REVIEW_LABELS, stderr: '' }),
@@ -171,18 +138,7 @@ class PullRequestReviewLoop {
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const planAgents = new CmuxPlanAgents({
-      brief: this.brief,
-      run: (argv) => this.cmux.run(argv),
-      write: Untouched.write,
-      read: Untouched.read,
-      remove: Untouched.remove,
-      sleep: Untouched.sleep,
-      realpathOf: Untouched.realpathOf,
-      runsIn: Untouched.RUNS_IN,
-      policy: Untouched.policy(),
-    })
-    const requestFixes = new RequestFixes({ workbench, planAgents })
+    const requestFixes = new RequestFixes({ workbench, planAgents: this.agents })
     const sweep = new Sweep(null)
     const reviews = new ReviewWatch({
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
@@ -202,7 +158,7 @@ class PullRequestReviewLoop {
   }
 }
 
-describe('the pull request review loop composed end to end, only gh, node and cmux doubled', () => {
+describe('the pull request review loop composed end to end, only gh, node and the recorded calls doubled', () => {
   it('reopens_the_exact_issue_the_review_named_instead_of_sending_undefined_to_dispatch_check', async () => {
     const loop = new PullRequestReviewLoop()
 
@@ -213,7 +169,7 @@ describe('the pull request review loop composed end to end, only gh, node and cm
     ]])
   })
 
-  it('types_an_errand_naming_the_real_issue_instead_of_issue_hash_undefined', async () => {
+  it('PR review delivery reopens then resumes the recorded conversation', async () => {
     const loop = new PullRequestReviewLoop()
 
     await loop.run()
@@ -223,10 +179,14 @@ describe('the pull request review loop composed end to end, only gh, node and cm
       repository: PullRequestReviewLoop.REPOSITORY,
       changes: PullRequestReviewLoop.CHANGE.text,
     })
-    expect(loop.cmux.calls).toEqual([
-      ['send', '--workspace', PullRequestReviewLoop.AGENT, expectedErrand],
-      ['send-key', '--workspace', PullRequestReviewLoop.AGENT, 'Enter'],
-    ])
+    expect(loop.agents.fixes).toEqual([{
+      agent: PullRequestReviewLoop.AGENT,
+      issue: PullRequestReviewLoop.ISSUE.number,
+      repository: PullRequestReviewLoop.REPOSITORY,
+      changes: PullRequestReviewLoop.CHANGE.text,
+      requestId: PullRequestReviewLoop.CHANGE.id,
+    }])
+    expect(loop.node.calls).toHaveLength(1)
     expect(expectedErrand).toContain('#7')
     expect(expectedErrand).not.toContain('undefined')
   })

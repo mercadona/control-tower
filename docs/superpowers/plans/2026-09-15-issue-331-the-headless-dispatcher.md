@@ -1091,7 +1091,7 @@ npm --prefix backend test -- __tests__/infrastructure/api-server.test.ts __tests
 
 ### Task 15 — Wire headless execution and safe loose-start compensation
 
-**Objective:** switch runtime to recorded calls after endpoint retirement.
+**Objective:** switch runtime to recorded calls.
 
 **Files:** `backend/src/infrastructure/ct-api.ts` (modify),
 `backend/src/application/actions/start-plan.ts` (modify),
@@ -1099,6 +1099,7 @@ npm --prefix backend test -- __tests__/infrastructure/api-server.test.ts __tests
 `backend/__tests__/application/start-plan.test.ts` (modify),
 `backend/__tests__/infrastructure/probed-tool-sessions.test.ts` (modify),
 `backend/__tests__/infrastructure/api-server.test.ts` (modify),
+`backend/__tests__/infrastructure/start-milestone-plan-route.test.ts` (modify),
 `backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify),
 `backend/__tests__/infrastructure/pull-request-review-loop.test.ts` (modify)
 
@@ -1110,25 +1111,24 @@ Current state (backend/src/infrastructure/ct-api.ts):
 Keep PR-fix wiring; composition helpers use PlanAgents. Wire HeadlessFiles/DiskPlanRecords/
 ClaudeCalls/ClaudePlanCalls/ContinuePlan/HeadlessPlanAgents under Invocation.stateRoot,
 with §2 budgets, real spawn/fs/UUID/clock/sleep, worker from import.meta.url, PluginTree root.
-Pass defined env entries, removing CT_PHASE_PROMPT, CT_SESSION_HOOKS_URL and inherited
-CLAUDE_CODE_SESSION_ID; preserve controls/auth. RecordedPlanRecovery shares records/calls
+Defined env only; omit CT_PHASE_PROMPT/CT_SESSION_HOOKS_URL/CLAUDE_CODE_SESSION_ID.
+Keep controls/auth. RecordedPlanRecovery shares records/calls
 and active registries. Wire StartMilestonePlan, startsInFlight and coordinator/groom ports;
-preserve coordinator recovery, PTY, freeze/groom and re-slicing.
+Preserve coordinator recovery/PTY/freeze/groom/re-slicing.
 
 StartPlan requires records: PlanRecords and claims: DispatchClaims; use checked claim/requeue,
 preserving issue creation/body/response. Only confirmed records.find absence permits undo
 then requeue. Failed undo preserves claim and both causes; keep Task 10's prepare refusal.
-Inconclusive reads preserve work. Add both ports to the mother, ct-api helper/constructor
-and api-server.test.ts's StartPlanSpy super call.
-PlanSessionRegistry wrapper shares activePlans/sessions and never re-adds implementing or
-uncertain watches; no second registry.
+Inconclusive reads preserve work. Add both ports to the mother, ct-api and StartPlan
+subclasses in the API-server and milestone-route tests; retain every assertion.
+Registry wrapper shares activePlans/sessions; never re-add implementing/uncertain watches.
 
-Task 14 unrouted /implement-plan; legacy fields stay unused until Task 16.
+Task 14 unrouted /implement-plan; Task 16 removes unused fields.
 Remove ct-api's implementPlan, implementationStarts AND pullRequestReviews
 server arguments together with DiskGoRegistry/DiskImplementationStartRegistry/ImplementPlan/
 WorktreePlans/ActivePlanRecovery construction/imports. ReviewWatch remains in recovery.
-Remove window queries/constants/probes from ct-api/ProbedToolSessions; retain five tools.
-Runtime tests pin POST/GET 404 and no go at the switch.
+Remove ct-api/ProbedToolSessions window access/constants; keep five tools.
+Assert POST/GET 404 and no go.
 
 **TDD:** `it('both entrances use recorded calls and the runtime constructs no go or window client')`
 pins composition at launch boundaries and original UUIDs.
@@ -1145,7 +1145,7 @@ pins composition at launch boundaries and original UUIDs.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/application/start-plan.test.ts __tests__/infrastructure/probed-tool-sessions.test.ts __tests__/infrastructure/ct-api-real-process.test.ts __tests__/infrastructure/pull-request-review-loop.test.ts
-npm --prefix backend test -- __tests__/infrastructure/api-server.test.ts
+npm --prefix backend test -- __tests__/infrastructure/api-server.test.ts __tests__/infrastructure/start-milestone-plan-route.test.ts
 ```
 
 ### Task 16 — Remove the retired server dependency surface

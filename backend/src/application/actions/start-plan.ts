@@ -1,7 +1,7 @@
 import { PlanBriefing } from '../../domain/value-objects/plan-briefing.ts'
 import { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
-import { PlanFailure, WorkspaceNotCleaned } from '../../domain/exceptions.ts'
+import { PlanFailure, PlanIssueNotClaimed, WorkspaceNotCleaned } from '../../domain/exceptions.ts'
 import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
 import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
 import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
@@ -17,6 +17,8 @@ import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
 import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 import type { Workspace } from '../../domain/ports/workspace.ts'
 import type { WorkspaceLocation } from '../../domain/value-objects/workspace-location.ts'
+import type { DispatchClaims } from '../../domain/ports/dispatch-claims.ts'
+import type { PlanRecords } from '../../domain/ports/plan-records.ts'
 
 export class StartPlanParams {
   readonly story: UserStoryKey | UserStoryUrl | null
@@ -76,19 +78,25 @@ export class StartPlan {
   readonly workspace: Workspace
   readonly planAgents: PlanAgents
   readonly checkouts: CheckoutRegistry
+  readonly records: PlanRecords
+  readonly claims: DispatchClaims
 
-  constructor({ userStories, planIssues, workspace, planAgents, checkouts }: {
+  constructor({ userStories, planIssues, workspace, planAgents, checkouts, records, claims }: {
     userStories: UserStories,
     planIssues: PlanIssues,
     workspace: Workspace,
     planAgents: PlanAgents,
     checkouts: CheckoutRegistry,
+    records: PlanRecords,
+    claims: DispatchClaims,
   }) {
     this.userStories = userStories
     this.planIssues = planIssues
     this.workspace = workspace
     this.planAgents = planAgents
     this.checkouts = checkouts
+    this.records = records
+    this.claims = claims
   }
 
   async execute(params: StartPlanParams): Promise<StartPlanResult> {
@@ -120,7 +128,7 @@ export class StartPlan {
     detail: UserStory | null
   ): Promise<PlanStarted> {
     const issue = await this.planIssues.open({ story: detail, comment, repository: target.repository })
-    await this.planIssues.claim({ issue, repository: target.repository })
+    await this.claims.claim({ issue, repository: target.repository, root: target.root })
     const sown = await this.#prepare(target, issue)
     const located = sown.located
     const agent = await this.#launch(target, story, issue, located)
@@ -138,7 +146,7 @@ export class StartPlan {
       return await this.workspace.prepare({ issue, repository: target.repository, root: target.root })
     } catch (failure) {
       if (failure instanceof WorkspaceNotCleaned) throw failure
-      await this.#release(target, issue)
+      await this.#release(target, issue, failure)
       throw failure
     }
   }
@@ -157,6 +165,7 @@ export class StartPlan {
         repository: target.repository,
       }))
     } catch (failure) {
+      if (!(await this.#launchWasUnrecorded(target, issue))) throw failure
       try {
         await this.workspace.undo(located)
       } catch (cleanup) {
@@ -164,13 +173,27 @@ export class StartPlan {
           `workspace cleanup failed after ${StartPlan.#diagnostic(failure)}: ${StartPlan.#diagnostic(cleanup)}`
         )
       }
-      await this.#release(target, issue)
+      await this.#release(target, issue, failure)
       throw failure
     }
   }
 
-  async #release(target: PlanTarget, issue: PlanIssue): Promise<void> {
-    await this.planIssues.requeue({ issue, repository: target.repository })
+  async #launchWasUnrecorded(target: PlanTarget, issue: PlanIssue): Promise<boolean> {
+    try {
+      return await this.records.find({ issue: issue.number, repository: target.repository }) === null
+    } catch {
+      return false
+    }
+  }
+
+  async #release(target: PlanTarget, issue: PlanIssue, original: unknown): Promise<void> {
+    try {
+      await this.claims.requeue({ issue, repository: target.repository, root: target.root })
+    } catch (compensation) {
+      throw new PlanIssueNotClaimed(
+        `claim compensation failed after ${StartPlan.#diagnostic(original)}: ${StartPlan.#diagnostic(compensation)}`
+      )
+    }
   }
 
   static #diagnostic(cause: unknown): string {

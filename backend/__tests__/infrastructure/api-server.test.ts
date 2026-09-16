@@ -34,6 +34,8 @@ import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
+import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
 import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
@@ -79,6 +81,8 @@ class StartPlanSpy extends StartPlan {
       workspace: new Workspace(),
       planAgents: new PlanAgents(),
       checkouts: new CheckoutRegistry(),
+      records: new PlanRecords(),
+      claims: new DispatchClaims(),
     })
     this.asked = []
     this.repositories = []

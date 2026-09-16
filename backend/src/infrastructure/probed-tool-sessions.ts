@@ -6,7 +6,6 @@ import type { ProcessOutput } from './tool-runner.ts'
 
 export type ProbeName = 'gh' | 'acli' | 'ssh' | 'gcloud'
 export type ToolLookUp = (bin: string) => string | null
-export type CmuxAnswers = () => boolean
 
 type ToolRow = { tool: string, bin: string, fix: string }
 type CredentialRow = ToolRow & { probe: ProbeName, argv: string[] }
@@ -36,11 +35,6 @@ export class ProbedToolSessions extends ToolSessions {
     },
   ]
 
-  static readonly CMUX: ToolRow = {
-    tool: 'cmux', bin: 'cmux',
-    fix: 'update cmux and restart the app, then start this backend from a terminal inside cmux',
-  }
-
   static readonly AUTHENTICATED = 'successfully authenticated'
 
   static readonly #READINGS: Record<ProbeName, (output: ProcessOutput) => SessionStateValue> = {
@@ -56,33 +50,21 @@ export class ProbedToolSessions extends ToolSessions {
 
   readonly clients: Record<string, ExternalTool>
   readonly lookUp: ToolLookUp
-  readonly cmuxAnswers: CmuxAnswers
 
-  constructor({ clients, lookUp, cmuxAnswers }: {
+  constructor({ clients, lookUp }: {
     clients: Record<string, ExternalTool>,
     lookUp: ToolLookUp,
-    cmuxAnswers: CmuxAnswers,
   }) {
     super()
     this.clients = clients
     this.lookUp = lookUp
-    this.cmuxAnswers = cmuxAnswers
   }
 
   async all(): Promise<ToolSession[]> {
     const sessions: ToolSession[] = []
     for (const row of ProbedToolSessions.PROBES) sessions.push(await this.#sessionFor(row))
-    sessions.push(this.#cmuxSession())
 
     return sessions
-  }
-
-  #cmuxSession(): ToolSession {
-    const row = ProbedToolSessions.CMUX
-    const installed = this.lookUp(row.bin) !== null
-    const answered = installed && this.cmuxAnswers()
-
-    return ProbedToolSessions.#sessionOf(row, installed, answered ? SessionState.READY : SessionState.MISSING)
   }
 
   async #sessionFor(row: ProbeRow): Promise<ToolSession> {

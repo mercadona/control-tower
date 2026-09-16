@@ -98,6 +98,8 @@ class StartPlanDouble extends StartPlan {
       workspace: new Workspace(),
       planAgents: new PlanAgents(),
       checkouts: new CheckoutRegistry(),
+      records: new PlanRecords(),
+      claims: new DispatchClaims(),
     })
     this.asked = []
     this.answer = answer
