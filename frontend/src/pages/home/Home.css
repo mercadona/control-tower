@@ -49,19 +49,13 @@
 .home__side {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   box-sizing: border-box;
-  min-height: 0;
+  min-height: var(--home-sessions-min-height);
   min-width: 0;
-  padding: 16px;
-  overflow: auto;
-  background-color: var(--background-elevated);
-  border-left: var(--borderwidth-sm) solid var(--border-secondary);
 }
 
-.home__side > .home__sessions {
-  --panel-padding: 16px;
-  min-height: var(--home-sessions-min-height);
+.home__columns--sessions-collapsed .column-resizer {
+  display: none;
 }
 
 .home__history {
@@ -207,12 +201,18 @@
   }
 
   .home__side {
-    overflow: visible;
-    border-left: none;
-    border-top: var(--borderwidth-sm) solid var(--border-secondary);
+    min-height: 0;
   }
 
-  .home__side > .home__sessions {
+  .home__side .drawer {
+    width: 100%;
+    height: auto;
+    box-shadow: none;
+    border-top: var(--borderwidth-sm) solid var(--border-primary);
+    border-left: none;
+  }
+
+  .home__side .drawer:not(.drawer--collapsed) {
     flex: none;
     height: var(--home-sessions-stacked-height);
     min-height: 360px;

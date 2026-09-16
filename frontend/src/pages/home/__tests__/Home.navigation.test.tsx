@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome, openRestored } from './helpers'
@@ -144,6 +144,7 @@ describe('Home · navigation shell', () => {
 
     openRestored({ phase: 'implementing' })
     await screen.findByText('Agente asignado')
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
     expect(side).toBeInTheDocument()

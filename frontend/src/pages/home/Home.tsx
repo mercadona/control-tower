@@ -17,17 +17,19 @@ import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { ColumnResizer } from 'pages/home/components/column-resizer'
+import { useSessionsColumnCollapse } from 'pages/home/useSessionsColumnCollapse'
 import { useSessionsColumnWidth } from 'pages/home/useSessionsColumnWidth'
 import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
+import { Drawer } from 'system-ui/drawer'
 import { Navigation } from 'system-ui/navigation'
-import { Panel } from 'system-ui/panel'
 import { TopBar } from 'system-ui/top-bar'
 import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
+const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
@@ -55,9 +57,10 @@ const Home = () => {
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const [openedSession, setOpenedSession] = useState<LiveSession | null>(null)
-  const sessionsRef = useRef<HTMLElement | null>(null)
+  const sessionsRef = useRef<HTMLDivElement | null>(null)
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
+  const sessionsColumnCollapse = useSessionsColumnCollapse()
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -341,9 +344,13 @@ const Home = () => {
         }
       >
         <div
-          className="home__columns"
+          className={`home__columns${sessionsColumnCollapse.collapsed ? ' home__columns--sessions-collapsed' : ''}`}
           ref={columnsRef}
-          style={sessionsColumnWidth.value === null ? undefined : ({ '--home-sessions-width': `${sessionsColumnWidth.value}px` } as CSSProperties)}
+          style={
+            sessionsColumnCollapse.collapsed
+              ? ({ '--home-sessions-width': `${SESSIONS_DRAWER_COLLAPSED_WIDTH_PX}px` } as CSSProperties)
+              : sessionsColumnWidth.value === null ? undefined : ({ '--home-sessions-width': `${sessionsColumnWidth.value}px` } as CSSProperties)
+          }
         >
         <main className="home__content">
           <nav className="home__flow" aria-label="Flujo del plan">
@@ -518,22 +525,27 @@ const Home = () => {
           max={sessionsColumnWidth.max}
           onChange={sessionsColumnWidth.setValue}
           label={SESSIONS_COLUMN_LABEL}
+          disabled={sessionsColumnCollapse.collapsed}
         />
-        <div className="home__side">
-          <Panel className="home__sessions" heading="Sesión coordinadora" fill ref={sessionsRef}>
+        <div className="home__side" ref={sessionsRef}>
+          <Drawer
+            title="Sesión coordinadora"
+            collapsed={sessionsColumnCollapse.collapsed}
+            onToggle={() => sessionsColumnCollapse.toggle()}
+          >
             <CoordinatingSessionStatus read={coordinatingSession} />
             <SessionsPanel opened={openedSession} />
-          </Panel>
-          {showHistory && workflow !== null && (
-            <aside className="home__history" aria-label="Progreso de la implementación">
-              <ImplementHistory
-                key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
-                issue={workflow.plan.issue.number}
-                root={workflow.plan.root ?? workflow.request.path}
-                repo={workflow.plan.repo}
-              />
-            </aside>
-          )}
+            {showHistory && workflow !== null && (
+              <aside className="home__history" aria-label="Progreso de la implementación">
+                <ImplementHistory
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
+                  issue={workflow.plan.issue.number}
+                  root={workflow.plan.root ?? workflow.request.path}
+                  repo={workflow.plan.repo}
+                />
+              </aside>
+            )}
+          </Drawer>
         </div>
       </div>
       </Navigation>

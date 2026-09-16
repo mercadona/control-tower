@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { openHome } from './helpers'
 
 const STORAGE_KEY = 'ct.sessions-column-width'
+const COLLAPSE_KEY = 'ct.sessions-column-collapsed'
 const LABEL = 'Ancho del panel de sesiones'
 
 const pointerEvent = (type: string, init: { clientX?: number; pointerId?: number }) => {
@@ -14,6 +15,9 @@ const mockColumnsWidth = (width: number) =>
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width, right: width } as DOMRect)
 
 describe('Home · sessions column width', () => {
+  beforeEach(() => {
+    localStorage.setItem(COLLAPSE_KEY, 'false')
+  })
   afterEach(() => {
     vi.restoreAllMocks()
   })

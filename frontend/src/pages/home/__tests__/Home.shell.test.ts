@@ -27,6 +27,10 @@ class Stylesheet {
     return new Stylesheet(join('pages', 'home', 'components', 'column-resizer', 'ColumnResizer.css'))
   }
 
+  static drawer() {
+    return new Stylesheet(join('system-ui', 'drawer', 'Drawer.css'))
+  }
+
   declarationsFor(selector: string) {
     return this.blocksFor(this.text, selector)
   }
@@ -87,24 +91,24 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*var\(--home-sessions-width\)/)
   })
 
-  it('scrolls the work area and the right column on their own', () => {
+  it('scrolls the work area and the drawer content on their own', () => {
     const content = Stylesheet.home().declarationsFor('.home__content')
-    const side = Stylesheet.home().declarationsFor('.home__side')
+    const drawerContent = Stylesheet.drawer().declarationsFor('.drawer__content')
 
     expect(content).toMatch(/overflow:\s*auto/)
-    expect(side).toMatch(/overflow:\s*auto/)
+    expect(drawerContent).toMatch(/overflow:\s*auto/)
   })
 
-  it('stacks the right column as a flex column so the sessions panel and the history sit one under the other', () => {
+  it('stacks the right column as a flex column so the drawer and the history sit one under the other', () => {
     const side = Stylesheet.home().declarationsFor('.home__side')
 
     expect(side).toMatch(/flex-direction:\s*column/)
   })
 
-  it('gives the sessions panel of the right column a minimum height to fit a terminal instead of collapsing to its content', () => {
-    const sessions = Stylesheet.home().declarationsFor('.home__side > .home__sessions')
+  it('gives the right column a minimum height to fit a terminal instead of collapsing to its content', () => {
+    const side = Stylesheet.home().declarationsFor('.home__side')
 
-    expect(sessions).toMatch(/min-height:\s*var\(--home-sessions-min-height\)/)
+    expect(side).toMatch(/min-height:\s*var\(--home-sessions-min-height\)/)
   })
 
   it('lets a panel opt into filling its flex container instead of sizing to its content', () => {

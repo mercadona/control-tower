@@ -1,4 +1,4 @@
-import { cleanup, screen } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
@@ -117,6 +117,7 @@ describe('Home and gate 2', () => {
     await user.click(screen.getByRole('button', { name: REVIEW_THE_SLICING }))
 
     expect(await screen.findByText(SESSION_OPENED)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
     await vi.waitFor(() => expect(
       screen.getByRole('tab', { name: EpicGroomMother.GROOM_SESSION.name }),
     ).toHaveAttribute('aria-selected', 'true'))
