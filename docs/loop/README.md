@@ -65,6 +65,13 @@ whole and unsummarised:
 | `/ct-status` | [`ct-status.md`](ct-status.md) |
 | `/ct-harvest` | [`ct-harvest.md`](ct-harvest.md) |
 
+One more document lives here and is not a command's reference:
+[`ct-scope-gate.md`](ct-scope-gate.md) carries the scope conformance workflow in
+full, moved out of `plugin/templates/scope-gate.yml` by the same sub-issue #93.
+It is installed by hand into each governed repository, which is why the
+instruction belongs in documentation rather than in the distributed package; the
+bundle it runs, `plugin/dist/scope-check.js`, is still built and tracked.
+
 They are documents of this repo, not of the plugin: they do not ship and they
 are not loaded into any session's context. `__tests__/ct-init.test.js` reads
 `ct-groom.md` to check that the rule for the `Señal` column says the same thing

@@ -1,4 +1,26 @@
-# Measuring dispatched slices
+# Measuring dispatched slices — CLOSED
+
+**This document is the record of one measurement session, 2026-07-30, against
+`menoplus-app/menoplus`. It is not a live tracker and it is not kept up to
+date.** The table below still reads `in flight` and `pending` because that is
+what was true that morning; #452 was neither re-measured nor followed here
+afterwards. Read it as minutes, and read nothing in it as an open action.
+
+**The measurement is no longer manual.** What this table asked a person to
+write down is now read out of GitHub's own timeline by `/ct-harvest`, one row
+per slice, with no field filled in by hand — see
+[`loop/ct-harvest.md`](loop/ct-harvest.md). Per-run telemetry lands in
+`docs/superpowers/metrics/issue-<n>.jsonl`, and with `CT_HARVEST_BQ_TABLE` set
+every harvested slice also leaves its row in the BigQuery harvest ledger.
+The checklist for #452's gate below was discharged at that pull request and is
+kept for the same reason the table is: knowing what was checked is worth more
+than a clean file.
+
+The death criterion it was built to serve has not moved, and it is stated in
+the plugin's own README under *Known limits*: if the loop costs more human
+intervention than it saves, it is said and it stops.
+
+---
 
 Two data points per slice. Nothing more. They are the ones that decide whether the dispatcher survives.
 
