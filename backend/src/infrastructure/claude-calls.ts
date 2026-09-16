@@ -10,6 +10,7 @@ import {
 } from '../domain/value-objects/plan-call.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { HeadlessFiles } from './headless-files.ts'
+import { RecordedCall } from './recorded-call.ts'
 
 type JsonRecord = Record<string, unknown>
 type CallMode = 'initial' | 'resume'
@@ -368,6 +369,7 @@ export class ClaudeCalls {
   readonly pollMs: number
   readonly sleep: (ms: number) => Promise<void>
   readonly starts: Map<string, Promise<void>>
+  readonly accepted: Map<string, StartedPlanCall>
 
   constructor(ports: {
     files: HeadlessFiles,
@@ -396,6 +398,7 @@ export class ClaudeCalls {
     this.pollMs = ports.pollMs
     this.sleep = ports.sleep
     this.starts = new Map()
+    this.accepted = new Map()
   }
 
   async start(invocation: CallInvocation): Promise<StartedPlanCall> {
@@ -451,6 +454,7 @@ export class ClaudeCalls {
     await this.#writeOnceOrMatch(join(directory, CallDescriptor.PROMPT), invocation.prompt)
     await this.#writeOnceOrMatch(descriptorPath, descriptor.text())
     await this.#launch(descriptorPath)
+    this.accepted.set(ClaudeCalls.#callKey(call), call)
     return call
   }
 
@@ -517,11 +521,11 @@ export class ClaudeCalls {
   async wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
     const descriptor = await this.#descriptor(call)
     for (;;) {
-      const completed = await this.completed(call)
+      const completed = (await this.#read(call)).completion
       if (completed !== null) return completed
       if (Date.parse(this.now()) >= descriptor.deadlineMs()) {
         await this.sleep(this.pollMs)
-        const final = await this.completed(call)
+        const final = (await this.#read(call)).completion
         if (final !== null) return final
         throw new PlanAgentNotLaunched(
           `completion for call ${call.id} is absent after its recorded deadline; launch outcome is uncertain`
@@ -532,6 +536,29 @@ export class ClaudeCalls {
   }
 
   async completed(call: StartedPlanCall): Promise<CompletedPlanCall | null> {
+    return (await this.#read(call)).completion
+  }
+
+  async history(conversation: string): Promise<readonly RecordedCall[]> {
+    const directory = join(this.files.root, 'harness', conversation, 'calls')
+    let names: string[]
+    try {
+      names = await this.files.list(directory)
+    } catch (cause) {
+      throw new PlanAgentNotLaunched(`${directory} could not be listed: ${String(cause)}`)
+    }
+    const history: RecordedCall[] = []
+    for (const name of names) {
+      history.push(await this.#read(new StartedPlanCall({ conversation, id: name })))
+    }
+    return Object.freeze(history)
+  }
+
+  owns(call: StartedPlanCall): boolean {
+    return this.accepted.has(ClaudeCalls.#callKey(call))
+  }
+
+  async #read(call: StartedPlanCall): Promise<RecordedCall> {
     const descriptor = await this.#descriptor(call)
     const path = join(this.files.callDirectory(call), CallDescriptor.COMPLETION)
     let text: string | null
@@ -540,9 +567,23 @@ export class ClaudeCalls {
     } catch (cause) {
       throw new PlanAgentNotLaunched(`${path} could not be read: ${String(cause)}`)
     }
-    if (text === null) return null
+    if (text === null) {
+      return new RecordedCall({
+        call,
+        purpose: descriptor.purpose,
+        startedAt: descriptor.startedAt,
+        completion: null,
+      })
+    }
     try {
-      return StoredCompletion.read(text, call, descriptor.mode())
+      const completion = StoredCompletion.read(text, call, descriptor.mode())
+      this.accepted.delete(ClaudeCalls.#callKey(call))
+      return new RecordedCall({
+        call,
+        purpose: descriptor.purpose,
+        startedAt: descriptor.startedAt,
+        completion,
+      })
     } catch (cause) {
       throw new PlanAgentNotNamed(`${path} cannot be read as a call completion: ${String(cause)}`)
     }
@@ -647,5 +688,9 @@ export class ClaudeCalls {
 
   static #hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
+  }
+
+  static #callKey(call: StartedPlanCall): string {
+    return `${call.conversation}/${call.id}`
   }
 }
