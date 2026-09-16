@@ -209,6 +209,35 @@ for regla in '.claude/worktrees/' '.claude/settings.local.json'; do
   fi
 done
 
+# Issue #376 — `.claude/settings.json`: the file that tells Claude Code which
+# plugin this repository uses. Until now nothing here wrote it, so the plugin
+# was only ever enabled on the machine of whoever ran `/plugin install`: a fresh
+# clone of a bootstrapped repository got no commands, no skills, no agents and
+# no hooks, and there was no way to tell that from a repository nobody had
+# bootstrapped at all.
+#
+# The logic is in node (scripts/claude-settings.js, pure + tests; the disk in
+# seed-claude-settings.mjs) and not here, for the same reason the two sweeps
+# below are: bash cannot merge a JSON file it does not own without replacing it,
+# and this file belongs to the repository — it may already carry other plugins,
+# other marketplaces and keys that have nothing to do with the loop.
+#
+# Same doctrine as those sweeps when `node` is not there: it is SAID. A silence
+# would be indistinguishable from "the plugin is wired up", which is the
+# expensive false negative here.
+SETTINGS_STATUS=0
+SETTINGS_OUT=''
+if command -v node >/dev/null 2>&1; then
+  SETTINGS_OUT="$(node "$HERE/scripts/seed-claude-settings.mjs" "$TARGET")" || SETTINGS_STATUS=$?
+else
+  SETTINGS_STATUS=127
+fi
+if [ "$SETTINGS_STATUS" -ne 0 ]; then
+  echo "aviso: no se ha podido sembrar ni comprobar $TARGET/.claude/settings.json — la operación necesita \`node\` y no se ha podido ejecutar (estado $SETTINGS_STATUS). NO lo leas como \"el plugin queda declarado\": sin ese fichero, quien clone este repo no recibe ningún comando, skill, agente ni hook de este plugin, y eso no se distingue de un repo que nadie ha inicializado." >&2
+elif [ -n "$SETTINGS_OUT" ]; then
+  printf '%s\n' "$SETTINGS_OUT"
+fi
+
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
   cat > "$AGENTS_MD" <<'EOF'

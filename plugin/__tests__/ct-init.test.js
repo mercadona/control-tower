@@ -1686,6 +1686,110 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  // Issue #376 — `.claude/settings.json`, the file that tells Claude Code which
+  // plugin this repository uses. The merge itself is unit-tested in
+  // __tests__/claude-settings.test.js; what is checked from here is that the
+  // scaffolder really reaches the disk, that a second run leaves the file alone,
+  // and that a missing `node` is SAID and not passed off as success.
+  describe('.claude/settings.json', () => {
+    const settingsOf = (dir) => JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'))
+
+    it('creates it, declaring the marketplace pinned at this plugin\'s release and the plugin enabled', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      const version = JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8')).version
+      expect(settings.extraKnownMarketplaces['control-tower'].source.ref).toBe(`plugin-v${version}`)
+      expect(settings.enabledPlugins['control-tower-loop@control-tower']).toBe(true)
+      expect(settings.permissions.allow).toContain('Bash(gh:*)')
+      expect(settings.permissions.deny.join('\n')).toContain('--no-verify')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('says what it declared, and the one command it does not run', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(out).toContain('claude plugin install control-tower-loop@control-tower --scope project')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a settings file of the repo\'s own → its keys survive and ours are added', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.claude'), { recursive: true })
+      writeFileSync(
+        join(dir, '.claude', 'settings.json'),
+        `${JSON.stringify({ model: 'opus', permissions: { allow: ['Bash(make:*)'] } }, null, 2)}\n`
+      )
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      expect(settings.model).toBe('opus')
+      expect(settings.permissions.allow).toContain('Bash(make:*)')
+      expect(settings.enabledPlugins['control-tower-loop@control-tower']).toBe(true)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('idempotent: the second run does not touch a single byte of the file', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const first = readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).toBe(first)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('a ref pinned at another release → it warns with both versions and moves nothing', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const settings = settingsOf(dir)
+      settings.extraKnownMarketplaces['control-tower'].source.ref = 'plugin-v0.1.0'
+      writeFileSync(join(dir, '.claude', 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`)
+      const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(out).toContain('plugin-v0.1.0')
+      expect(settingsOf(dir).extraKnownMarketplaces['control-tower'].source.ref).toBe('plugin-v0.1.0')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // The file exists and is not the object these keys merge into. Reading it as
+    // empty would replace whatever the repository had, so nothing is written and
+    // the bootstrap still finishes: the rest of the scaffolding is unaffected by
+    // this file being broken.
+    it('a settings file that is not JSON → it says so on stderr, writes nothing, and still exits 0', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(dir, '.claude'), { recursive: true })
+      writeFileSync(join(dir, '.claude', 'settings.json'), '{ not json')
+      const { status, stderr } = spawnSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toContain('.claude/settings.json')
+      expect(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).toBe('{ not json')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // "There is no node" is not "the plugin is declared". A silence here reads
+    // exactly like a bootstrapped repository, and the cost is a clone that gets
+    // no plugin at all.
+    it('no node on the PATH → it says nobody looked, and what that costs', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      // Same fake PATH as the "there is nothing to hash with" test above: the
+      // shell's own tools are symlinked in, and `node` deliberately is not.
+      const binDir = join(dir, 'fake-bin')
+      mkdirSync(binDir)
+      for (const tool of ['bash', 'awk', 'grep', 'sed', 'mkdir', 'cp', 'cat', 'mktemp', 'mv', 'rm', 'touch', 'tail', 'wc', 'head', 'dirname', 'pwd', 'shasum']) {
+        const found = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim()
+        if (found) symlinkSync(found, join(binDir, tool))
+      }
+      expect(existsSync(join(binDir, 'node'))).toBe(false)
+      const { status, stderr } = spawnSync('bash', [script, dir], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: binDir },
+      })
+      expect(status).toBe(0)
+      expect(stderr).toContain('.claude/settings.json')
+      expect(stderr).toMatch(/NO lo leas como/)
+      expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(false)
+      rmSync(dir, { recursive: true, force: true })
+    })
+  })
+
   // -------------------------------------------------------------------------
   // The execution spec's template. The flow after /ct-init is brainstorming →
   // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8
