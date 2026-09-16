@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
+import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
@@ -22,6 +22,7 @@ class RequestVocabularies {
   static codes(): string[] {
     return [
       ...Object.values(PlanRequestOutcome),
+      ...Object.values(MilestonePlanOutcome),
       ...Object.values(ImplementRequestOutcome),
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),

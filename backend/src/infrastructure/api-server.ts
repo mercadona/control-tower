@@ -8,7 +8,7 @@ import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
 import { ImplementPlanRoute } from './implement-plan-route.ts'
 import { PlanEventsRoute } from './plan-events-route.ts'
-import { ActivePlansRoute } from './active-plans-route.ts'
+import { ActivePlanPhase, ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
@@ -24,12 +24,13 @@ import { SpecReslicingRoute } from './spec-reslicing-route.ts'
 import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
+import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
-import type { WorkInFlight } from './work-in-flight.ts'
+import { WorkInFlight } from './work-in-flight.ts'
 import type { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import type { FreezeSpec } from '../application/actions/freeze-spec.ts'
 import type { PublishReslicing } from '../application/actions/publish-reslicing.ts'
@@ -68,6 +69,33 @@ type ImplementationHistoryReader = {
 
 type Stderr = (line: string) => void
 
+class EntrypointPlanSessionRegistry {
+  readonly sessions: PlanSessions
+  readonly activePlans: ActivePlans
+
+  constructor({ sessions, activePlans }: { sessions: PlanSessions, activePlans: ActivePlans }) {
+    this.sessions = sessions
+    this.activePlans = activePlans
+    Object.freeze(this)
+  }
+
+  remember(watch: PlanWatch): void {
+    const found = this.activePlans.find({ issue: watch.issue.number, repository: watch.repository })
+    if (found === null) {
+      this.sessions.remember(watch)
+      return
+    }
+    switch (found.phase) {
+      case ActivePlanPhase.PLANNING:
+        this.sessions.remember(watch)
+        return
+      case ActivePlanPhase.IMPLEMENTING:
+      case ActivePlanPhase.UNCERTAIN:
+        return
+    }
+  }
+}
+
 type RequestFailure = {
   readonly type?: unknown,
   readonly status?: unknown,
@@ -78,6 +106,8 @@ type RequestFailure = {
 export type ApiCollaborators = {
   port: number,
   startPlan?: StartPlan | null,
+  startMilestonePlan?: StartMilestonePlan | null,
+  startsInFlight?: WorkInFlight | null,
   implementPlan?: PlanImplementer | null,
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
@@ -142,6 +172,8 @@ class Failures {
 export class ApiServer {
   readonly requestedPort: number
   readonly startPlan: StartPlan | null | undefined
+  readonly startMilestonePlan: StartMilestonePlan | null | undefined
+  readonly startsInFlight: WorkInFlight
   readonly implementPlan: PlanImplementer | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
@@ -175,7 +207,7 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
+    port, startPlan, startMilestonePlan, startsInFlight, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, implementationStarts, recovery = null,
     openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
@@ -184,6 +216,8 @@ export class ApiServer {
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
+    this.startMilestonePlan = startMilestonePlan
+    this.startsInFlight = startsInFlight ?? new WorkInFlight()
     this.implementPlan = implementPlan
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
@@ -228,7 +262,16 @@ export class ApiServer {
       Browsers.turnAwayForeign,
       JsonBody.demandDeclared,
       JsonBody.reader(),
-      StartPlanRoute.handledBy(this.startPlan!, this.sessions!)
+      StartPlanRoute.handledBy(
+        this.startPlan!,
+        new EntrypointPlanSessionRegistry({ sessions: this.sessions!, activePlans: this.activePlans! }),
+        {
+          milestone: this.startMilestonePlan ?? null,
+          coordinating: this.coordinatingSessions ?? null,
+          groom: this.readEpicGroom ?? null,
+          inFlight: this.startsInFlight,
+        },
+      )
     )
     app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
     app.post(
