@@ -8,8 +8,8 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 
 | | |
 |---|---|
-| Version | `0.57.0` <!-- x-release-please-version --> · slice table contract `v23` |
-| Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` |
+| Version | `0.57.0` <!-- x-release-please-version --> · slice table contract `v26` |
+| Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` · `/ct-harvest` |
 | Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
 | Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`writing-plans-prescriptive`) |
 | Requirements | Node ≥ 24 · `gh` authenticated · `cmux` · git worktrees |
@@ -96,7 +96,7 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 - **`cmux`** on the `PATH`: it is what opens the terminal of every dispatched agent. `/ct-next --dry-run` checks that it is there, without running it.
 - **A Project v2 with an iteration field named exactly `Sprint`**, only if you use `/ct-groom --project`.
 
-## The four commands
+## The five commands
 
 | Command | What it does | Mutates |
 |---|---|---|
@@ -104,8 +104,9 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 | **`/ct-groom`** | Reads the slice table of the **frozen** spec and creates the milestone, the labels, the issues and the entries in the Project. Idempotent by existence; it detects divergence but **does not apply it** without `--reconcile`. | GitHub |
 | **`/ct-next`** | Chooses the next dispatchable slice (order, merged dependencies, no token collision, with a `--cap` gap available), claims it, creates worktree and branch, seeds the state and launches the agent **verifying that it really started**. | GitHub + disk |
 | **`/ct-status`** | Answers in one go: what is in flight, what has been delivered and what is residue. **It does not write a single time** — there is a test that checks it by looking at the real `argv` `gh` was called with. | nothing |
+| **`/ct-harvest`** | Answers what each slice of a milestone really cost, read out of GitHub's timeline and the telemetry the slice left committed: the phases, the reopens, the requeues, the pull request, the judge's vetoes and what the coding tool spent. It asks for no field by hand. With `--bq` it loads the harvest into BigQuery; `--schema` prints the table's schema and touches nothing. | nothing, without `--bq` |
 
-The four share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`warning:`, `ATTENTION:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
+The five share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`warning:`, `ATTENTION:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
 
 Always start dry:
 
@@ -281,7 +282,7 @@ scripts/vendor/  `yaml` bundled — DERIVED, tracked, see below
 hooks/        SessionStart (hydration), Stop (state up to date), PreToolUse over Bash (commit guard) and over Task (the dispatch gate)
 dist/         bundles of the hooks — DERIVED, tracked, see above
 skills/       the 11 forked skills + writing-plans-prescriptive (our own) + LICENSE-superpowers + FORK.md
-__tests__/    133 files, ~3,350 tests
+__tests__/    158 files, 4,281 tests
 ```
 
 And one level further up, in the repo and **outside** what is distributed (the marketplace's
@@ -291,7 +292,7 @@ And one level further up, in the repo and **outside** what is distributed (the m
 ../docs/loop/  the cycle's document (source, self-contained HTML and PDF) and the long reference of each command: ct-init.md, ct-groom.md, ct-next.md, ct-status.md, ct-harvest.md, ct-scope-gate.md
 ../docs/       the handoffs of each round (prompt-fNN-*.md) — how we got here
 ../backend/    the local programming interface the front consumes
-../frontend/   the front, still a prepared gap
+../frontend/   the page the backend serves — the local cabin, with the panels of gates 1 and 2
 ```
 
 ### The superpowers fork

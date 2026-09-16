@@ -5,6 +5,19 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+class RealCheckout {
+  static readonly #ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+
+  static ignores(path: string): boolean {
+    try {
+      execFileSync('git', ['check-ignore', path], { cwd: RealCheckout.#ROOT, encoding: 'utf8' })
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
 class SandboxCheckout {
   static readonly #SOURCE_MAKEFILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'Makefile')
 
@@ -66,5 +79,11 @@ describe('the Makefile reads a local, git-ignored .env file', () => {
     const printed = sandbox.printedStartRecipe()
 
     expect(printed).toContain('CT_API_PORT=0')
+  })
+
+  it('ignores .env and every .env.* file except .env.example in the real checkout', () => {
+    expect(RealCheckout.ignores('.env')).toBe(true)
+    expect(RealCheckout.ignores('.env.local')).toBe(true)
+    expect(RealCheckout.ignores('.env.example')).toBe(false)
   })
 })
