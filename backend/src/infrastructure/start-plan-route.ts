@@ -16,7 +16,8 @@ import {
   DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood,
   UserStoryNotRead, UserStoryNotUnderstood, PlanIssueNotCreated, PlanIssueNotNamed,
   PlanIssueNotClaimed,
-  PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotCleaned, WorkspaceNotRead,
+  PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed,
+  WorkspaceNotPrepared, WorkspaceNotCleaned, WorkspaceNotRead,
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
   ConversationNotStarted, ConversationNotRecorded, ConversationNotUnderstood,
   SessionHooksNotWritten, SessionHooksNotUnderstood,
@@ -323,7 +324,7 @@ export class PlanRefusal {
   }
 }
 
-type PlanFailureClass = { new (reason: string): PlanFailure, readonly name: string }
+type PlanFailureClass = { readonly name: string, readonly prototype: PlanFailure }
 
 type PlanCollapseOf = (cause: PlanFailure) => Refusal
 
@@ -342,6 +343,7 @@ export class PlanCollapse {
     [DispatchNotAvailable, PlanCollapse.#collapsed('dispatch-not-available')],
     [DispatchNotRead, PlanCollapse.#collapsed('dispatch-not-read')],
     [DispatchNotUnderstood, PlanCollapse.#collapsed('dispatch-not-understood')],
+    [PlanAgentNeverLaunched, PlanCollapse.#collapsed('plan-agent-never-launched')],
     [PlanAgentNotLaunched, PlanCollapse.#collapsed('plan-agent-not-launched')],
     [WorkspaceNotPrepared, PlanCollapse.#collapsed('workspace-not-prepared')],
     [WorkspaceNotCleaned, PlanCollapse.#collapsed('workspace-not-cleaned')],
@@ -386,7 +388,8 @@ export class PlanCollapse {
   }
 
   static declaredCodes(): string[] {
-    return PlanCollapse.#BY_FAILURE.members().map((failure) => PlanCollapse.of(new failure('x')).code)
+    const probe = new PlanFailure('x')
+    return PlanCollapse.#BY_FAILURE.members().map((failure) => PlanCollapse.#BY_FAILURE.of(failure)(probe).code)
   }
 }
 

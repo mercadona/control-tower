@@ -15,6 +15,8 @@ import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts
 import { SpecReslicingOutcome } from '../../src/infrastructure/spec-reslicing-route.ts'
 import { EpicGroomOutcome } from '../../src/infrastructure/epic-groom-route.ts'
 import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-route.ts'
+import { RecoverPlanOutcome } from '../../src/infrastructure/recover-plan-route.ts'
+import { CleanupPlanOutcome } from '../../src/infrastructure/cleanup-plan-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -37,6 +39,8 @@ class RequestVocabularies {
       ...Object.values(SpecReslicingOutcome),
       ...Object.values(EpicGroomOutcome),
       ...Object.values(EpicPromotionOutcome),
+      ...Object.values(RecoverPlanOutcome),
+      ...Object.values(CleanupPlanOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }

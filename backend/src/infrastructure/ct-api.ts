@@ -45,6 +45,8 @@ import { CtGroomEpic } from './ct-groom-epic.ts'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
+import { RecoverPlan } from '../application/actions/recover-plan.ts'
+import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
@@ -489,6 +491,8 @@ class CtApi {
         listNames: (path: string) => readdirSync(path),
         readText: (path: string) => readFileSync(path, 'utf8'),
       }).read(watch.agent) !== null,
+      records,
+      nowMs: Date.now,
     })
     const userStories = CtApi.#userStories(gh)
     const planIssues = new GhPlanIssues({
@@ -532,7 +536,8 @@ class CtApi {
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
     const recovery = new RecordedPlanRecovery({
       records,
-      calls,
+      calls: planCalls,
+      ownership: calls,
       checkouts,
       activePlans,
       reviews: pullRequestReviews,
@@ -637,6 +642,8 @@ class CtApi {
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,
       startsInFlight: new WorkInFlight(),
+      recoverPlan: new RecoverPlan({ agents: planAgents }),
+      cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({
         implementationProgress: runFileProgress,
         pullRequests,

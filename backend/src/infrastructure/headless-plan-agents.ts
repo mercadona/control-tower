@@ -1,5 +1,13 @@
 import { ContinuePlanParams, type ContinuePlan } from '../application/actions/continue-plan.ts'
-import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotResumed } from '../domain/exceptions.ts'
+import {
+  PlanAgentNeverLaunched,
+  PlanAgentNotLaunched,
+  PlanAgentNotResumed,
+  PlanRecoveryConflict,
+  PlanRecoveryNotFound,
+  PlanRecoveryNotRead,
+  PlanRecoveryNotUnderstood,
+} from '../domain/exceptions.ts'
 import { PlanAgents } from '../domain/ports/plan-agents.ts'
 import type { PlanCalls } from '../domain/ports/plan-calls.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
@@ -65,15 +73,39 @@ export class HeadlessPlanAgents extends PlanAgents {
     issue: number,
     repository: RepositoryName,
   }): Promise<void> {
-    const watch = await this.records.find({ issue: asked.issue, repository: asked.repository })
-    if (watch === null || watch.agent !== asked.agent) {
-      throw new PlanAgentNotResumed(
-        `conversation ${JSON.stringify(asked.agent)} is not the recorded plan for `
-        + `${asked.repository.text}#${asked.issue}`
+    let watch: PlanWatch | null
+    try {
+      watch = await this.records.find({ issue: asked.issue, repository: asked.repository })
+    } catch (cause) {
+      throw new PlanRecoveryNotRead(cause instanceof Error ? cause.message : String(cause))
+    }
+    if (watch === null) throw new PlanRecoveryNotFound(`no active plan is recorded for ${asked.repository.text}#${asked.issue}`)
+    if (watch.agent !== asked.agent) {
+      throw new PlanRecoveryConflict(
+        `conversation ${JSON.stringify(asked.agent)} is not the recorded plan for ${asked.repository.text}#${asked.issue}`
       )
     }
-    const call = await this.calls.planningFor(watch)
-    this.#supervise(watch, call, this.continuation.execute(new ContinuePlanParams({ watch, call })))
+    const recovery = await this.calls.recoveryFor(watch)
+    const decision = recovery.decision
+    switch (decision.action) {
+      case 'cleanup':
+      case 'inspect':
+        throw new PlanRecoveryConflict(decision.detail)
+      case 'continue':
+        this.#supervise(
+          watch,
+          decision.call,
+          this.continuation.execute(new ContinuePlanParams({ watch, call: decision.call })),
+        )
+        return
+      case 'observe': {
+        const work = recovery.purposeOf(decision.call) === 'plan'
+          ? this.continuation.execute(new ContinuePlanParams({ watch, call: decision.call }))
+          : this.#waitForSuccess(decision.call)
+        this.#supervise(watch, decision.call, work)
+        return
+      }
+    }
   }
 
   override async fix(asked: {

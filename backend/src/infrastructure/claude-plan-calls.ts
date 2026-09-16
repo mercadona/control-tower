@@ -1,5 +1,13 @@
-import { PlanAgentNotResumed } from '../domain/exceptions.ts'
+import {
+  PlanAgentNotLaunched,
+  PlanAgentNotNamed,
+  PlanAgentNotResumed,
+  PlanRecoveryNotRead,
+  PlanRecoveryNotUnderstood,
+} from '../domain/exceptions.ts'
 import { PlanCalls } from '../domain/ports/plan-calls.ts'
+import type { PlanRecords } from '../domain/ports/plan-records.ts'
+import { PlanRecovery, type RecoveryCall } from '../domain/policies/plan-recovery.ts'
 import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
@@ -17,18 +25,24 @@ export class ClaudePlanCalls extends PlanCalls {
   readonly brief: PlanAgentBrief
   readonly pluginRoot: string
   readonly resumable: (watch: PlanWatch) => Promise<boolean>
+  readonly records: PlanRecords
+  readonly nowMs: () => number
 
   constructor(ports: {
     calls: ClaudeCalls,
     brief: PlanAgentBrief,
     pluginRoot: string,
     resumable: (watch: PlanWatch) => Promise<boolean>,
+    records: PlanRecords,
+    nowMs: () => number,
   }) {
     super()
     this.calls = ports.calls
     this.brief = ports.brief
     this.pluginRoot = ports.pluginRoot
     this.resumable = ports.resumable
+    this.records = ports.records
+    this.nowMs = ports.nowMs
   }
 
   async start(
@@ -76,6 +90,28 @@ export class ClaudePlanCalls extends PlanCalls {
       )
     }
     return implementations[0]?.call ?? null
+  }
+
+  async recoveryFor(watch: PlanWatch): Promise<PlanRecovery> {
+    try {
+      const proof = await this.records.nonLaunch(watch)
+      const cleanup = await this.records.cleanupEvidence(watch)
+      const history = await this.calls.history(watch.agent)
+      const facts: RecoveryCall[] = []
+      for (const recorded of history) facts.push({
+        call: recorded.call,
+        purpose: recorded.purpose,
+        startedAt: recorded.startedAt,
+        deadlineMs: await this.calls.deadlineOf(recorded.call),
+        completion: recorded.completion,
+      })
+      return PlanRecovery.from({ calls: facts, proof, cleanup, nowMs: this.nowMs() })
+    } catch (cause) {
+      if (cause instanceof PlanRecoveryNotRead || cause instanceof PlanRecoveryNotUnderstood) throw cause
+      if (cause instanceof PlanAgentNotNamed) throw new PlanRecoveryNotUnderstood(cause.message)
+      if (cause instanceof PlanAgentNotLaunched) throw new PlanRecoveryNotRead(cause.message)
+      throw cause
+    }
   }
 
   wait(call: StartedPlanCall): Promise<CompletedPlanCall> {

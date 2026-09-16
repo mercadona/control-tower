@@ -38,6 +38,8 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { PlanAgentNeverLaunched } from '../../src/domain/exceptions.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 
 class StartMilestonePlanDouble extends StartMilestonePlan {
   readonly asked: StartMilestonePlanParams[]
@@ -291,6 +293,28 @@ describe('StartPlanRoute milestone entrance', () => {
     expect(start.asked[0].root).toBe(Mother.ROOT)
     expect(groom.asked[0].repository).toBe(Mother.REPOSITORY)
     expect(groom.asked[0].root).toBe(Mother.ROOT)
+  })
+
+  it('milestone start exposes definite non-launch', async () => {
+    const proof = new PlanNonLaunch({
+      conversation: Mother.AGENT,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'headless worker spawn was refused',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+    const start = new StartMilestonePlanDouble(async () => {
+      throw new PlanAgentNeverLaunched(proof)
+    })
+    const port = await RunningApi.listening({ startMilestonePlan: start, readEpicGroom: new ReadEpicGroomDouble() })
+
+    const response = await RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'plan-agent-never-launched',
+      detail: 'headless worker spawn was refused',
+    })
   })
 
   it('mixed malformed and unknown milestone fields reach no action', async () => {

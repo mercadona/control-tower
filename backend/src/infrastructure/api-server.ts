@@ -22,8 +22,12 @@ import { SpecFreezeRoute } from './spec-freeze-route.ts'
 import { SpecReslicingRoute } from './spec-reslicing-route.ts'
 import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
+import { RecoverPlanRoute } from './recover-plan-route.ts'
+import { CleanupPlanRoute } from './cleanup-plan-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
+import type { RecoverPlan } from '../application/actions/recover-plan.ts'
+import type { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
@@ -100,6 +104,8 @@ export type ApiCollaborators = {
   startPlan?: StartPlan | null,
   startMilestonePlan?: StartMilestonePlan | null,
   startsInFlight?: WorkInFlight | null,
+  recoverPlan?: RecoverPlan | null,
+  cleanupPlan?: CleanupPlan | null,
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
   planEvents?: PlanEvents | null,
@@ -163,6 +169,8 @@ export class ApiServer {
   readonly startPlan: StartPlan | null | undefined
   readonly startMilestonePlan: StartMilestonePlan | null | undefined
   readonly startsInFlight: WorkInFlight
+  readonly recoverPlan: RecoverPlan | null | undefined
+  readonly cleanupPlan: CleanupPlan | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
   readonly planEvents: PlanEvents | null | undefined
@@ -193,7 +201,7 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, startMilestonePlan, startsInFlight, implementProgress, implementHistory,
+    port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementProgress, implementHistory,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null,
     openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
@@ -204,6 +212,8 @@ export class ApiServer {
     this.startPlan = startPlan
     this.startMilestonePlan = startMilestonePlan
     this.startsInFlight = startsInFlight ?? new WorkInFlight()
+    this.recoverPlan = recoverPlan
+    this.cleanupPlan = cleanupPlan
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
     this.planEvents = planEvents
@@ -257,6 +267,22 @@ export class ApiServer {
       )
     )
     app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
+    app.post(
+      RecoverPlanRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      RecoverPlanRoute.handledBy(this.recoverPlan!, this.recovery!, this.startsInFlight),
+    )
+    app.all(RecoverPlanRoute.PATH, RecoverPlanRoute.refuseOtherMethods)
+    app.post(
+      CleanupPlanRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      CleanupPlanRoute.handledBy(this.cleanupPlan!, this.recovery!, this.startsInFlight),
+    )
+    app.all(CleanupPlanRoute.PATH, CleanupPlanRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

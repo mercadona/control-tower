@@ -11,11 +11,15 @@ import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-cal
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
+import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
 
 class CallsDouble extends ClaudeCalls {
   readonly invocations: CallInvocation[] = []
   readonly result: CompletedPlanCall
   recordedCall: StartedPlanCall | null = null
+  historyRows: readonly RecordedCall[] = []
+  deadline = Date.parse('2026-09-16T12:00:00.000Z')
 
   constructor() {
     super({
@@ -46,6 +50,24 @@ class CallsDouble extends ClaudeCalls {
 
   override async wait(): Promise<CompletedPlanCall> {
     return this.result
+  }
+
+  override async history(): Promise<readonly RecordedCall[]> {
+    return this.historyRows
+  }
+
+  override async deadlineOf(): Promise<number> {
+    return this.deadline
+  }
+}
+
+class RecordsDouble extends PlanRecords {
+  override async nonLaunch(): Promise<null> {
+    return null
+  }
+
+  override async cleanupEvidence(): Promise<null> {
+    return null
   }
 }
 
@@ -86,6 +108,7 @@ class PlanCallMother {
 
 class Subject {
   readonly calls = new CallsDouble()
+  readonly records = new RecordsDouble()
   readonly resumableWatches: PlanWatch[] = []
   resumable = true
   readonly adapter = new ClaudePlanCalls({
@@ -96,6 +119,8 @@ class Subject {
       ctStep: '/plugin/scripts/ct-step.mjs',
     }),
     pluginRoot: '/installed/control-tower-loop',
+    records: this.records,
+    nowMs: () => Date.parse('2026-09-16T10:00:00.000Z'),
     resumable: async (watch): Promise<boolean> => {
       this.resumableWatches.push(watch)
       return this.resumable
@@ -187,5 +212,63 @@ describe('ClaudePlanCalls', () => {
     )).toBe(PlanCallMother.CALL)
     expect(subject.resumableWatches).toEqual([])
     expect(subject.calls.invocations).toEqual([])
+  })
+
+  it('successful planner recovery continues the original call', async () => {
+    const subject = new Subject()
+    subject.calls.historyRows = [new RecordedCall({
+      call: PlanCallMother.CALL,
+      purpose: 'plan',
+      startedAt: '2026-09-16T10:00:00.000Z',
+      completion: PlanCallMother.completed(),
+    })]
+
+    const recovery = await subject.adapter.recoveryFor(PlanCallMother.watch())
+
+    expect(recovery.decision).toEqual(expect.objectContaining({ action: 'continue', call: PlanCallMother.CALL }))
+  })
+
+  it('incomplete implementation recovery observes only within its recorded deadline', async () => {
+    const subject = new Subject()
+    subject.calls.historyRows = [new RecordedCall({
+      call: PlanCallMother.CALL,
+      purpose: 'implementation',
+      startedAt: '2026-09-16T10:00:00.000Z',
+      completion: null,
+    })]
+
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
+      expect.objectContaining({ action: 'observe', call: PlanCallMother.CALL }),
+    )
+    subject.calls.deadline = Date.parse('2026-09-16T09:59:59.000Z')
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
+      expect.objectContaining({ action: 'inspect' }),
+    )
+  })
+
+  it('timestamp ties remain inspect-only', async () => {
+    const subject = new Subject()
+    const other = new StartedPlanCall({
+      conversation: PlanCallMother.CONVERSATION,
+      id: '33333333-3333-4333-8333-333333333333',
+    })
+    subject.calls.historyRows = [
+      new RecordedCall({
+        call: PlanCallMother.CALL,
+        purpose: 'plan',
+        startedAt: '2026-09-16T10:00:00.000Z',
+        completion: PlanCallMother.completed(),
+      }),
+      new RecordedCall({
+        call: other,
+        purpose: 'implementation',
+        startedAt: '2026-09-16T10:00:00.000Z',
+        completion: null,
+      }),
+    ]
+
+    expect((await subject.adapter.recoveryFor(PlanCallMother.watch())).decision).toEqual(
+      expect.objectContaining({ action: 'inspect', detail: expect.stringContaining('ambiguous') }),
+    )
   })
 })

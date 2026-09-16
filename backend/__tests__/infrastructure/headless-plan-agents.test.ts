@@ -9,7 +9,8 @@ import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotResumed } fro
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
-import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { StartedPlanCall, type CompletedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { PlanRecovery } from '../../src/domain/policies/plan-recovery.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
@@ -77,6 +78,27 @@ class CallsDouble extends PlanCalls {
   override async planningFor(): Promise<StartedPlanCall> {
     this.events.push('planner-read')
     return this.call
+  }
+
+  override async recoveryFor(): Promise<PlanRecovery> {
+    this.events.push('planner-read')
+    return PlanRecovery.from({
+      calls: [{
+        call: this.call,
+        purpose: 'plan',
+        startedAt: '2026-09-16T10:00:00.000Z',
+        deadlineMs: Date.parse('2026-09-16T12:00:00.000Z'),
+        completion: null,
+      }],
+      proof: null,
+      cleanup: null,
+      nowMs: Date.parse('2026-09-16T10:01:00.000Z'),
+    })
+  }
+
+  override async wait(): Promise<CompletedPlanCall> {
+    this.events.push('waited')
+    return new Promise<CompletedPlanCall>(() => {})
   }
 }
 
@@ -263,8 +285,10 @@ describe('HeadlessPlanAgents', () => {
   it('failed ambiguous or expired calls cannot relaunch', async () => {
     const events: string[] = []
     class RefusingCalls extends CallsDouble {
-      override async planningFor(): Promise<StartedPlanCall> {
-        throw new PlanAgentNotResumed('recorded planner is expired or ambiguous')
+      override async recoveryFor(): Promise<PlanRecovery> {
+        return PlanRecovery.from({
+          calls: [], proof: null, cleanup: null, nowMs: Date.parse('2026-09-16T10:00:00.000Z'),
+        })
       }
     }
     const agents = new HeadlessPlanAgents({
@@ -279,8 +303,44 @@ describe('HeadlessPlanAgents', () => {
       agent: HeadlessMother.CONVERSATION,
       issue: HeadlessMother.ISSUE.number,
       repository: HeadlessMother.REPOSITORY,
-    })).rejects.toThrow('expired or ambiguous')
+    })).rejects.toThrow('no call descriptor')
     expect(events).toEqual([])
+  })
+
+  it('fix recovery observes the recorded call', async () => {
+    const events: string[] = []
+    class FixCalls extends CallsDouble {
+      override async recoveryFor(): Promise<PlanRecovery> {
+        events.push('recovery-read')
+        return PlanRecovery.from({
+          calls: [{
+            call: this.call,
+            purpose: 'fix',
+            startedAt: '2026-09-16T10:00:00.000Z',
+            deadlineMs: Date.parse('2026-09-16T12:00:00.000Z'),
+            completion: null,
+          }],
+          proof: null,
+          cleanup: null,
+          nowMs: Date.parse('2026-09-16T10:01:00.000Z'),
+        })
+      }
+    }
+    const agents = new HeadlessPlanAgents({
+      records: new RecordsDouble(HeadlessMother.WATCH, events),
+      calls: new FixCalls(events, HeadlessMother.CALL),
+      continuation: new ContinuationDouble(new Deferred<void>(), new Deferred<void>()),
+      newId: () => '33333333-3333-4333-8333-333333333333',
+      stderr: () => {},
+    })
+
+    await agents.recover({
+      agent: HeadlessMother.CONVERSATION,
+      issue: HeadlessMother.ISSUE.number,
+      repository: HeadlessMother.REPOSITORY,
+    })
+
+    expect(events).toEqual(['recovery-read', 'waited'])
   })
 
   it('review retries reuse a recorded request without launching again', async () => {

@@ -19,10 +19,16 @@ export const ActivePlansOutcome = Object.freeze({
 export type ActivePlansOutcomeValue = (typeof ActivePlansOutcome)[keyof typeof ActivePlansOutcome]
 
 type AskedPlan = { issue: number, repository: RepositoryName }
+export type ActivePlanRecovery = { action: 'observe' | 'continue' | 'cleanup' | 'inspect', detail: string }
 
 export type FoundActivePlan =
   | { phase: typeof ActivePlanPhase.PLANNING | typeof ActivePlanPhase.IMPLEMENTING, watch: PlanWatch }
-  | { phase: typeof ActivePlanPhase.UNCERTAIN, watch: PlanWatch, diagnostic: string | null }
+  | {
+    phase: typeof ActivePlanPhase.UNCERTAIN,
+    watch: PlanWatch,
+    diagnostic: string | null,
+    recovery: ActivePlanRecovery,
+  }
 
 export type ProjectedActivePlan = {
   phase: ActivePlanPhaseValue,
@@ -36,6 +42,7 @@ export type ProjectedActivePlan = {
     branch: string,
     worktree: string,
   },
+  recovery?: ActivePlanRecovery,
 }
 
 export type ActivePlanRecovering = { recover: () => Promise<string | null> }
@@ -69,11 +76,11 @@ export class ActivePlans {
     this.sessions.remember(watch)
   }
 
-  rememberUncertain(watch: PlanWatch, diagnostic: string | null = null): void {
+  rememberUncertain(watch: PlanWatch, diagnostic: string | null, recovery: ActivePlanRecovery): void {
     const key = ActivePlans.#keyFor(watch)
     this.implementing.delete(key)
     this.sessions.forget({ issue: watch.issue.number, repository: watch.repository })
-    this.uncertain.set(key, { phase: ActivePlanPhase.UNCERTAIN, watch, diagnostic })
+    this.uncertain.set(key, { phase: ActivePlanPhase.UNCERTAIN, watch, diagnostic, recovery: Object.freeze({ ...recovery }) })
   }
 
   forget({ issue, repository }: AskedPlan): void {
@@ -109,7 +116,7 @@ export class ActivePlans {
       ...this.sessions.known().map((watch) => ActivePlans.#project(ActivePlanPhase.PLANNING, watch)),
       ...[...this.implementing.values()].map((watch) => ActivePlans.#project(ActivePlanPhase.IMPLEMENTING, watch)),
       ...[...this.uncertain.values()].map((found) => (
-        ActivePlans.#project(ActivePlanPhase.UNCERTAIN, found.watch, found.diagnostic)
+        ActivePlans.#project(ActivePlanPhase.UNCERTAIN, found.watch, found.diagnostic, found.recovery)
       )),
     ]
   }
@@ -118,6 +125,7 @@ export class ActivePlans {
     phase: ActivePlanPhaseValue,
     watch: PlanWatch,
     diagnostic: string | null = null,
+    recovery: ActivePlanRecovery | null = null,
   ): ProjectedActivePlan {
     const projected: ProjectedActivePlan = {
       phase,
@@ -136,6 +144,7 @@ export class ActivePlans {
       },
     }
     if (diagnostic !== null) projected.diagnostic = diagnostic
+    if (recovery !== null) projected.recovery = recovery
     return projected
   }
 }

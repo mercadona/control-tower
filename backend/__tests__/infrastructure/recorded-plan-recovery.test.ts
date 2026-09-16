@@ -18,6 +18,8 @@ import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
+import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
+import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 
@@ -115,10 +117,26 @@ class RecoveryMother {
     this.reviews = new RecordingReviews()
     this.recovery = new RecordedPlanRecovery({
       records: this.records,
-      calls: this.calls,
+      calls: this.planCalls(this.calls),
+      ownership: this.calls,
       checkouts: this.checkouts,
       activePlans: this.activePlans,
       reviews: this.reviews,
+    })
+  }
+
+  planCalls(calls: ClaudeCalls): ClaudePlanCalls {
+    return new ClaudePlanCalls({
+      calls,
+      records: this.records,
+      brief: new PlanAgentBrief({
+        dispatchCheck: '/plugin/dispatch-check.mjs',
+        conventions: '/plugin/conventions',
+        ctStep: '/plugin/ct-step.mjs',
+      }),
+      pluginRoot: '/plugin',
+      resumable: async () => false,
+      nowMs: () => Date.parse(RecoveryMother.STARTED_AT),
     })
   }
 
@@ -286,7 +304,8 @@ describe('RecordedPlanRecovery', () => {
     }))
     const recovery = new RecordedPlanRecovery({
       records: fixture.records,
-      calls,
+      calls: fixture.planCalls(calls),
+      ownership: calls,
       checkouts: fixture.checkouts,
       activePlans: fixture.activePlans,
       reviews: fixture.reviews,
@@ -418,7 +437,8 @@ describe('RecordedPlanRecovery', () => {
     })
     const recovery = new RecordedPlanRecovery({
       records: fixture.records,
-      calls: fixture.calls,
+      calls: fixture.planCalls(fixture.calls),
+      ownership: fixture.calls,
       checkouts: fixture.checkouts,
       activePlans: fixture.activePlans,
       reviews,
@@ -431,6 +451,7 @@ describe('RecordedPlanRecovery', () => {
 
     await fixture.writeCall({
       id: RecoveryMother.THIRD_CALL,
+      purpose: 'fix',
       startedAt: '2026-09-15T10:02:00.000Z',
       completion: RecoveryMother.completion({ execution: { kind: 'error', diagnostic: 'turn limit reached' } }),
     })
@@ -439,6 +460,7 @@ describe('RecordedPlanRecovery', () => {
 
     await fixture.writeCall({
       id: '44444444-4444-4444-8444-444444444444',
+      purpose: 'fix',
       startedAt: '2026-09-15T10:03:00.000Z',
       completion: RecoveryMother.completion(),
     })

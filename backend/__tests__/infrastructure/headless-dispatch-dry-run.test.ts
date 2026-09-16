@@ -382,7 +382,7 @@ describe('headless dispatch dry run', () => {
     }
   }
 
-  it('the isolated dispatcher records publishes accepts continuation and recovers its identity', async () => {
+  it('coordinator recovery reaches the production continuation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-331-headless-rehearsal-'))
     roots.push(root)
     try {
@@ -466,6 +466,8 @@ describe('headless dispatch dry run', () => {
       }),
       pluginRoot: '/plugin',
       resumable: async (watch) => watch.agent === Rehearsal.CONVERSATION,
+      records,
+      nowMs: () => Date.parse(Rehearsal.STARTED_AT),
     })
     const publication = new GhPlanPublication({
       gh,
@@ -573,11 +575,13 @@ describe('headless dispatch dry run', () => {
     const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
     expect(plannerDescriptor.argv).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
       '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
       ClaudePlanCalls.OPENING,
     ])
     expect(implementationDescriptor.argv).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
       '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
       ClaudePlanCalls.OPENING,
     ])
@@ -624,7 +628,8 @@ describe('headless dispatch dry run', () => {
     })
     const recovery = new RecordedPlanRecovery({
       records,
-      calls: restartedCalls,
+      calls: planCalls,
+      ownership: restartedCalls,
       checkouts: new RememberingCheckouts(),
       activePlans: recoveredPlans,
       reviews,

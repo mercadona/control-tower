@@ -1,7 +1,12 @@
 import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../value-objects/plan-call.ts'
 import type { PlanWatch } from '../value-objects/plan-watch.ts'
+import type { PlanRecovery } from '../policies/plan-recovery.ts'
 
 export class PlanCalls {
+  async recoveryFor(watch: PlanWatch): Promise<PlanRecovery> {
+    throw new Error(`${this.constructor.name} must implement recoveryFor(watch), asked for ${watch.agent}`)
+  }
+
   async planningFor(watch: PlanWatch): Promise<StartedPlanCall> {
     throw new Error(`${this.constructor.name} must implement planningFor(watch), asked for ${watch.agent}`)
   }

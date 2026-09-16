@@ -553,6 +553,10 @@ export class ClaudeCalls {
     return (await this.#read(call)).completion
   }
 
+  async deadlineOf(call: StartedPlanCall): Promise<number> {
+    return (await this.#descriptor(call)).deadlineMs()
+  }
+
   async history(conversation: string): Promise<readonly RecordedCall[]> {
     const directory = join(this.files.root, 'harness', conversation, 'calls')
     let names: string[]

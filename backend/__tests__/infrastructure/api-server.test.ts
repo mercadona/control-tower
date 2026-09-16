@@ -15,7 +15,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
-  PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
+  PlanAgentNeverLaunched, PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
   PlanProgressNotRead,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -41,6 +41,8 @@ import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import type { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
+import { PlanRecovery } from '../../src/domain/policies/plan-recovery.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
@@ -56,6 +58,7 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 
 class StartPlanSpy extends StartPlan {
   static readonly AGENT = 'workspace:4'
@@ -236,6 +239,30 @@ class RecoveryCalls extends ClaudeCalls {
   }
 }
 
+class RecoveryDecisions extends PlanCalls {
+  readonly recorded: readonly RecordedCall[]
+
+  constructor(recorded: readonly RecordedCall[]) {
+    super()
+    this.recorded = recorded
+  }
+
+  override async recoveryFor(): Promise<PlanRecovery> {
+    return PlanRecovery.from({
+      calls: this.recorded.map((recorded) => ({
+        call: recorded.call,
+        purpose: recorded.purpose,
+        startedAt: recorded.startedAt,
+        deadlineMs: Date.parse(recorded.startedAt) + 7_205_000,
+        completion: recorded.completion,
+      })),
+      proof: null,
+      cleanup: null,
+      nowMs: Date.parse('2026-09-16T10:00:00.000Z'),
+    })
+  }
+}
+
 class RecoveryFixture {
   static refusingWith(reason: string): RecordedPlanRecovery {
     return RecoveryFixture.with(PlansInFlight.refused(reason), [])
@@ -243,10 +270,12 @@ class RecoveryFixture {
 
   static with(records: PlansInFlight, calls: readonly RecordedCall[]): RecordedPlanRecovery {
     const sessions = new PlanSessions()
+    const ownership = new RecoveryCalls(calls)
 
     return new RecordedPlanRecovery({
       records: new RecoveryRecords(records),
-      calls: new RecoveryCalls(calls),
+      calls: new RecoveryDecisions(calls),
+      ownership,
       checkouts: new CheckoutRegistry(),
       activePlans: new ActivePlans({ sessions }),
       reviews: new NeverWatching('pull request review watch double'),
@@ -486,6 +515,38 @@ describe('ApiServer', () => {
       expect(await response.text()).toBe(
         '{"code":"plan-agent-not-launched","detail":"cmux is not reachable"}'
       )
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('loose start exposes definite non-launch', async () => {
+    const proof = new PlanNonLaunch({
+      conversation: '11111111-1111-4111-8111-111111111111',
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'headless worker spawn was refused',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+    const spy = new StartPlanSpy()
+    spy.execute = async () => new StartPlanResult({
+      started: [],
+      failed: [new PlanNotStarted({
+        repository: new RepositoryName(RunningApi.REPO),
+        cause: new PlanAgentNeverLaunched(proof),
+      })],
+    })
+    const server = RunningApi.server({ startPlan: spy })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        code: 'plan-agent-never-launched',
+        detail: 'headless worker spawn was refused',
+      })
     } finally {
       await server.stop()
     }
