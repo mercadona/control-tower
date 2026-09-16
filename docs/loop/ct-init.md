@@ -133,3 +133,75 @@ not parse is reported and silences **nothing**. Do not write the acknowledgement
 yourself: the decision is the user's, you tell them the way out exists.
 
 Lastly, if the repository is not registered in `control-tower/tower/workspaces.*.yaml`, say so; do not register it yourself.
+
+## `.claude/settings.json` — why the repository declares the plugin
+
+Until #376 the plugin was only ever enabled on the machine of whoever ran
+`/plugin install`, which writes to `~/.claude/settings.json`. Nothing travelled
+with the repository, so a fresh clone of a bootstrapped repository got no
+commands, no skills, no agents and no hooks — and that was indistinguishable
+from a repository nobody had bootstrapped.
+
+`/ct-init` now writes the file into the target repository. The rest of the
+plugin is **not** copied in with it, and that is deliberate: a dispatched agent
+does not only read files. `ct-next.mjs` resolves absolute paths to
+`ct-step.mjs`, `dispatch-check.mjs` and `conventions/` from wherever the plugin
+is installed and types them into the agent's terminal, and the kickoff names the
+skill `control-tower-loop:writing-plans-prescriptive`, which only resolves when
+the plugin is loaded. Copying the skills in would not finish that job; it would
+take the whole tree into every governed repository, kept in step by hand.
+
+### The version pin
+
+`enabledPlugins` holds a boolean and pins no release. The pin is the
+marketplace's `ref`, and it reaches the plugin's code because the marketplace
+entry's `source` is `./plugin`, inside the same checkout. The ref is
+`plugin-v<version>`, the tag release-please already creates, so a governed
+repository records in a committed file exactly which release it runs.
+
+Its one edge is honest: the tag is created **after** the version bump lands, so
+a `/ct-init` run from an unreleased commit writes a ref that does not resolve
+and the install fails naming the tag. That beats no ref, which floats every
+governed repository onto `main` and records nothing.
+
+### What is created, what is reported, what is never touched
+
+Per leaf key, not per file:
+
+| Key | Absent | Present with another value |
+|---|---|---|
+| the marketplace entry | created | reported |
+| its `source.ref` | **filled in** | reported, with both releases named |
+| `enabledPlugins[…]` | created | reported |
+| `permissions.allow`, `permissions.deny` | created | additive union, never a removal |
+| anything else | — | untouched |
+
+A missing `ref` is an absent leaf key, so it is filled in; a `ref` naming
+another release is a decision, so it is reported. That distinction is the
+upgrade path: moving a repository is one line, and a person moves it.
+
+### The deny list is a speed bump, not a boundary
+
+`Bash(git:*)` would auto-allow the invocations `CLAUDE.md` forbids, so the
+allowance arrives with them denied. Two things to be clear about:
+
+- The `:*` shorthand is only read as "anything after this" at the **end** of a
+  pattern. In the middle, the colon is a literal character and the rule matches
+  no real command. `Bash(git push *--force*)` is the working shape;
+  `Bash(git push:*--force*)` matches nothing.
+- Bash rules match the **text** of a command. `git -C . push --force`,
+  `/usr/bin/git push --force` and `sh -c '…'` all get past them. The documented
+  mechanism for enforcement that holds is a `PreToolUse` hook, which this plugin
+  already uses for the commit-keyword guard. The deny rules are worth having,
+  and they are not the guard.
+
+### The gate directory is pinned as ESM
+
+`plugin/dist/scope-check.js` is an ESM bundle vendored as `.js`, so the format
+node parses it with is decided by the **receiving** repository's nearest
+`package.json`. A target declaring `"type": "commonjs"` makes node read it as
+CommonJS and it dies on its first `import` — a required check red on every pull
+request, correct ones included. `/ct-init` writes `.github/ct/package.json` with
+`"type": "module"`: nearer than the repository's own, and the vendored path
+stays the one the workflow names. A `package.json` already there saying
+something else is reported, never rewritten.

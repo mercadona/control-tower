@@ -200,12 +200,12 @@ done
 # also holds the `settings.json` this scaffolder writes, which declares the
 # plugin and IS committed; a rule on the directory would take it along and leave
 # the repository with no plugin declaration at all.
-for regla in '.claude/worktrees/' '.claude/settings.local.json'; do
-  if ! grep -qxF "$regla" "$GITIGNORE"; then
-    echo "$regla" >> "$GITIGNORE"
-    echo "añadido $regla a $GITIGNORE"
+for rule in '.claude/worktrees/' '.claude/settings.local.json'; do
+  if ! grep -qxF "$rule" "$GITIGNORE"; then
+    echo "$rule" >> "$GITIGNORE"
+    echo "added $rule to $GITIGNORE"
   else
-    echo "$regla ya está en $GITIGNORE, no se duplica"
+    echo "$rule is already in $GITIGNORE, not duplicated"
   fi
 done
 
@@ -227,28 +227,49 @@ done
 # repository fixes it. It is a GENERATED file, so there is no hand-edited variant
 # to protect and no hash history to keep: bytes differ or they do not. It still
 # is not replaced without being asked — that is `--force`.
+#
+# The bundle is ESM and it is vendored as `.js`, so the format it is parsed with
+# is decided by the RECEIVING repository's nearest package.json — not by this
+# plugin. A target declaring `"type": "commonjs"` makes node read the bundle as
+# CommonJS and it dies on its first `import`, which turns a REQUIRED check red
+# on every pull request, correct ones included, for a reason that has nothing to
+# do with the work. `.github/ct/package.json` pins the format for that directory
+# alone: it is nearer than the repository's own, it says `module`, and the
+# vendored path stays the one the workflow and the documentation name.
 GATE_WORKFLOW="$TARGET/.github/workflows/ct-scope-gate.yml"
-GATE_BUNDLE="$TARGET/.github/ct/scope-check.js"
+GATE_DIR="$TARGET/.github/ct"
+GATE_BUNDLE="$GATE_DIR/scope-check.js"
+GATE_MODULE_TYPE="$GATE_DIR/package.json"
 
 if [ ! -f "$GATE_WORKFLOW" ]; then
   mkdir -p "$(dirname "$GATE_WORKFLOW")"
   cp "$HERE/templates/ct-scope-gate.workflow.yml" "$GATE_WORKFLOW"
-  echo "creado $GATE_WORKFLOW"
+  echo "created $GATE_WORKFLOW"
 else
-  echo "$GATE_WORKFLOW ya existe, no se pisa"
+  echo "$GATE_WORKFLOW already exists, not overwritten"
 fi
 
 if [ ! -f "$GATE_BUNDLE" ]; then
-  mkdir -p "$(dirname "$GATE_BUNDLE")"
+  mkdir -p "$GATE_DIR"
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
-  echo "creado $GATE_BUNDLE"
+  echo "created $GATE_BUNDLE"
 elif cmp -s "$HERE/dist/scope-check.js" "$GATE_BUNDLE"; then
-  echo "$GATE_BUNDLE coincide con el bundle de esta versión, no se pisa"
+  echo "$GATE_BUNDLE matches the bundle this release ships, not overwritten"
 elif [ "$FORCE" -eq 1 ]; then
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
-  echo "actualizado $GATE_BUNDLE con el bundle de esta versión del plugin (--force)"
+  echo "updated $GATE_BUNDLE with the bundle this release ships (--force)"
 else
-  echo "aviso: $GATE_BUNDLE no coincide con el bundle que trae esta versión del plugin. Es un fichero GENERADO, así que la diferencia es que la copia de este repo es de otra versión, no una edición a mano. Importa: una copia sembrada antes de #346 sólo reconoce \`## Contexto del epic\`, así que tumba la puerta de cada issue nuevo por una sección que no encuentra, y no hay merge en el repo del plugin que lo arregle. Para actualizarla: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
+  echo "warning: $GATE_BUNDLE does not match the bundle this release of the plugin ships. It is a GENERATED file, so the difference means this repo's copy comes from another release, not that somebody edited it. It matters: a copy vendored before #346 recognises \`## Contexto del epic\` and nothing else, so it fails the gate of every new issue over a section it cannot find, and no merge in the plugin's repository fixes it. To update it: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
+fi
+
+if [ ! -f "$GATE_MODULE_TYPE" ]; then
+  mkdir -p "$GATE_DIR"
+  printf '{\n  "type": "module"\n}\n' > "$GATE_MODULE_TYPE"
+  echo "created $GATE_MODULE_TYPE"
+elif grep -q '"type"[[:space:]]*:[[:space:]]*"module"' "$GATE_MODULE_TYPE"; then
+  echo "$GATE_MODULE_TYPE already parses the gate as ESM, not overwritten"
+else
+  echo "warning: $GATE_MODULE_TYPE exists and does not declare \`\"type\": \"module\"\`. The scope gate's bundle is ESM, so node will read it with whatever format that file decides and it will die on its first \`import\` — a required check red on every pull request, correct ones included. Nothing has been changed: add \`\"type\": \"module\"\` to it by hand." >&2
 fi
 
 # Issue #376 — `.claude/settings.json`: the file that tells Claude Code which
@@ -275,7 +296,7 @@ else
   SETTINGS_STATUS=127
 fi
 if [ "$SETTINGS_STATUS" -ne 0 ]; then
-  echo "aviso: no se ha podido sembrar ni comprobar $TARGET/.claude/settings.json — la operación necesita \`node\` y no se ha podido ejecutar (estado $SETTINGS_STATUS). NO lo leas como \"el plugin queda declarado\": sin ese fichero, quien clone este repo no recibe ningún comando, skill, agente ni hook de este plugin, y eso no se distingue de un repo que nadie ha inicializado." >&2
+  echo "warning: $TARGET/.claude/settings.json could neither be seeded nor checked — the operation needs \`node\` and it could not be run (status $SETTINGS_STATUS). Do NOT read that as \"the plugin is declared\": without that file, whoever clones this repo receives no command, skill, agent or hook of this plugin, and that is indistinguishable from a repo nobody has initialised." >&2
 elif [ -n "$SETTINGS_OUT" ]; then
   printf '%s\n' "$SETTINGS_OUT"
 fi

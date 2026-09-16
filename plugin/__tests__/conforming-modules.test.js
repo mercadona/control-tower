@@ -69,6 +69,9 @@ class BornConforming {
     '__tests__/judge-returns.test.js',
     'scripts/milestone-context.js',
     '__tests__/milestone-context.test.js',
+    'scripts/claude-settings.js',
+    'scripts/seed-claude-settings.mjs',
+    '__tests__/claude-settings.test.js',
   ]
 
   static SPANISH_WORDS = [

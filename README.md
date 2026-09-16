@@ -102,7 +102,7 @@ Then, **once per repository you want to govern**:
 `/ct-init` leaves `.agent/STATE.md`, `.agent/conventions.md`, the slice table
 contract in `docs/superpowers/CONTRATO-SLICES.md`, a short section in
 `AGENTS.md` that links to it, the `.gitignore` rules, `.claude/settings.json`
-and the scope gate under `.github/`. **It plans nothing**: filling in the
+and the scope gate under `.github/` (the workflow, the bundle, and the one-line `package.json` that keeps node reading that bundle as ESM). **It plans nothing**: filling in the
 repository's real commands — build, test, lint, CI — in `AGENTS.md` is up to
 you. If it warns that the repository already came with its own conventions,
 choosing which one rules is your decision, not the plugin's.

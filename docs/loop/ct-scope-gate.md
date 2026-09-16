@@ -23,18 +23,27 @@ suspect runs is not a guard.
 
 ## How it is installed
 
-`/ct-init` puts both files in place, in the repository it bootstraps:
+`/ct-init` puts these files in place, in the repository it bootstraps:
 
 | Path | From |
 |---|---|
 | `.github/workflows/ct-scope-gate.yml` | `plugin/templates/ct-scope-gate.workflow.yml` |
 | `.github/ct/scope-check.js` | `plugin/dist/scope-check.js` |
+| `.github/ct/package.json` | one line, `"type": "module"` |
 
-Both are **committed** in that repository. A workflow only runs from a committed
+All three are **committed** in that repository. A workflow only runs from a committed
 file, and the bundle is built self-contained on purpose — in CI it needs neither
 the plugin nor `node_modules`.
 
-Neither is overwritten if it is already there. The bundle gets one check the rest
+The `package.json` is there because the bundle is ESM and it is vendored as
+`.js`: the format node parses it with is decided by the **receiving**
+repository's nearest `package.json`, and a target declaring `"type": "commonjs"`
+makes node die on the bundle's first `import` — a required check red on every
+pull request, correct ones included. That one file is nearer than the
+repository's own and settles the question, while the vendored path stays the one
+the workflow names.
+
+None of them is overwritten if it is already there. The bundle gets one check the rest
 of the scaffolding does not: its bytes are compared against the copy the plugin
 ships, and a difference is reported. It is a generated file, so a difference
 means the repository's copy is from another version, not that somebody edited it.

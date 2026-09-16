@@ -3,202 +3,256 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  mergeClaudeSettings,
-  MARKETPLACE,
-  PLUGIN_ID,
-  MARKETPLACE_REPO,
-  marketplaceRef,
+  BashPermission,
+  ClaudeSettings,
+  ControlTowerPlugin,
+  LoopPermissions,
   SettingsNotUnderstood,
 } from '../scripts/claude-settings.js'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+class Manifests {
+  static ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-describe('mergeClaudeSettings', () => {
+  static get marketplace() {
+    return JSON.parse(readFileSync(join(Manifests.ROOT, '..', '.claude-plugin', 'marketplace.json'), 'utf8'))
+  }
+
+  static get plugin() {
+    return JSON.parse(readFileSync(join(Manifests.ROOT, '.claude-plugin', 'plugin.json'), 'utf8'))
+  }
+}
+
+class Given {
+  static RELEASE = '0.57.0'
+
+  static merged(existing = {}, version = Given.RELEASE) {
+    return ClaudeSettings.merge(existing, { version })
+  }
+
+  static seeded(version = Given.RELEASE) {
+    return Given.merged({}, version).settings
+  }
+
+  static sourceOf(settings) {
+    return settings.extraKnownMarketplaces[ControlTowerPlugin.MARKETPLACE].source
+  }
+
+  static flagOf(settings) {
+    return settings.enabledPlugins[ControlTowerPlugin.id]
+  }
+
+  static occurrencesOf(list, entry) {
+    return list.filter((each) => each === entry).length
+  }
+}
+
+describe('BashPermission reads a rule the way Claude Code reads it', () => {
+  it('the :* shorthand at the end of a pattern stands for a trailing space and star', () => {
+    expect(new BashPermission('git:*').matches('git commit --no-verify -m x')).toBe(true)
+    expect(new BashPermission('gh:*').matches('gh pr view 1')).toBe(true)
+  })
+
+  it('a trailing star also matches the bare command', () => {
+    expect(new BashPermission('git:*').matches('git')).toBe(true)
+  })
+
+  it('a colon anywhere but the end is a literal colon and matches no real command', () => {
+    expect(new BashPermission('git commit:*--no-verify*').matches('git commit --no-verify -m x')).toBe(false)
+    expect(new BashPermission('git commit:*--no-verify*').matches('git commit:--no-verify')).toBe(true)
+  })
+
+  it('a pattern with no star is an exact match', () => {
+    expect(new BashPermission('git status').matches('git status')).toBe(true)
+    expect(new BashPermission('git status').matches('git status --short')).toBe(false)
+  })
+
+  it('a rule renders as the Bash specifier Claude Code expects', () => {
+    expect(new BashPermission('gh:*').rule).toBe('Bash(gh:*)')
+  })
+})
+
+describe('the permissions the loop declares', () => {
+  it('allows gh and git, and nothing wider', () => {
+    expect(LoopPermissions.allow).toEqual(['Bash(gh:*)', 'Bash(git:*)'])
+  })
+
+  it.each([
+    'git commit --no-verify -m x',
+    'git commit -m x --no-verify',
+    'git push --no-verify',
+    'git push --force origin main',
+    'git push origin main --force',
+    'git -c core.hooksPath=/dev/null commit -m x',
+  ])('denies %s, which the allowance for git would otherwise cover', (command) => {
+    expect(new BashPermission('git:*').matches(command)).toBe(true)
+    expect(LoopPermissions.forbids(command)).toBe(true)
+  })
+
+  it.each(['git commit -m x', 'git push origin main', 'git status', 'gh pr view 1'])(
+    'leaves %s alone',
+    (command) => {
+      expect(LoopPermissions.forbids(command)).toBe(false)
+    }
+  )
+
+  it('every denial is a pattern that matches a command somebody could really type', () => {
+    for (const permission of LoopPermissions.FORBIDDEN) {
+      expect(permission.pattern).not.toMatch(/:\*(?!$)/)
+    }
+  })
+})
+
+describe('ClaudeSettings.merge declares what a cloned repository needs', () => {
   it('an empty file gets the marketplace, the plugin and both permission lists', () => {
-    const { settings } = mergeClaudeSettings({}, { version: '0.57.0' })
-    expect(settings.extraKnownMarketplaces[MARKETPLACE].source).toEqual({
+    const settings = Given.seeded()
+    expect(Given.sourceOf(settings)).toEqual({
       source: 'github',
-      repo: MARKETPLACE_REPO,
+      repo: ControlTowerPlugin.MARKETPLACE_REPO,
       ref: 'plugin-v0.57.0',
     })
-    expect(settings.enabledPlugins[PLUGIN_ID]).toBe(true)
-    expect(settings.permissions.allow).toContain('Bash(gh:*)')
-    expect(settings.permissions.deny.length).toBeGreaterThan(0)
+    expect(Given.flagOf(settings)).toBe(true)
+    expect(settings.permissions.allow).toEqual(LoopPermissions.allow)
+    expect(settings.permissions.deny).toEqual(LoopPermissions.deny)
   })
 
-  it('it says what it created, so ct-init does not have to read the JSON back', () => {
-    const { messages } = mergeClaudeSettings({}, { version: '0.57.0' })
-    expect(messages.join('\n')).toContain(MARKETPLACE)
+  it('it says what it declared, so the caller does not have to read the JSON back', () => {
+    expect(Given.merged().messages.join('\n')).toContain(ControlTowerPlugin.MARKETPLACE)
   })
 
-  // The whole reason this merges instead of writing the file: a repository may
-  // already carry its own settings, with other plugins, other marketplaces and
-  // keys that have nothing to do with the loop. Replacing that file would break
-  // the repository to bootstrap it.
   it('keys that are not ours survive untouched', () => {
     const existing = {
       model: 'opus',
       extraKnownMarketplaces: { 'other-team': { source: { source: 'github', repo: 'other/repo' } } },
       enabledPlugins: { 'other-plugin@other-team': true },
     }
-    const { settings } = mergeClaudeSettings(existing, { version: '0.57.0' })
+    const { settings } = Given.merged(existing)
     expect(settings.model).toBe('opus')
     expect(settings.extraKnownMarketplaces['other-team']).toEqual(existing.extraKnownMarketplaces['other-team'])
     expect(settings.enabledPlugins['other-plugin@other-team']).toBe(true)
-    expect(settings.enabledPlugins[PLUGIN_ID]).toBe(true)
+    expect(Given.flagOf(settings)).toBe(true)
   })
 
-  it('a file that already declares exactly what we would write says nothing', () => {
-    const first = mergeClaudeSettings({}, { version: '0.57.0' }).settings
-    const { messages } = mergeClaudeSettings(first, { version: '0.57.0' })
-    expect(messages).toEqual([])
+  it('a file that already declares what we would write says nothing', () => {
+    expect(Given.merged(Given.seeded()).messages).toEqual([])
   })
 
   it('running it twice changes nothing', () => {
-    const first = mergeClaudeSettings({}, { version: '0.57.0' }).settings
-    const { settings } = mergeClaudeSettings(first, { version: '0.57.0' })
-    expect(settings).toEqual(first)
+    const first = Given.seeded()
+    expect(Given.merged(first).settings).toEqual(first)
   })
 
-  // Somebody who set the flag to `false` took a decision. Putting it back to
-  // `true` from a scaffolder is indistinguishable from overriding them, and the
-  // repository would be left running a plugin its owner switched off.
-  it('the plugin flag set to false is reported and NOT put back', () => {
-    const existing = { enabledPlugins: { [PLUGIN_ID]: false } }
-    const { settings, messages } = mergeClaudeSettings(existing, { version: '0.57.0' })
-    expect(settings.enabledPlugins[PLUGIN_ID]).toBe(false)
-    expect(messages.join('\n')).toMatch(/false/)
+  it('the plugin flag set to false is reported and not put back', () => {
+    const { settings, messages } = Given.merged({ enabledPlugins: { [ControlTowerPlugin.id]: false } })
+    expect(Given.flagOf(settings)).toBe(false)
+    expect(messages.join('\n')).toContain('false')
   })
 
-  // The upgrade path, and the only one: a repository pinned to an older release
-  // visited by a newer ct-init is TOLD, with both versions named, and is not
-  // moved. Which plugin release somebody else's repository runs is not a
-  // scaffolder's decision.
-  it('a ref pinned to another release is reported with both versions, and not moved', () => {
-    const existing = mergeClaudeSettings({}, { version: '0.55.0' }).settings
-    const { settings, messages } = mergeClaudeSettings(existing, { version: '0.57.0' })
-    expect(settings.extraKnownMarketplaces[MARKETPLACE].source.ref).toBe('plugin-v0.55.0')
-    const said = messages.join('\n')
-    expect(said).toContain('plugin-v0.55.0')
-    expect(said).toContain('plugin-v0.57.0')
+  it('a ref pinned at another release is reported with both releases, and not moved', () => {
+    const { settings, messages } = Given.merged(Given.seeded('0.55.0'))
+    expect(Given.sourceOf(settings).ref).toBe('plugin-v0.55.0')
+    expect(messages.join('\n')).toContain('plugin-v0.55.0')
+    expect(messages.join('\n')).toContain('plugin-v0.57.0')
   })
 
-  it('a marketplace pointing at another repository is reported, and not moved', () => {
+  it('a marketplace of ours carrying no ref is pinned: an absent leaf key is filled in', () => {
     const existing = {
-      extraKnownMarketplaces: { [MARKETPLACE]: { source: { source: 'github', repo: 'someone/else' } } },
+      extraKnownMarketplaces: {
+        [ControlTowerPlugin.MARKETPLACE]: { source: { source: 'github', repo: ControlTowerPlugin.MARKETPLACE_REPO } },
+      },
     }
-    const { settings, messages } = mergeClaudeSettings(existing, { version: '0.57.0' })
-    expect(settings.extraKnownMarketplaces[MARKETPLACE].source.repo).toBe('someone/else')
+    const { settings, messages } = Given.merged(existing)
+    expect(Given.sourceOf(settings).ref).toBe('plugin-v0.57.0')
+    expect(messages.join('\n')).toContain('plugin-v0.57.0')
+    expect(messages.join('\n')).not.toContain('undefined')
+  })
+
+  it('pinning an unpinned marketplace keeps whatever else its entry carried', () => {
+    const existing = {
+      extraKnownMarketplaces: {
+        [ControlTowerPlugin.MARKETPLACE]: {
+          autoUpdate: false,
+          source: { source: 'github', repo: ControlTowerPlugin.MARKETPLACE_REPO },
+        },
+      },
+    }
+    const { settings } = Given.merged(existing)
+    expect(settings.extraKnownMarketplaces[ControlTowerPlugin.MARKETPLACE].autoUpdate).toBe(false)
+  })
+
+  it('a marketplace reading another repository is reported, and not moved', () => {
+    const existing = {
+      extraKnownMarketplaces: {
+        [ControlTowerPlugin.MARKETPLACE]: { source: { source: 'github', repo: 'someone/else' } },
+      },
+    }
+    const { settings, messages } = Given.merged(existing)
+    expect(Given.sourceOf(settings).repo).toBe('someone/else')
     expect(messages.join('\n')).toContain('someone/else')
   })
 
-  describe('the permission lists', () => {
-    it('foreign entries are kept and ours are added', () => {
-      const existing = { permissions: { allow: ['Bash(make:*)'], deny: ['Bash(rm:*)'] } }
-      const { settings } = mergeClaudeSettings(existing, { version: '0.57.0' })
-      expect(settings.permissions.allow).toContain('Bash(make:*)')
-      expect(settings.permissions.allow).toContain('Bash(gh:*)')
-      expect(settings.permissions.deny).toContain('Bash(rm:*)')
-    })
-
-    it('two runs do not duplicate an entry', () => {
-      const first = mergeClaudeSettings({}, { version: '0.57.0' }).settings
-      const { settings } = mergeClaudeSettings(first, { version: '0.57.0' })
-      const counted = (list, entry) => list.filter((e) => e === entry).length
-      expect(counted(settings.permissions.allow, 'Bash(gh:*)')).toBe(1)
-      for (const entry of settings.permissions.deny) {
-        expect(counted(settings.permissions.deny, entry)).toBe(1)
-      }
-    })
-
-    // `Bash(git:*)` would otherwise auto-allow the very invocations this
-    // repository's CLAUDE.md forbids — a control is not an obstacle to route
-    // around. The deny list carries that rule into every governed repository,
-    // and it applies before the folder is trusted.
-    it('every invocation CLAUDE.md forbids is denied', () => {
-      const { settings } = mergeClaudeSettings({}, { version: '0.57.0' })
-      const denied = settings.permissions.deny.join('\n')
-      expect(denied).toContain('--no-verify')
-      expect(denied).toContain('--force')
-      expect(denied).toContain('core.hooksPath')
-    })
-
-    it('nothing broader than gh and git is allowed', () => {
-      const { settings } = mergeClaudeSettings({}, { version: '0.57.0' })
-      expect(settings.permissions.allow).toEqual(['Bash(gh:*)', 'Bash(git:*)'])
-    })
-
-    // An entry a later version stops emitting is left where it is. Widening an
-    // allow list is not the hazard a stale hook is: a leftover entry sits there
-    // doing nothing, and removing what we do not recognise would be removing
-    // somebody's rule on the strength of not having written it ourselves.
-    it('an entry of ours that this version no longer emits is not removed', () => {
-      const existing = { permissions: { allow: ['Bash(bq:*)'] } }
-      const { settings } = mergeClaudeSettings(existing, { version: '0.57.0' })
-      expect(settings.permissions.allow).toContain('Bash(bq:*)')
-    })
+  it('foreign permission entries are kept and ours are added', () => {
+    const { settings } = Given.merged({ permissions: { allow: ['Bash(make:*)'], deny: ['Bash(rm:*)'] } })
+    expect(settings.permissions.allow).toContain('Bash(make:*)')
+    expect(settings.permissions.allow).toContain('Bash(gh:*)')
+    expect(settings.permissions.deny).toContain('Bash(rm:*)')
   })
 
-  // "It is not the object we merge into" is not "it is empty". Treating a
-  // string, a list or a null as `{}` would silently replace whatever the
-  // repository had. The same reading `SessionHooksNotUnderstood` already takes
-  // for the file the cabin merges into.
-  describe('a file that is not what we can merge into', () => {
-    it('settings that are not an object', () => {
-      for (const bad of ['text', 42, null, ['a']]) {
-        expect(() => mergeClaudeSettings(bad, { version: '0.57.0' })).toThrow(SettingsNotUnderstood)
-      }
-    })
-
-    it('one of our own containers holding something else', () => {
-      for (const key of ['extraKnownMarketplaces', 'enabledPlugins', 'permissions']) {
-        expect(() => mergeClaudeSettings({ [key]: 'text' }, { version: '0.57.0' })).toThrow(SettingsNotUnderstood)
-      }
-    })
-
-    it('a permission list that is not a list', () => {
-      expect(() => mergeClaudeSettings({ permissions: { allow: 'Bash(gh:*)' } }, { version: '0.57.0' })).toThrow(
-        SettingsNotUnderstood
-      )
-    })
-
-    it('the marketplace entry present but not an object', () => {
-      expect(() =>
-        mergeClaudeSettings({ extraKnownMarketplaces: { [MARKETPLACE]: 'text' } }, { version: '0.57.0' })
-      ).toThrow(SettingsNotUnderstood)
-    })
-  })
-
-  // The version cannot be invented: the ref is a tag that either exists or does
-  // not, and writing `plugin-vundefined` would fail at install with a message
-  // about a tag instead of about the missing version.
-  it('with no version there is no ref to write', () => {
-    for (const bad of [undefined, '', 'not-a-version']) {
-      expect(() => mergeClaudeSettings({}, { version: bad })).toThrow(SettingsNotUnderstood)
+  it('two runs do not duplicate a permission entry', () => {
+    const { settings } = Given.merged(Given.seeded())
+    expect(Given.occurrencesOf(settings.permissions.allow, 'Bash(gh:*)')).toBe(1)
+    for (const entry of settings.permissions.deny) {
+      expect(Given.occurrencesOf(settings.permissions.deny, entry)).toBe(1)
     }
+  })
+
+  it('an entry of ours that this release no longer emits is not removed', () => {
+    const { settings } = Given.merged({ permissions: { allow: ['Bash(bq:*)'] } })
+    expect(settings.permissions.allow).toContain('Bash(bq:*)')
   })
 })
 
-describe('the literals this module carries', () => {
-  // plugin/__tests__/distribution-boundary.test.js forbids anything under
-  // plugin/ from reaching outside it, and .claude-plugin/marketplace.json is at
-  // the ROOT of this repository — outside. So the names cannot be read at
-  // runtime and live here as literals. This is the test that replaces that
-  // read: it compares them against the real files, from the test tree, which is
-  // allowed to look.
-  const marketplace = JSON.parse(readFileSync(join(ROOT, '..', '.claude-plugin', 'marketplace.json'), 'utf8'))
-  const manifest = JSON.parse(readFileSync(join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'))
+describe('a settings file that is not what these keys merge into', () => {
+  it.each([['text'], [42], [null], [['a']]])('refuses settings that are not an object: %s', (bad) => {
+    expect(() => Given.merged(bad)).toThrow(SettingsNotUnderstood)
+  })
 
+  it.each(['extraKnownMarketplaces', 'enabledPlugins', 'permissions'])(
+    'refuses a %s holding something else',
+    (key) => {
+      expect(() => Given.merged({ [key]: 'text' })).toThrow(SettingsNotUnderstood)
+    }
+  )
+
+  it('refuses a permission list that is not a list', () => {
+    expect(() => Given.merged({ permissions: { allow: 'Bash(gh:*)' } })).toThrow(SettingsNotUnderstood)
+  })
+
+  it('refuses a marketplace entry carrying no source object', () => {
+    expect(() =>
+      Given.merged({ extraKnownMarketplaces: { [ControlTowerPlugin.MARKETPLACE]: 'text' } })
+    ).toThrow(SettingsNotUnderstood)
+  })
+
+  it.each([[undefined], [''], ['not-a-release']])('refuses to invent a ref out of version %s', (bad) => {
+    expect(() => ClaudeSettings.merge({}, { version: bad })).toThrow(SettingsNotUnderstood)
+  })
+
+  it('refuses to invent a ref when no version is handed over at all', () => {
+    expect(() => ClaudeSettings.merge({})).toThrow(SettingsNotUnderstood)
+  })
+})
+
+describe('the literals this module carries instead of reading', () => {
   it('the marketplace name is the one the marketplace declares', () => {
-    expect(MARKETPLACE).toBe(marketplace.name)
+    expect(ControlTowerPlugin.MARKETPLACE).toBe(Manifests.marketplace.name)
   })
 
-  it('the plugin id is the plugin name and the marketplace name', () => {
-    expect(PLUGIN_ID).toBe(`${manifest.name}@${marketplace.name}`)
-    expect(marketplace.plugins.some((p) => p.name === manifest.name)).toBe(true)
+  it('the plugin id joins the plugin name and the marketplace name', () => {
+    expect(ControlTowerPlugin.id).toBe(`${Manifests.plugin.name}@${Manifests.marketplace.name}`)
+    expect(Manifests.marketplace.plugins.some((each) => each.name === Manifests.plugin.name)).toBe(true)
   })
 
-  it('the ref is the tag release-please creates for the version the plugin declares', () => {
-    expect(marketplaceRef(manifest.version)).toBe(`plugin-v${manifest.version}`)
+  it('the ref is the tag release-please creates for the release the plugin declares', () => {
+    expect(ControlTowerPlugin.refFor(Manifests.plugin.version)).toBe(`plugin-v${Manifests.plugin.version}`)
   })
 })

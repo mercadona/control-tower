@@ -1784,8 +1784,21 @@ describe('ct-init.sh', () => {
       })
       expect(status).toBe(0)
       expect(stderr).toContain('.claude/settings.json')
-      expect(stderr).toMatch(/NO lo leas como/)
+      expect(stderr).toMatch(/Do NOT read that as/)
       expect(existsSync(join(dir, '.claude', 'settings.json'))).toBe(false)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    // Whoever clones a repository that was bootstrapped long ago still has to
+    // install the plugin on their own machine. Tying the reminder to "the file
+    // changed" meant the only person who ever saw it was the one who did not
+    // need it.
+    it('the install step is named on every run, not only when the file changes', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const second = execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(second).toContain('claude plugin install control-tower-loop@control-tower --scope project')
+      expect(second).toMatch(/trust the folder/)
       rmSync(dir, { recursive: true, force: true })
     })
   })
@@ -1863,6 +1876,38 @@ describe('ct-init.sh', () => {
       execFileSync('bash', [script, dir, '--force'], { encoding: 'utf8' })
       expect(readFileSync(join(dir, BUNDLE), 'utf8')).toBe(readFileSync(join(root, 'dist', 'scope-check.js'), 'utf8'))
       rmSync(dir, { recursive: true, force: true })
+    })
+
+    // Comparing the copied bytes cannot see this one. The bundle is ESM and it
+    // is vendored as `.js`, so the format node parses it with is decided by the
+    // RECEIVING repository: a target declaring `"type": "commonjs"` makes node
+    // read it as CommonJS and it dies on its first `import` — a required check
+    // red on every pull request, correct ones included. The only way to catch
+    // it is to start the thing where it will really run.
+    it('the vendored gate starts in a repository that declares itself CommonJS', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ name: 'x', type: 'commonjs' })}\n`)
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const started = spawnSync('node', [join(dir, BUNDLE)], { encoding: 'utf8', cwd: dir })
+      expect(started.stderr).not.toMatch(/Cannot use import statement outside a module/)
+      expect(started.stderr).toContain('usage: scope-check')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('pins the gate directory as ESM, and does not silently rewrite a package.json that says otherwise', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ct-'))
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      expect(JSON.parse(readFileSync(join(dir, '.github', 'ct', 'package.json'), 'utf8')).type).toBe('module')
+
+      const foreign = mkdtempSync(join(tmpdir(), 'ct-'))
+      mkdirSync(join(foreign, '.github', 'ct'), { recursive: true })
+      writeFileSync(join(foreign, '.github', 'ct', 'package.json'), '{ "type": "commonjs" }\n')
+      const { status, stderr } = spawnSync('bash', [script, foreign], { encoding: 'utf8' })
+      expect(status).toBe(0)
+      expect(stderr).toMatch(/"type": "module"/)
+      expect(readFileSync(join(foreign, '.github', 'ct', 'package.json'), 'utf8')).toBe('{ "type": "commonjs" }\n')
+      rmSync(dir, { recursive: true, force: true })
+      rmSync(foreign, { recursive: true, force: true })
     })
 
     // The template is the only copy. While the doc carried the YAML inside a
