@@ -6,7 +6,6 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
-import { ImplementPlanRoute } from './implement-plan-route.ts'
 import { PlanEventsRoute } from './plan-events-route.ts'
 import { ActivePlanPhase, ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
@@ -274,17 +273,6 @@ export class ApiServer {
       )
     )
     app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
-    app.post(
-      ImplementPlanRoute.PATH,
-      Browsers.turnAwayForeign,
-      JsonBody.demandDeclared,
-      JsonBody.reader(),
-      ImplementPlanRoute.handledBy(
-        this.implementPlan!, this.pullRequestReviews!,
-        this.activePlans!, this.implementationStarts!, this.stderr!
-      )
-    )
-    app.all(ImplementPlanRoute.PATH, ImplementPlanRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

@@ -660,6 +660,24 @@ describe('ApiServer', () => {
     expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
   })
 
+  it('the retired implementation endpoint is not found and cannot mint a go', async () => {
+    const implementPlan = { execute: vi.fn().mockRejectedValue(new Error('the retired endpoint minted a go')) }
+    const port = await RunningApi.listening({ implementPlan })
+
+    const posted = await RunningApi.post(
+      port,
+      '/implement-plan',
+      '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
+    )
+    const read = await fetch(`http://127.0.0.1:${port}/implement-plan`)
+
+    expect(posted.status).toBe(404)
+    expect(await posted.json()).toEqual({ code: 'not-found', detail: 'not found' })
+    expect(read.status).toBe(404)
+    expect(await read.json()).toEqual({ code: 'not-found', detail: 'not found' })
+    expect(implementPlan.execute).not.toHaveBeenCalled()
+  })
+
   it('a_request_from_a_foreign_page_is_refused_because_any_site_can_post_to_localhost', async () => {
     const port = await RunningApi.listening()
 
