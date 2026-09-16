@@ -1447,6 +1447,11 @@ npm --prefix frontend run build
 `frontend/src/app/implement-plan/components/implement-plan-action/ImplementPlanAction.css` (modify),
 `frontend/src/app/implement-plan/components/implement-plan-action/index.ts` (modify),
 `frontend/src/__scenarios__/ImplementPlanMother.ts` (modify),
+`frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementHistory.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.sessions.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.planEvents.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementProgress.test.tsx` (modify),
 `frontend/vite.config.ts` (modify)
 
 Current state (frontend/src/app/implement-plan/client.test.ts):
@@ -1458,6 +1463,10 @@ Delete the eight retired modules above. Remove the /implement-plan dev proxy ent
 vite.config.ts; all surviving proxies remain. The new HeadlessPlanMother replaces the
 old mother in Home's suites, so no stale import or copied manual-order client survives.
 The backend's ordinary 404 is asserted against the backend itself, not Vite's SPA fallback.
+Adapt the five listed Home suites to backend-driven phase changes and the new Spanish
+copy. Keep their history, navigation, session, stream and progress assertions; remove
+no scenario from these suites. Task 21 exposed 14 stale manual-button/copy assertions
+there; this scope addition covers those callers rather than suppressing their failures.
 
 **TDD:** No TDD — dead-client retirement; automatic progress and absence of the button
 are already pinned by Home's new tests.
@@ -1476,6 +1485,7 @@ are already pinned by Home's new tests.
 **Verification:**
 ```bash
 npm --prefix frontend test -- src/pages/home/__tests__/Home.implementPlan.test.tsx src/pages/home/__tests__/Home.restoreWorkflow.test.tsx src/pages/home/__tests__/Home.layout.test.tsx
+npm --prefix frontend test
 npm --prefix frontend run build
 ```
 

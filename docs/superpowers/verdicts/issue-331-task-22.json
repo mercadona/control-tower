@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 22,
+  "task_name": "Remove the unused manual-implementation client",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The diff deletes all eight explicitly retired modules: ImplementPlanMother.ts, ImplementPlan.types.ts, client.ts, client.test.ts, ImplementPlanAction.tsx, ImplementPlanAction.test.tsx, ImplementPlanAction.css and the action's index.ts. Home no longer consumes their symbols; the frontend source search finds no surviving manual client or retired import. Vite removes only /implement-plan and preserves the other 14 proxy entries. Controls attempt 1, including the full frontend suite and build, is inherited as green; log reference only: .agent/run-331/task-22-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The task explicitly declares No TDD for dead-client retirement. The pre-existing Home automatic-implementation tests already pin backend-driven continuation and absence of an implementation order.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "There is no new signature, constant-value or error Contract block to compare. The Current state import belongs to the explicitly deleted test module. The proxy-retirement requirement is measured under objetivo; the existing backend api-server test asserts both GET and POST return 404 with the not-found payload through a real backend server, independently of Vite's fallback.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The relevant closed decisions hold: D-3 and D-8/D-15 lose the manual implementation action, D-13 remains backend-evidence-driven, and D-9/D-24 and D-18/D-21 retain the session surfaces and coordinating-terminal assertions. The other rows acquire no implementation changes in this retirement diff. No feature flag or additional gate is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against all eight convention texts supplied in the brief with the package's rule-by-rule precedence. Existing frontend test idioms are retained, named HeadlessPlanMother scenarios replace repeated default payloads, identifiers remain English and rendered expectations remain Spanish. The backend exemplars have no corresponding newly implemented role here; no layer, dependency boundary, policy or delivery mechanism is added. defects.md, rule by rule: closed vocabulary — no new loose classifier or catch-all dispatch; raw map as the return value of logic — no new logic-return map, and the retained specialized fixture is serialized directly; two fields that have to agree — no new redundant state or absence sentinel; an error named for where it happens — no new error type or error naming subject. No convention/control conflict found.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The nine deleted client/component scenarios match the nine names explicitly authorized by Tests. All 33 scenarios in the five amended Home suites remain: history 8, progress 6, navigation 7, plan events 7 and sessions 5. The declared 14 stale manual-button/copy failures are addressed through shared setup and literal expectation adaptation rather than scenario removal. History rendering and polling, canonical-root and missing-root fallback, task/agent display, unmount polling, navigation, terminal interaction and stream lifecycle assertions survive. The ready-plan button expectation becomes an explicit absence assertion as authorized by the amended task. HeadlessPlanMother.implementing omits root, preserving the missing-root case; the specialized non-canonical-root fixture still carries its distinct root and worktree.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Retirement occurs in production module deletions and Vite configuration, not in scaffolding. The updated Spanish assertions match Home.tsx's real review description and implementation banner; its ready view renders the GitHub link without a manual action and its progress root derives from plan.root or request.path. The mother supplies backend response input, while Home performs rendering and polling. No promised effect is implemented only by the fixtures.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The plan amendment is narrow and justified by retiring the remaining manual-flow callers: it adds exactly five Home suites, explicitly authorizes backend-driven phase/copy adaptation, and requires retaining every scenario and the existing behavioral assertions. It adds the full frontend suite to Verification while retaining the focused suites and build. It removes no task path, promised test name or verification command, changes no other task, and does not relax the objective or protected scope. The implementation diff follows that amendment without adjacent production changes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "No new test scenario is added. The test additions are fixture substitutions and authorized expectation changes inside existing scenarios, measured under manipulacion-tests.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "c3531f9d1c387fae8b34fe02d57829df3e3ced1602c10a46ced2993766e327a2"
+  }
+}
