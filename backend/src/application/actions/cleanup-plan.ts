@@ -2,7 +2,10 @@ import {
   PlanCleanupConflict,
   PlanCleanupNotFound,
   PlanCleanupNotRead,
+  PlanCleanupNotUnderstood,
   PlanIssueNotClaimed,
+  PlanStatusNotRead,
+  PlanStatusNotUnderstood,
 } from '../../domain/exceptions.ts'
 import type { DispatchClaims } from '../../domain/ports/dispatch-claims.ts'
 import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
@@ -85,10 +88,13 @@ export class CleanupPlan {
       try {
         refreshed = await this.#status(watch)
       } catch (refreshCause) {
-        throw new PlanCleanupNotRead(
-          `${cause instanceof Error ? cause.message : String(cause)}; `
-          + `status after the failed requeue could not be read: ${String(refreshCause)}`
-        )
+        const diagnostic = `checked requeue failed: ${cause.message}; status read failed: `
+          + `${refreshCause instanceof Error ? refreshCause.message : String(refreshCause)}`
+        if (refreshCause !== null && typeof refreshCause === 'object'
+          && refreshCause.constructor === PlanStatusNotRead) throw new PlanCleanupNotRead(diagnostic)
+        if (refreshCause !== null && typeof refreshCause === 'object'
+          && refreshCause.constructor === PlanStatusNotUnderstood) throw new PlanCleanupNotUnderstood(diagnostic)
+        throw refreshCause
       }
       if (refreshed === PlanIssueStatus.READY) return
       throw new PlanCleanupNotRead(cause instanceof Error ? cause.message : String(cause))

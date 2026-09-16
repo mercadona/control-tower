@@ -39,7 +39,7 @@ Keep gate 1, gate 2, apply and merge human-owned. Keep loose starts, milestone s
 | Cleanup entry | `POST /cleanup-plan` accepts exactly `{repo, issue, agent}`. It only retires proven initial non-launch. |
 | Route authority | Use existing origin and JSON checks. Allow originless coordinator requests. Neither route uses or mints a human gate key. |
 | Route answers | Recovery returns 202 with `{agent}`. Cleanup returns 200 with `{agent}` only after retirement. Refusals use `{code, detail}`. |
-| Refusal codes | Use endpoint prefixes `recover-plan-` and `cleanup-plan-` with `invalid-request`, `not-found`, `conflict`, `failed`, `unreadable`. |
+| Refusal codes | Use endpoint prefixes `recover-plan-` and `cleanup-plan-` with `invalid-request`, `in-progress`, `not-found`, `conflict`, `failed`, `unreadable`. |
 | Recovery policy | Observe incomplete calls within their original deadline. Refuse expired, corrupt, conflicting or failed evidence. Never infer a new phase. |
 | Continuation identity | Use request ID `implementation:<planner-call-id>`. Recognize the sole legacy implementation with a null request ID. |
 | Continuation ordering | Read an existing implementation before publication or transcript checks. If one exists, observe it without another launch. |
@@ -247,6 +247,61 @@ Two prior plan choices needed correction: inspection did not prove absence, and 
 This amendment closes both tensions explicitly. Keep wire shapes; replace only the unsafe internal contracts.
 Preserve prior green counts as history. Correct broad verification claims with dated new observations after Sol runs the missing cases and mutations.
 
+### Shutdown continuation: runner scope and fixture timing
+
+Task 4 includes `tool-runner.ts` and its real-process tests because quiet Git absence needs the actual stderr channel.
+`ToolRunner.run` preserves stdout/stderr bytes for success and normal integer numeric exits, including empty or whitespace-only stderr.
+A normal exit has neither `failure.killed` nor a signal. Numeric code alone does not exclude a timeout with a numeric child exit.
+Keep the existing diagnostic fallback for spawn, timeout and signal failures. Keep code normalization, supplied budgets and `runWholeOutput` unchanged.
+
+Do not loosen Git absence checks or special-case the synthesized command message in `GitWorkspace`.
+Add the exact empty-stderr regression and a timeout case whose ready child handles SIGTERM and exits 1 with empty stderr.
+Use a 5000 ms runner budget for that case; assert readiness, failure and a nonempty diagnostic. Track fixture children for unconditional cleanup.
+Retain the existing missing-tool, numeric-refusal, partial-stdout and timeout assertions; strengthen the timeout diagnostic assertion.
+
+Task 3 permits fixture-only timing values of 30000 ms for success and 10000 ms for deadline enforcement.
+The deadline assertion remains `wallDurationMs >= 10000`, alongside SIGTERM, non-success and descendant absence.
+The absence helper permits 2000 sleeps of 10 ms; this is a nominal 20-second observation window, not a hard wall-clock bound.
+The fixture grace stays 100 ms and PID-file discovery stays 200 sleeps of 10 ms. Production budgets remain unchanged.
+
+These adjustments still measure deadline enforcement but permit longer fixture latency. They do not prove precise grace timing or explain earlier failures.
+Keep bounded cleanup and the existing suite timeout. Record actual focused/full results after restart and request fresh independent review of the timing diff.
+Do not label all prior failures flaky or carry interrupted checks forward as successful observations.
+
+### Round-three closure at b23aac68
+
+The remaining finite checklist is `.agent/run-331/apply-feedback-corrections-round3.md`, validated separately against the same original base.
+It supplements these six task scopes without a new issue plan, run identity or history rewrite.
+Its exact remaining test names and commands govern the correction; existing passing assertions remain mandatory.
+
+R1 uses `PlanCleanupConflict` for remaining registration, branch and path in cleanup-specific workspace methods.
+Keep generic `WorkspaceNotCleaned` compensation unchanged and do not widen the cleanup registry.
+Seed/lstat errno failures use `PlanCleanupNotRead`; malformed seed/listing uses `PlanCleanupNotUnderstood`. Unexpected bugs escape unchanged.
+
+R2 maps only known post-requeue status failures. `PlanStatusNotRead` becomes `PlanCleanupNotRead`; `PlanStatusNotUnderstood` becomes `PlanCleanupNotUnderstood`.
+Keep both messages as `checked requeue failed: <cause.message>; status read failed: <refreshCause.message>`.
+Rethrow any unrelated exception as the same object. Use explicit current claim state in tests, never a queue with default READY.
+
+The review's generic production HTTP 500 claim is incorrect. `ApiServer` answers HTTP 400 `request-failed`; bare Express test harnesses answer 500.
+Test actual production refusal bodies and retain the shared fallback. No status change follows from that reviewer error.
+
+R3 replaces the real-Git archive boolean with actual `DiskPlanRecords` and on-disk assertions across rebuilt retries.
+Cover full cleanup, worktree-only removal, branch deletion before requeue failure, and archive failure after requeue, with exact external doubles.
+Complete the action cut table, terminal contradictions, real partial-directory reads and planner deadline boundaries from the addendum.
+Add valid/malformed porcelain, a real dangling symlink and artifact reappearance after requeue. Keep already-passing safety cases.
+
+R4 restores the normal-start rehearsal beside independently seeded HTTP recovery. Preserve restart uncertainty, identity, zero-spawn, comment and metrics assertions.
+R5 changes the private execution helper to return `PlanRecovery` directly, not a structural selection map.
+Keep private selection semantics and outward wire shape. Add no policy framework or success flag.
+
+Exercise the shared body matrix and unexpected parser bugs through both production endpoints in `api-server.test.ts`.
+The runner test tracks native child handles immediately and stops them in async afterEach independently of the runner timeout.
+Preserve existing actual process results, output assertions, budgets and protocol guards.
+
+The scratch Task 4 already includes both ToolRunner paths and their command. Synchronize that validated scope into the existing permanent plan.
+Append precise evidence and preserve historical progress. Prior versions, timings and restoration hashes remain unavailable unless records establish them.
+The three supplied mutations remain reported observations. No broad or purpose-specific mutation sweep is newly mandatory.
+
 ### Caller and documentation contracts
 
 Task 6 keeps `HeadlessPlanMother.uncertain()` as a valid inspect-only payload with diagnostic and `recovery: {action: 'inspect', detail}`.
@@ -262,7 +317,7 @@ Strengthen `Home.implementPlan.test.tsx` to forbid automatic recovery and cleanu
 `Home.layout.test.tsx` uses only `implementing()`. Run it unchanged, together with implementation progress, history and session tests in the full frontend suite.
 The existing Home helpers already forward explicit requests. Keep mutation doubles local and keyed by request; do not broaden shared fallback answers.
 
-Task 6 updates `backend/API.md` with both endpoint sections, exact bodies, 202/200 answers, all ten prefixed refusal codes and shared protocol refusals.
+Task 6 updates `backend/API.md` with both endpoint sections, exact bodies, 202/200 answers, each declared prefixed refusal code and shared protocol refusals.
 Also document `plan-agent-never-launched` in the start-plan refusal table, without any automatic-cleanup promise.
 Document application refusals as HTTP 400, coordinator access without a gate key, and the original conversation identity checks.
 Update `GET /active-plans` with mandatory uncertain metadata, partial-cleanup visibility, and the new immutable receipts and retirement directory.
@@ -337,7 +392,7 @@ Use real HTTP for route tests with action doubles. Add one recovery happy-path r
 Measure cuts at their owning layer. Keep all unrelated assertions and existing preservation tests.
 
 Any new subprocess test uses `-real-process.test.ts` and unconditional child cleanup.
-Mutation evidence must show that removal of identity, proof, ordering and idempotence checks makes the focused assertions fail.
+Keep performed mutations distinct from red-first failures and inferred coverage. Use a targeted mutation only to resolve an uncertain oracle.
 Do not run live Claude from the suite. An argv assertion and a Node fixture cannot prove Claude permissions.
 
 ## 7. Tasks
@@ -464,6 +519,7 @@ npm --prefix backend test -- __tests__/infrastructure/claude-calls-real-process.
 `backend/src/infrastructure/recorded-plan-recovery.ts` (modify), `backend/__tests__/application/cleanup-plan.test.ts` (create), `backend/__tests__/infrastructure/disk-plan-records.test.ts` (modify), `backend/__tests__/infrastructure/git-workspace.test.ts` (modify), `backend/__tests__/infrastructure/recorded-plan-recovery.test.ts` (modify).
 `backend/src/domain/value-objects/unused-workspace.ts` (create).
 `backend/src/infrastructure/ct-api.ts` (modify), `backend/__tests__/infrastructure/headless-dispatch-dry-run.test.ts` (modify), `backend/__tests__/infrastructure/git-workspace-real-process.test.ts` (create), `backend/__tests__/infrastructure/gh-dispatch-candidates.test.ts` (modify).
+`backend/src/infrastructure/tool-runner.ts` (modify), `backend/__tests__/infrastructure/tool-runner-real-process.test.ts` (modify).
 
 Contract (backend/src/domain/ports/workspace.ts):
 ```ts
@@ -472,22 +528,20 @@ undoUnlaunched(evidence: UnusedWorkspace): Promise<void>
 confirmAbsent(watch: PlanWatch): Promise<void>
 ```
 
-Implement §2's distinct eligibility and absence contracts. Preserve snapshot identity and checked requeue; archive last.
-Exercise real local Git through final absence and retirement. Script remote/identity, issue, PR and claim edges; make no network calls.
-Cut every cleanup effect, retry each partial removal, and refuse recreated or unregistered artifacts and malformed porcelain.
-Retain prior assertions, accurate test titles, visible partial cleanup and harmless archived retries.
+Apply §2's cleanup and runner contracts. Preserve snapshots, checked requeue and existing assertions; archive only after fresh absence.
 
 **TDD:** `it('non-launch cleanup orders workspace requeue and retirement')` cuts each effect and asserts the remaining claim and evidence.
 
 **Tests:** Added: `'non-launch cleanup orders workspace requeue and retirement'`, `'partial cleanup resumes from verified facts'`, `'changed or remote work prevents cleanup'`, `'lost requeue success does not repeat label writes'`, `'archive failure blocks redispatch'`, `'retired cleanup cannot affect a newer dispatch'`, `'retirement preserves bytes and permits preparation'`.
 Added: `'real Git cleanup reaches verified absence and retirement'`, `'cleanup stops at every failed effect'`, `'fresh absence rejects remaining artifacts'`, `'malformed porcelain cannot prove absence'`, `'cap one releases only after checked cleanup'`.
-Removed on purpose: `'retirement frees cap and permits preparation'`; retain its assertions under the truthful title and add actual cap coverage.
+Added: `'a normal nonzero exit preserves an actually empty stderr channel'`, `'timeout exits keep a diagnostic even when the child exits numerically'`.
+Removed on purpose: `'retirement frees cap and permits preparation'`; title only, with assertions retained and actual cap coverage added.
 
-**Verification:** Run cleanup and related adapter tests. No real governed workspace may serve as a fixture.
+**Verification:** Run cleanup and runner checks in local fixtures.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/application/cleanup-plan.test.ts __tests__/infrastructure/disk-plan-records.test.ts __tests__/infrastructure/git-workspace.test.ts __tests__/infrastructure/dispatch-check-claims.test.ts __tests__/infrastructure/recorded-plan-recovery.test.ts
-npm --prefix backend test -- __tests__/infrastructure/git-workspace-real-process.test.ts __tests__/infrastructure/gh-dispatch-candidates.test.ts
+npm --prefix backend test -- __tests__/infrastructure/git-workspace-real-process.test.ts __tests__/infrastructure/gh-dispatch-candidates.test.ts __tests__/infrastructure/tool-runner-real-process.test.ts
 ```
 
 ### Task 5 — Wire recovery and cleanup into the real API

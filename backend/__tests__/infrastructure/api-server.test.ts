@@ -59,6 +59,9 @@ import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
+import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
+import { CleanupPlan } from '../../src/application/actions/cleanup-plan.ts'
+import { PlanOperationRequest } from '../../src/infrastructure/plan-operation-request.ts'
 
 class StartPlanSpy extends StartPlan {
   static readonly AGENT = 'workspace:4'
@@ -646,6 +649,77 @@ describe('ApiServer', () => {
     } finally {
       complaining.mockRestore()
       await server.stop()
+    }
+  })
+
+  it('both plan operation routes enforce the shared body matrix', async () => {
+    const recover = vi.fn(async () => {})
+    const cleanup = vi.fn(async () => {})
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      recoverPlan: { execute: recover } as unknown as RecoverPlan,
+      cleanupPlan: { execute: cleanup } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const validAgent = '11111111-1111-4111-8111-111111111111'
+    const invalidBodies = [
+      '{',
+      'null',
+      '[]',
+      '7',
+      '{}',
+      '{"repo":"owner/name"}',
+      `{"repo":"owner/name","issue":331,"agent":"${validAgent}","extra":true}`,
+      `{"repo":"name","issue":331,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":0,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":-1,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":1.5,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":"331","agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":9007199254740992,"agent":"${validAgent}"}`,
+      '{"repo":"owner/name","issue":331,"agent":""}',
+      '{"repo":"owner/name","issue":331,"agent":"not-a-uuid"}',
+    ]
+
+    for (const path of ['/recover-plan', '/cleanup-plan']) {
+      for (const body of invalidBodies) {
+        const response = await RunningApi.post(port, path, body)
+        expect(response.status, `${path} ${body}`).toBe(400)
+        expect(await response.json(), `${path} ${body}`).toMatchObject({ code: `${path.slice(1)}-invalid-request` })
+      }
+    }
+    expect(recover).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+    expect(projection.recover).not.toHaveBeenCalled()
+  })
+
+  it('both plan operation routes preserve parser bugs', async () => {
+    const recover = vi.fn(async () => {})
+    const cleanup = vi.fn(async () => {})
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      recoverPlan: { execute: recover } as unknown as RecoverPlan,
+      cleanupPlan: { execute: cleanup } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const parser = vi.spyOn(PlanOperationRequest, 'from').mockImplementation(() => {
+      throw new TypeError('sentinel parser defect')
+    })
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const body = '{"repo":"owner/name","issue":331,"agent":"11111111-1111-4111-8111-111111111111"}'
+
+    try {
+      for (const path of ['/recover-plan', '/cleanup-plan']) {
+        const response = await RunningApi.post(port, path, body)
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+      }
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('sentinel parser defect')
+      expect(recover).not.toHaveBeenCalled()
+      expect(cleanup).not.toHaveBeenCalled()
+      expect(projection.recover).not.toHaveBeenCalled()
+    } finally {
+      parser.mockRestore()
+      complaining.mockRestore()
     }
   })
 

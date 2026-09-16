@@ -1,7 +1,23 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ChildProcess } from 'node:child_process'
+import { once } from 'node:events'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+
+const tracked = vi.hoisted(() => ({ children: new Set<ChildProcess>() }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const native = await importOriginal<typeof import('node:child_process')>()
+  return {
+    ...native,
+    execFile: vi.fn(((...args: unknown[]) => {
+      const child = (native.execFile as (...asked: unknown[]) => ChildProcess)(...args)
+      tracked.children.add(child)
+      return child
+    }) as typeof native.execFile),
+  }
+})
 
 class Node {
   static SLOW_MS = 5_000
@@ -34,8 +50,28 @@ class Node {
 }
 
 describe('ToolRunner', () => {
-  afterEach(() => {
-    Node.forgotten()
+  async function stopChildren(): Promise<void> {
+    const children = [...tracked.children]
+    tracked.children.clear()
+    await Promise.all(children.map(async (child) => {
+      if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return
+      const closed = once(child, 'close')
+      try {
+        child.kill('SIGKILL')
+      } catch (cause) {
+        if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause
+      }
+      await closed
+    }))
+  }
+
+  afterEach(async () => {
+    try {
+      await stopChildren()
+    } finally {
+      Node.forgotten()
+      vi.clearAllMocks()
+    }
   })
 
   it('what_the_tool_prints_comes_back_with_the_code_that_says_it_went_well', async () => {
@@ -54,6 +90,24 @@ describe('ToolRunner', () => {
     expect(output.failed).toBe(true)
     expect(output.stderr).not.toBe('')
     expect(Date.now() - started).toBeLessThan(Node.SLOW_MS)
+  })
+
+  it('runner teardown stops a live child independently of its timeout', async () => {
+    const started = Date.now()
+    const running = Node.running(30_000).run(['-e', [
+      'process.stdout.write("ready\\n")',
+      'setInterval(() => {}, 1_000)',
+    ].join(';')])
+    const child = [...tracked.children][0]
+    expect(child).toBeDefined()
+    await once(child.stdout!, 'data')
+
+    await stopChildren()
+    const output = await running
+
+    expect(output.failed).toBe(true)
+    expect(child.signalCode).toBe('SIGKILL')
+    expect(Date.now() - started).toBeLessThan(5_000)
   })
 
   it('timeout exits keep a diagnostic even when the child exits numerically', async () => {

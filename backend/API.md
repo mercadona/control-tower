@@ -497,6 +497,11 @@ the canonical repository, complete worktree registration, absent local branch,
 absent filesystem path, absent remote branch and absent pull request. Only an
 `ENOENT` filesystem result and Git's quiet missing-ref result establish local
 absence; malformed or inconclusive evidence preserves the active record.
+Remaining registration, branch or path is `cleanup-plan-conflict`. Errno-shaped
+seed, path or status reads are `cleanup-plan-failed`; malformed seed, listing or
+status evidence is `cleanup-plan-unreadable`. Unexpected implementation defects
+are not converted into those categories and use the API's shared HTTP 400
+`request-failed` response while retaining their diagnostic on backend stderr.
 
 | `code` | Status | Meaning |
 |---|---|---|

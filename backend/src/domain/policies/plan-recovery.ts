@@ -61,7 +61,7 @@ export class PlanRecovery {
     const implementation = calls.find((fact) => fact.purpose === 'implementation') ?? null
     const fixes = calls.filter((fact) => fact.purpose === 'fix').sort((left, right) => right.startedAt.localeCompare(left.startedAt))
     const target = fixes[0] ?? implementation
-    if (target !== null) return new PlanRecovery(PlanRecovery.#executionSelection(target, facts.nowMs), calls)
+    if (target !== null) return PlanRecovery.#executionRecovery(target, facts.nowMs, calls)
 
     const planners = calls.filter((fact) => fact.purpose === 'plan')
     if (planners.length === 0) {
@@ -119,14 +119,19 @@ export class PlanRecovery {
     return null
   }
 
-  static #executionSelection(fact: RecoveryCall, nowMs: number): RecoverySelection {
+  static #executionRecovery(fact: RecoveryCall, nowMs: number, calls: readonly RecoveryCall[]): PlanRecovery {
     if (fact.completion === null) {
-      return nowMs < fact.deadlineMs
-        ? { kind: 'observe', selected: fact }
-        : { kind: 'inspect', reason: `${fact.purpose} call ${fact.call.id} is incomplete after its recorded deadline` }
+      return new PlanRecovery(
+        nowMs < fact.deadlineMs
+          ? { kind: 'observe', selected: fact }
+          : { kind: 'inspect', reason: `${fact.purpose} call ${fact.call.id} is incomplete after its recorded deadline` },
+        calls,
+      )
     }
-    if (!fact.completion.succeeded) return { kind: 'inspect', reason: PlanRecovery.#failureOf(fact) }
-    return { kind: 'completed', selected: fact }
+    if (!fact.completion.succeeded) {
+      return new PlanRecovery({ kind: 'inspect', reason: PlanRecovery.#failureOf(fact) }, calls)
+    }
+    return new PlanRecovery({ kind: 'completed', selected: fact }, calls)
   }
 
   static #failureOf(fact: RecoveryCall): string {

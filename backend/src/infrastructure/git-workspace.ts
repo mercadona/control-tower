@@ -24,6 +24,7 @@ import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch } from './external-tool.ts'
 import type { Gh } from './gh.ts'
+import { HeadlessFiles } from './headless-files.ts'
 
 export type NumberedIssue = { readonly number: number }
 export type DiskWrite = (path: string, text: string) => Promise<void>
@@ -133,10 +134,10 @@ class WorktreeListing {
         throw new PlanCleanupNotUnderstood(`malformed worktree block for ${JSON.stringify(path)}`)
       }
       if (path === watch.located.path) {
-        throw new WorkspaceNotCleaned(`worktree registration ${path} remains after cleanup`)
+        throw new PlanCleanupConflict(`worktree registration ${path} remains after cleanup`)
       }
       if (branches.includes(`branch refs/heads/${watch.located.branch}`)) {
-        throw new WorkspaceNotCleaned(`branch ${watch.located.branch} remains registered at ${path}`)
+        throw new PlanCleanupConflict(`branch ${watch.located.branch} remains registered at ${path}`)
       }
     }
   }
@@ -314,7 +315,7 @@ export class GitWorkspace extends Workspace {
       if (!/^[0-9a-f]{40}\n?$/.test(checked.stdout) || checked.stderr.length !== 0) {
         throw new PlanCleanupNotUnderstood(`local branch query printed malformed evidence: ${GitWorkspace.#output(checked)}`)
       }
-      throw new WorkspaceNotCleaned(`local branch ${watch.located.branch} remains after cleanup`)
+      throw new PlanCleanupConflict(`local branch ${watch.located.branch} remains after cleanup`)
     }
     if (checked.code !== 1 || checked.stdout.length !== 0 || checked.stderr.length !== 0) {
       throw new PlanCleanupNotRead(`local branch absence could not be confirmed: ${GitWorkspace.#output(checked)}`)
@@ -323,13 +324,16 @@ export class GitWorkspace extends Workspace {
     try {
       await this.inspectPath(path)
     } catch (cause) {
-      if (cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT') {
+      if (HeadlessFiles.isSystemFailure(cause) && cause.code === 'ENOENT') {
         await this.#requireNoRemoteWork(watch, root)
         return
       }
-      throw new PlanCleanupNotRead(`worktree path absence could not be confirmed: ${String(cause)}`)
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanCleanupNotRead(`worktree path absence could not be confirmed: ${cause.message}`)
+      }
+      throw cause
     }
-    throw new WorkspaceNotCleaned(`worktree path ${path} remains after cleanup`)
+    throw new PlanCleanupConflict(`worktree path ${path} remains after cleanup`)
   }
 
   async #inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnlaunchedWorkspace> {
@@ -382,7 +386,15 @@ export class GitWorkspace extends Workspace {
 
   async #seedBase(watch: PlanWatch): Promise<string> {
     const path = `${watch.located.path}/${SliceSeed.RELATIVE_PATH}`
-    const text = await this.read(path)
+    let text: string | null
+    try {
+      text = await this.read(path)
+    } catch (cause) {
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new PlanCleanupNotRead(`${path} could not be read: ${cause.message}`)
+      }
+      throw cause
+    }
     if (text === null) throw new PlanCleanupNotUnderstood(`${path} is absent`)
     const parsed = parseStateSafe(text)
     if (parsed.error !== null) throw new PlanCleanupNotUnderstood(`${path} cannot be parsed: ${parsed.error}`)

@@ -82,3 +82,46 @@ agent, Orca action or delivered-run mutation occurred. Live Claude permission,
 commit and READY behavior remain unverified. Ambiguous legacy evidence remains
 inspect-only; resumed attributable cost, issue #332, human apply and merge remain
 outside this correction.
+
+## Round-three closure
+
+Source before this batch was
+`b23aac684f8a6fdd167d8a1b5283a9265a242d0f`. The following observations are
+from 2026-09-16 on Node `v25.9.0` and Git `2.50.1 (Apple Git-155)`.
+
+| Group | Observed closure |
+|---|---|
+| Cleanup causes | Registration, branch and path presence now produce `PlanCleanupConflict`. Seed and `lstat` errno failures produce `PlanCleanupNotRead`; malformed evidence remains unreadable and sentinel `TypeError` objects escape unchanged. |
+| Lost requeue | Only exact `PlanStatusNotRead` and `PlanStatusNotUnderstood` are converted. Both diagnostics use `checked requeue failed: ...; status read failed: ...`; unrelated errors retain object identity. |
+| Cleanup cuts | The application fixture now holds explicit claim/artifact state. Proof, initial status, inspection, snapshot, worktree, branch, first absence, release-status, pre-effect requeue, post-effect readback, reappearance and archive retry cases assert retained active evidence and actual claim state. |
+| Durable cleanup | Real local Git and `DiskPlanRecords` cover full retirement, branch-removal retry, checked-requeue retry, archive-rename retry and an invalid checkout. Each retry rebuilds records, workspace and action over the same roots; descriptor, proof and snapshot bytes survive until retirement, and successful requeue occurs once. |
+| Evidence readers | A valid persisted child-spawn fixture is changed one field at a time for identity, diagnostic, timestamp, exit, signal, measurement, missing terminal, resume mode, generic/unavailable/success terminal and stream contradictions. Real partial directories and persisted planner deadline-minus-one/exact/plus-one cases allocate no replacement identity. |
+| Rehearsals and boundaries | Successful normal start and publication recovery are independent production graphs. Both mounted plan-operation routes share the complete invalid-body matrix and send unexpected parser defects to production HTTP 400 `request-failed`. `PlanRecovery`'s execution helper returns the policy value directly. |
+| Process teardown | The runner fixture partially wraps native `execFile`, records returned child handles immediately, and uses one async SIGKILL/close helper in the early-abort assertion and `afterEach`. Missing/already-exited handles are not signalled; only `ESRCH` is tolerated. |
+
+The first focused red run had 5 failures and 97 passes. Those failures were the
+R1/R2 regression observations: three lost-requeue category/identity assertions,
+one cleanup presence category assertion and one seed errno assertion. The same
+two files then passed 102 tests after the narrow production changes. Other
+round-three tests were coverage additions over already-correct behavior and are
+reported as green additions, not invented red phases.
+
+No new mutation sweep ran. The three round-two mutation observations above are
+retained as reported provenance. Historical pre-restoration source hashes,
+elapsed timings and other unperformed mutations remain unavailable.
+
+Round-three focused results:
+
+- Backend typecheck passed.
+- Cleanup/API set: 5 files, 201 tests passed.
+- Record/policy set: 4 files, 47 tests passed.
+- Rehearsal/route set: 2 files, 9 tests passed.
+- Real Git/candidate/runner set: 3 files, 25 tests passed.
+- Full backend: 110 files, 2,206 tests passed.
+- Full frontend: 70 files, 1,350 tests passed; existing jsdom canvas diagnostics remained non-failing.
+- Frontend production build passed with the existing chunk-size advisory.
+
+Production unexpected errors remain HTTP 400 `request-failed` with stderr
+diagnostics. Bare route-only Express harnesses retain their default 500 behavior.
+No live Claude call, network mutation, GitHub write, push, governed-repository
+action, nested agent, Orca action or delivered-run mutation occurred.

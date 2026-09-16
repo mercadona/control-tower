@@ -149,3 +149,28 @@ No live Claude call was made. The local nonexistent-binary fixture proves OS
 spawn/evidence behavior, not Claude permissions. Unknown legacy evidence remains
 inspect-only; resumed attributable cost remains unavailable; issue #332,
 human apply and merge ownership are unchanged.
+
+## Round 3 correction result
+
+The finite addendum after `b23aac684f8a6fdd167d8a1b5283a9265a242d0f`
+closed the remaining refusal, durability and test-integrity findings without
+changing the public wire shapes or production budgets.
+
+Cleanup now owns presence conflicts and errno reads, and lost-requeue status
+reconciliation preserves operational versus malformed evidence plus both
+diagnostics. Explicit stateful action cuts and rebuilt real-Git retries verify
+partial work, archive-last ordering and single successful requeue. Persisted
+terminal, partial-directory and planner-deadline fixtures exercise the real
+readers. Normal start and HTTP recovery are separate production rehearsals, both
+routes share the full request matrix, the policy helper returns `PlanRecovery`
+directly, and runner teardown no longer depends on the timeout under test.
+
+The observed R1/R2 red run failed 5 of 102 tests before the production fix; its
+green rerun passed all 102. Coverage additions over already-correct behavior had
+no fabricated red phase. No new mutation sweep ran, and only the three earlier
+reported mutations remain mutation evidence.
+
+Fresh verification passed backend typecheck; focused groups of 201, 47, 9 and
+25 tests; the full backend suite with 110 files and 2,206 tests; the full
+frontend suite with 70 files and 1,350 tests; and the frontend production build.
+Node was `v25.9.0`; Git was `2.50.1 (Apple Git-155)`.

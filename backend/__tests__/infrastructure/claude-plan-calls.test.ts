@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
@@ -14,6 +17,9 @@ import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { CallDescriptor } from '../../src/infrastructure/claude-calls.ts'
+import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
 class CallsDouble extends ClaudeCalls {
   readonly invocations: CallInvocation[] = []
@@ -264,6 +270,141 @@ describe('ClaudePlanCalls', () => {
     const recovery = await subject.adapter.recoveryFor(PlanCallMother.watch())
 
     expect(recovery.action).toBe('cleanup')
+  })
+
+  it.each(['allocated call without a directory', 'prompt-only call directory'] as const)(
+    'partial filesystem preparation reaches cleanup without history: %s', async (shape) => {
+      const root = await mkdtemp(join(tmpdir(), 'ct-partial-plan-call-'))
+      try {
+        const files = new HeadlessFiles({ root, fs, newId: () => 'temporary-record' })
+        const records = new DiskPlanRecords({
+          files,
+          newId: () => PlanCallMother.CONVERSATION,
+          now: () => '2026-09-16T10:00:00.000Z',
+          exists: async () => true,
+        })
+        const watch = await records.prepare(new PlanBriefing({
+          story: null,
+          issue: PlanCallMother.watch().issue,
+          repository: PlanCallMother.watch().repository,
+          located: PlanCallMother.watch().located,
+        }))
+        await records.recordNonLaunch(watch, new PlanNonLaunch({
+          conversation: watch.agent,
+          callId: PlanCallMother.CALL.id,
+          source: 'before-worker',
+          diagnostic: 'descriptor publication failed before worker spawn',
+          observedAt: '2026-09-16T10:00:00.000Z',
+        }))
+        if (shape === 'prompt-only call directory') {
+          const directory = files.callDirectory(PlanCallMother.CALL)
+          await mkdir(directory, { recursive: true })
+          await writeFile(join(directory, CallDescriptor.PROMPT), 'persisted prompt', 'utf8')
+        }
+        const calls = new ClaudeCalls({
+          files,
+          binary: 'claude',
+          worker: 'worker.ts',
+          spawn: (() => { throw new Error('partial recovery must not spawn') }) as typeof spawn,
+          env: {},
+          newId: () => { throw new Error('partial recovery must not allocate identity') },
+          now: () => { throw new Error('partial recovery must not ask current time') },
+          budgetMs: 1,
+          killGraceMs: 1,
+          acceptanceMs: 1,
+          pollMs: 1,
+          sleep: async () => { throw new Error('partial recovery must not sleep') },
+        })
+        const adapter = new ClaudePlanCalls({
+          calls,
+          brief: new PlanAgentBrief({
+            dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+            conventions: '/plugin/conventions',
+            ctStep: '/plugin/scripts/ct-step.mjs',
+          }),
+          pluginRoot: '/plugin',
+          records,
+          nowMs: () => Date.parse('2026-09-16T10:00:00.000Z'),
+          resumable: async () => { throw new Error('partial recovery must not inspect a transcript') },
+        })
+
+        expect((await adapter.recoveryFor(watch)).action).toBe('cleanup')
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it('planner recovery reads its original deadline across a rebuilt graph', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-planner-deadline-'))
+    try {
+      const files = new HeadlessFiles({ root, fs, newId: () => 'temporary-record' })
+      const records = new DiskPlanRecords({
+        files,
+        newId: () => PlanCallMother.CONVERSATION,
+        now: () => '2026-09-16T10:00:00.000Z',
+        exists: async () => true,
+      })
+      const watch = await records.prepare(new PlanBriefing({
+        story: null,
+        issue: PlanCallMother.watch().issue,
+        repository: PlanCallMother.watch().repository,
+        located: PlanCallMother.watch().located,
+      }))
+      const descriptor = new CallDescriptor({
+        conversation: watch.agent,
+        purpose: 'plan',
+        requestId: null,
+        cwd: watch.located.path,
+        binary: 'claude',
+        argv: ['--session-id', watch.agent],
+        startedAt: '2026-09-16T10:00:00.000Z',
+        budgetMs: 10_000,
+        killGraceMs: 5_000,
+      })
+      const descriptorPath = join(files.callDirectory(PlanCallMother.CALL), CallDescriptor.FILE)
+      await mkdir(files.callDirectory(PlanCallMother.CALL), { recursive: true })
+      await writeFile(descriptorPath, descriptor.text(), 'utf8')
+      const originalBytes = await readFile(descriptorPath, 'utf8')
+      const deadline = descriptor.deadlineMs()
+
+      for (const [nowMs, action] of [
+        [deadline - 1, 'observe'], [deadline, 'inspect'], [deadline + 1, 'inspect'],
+      ] as const) {
+        const calls = new ClaudeCalls({
+          files,
+          binary: 'claude',
+          worker: 'worker.ts',
+          spawn: (() => { throw new Error('deadline recovery must not spawn') }) as typeof spawn,
+          env: {},
+          newId: () => { throw new Error('deadline recovery must not allocate identity') },
+          now: () => { throw new Error('deadline recovery must retain recorded time') },
+          budgetMs: 1,
+          killGraceMs: 1,
+          acceptanceMs: 1,
+          pollMs: 1,
+          sleep: async () => { throw new Error('deadline recovery must not sleep') },
+        })
+        const rebuilt = new ClaudePlanCalls({
+          calls,
+          brief: new PlanAgentBrief({
+            dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+            conventions: '/plugin/conventions',
+            ctStep: '/plugin/scripts/ct-step.mjs',
+          }),
+          pluginRoot: '/plugin',
+          records,
+          nowMs: () => nowMs,
+          resumable: async () => true,
+        })
+        const recovery = await rebuilt.recoveryFor(watch)
+        expect(recovery.action).toBe(action)
+        if (action === 'observe') expect(recovery.call()).toEqual(PlanCallMother.CALL)
+        expect(await readFile(descriptorPath, 'utf8')).toBe(originalBytes)
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it('incomplete implementation recovery observes only within its recorded deadline', async () => {

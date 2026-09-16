@@ -195,13 +195,13 @@ The validation process imported the real `validatePlan` and `planFilesForIssue` 
 It read the scratch plan with `readFileSync`. Its `readFile` callback used `git show b26554378b437b77362699cef1d867756c559283:<path>` for each reference and current-state citation.
 It did not use the parent checkout, change the validator, or call dispatch/release/run commands.
 
-Latest plan SHA-256 after the independent-judge correction: `4a6493b58bf3b21c3daff87f9f8b9aef9562cecb9d41d3bd00d42e1b89418e65`.
+Latest plan SHA-256 after round-three architecture: `5890443f2a43f16cd6fa496ae4bd92f85e98278cc4d183bb9cf1690bea9fa73b`.
 
 ```json
 {
   "base": "b26554378b437b77362699cef1d867756c559283",
   "validatePlan": { "ok": true, "violations": [] },
-  "extractTasks": { "tasks": 6, "problems": [], "testsAdded": 55, "testsRemoved": 1, "globalCommands": 4 },
+  "extractTasks": { "tasks": 6, "problems": [], "testsAdded": 57, "testsRemoved": 1, "globalCommands": 4 },
   "missingModifyPathsAtBase": [],
   "discoverableIssuePlans": [
     "docs/superpowers/plans/2026-09-15-issue-331-the-headless-dispatcher.md"
@@ -210,7 +210,7 @@ Latest plan SHA-256 after the independent-judge correction: `4a6493b58bf3b21c3da
 }
 ```
 
-All six TDD names and command blocks extracted. The latest task test-name counts are 4, 6, 9, 12, 17 and 7.
+All six TDD names and command blocks extracted. The latest task test-name counts are 4, 6, 9, 14, 17 and 7.
 The one removed title is `retirement frees cap and permits preparation`: its assertions remain under the truthful retirement title, with separate actual cap coverage added.
 The real validator accepted the normal 3500-character task limit, block taxonomy, line budgets, literal citation and Simplified Technical English checks.
 Initial validation caught paragraph/wording issues and one 3544-character task. I corrected the prose and removed duplicate wording; I did not change any control.
@@ -485,3 +485,155 @@ The recorded title replacement removes no test assertions or guard. It stops a d
 The protected/history diff, tracked status check and `git diff --check` exited zero with no output at the reviewed tip.
 Only `.agent/run-331/apply-feedback-plan.md`, `.agent/run-331/apply-feedback-analysis.md`, and the new `.agent/run-331/apply-feedback-corrections.md` changed in this session.
 No tests, live calls, implementation edits, GitHub writes, commits, run-state changes or nested sessions occurred.
+
+## Post-shutdown scope amendment — runner channels and fixture timing
+
+### Read-only inspection and decision
+
+HEAD remains `be6ac2758d61b95e1998bfb85fbdef6614093f15`. The current working tree contains Sol's interrupted corrective work; its modifications are not an architect implementation.
+I inspected the full current diff for `tool-runner.ts`, `tool-runner-real-process.test.ts`, and `claude-calls-real-process.test.ts`, plus their consumers, fixture and timeout configuration.
+I also read the production worker/call/API diff to distinguish fixture values from production bounds. No test, local-process fixture or implementation command was executed.
+
+**Decision: authorize the two missing paths under Task 4.** Preserving normal process output is the necessary minimal producer fix; relaxing the Git absence rule would be wrong.
+The current predicate still needs one small refinement before final verification: numeric exit alone does not distinguish a normal refusal from a killed child that handles SIGTERM and exits numerically.
+The amended plan permits raw stderr only for success or a normal integer numeric exit with neither killed nor signal metadata. All other failures retain the prior diagnostic fallback.
+This is a bounded continuation of the same Sol correction, not a new issue or a request for routine scope approval.
+
+### Why this belongs to the existing absence repair
+
+`backend/src/infrastructure/tool-runner.ts:38-47` calls `execFile` and constructs `ProcessOutput`.
+Before Sol's diff, any failure used `stderr.trim() || failure.message`. A normal quiet Git exit 1 therefore acquired a synthesized command diagnostic even when the actual stderr channel was empty.
+That prevents the deliberately strict quiet-ref absence contract from passing through the real adapter. A subprocess double returning `{code: 1, stdout: '', stderr: ''}` would conceal this boundary mismatch.
+
+The current diff preserves `stderr` for null failure or any numeric `failure.code`; stdout and `#codeOf` remain unchanged.
+For ordinary numeric exit 1 this fixes the defect without changing Git's rule. It also preserves raw whitespace rather than treating it as absence.
+For missing executable errors with string code and signal/timeout errors with nonnumeric code, the existing fallback remains.
+But the condition currently ignores `failure.killed` and `failure.signal`. A timeout with numeric child exit 1 can still reach the raw-empty branch.
+Explicitly exclude killed/signalled outcomes so they cannot resemble a quiet normal missing-ref result. Keep `runWholeOutput` and configured budgets outside this correction.
+
+`tool-runner-real-process.test.ts:66-70` adds the correct real local-process regression for exit 1 with empty stdout/stderr.
+The existing missing-tool case at `:80-85` pins a diagnostic, and ordinary refusal at `:58-64` pins stderr text.
+The existing timeout case at `:49-56` checks failure and elapsed time but does not assert a diagnostic. Strengthen it and add the numeric timeout-exit case named in the amended Task 4.
+The new Git fixture at `git-workspace-real-process.test.ts:61-65` actually routes local Git through `ToolRunner.run`, so this fix belongs at that shared boundary rather than in a Git-only test workaround.
+The new assertion has been inspected, not executed or certified green in this architecture session.
+
+### Fixture timing audit
+
+| Change in `claude-calls-real-process.test.ts` | Static assessment |
+|---|---|
+| Success descriptor 2000 → 30000 ms (`:211-228`) | Still waits on the recorded call and checks success, null signal and fixture output after API exit. It permits more startup/execution time; it does not measure a 2-second success bound now. |
+| Deadline descriptor 500 → 10000 ms and matching lower-bound assertion (`:230-255`) | Still checks non-success, SIGTERM, wall duration at least 10000 ms and descendant disappearance. The intended surviving-worker enforcement scenario remains present at the new fixture budget. |
+| `eventuallyAbsent` 200 → 2000 iterations (`:162-172`) | Still needs actual ESRCH and still throws after exhaustion. It permits 20 seconds of nominal sleeps instead of 2, so it is a larger observation window rather than equally prompt enforcement evidence. |
+
+Unchanged fixture facts: grace is 100 ms; PID-file discovery is still 200 sleeps of 10 ms; the helper adapter's constructor budget is still 2000 ms.
+`ClaudeCalls.wait()` reads the immutable descriptor deadline, so the helper's constructor budget does not secretly reinstate a 2-second limit for these recorded fixtures.
+The child fixture at `backend/__tests__/infrastructure/fixtures/headless-child.ts:14-28` still installs a resistant descendant and emits the known process identities; no fixture-code change was in the timing diff.
+
+Production constants in `ct-api.ts:219-222` remain **7200000 / 5000 / 10000 / 250 ms** for call timeout, kill grace, acceptance and polling.
+The current API diff only adds the earlier-planned lstat wiring. The current call diff changes terminal validation, not `deadlineMs()` or its budgets.
+The worker still computes remaining time from recorded start plus budget and retains the grace schedule. The inspected timing adjustment changes no production budget value.
+`backend/vitest.config.ts` remains unchanged at 120000 ms for test and hook timeouts.
+
+These assertions do not establish a precise 100 ms escalation interval or tight upper wall-duration bound. A nominal sleep-loop window is not a hard wall-clock cap under scheduler delays.
+The broader window therefore needs new independent review and new focused/full-suite observations. I make no blanket finding that earlier tests were flaky and no claim that interrupted checks passed.
+
+### Exact continuation scope and checks
+
+Task 4 now authorizes `backend/src/infrastructure/tool-runner.ts` and `backend/__tests__/infrastructure/tool-runner-real-process.test.ts`.
+Its declarations include `a normal nonzero exit preserves an actually empty stderr channel` and `timeout exits keep a diagnostic even when the child exits numerically`.
+The former preserves Sol's added regression. The latter proves the killed-versus-normal distinction with a ready local Node child, a 5000 ms runner budget, numeric exit 1 and retained diagnostic.
+Retain all existing assertions and child cleanup; do not special-case Git text or enlarge a production/suite budget.
+
+The timing fixture was already in Task 3 scope. The amendment records the exact changed values and requires a fresh review of that diff alongside new results.
+The corrective brief carries the exact focused ToolRunner/Git and Claude-worker commands for Sol to run after shutdown, followed by the existing global checks.
+This architecture session changes only the three scratch artifacts and validates the plan against original base `b265543`; it does not complete those execution checks on Sol's behalf.
+
+### Shutdown amendment validation
+
+The real `validatePlan` result is `{"ok":true,"violations":[]}` against `b26554378b437b77362699cef1d867756c559283`.
+`extractTasks` returns six tasks and no problems. The two runner paths exist at that original base and appear explicitly in Task 4.
+Task sizes are 3140, 3166, 2831, **3352**, 3459 and 3449 characters; all remain inside the unchanged 3500-character limit and block/STE budgets.
+There are 57 declared addition/revised test names; the single prior title replacement retains its assertions. No new removal or guard exemption was introduced.
+The supplemental evidence filenames still leave only the canonical issue plan discoverable.
+Validation and extraction output appeared directly in the session without output filters. This checks the plan only; no production/test execution or completed repair claim follows from it.
+
+## Round-three architecture — current b23aac68 review
+
+### Authority and source verification
+
+I read `.agent/run-331/apply-feedback-review-round2.md` completely and applied the repository-local receiving-code-review workflow.
+The current HEAD is `b23aac684f8a6fdd167d8a1b5283a9265a242d0f`; the initial tracked status was clean. The original repair/validation base remains b265.
+The review's runtime counts and three mutation observations are supplied provenance. I did not rerun tests, reproduce mutations or call Claude.
+The bounded executable handoff is `.agent/run-331/apply-feedback-corrections-round3.md`. It is a supplemental checklist, not a new issue execution plan or run-state record.
+
+| Finding | Verified disposition | Concrete source and decision |
+|---|---|---|
+| R1 | Confirmed, with an incorrect HTTP-status claim | `git-workspace.ts:135-139,317,332` throws `WorkspaceNotCleaned`; `cleanup-plan-route.ts:39-48,92-94` has no entry. Cleanup-specific presence throws will become `PlanCleanupConflict`; generic workspace compensation stays unchanged. Seed reads at `:383-386` and lstat catch at `:323-330` need errno-only translation and unchanged bug propagation. |
+| R2 | Confirmed | `cleanup-plan.ts:82-94` restricts the outer cause but converts every refresh error into `PlanCleanupNotRead`. Match only concrete `PlanStatusNotRead`/`PlanStatusNotUnderstood`, preserve both diagnostics in the appropriate cleanup family, and rethrow other objects unchanged. |
+| R3 | Confirmed as missing specified verification, not proof that every untested branch is wrong | `cleanup-plan.test.ts:108-117,177-220` has a status queue/default READY and only three effect cuts. `git-workspace-real-process.test.ts:84-101` archives a boolean. Terminal negatives, real partial shapes and planner deadlines need the exact matrices below. |
+| R4 | Confirmed | There is one rehearsal at `headless-dispatch-dry-run.test.ts:405`. It now forces publication failure at `:574-612`, then genuinely recovers at `:614-747`. Restore the distinct normal-start path and its read-only restart assertions while preserving this useful recovery behavior. |
+| R5 | Confirmed, narrowly | `plan-recovery.ts:64,122-129` returns a structural selection between methods. Return `PlanRecovery` directly from the execution helper. Its typed completed selection and public behavior are already improved and must stay intact. |
+
+**Reviewer factual correction:** R1 says the caller receives generic HTTP 500. Production `api-server.ts:149-163` instead returns HTTP 400 with `{"code":"request-failed","detail":"request failed"}`.
+The route-only harness in `recover-plan-route.test.ts:45-54,89-101` does not mount that production fallback; its parser-bug assertion expects Express's default 500.
+The projection defect remains real: the caller loses the declared cleanup category and artifact diagnostic. No change to the production fallback status is warranted.
+
+### Additional notes checked, including what is already closed
+
+| Note | Evidence and finite disposition |
+|---|---|
+| Authorization assertion | The distinct-purpose/adjacent-pair assertion is fixed. Do not require a new purpose-specific mutation sweep on unchanged production merely to fill a report. Mark those prior requested mutations unperformed unless records exist. |
+| Planner titles | `headless-plan-agents.test.ts:258-308` still uses fixed delegation and empty history. `claude-plan-calls.test.ts:269-286` checks implementation deadlines. Add actual persisted planner boundaries and genuine failed/ambiguous/expired supervisor inputs; retain existing assertions. |
+| Cleanup cuts | Extend the three current effect cuts with proof/status/snapshot/readback failures and real partial retries. Use explicit external status state, not a response queue that silently becomes ready. |
+| Cap attribution | `gh-dispatch-candidates.test.ts:154-165` correctly proves the cap rule on two supplied tables. It does not prove cleanup caused the transition. Connect the new durable cleanup scenario's scripted external state to the real candidate reader, retaining the separate rule test. |
+| Workspace negatives | PR/base/root/removal checks at `git-workspace.test.ts:979-1028` are present and should not be reported missing. Remaining work is the detailed porcelain/seed matrix, real dangling symlink, invalid checkout and post-requeue reappearance. |
+| Negative terminal evidence | `disk-plan-records.test.ts:215-268` covers before-worker contradictions, not the full matching child-terminal matrix. The matching checks at `disk-plan-records.ts:475-496` exist; feed the precise negative fields to them. |
+| Partial reader integration | `claude-plan-calls.test.ts:253-266` bypasses the real reader with `RecordsDouble.proof`. Add prompt-only and allocated-but-absent fixtures through actual disk records and the adapter. |
+| Entry barrier | `cleanup-plan-route.test.ts:87-117` now awaits actual entry. Preserve it; no further race mechanism is needed. |
+| Shared parser | Architecture is fixed. Current route cases cover one invalid agent, one invalid issue, and a parser bug only for recovery. Add one shared matrix through both production routes in the existing API-server test. |
+| Coordinator discovery docs | `backend/API.md:518-521` now explains how existing/resumed sessions receive the instruction. Do not claim a live coordinator has actually received it. |
+| Workspace value | `UnlaunchedWorkspace` is already a frozen value. Do not rewrite it to solve R5 elsewhere. |
+| Runner teardown | `tool-runner-real-process.test.ts:36-39` only clears environment. Add transparent immediate native-child tracking and unconditional asynchronous stop/close cleanup independent of the tested timer. |
+| Evidence and timings | Credit the three reported mutations and disclosed fixture values with their limits. Missing historical Node/Git versions, elapsed observations and restored-source hashes remain unavailable; current values cannot backfill them. |
+| Permanent scope | The scratch plan already includes both ToolRunner files and command. A read-only diff confirmed the permanent plan lacks that amendment. Synchronize the existing permanent plan/analysis paths; do not call the already-authorized work unauthorized. |
+
+### Narrow correction choices
+
+R1 changes only cleanup-specific presence classifications and its two filesystem-read boundaries. It does not add a broad `WorkspaceFailure` projector or weaken unknown-subclass rejection.
+Remaining registration/ref/path is a known conflict. A failed syscall is operational; missing/malformed seed content is unreadable; an unrelated implementation exception retains its identity.
+R2 preserves the existing known-requeue guard and uses exact concrete status classes, not a name prefix or a generic catch-all.
+The combined diagnostic is `checked requeue failed: <cause.message>; status read failed: <refreshCause.message>`; its error class preserves the receiver's distinction.
+
+The real cleanup verification will use actual disk records and filesystem archive bytes with real local Git. Production claim/status adapters use exact scripted external boundaries.
+Four isolated scenarios cover full success, worktree-only removal, branch deletion before requeue failure, and archive failure after ready. Each retry rebuilds collaborators over the same roots.
+This proves durable effects without a model or network call. Named fault injection at the runner/syscall edge must not replace archive with a boolean.
+
+The start and recovery rehearsals remain separate cases. Normal start needs no recovery request; read-only reconstruction remains uncertain for its unowned incomplete implementation and spawns nothing.
+The independent recovery case starts from directly arranged successful planner evidence, observes publication failure, then rebuilds its continuation before the real recovery POST.
+Private policy execution returns the existing value directly; no new framework, success flag or wire shape follows from R5.
+
+The runner test can record actual child handles with a transparent native execFile decorator. The mechanism still executes for real.
+Teardown sends no signal to the test process group, stops only live fixture children, waits for close, and restores state in finally. It cannot rely on the timeout it tests.
+Captured native exit/signal metadata also distinguishes an actual numeric timeout exit from `ProcessOutput`'s unknown-exit normalization.
+
+### Evidence policy and closure ownership
+
+The permanent implementation report's `:108-111` all-ten closure statement is too broad. Its runtime counts remain historical reported results, not deleted or independently repeated observations.
+The three mutation narratives in `pr-375-apply-feedback-corrections.md:42-57` are specific and meaningful supplied observations. Nothing here expands them into a broader sweep.
+The old progress lines remain intact. New reports must append case-by-case results and qualify earlier broad mutation language rather than rewrite history.
+New red-first failures for R1/R2 differ from a separate mutation experiment. Coverage restorations can pass correct current code; no fabricated red phase is needed.
+Use a targeted mutation only if an oracle's effectiveness remains uncertain. There is no new quota of purpose, proof, identity or route mutations.
+
+This architecture session will synchronize only the existing permanent plan and analysis evidence, not rewrite the implementation report or the earlier corrections evidence.
+Sol's final checklist owns those append-only runtime reports and their new versions/timings. No claim of complete runtime closure follows from plan validation.
+
+### Round-three artifact validation
+
+Both the amended six-task supplement and the new nine-section round-three addendum pass the real `validatePlan` and `extractTasks` APIs against `b26554378b437b77362699cef1d867756c559283`.
+Both return `ok: true`, no violations and no extraction problems. Source reads use `git show <base>:<path>`; new current-source findings are prose citations, not false base-state quotes.
+The supplement's task sizes remain 3140, 3166, 2831, 3352, 3459 and 3449 characters. The addendum's six bounded groups measure 1632, 1770, 1547, 1805, 1131 and 1539 characters.
+All normal 3500-character, block and STE limits remain intact. Test-only groups prescribe names and assertions, not test bodies; the runner teardown quotation exists verbatim at the base.
+
+Validated addendum SHA-256: `46876f51e69db1445f3e38510350a8338bfc7a2c382008666ad45a082ad64a86`.
+Validated supplement SHA-256: `5890443f2a43f16cd6fa496ae4bd92f85e98278cc4d183bb9cf1690bea9fa73b`.
+These results certify the artifacts' structure and source citations, not runtime closure. The finite matrices and actual observations, not extracted counts, define Sol's completion criteria.

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstat as realLstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseStateSafe } from '../../../plugin/scripts/state.js'
@@ -13,7 +14,7 @@ import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import {
   WorkspaceFailure, WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood,
-  CheckoutNotConfirmed, PlanCleanupNotUnderstood,
+  CheckoutNotConfirmed, PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -869,26 +870,35 @@ class UnlaunchedWorkspaceDouble {
   branchPresent = true
   pathPresent = false
   malformedListing = false
+  listing: string | null = null
   remoteUrl = GitDouble.REMOTE_URL
   canonicalRoot = GitDouble.ROOT
   head = UnlaunchedWorkspaceDouble.BASE
+  branchTip = UnlaunchedWorkspaceDouble.BASE
+  seedBranch = 'feat/331'
+  seedIssue = 331
+  seedBase = UnlaunchedWorkspaceDouble.BASE
   pulls = '[]'
   removeFailure: ProcessOutput | null = null
   deleteFailure: ProcessOutput | null = null
   pathFailure: Error | null = null
+  seedFailure: Error | null = null
+  lstat: typeof realLstat | null = null
 
   workspace(): GitWorkspace {
     return new GitWorkspace({
       baseline: new BaselineDouble(),
       stderr: () => {},
       write: async () => {},
-      read: async (path) => path.endsWith(SliceSeed.RELATIVE_PATH)
-        ? buildStateSeed(
-          { name: 'unused', issue: '#331', ac: ['unused workspace stays untouched'] },
-          { branch: 'feat/331', base: 'main', baseSha: UnlaunchedWorkspaceDouble.BASE },
+      read: async (path) => {
+        if (path.endsWith(SliceSeed.RELATIVE_PATH) && this.seedFailure !== null) throw this.seedFailure
+        return path.endsWith(SliceSeed.RELATIVE_PATH) ? buildStateSeed(
+          { name: 'unused', issue: `#${this.seedIssue}`, ac: ['unused workspace stays untouched'] },
+          { branch: this.seedBranch, base: 'main', baseSha: this.seedBase },
         )
-        : null,
-      lstat: (async () => {
+          : null
+      },
+      lstat: this.lstat ?? (async () => {
         if (this.pathFailure !== null) throw this.pathFailure
         if (this.pathPresent) return {} as Awaited<ReturnType<typeof import('node:fs/promises').lstat>>
         throw Object.assign(new Error('absent fixture path'), { code: 'ENOENT' })
@@ -905,7 +915,7 @@ class UnlaunchedWorkspaceDouble {
         }
         if (argv.includes('rev-parse') && argv.includes('refs/heads/feat/331')) {
           return this.branchPresent
-            ? GitDouble.printing(`${UnlaunchedWorkspaceDouble.BASE}\n`)
+            ? GitDouble.printing(`${this.branchTip}\n`)
             : new ProcessOutput({ code: 1, stdout: '', stderr: '' })
         }
         if (argv.includes('remove')) {
@@ -932,6 +942,7 @@ class UnlaunchedWorkspaceDouble {
   }
 
   worktrees(): string {
+    if (this.listing !== null) return this.listing
     if (this.malformedListing) return 'not porcelain\n'
     const blocks = [
       `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main`,
@@ -1030,20 +1041,26 @@ describe('GitWorkspace unused dispatch cleanup', () => {
 
   it('fresh absence refuses a remaining registration branch path and malformed listing', async () => {
     const registration = new UnlaunchedWorkspaceDouble()
-    await expect(registration.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
-      .rejects.toThrow('registration')
+    const registrationRefusal = await registration.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(registrationRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(registrationRefusal.message).toContain('registration')
 
     const branch = new UnlaunchedWorkspaceDouble()
     branch.worktreePresent = false
-    await expect(branch.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
-      .rejects.toThrow('local branch')
+    const branchRefusal = await branch.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(branchRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(branchRefusal.message).toContain('local branch')
 
     const path = new UnlaunchedWorkspaceDouble()
     path.worktreePresent = false
     path.branchPresent = false
     path.pathPresent = true
-    await expect(path.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
-      .rejects.toThrow('worktree path')
+    const pathRefusal = await path.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(pathRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(pathRefusal.message).toContain('worktree path')
 
     const malformed = new UnlaunchedWorkspaceDouble()
     malformed.malformedListing = true
@@ -1055,7 +1072,28 @@ describe('GitWorkspace unused dispatch cleanup', () => {
     unreadablePath.branchPresent = false
     unreadablePath.pathFailure = Object.assign(new Error('permission denied'), { code: 'EACCES' })
     await expect(unreadablePath.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
-      .rejects.toThrow('absence could not be confirmed')
+      .rejects.toBeInstanceOf(PlanCleanupNotRead)
+  })
+
+  it('cleanup seed and path reads preserve errno and unexpected bugs', async () => {
+    const unreadableSeed = new UnlaunchedWorkspaceDouble()
+    unreadableSeed.seedFailure = Object.assign(new Error('seed permission denied'), { code: 'EACCES' })
+    await expect(unreadableSeed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toBeInstanceOf(PlanCleanupNotRead)
+
+    const seedDefect = new TypeError('seed reader defect')
+    const buggySeed = new UnlaunchedWorkspaceDouble()
+    buggySeed.seedFailure = seedDefect
+    await expect(buggySeed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toBe(seedDefect)
+
+    const pathDefect = new TypeError('lstat defect')
+    const buggyPath = new UnlaunchedWorkspaceDouble()
+    buggyPath.worktreePresent = false
+    buggyPath.branchPresent = false
+    buggyPath.pathFailure = pathDefect
+    await expect(buggyPath.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBe(pathDefect)
   })
 
   it('fresh absence uses the quiet missing-ref query exactly', async () => {
@@ -1068,6 +1106,97 @@ describe('GitWorkspace unused dispatch cleanup', () => {
     expect(fixture.calls).toContainEqual([
       '-C', GitDouble.ROOT, 'rev-parse', '--verify', '--quiet', 'refs/heads/feat/331',
     ])
+  })
+
+  it('porcelain and seed identity cases retain cleanup safety', async () => {
+    const valid = new UnlaunchedWorkspaceDouble()
+    valid.worktreePresent = false
+    valid.branchPresent = false
+    valid.listing = [
+      `worktree ${GitDouble.ROOT}`,
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}`,
+      'branch refs/heads/main',
+      'locked maintenance',
+      'prunable stale metadata',
+      '',
+      'worktree /repo/detached',
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}`,
+      'detached',
+      '',
+      'worktree /repo/bare',
+      'bare',
+      '',
+    ].join('\n')
+    await expect(valid.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)).resolves.toBeUndefined()
+
+    const malformedListings = [
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree relative/path\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n\nworktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\ndetached\n`,
+      `worktree ${GitDouble.ROOT}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD invalid\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\ndetached\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\nbranch refs/heads/other\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\n`,
+    ]
+    for (const listing of malformedListings) {
+      const fixture = new UnlaunchedWorkspaceDouble()
+      fixture.worktreePresent = false
+      fixture.branchPresent = false
+      fixture.listing = listing
+      await expect(fixture.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+        .rejects.toBeInstanceOf(PlanCleanupNotUnderstood)
+    }
+
+    const elsewhere = new UnlaunchedWorkspaceDouble()
+    elsewhere.worktreePresent = false
+    elsewhere.branchPresent = false
+    elsewhere.listing = `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n\n`
+      + `worktree /repo/other\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/feat/331\n`
+    await expect(elsewhere.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBeInstanceOf(PlanCleanupConflict)
+
+    for (const change of ['branch', 'issue', 'base'] as const) {
+      const fixture = new UnlaunchedWorkspaceDouble()
+      if (change === 'branch') fixture.seedBranch = 'feat/332'
+      if (change === 'issue') fixture.seedIssue = 332
+      if (change === 'base') fixture.seedBase = 'b'.repeat(40)
+      await expect(fixture.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+        .rejects.toBeInstanceOf(change === 'base' ? PlanCleanupConflict : PlanCleanupNotUnderstood)
+    }
+
+    const changedTip = new UnlaunchedWorkspaceDouble()
+    changedTip.worktreePresent = false
+    changedTip.branchTip = 'b'.repeat(40)
+    await expect(changedTip.workspace().inspectUnlaunched(
+      UnlaunchedWorkspaceDouble.WATCH,
+      new UnusedWorkspace({
+        watch: UnlaunchedWorkspaceDouble.WATCH,
+        baseSha: UnlaunchedWorkspaceDouble.BASE,
+        checkedAt: '2026-09-16T10:00:00.000Z',
+      }),
+    )).rejects.toBeInstanceOf(PlanCleanupConflict)
+  })
+
+  it('dangling symlinks prevent retirement', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ct-dangling-worktree-'))
+    try {
+      const path = join(root, 'missing-target-link')
+      symlinkSync(join(root, 'absent-target'), path)
+      const watch = new PlanWatch({
+        ...UnlaunchedWorkspaceDouble.WATCH,
+        located: new WorkspaceLocation({ root: GitDouble.ROOT, path, branch: 'feat/331' }),
+      })
+      const fixture = new UnlaunchedWorkspaceDouble()
+      fixture.worktreePresent = false
+      fixture.branchPresent = false
+      fixture.lstat = realLstat
+
+      await expect(fixture.workspace().confirmAbsent(watch)).rejects.toBeInstanceOf(PlanCleanupConflict)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

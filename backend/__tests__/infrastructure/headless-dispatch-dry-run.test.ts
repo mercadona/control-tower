@@ -163,11 +163,13 @@ class ScriptedBoundaries {
   readonly attemptBytes: string
   readonly seedPath: string
   readonly publicationBodyPath: string
+  readonly failFirstPublication: boolean
   postedBody: string | null = null
   publicationAttempts = 0
 
-  constructor(root: string, trace: string[]) {
+  constructor(root: string, trace: string[], failFirstPublication: boolean) {
     this.trace = trace
+    this.failFirstPublication = failFirstPublication
     this.checkoutRoot = join(root, 'checkout')
     this.worktree = join(this.checkoutRoot, '.worktrees', String(Rehearsal.ISSUE))
     this.commonGit = join(root, 'git-common')
@@ -216,7 +218,7 @@ class ScriptedBoundaries {
       this.accept('gh', argv, null)
       this.postedBody = await readFile(this.publicationBodyPath, 'utf8')
       this.publicationAttempts += 1
-      if (this.publicationAttempts === 1) {
+      if (this.failFirstPublication && this.publicationAttempts === 1) {
         this.trace.push('publication-refused')
         return new ProcessOutput({ code: 1, stdout: '', stderr: 'scripted publication refusal' })
       }
@@ -402,13 +404,16 @@ describe('headless dispatch dry run', () => {
     }
   }
 
-  it('coordinator recovery reaches the production continuation', async () => {
+  it.each([
+    { title: 'headless start preserves publication', needsRecovery: false },
+    { title: 'coordinator recovery reaches the production continuation', needsRecovery: true },
+  ])('$title', async ({ needsRecovery }) => {
     const root = await mkdtemp(join(tmpdir(), 'ct-331-headless-rehearsal-'))
     roots.push(root)
     try {
     const stateRoot = join(root, 'state')
     const trace: string[] = []
-    const boundaries = new ScriptedBoundaries(root, trace)
+    const boundaries = new ScriptedBoundaries(root, trace, needsRecovery)
     await fs.mkdir(boundaries.checkoutRoot, { recursive: true })
     const files = new HeadlessFiles({ root: stateRoot, fs, newId: () => 'temporary-record' })
     const plannerCompletion = await Rehearsal.plannerCompletion()
@@ -577,7 +582,7 @@ describe('headless dispatch dry run', () => {
       body: JSON.stringify({ milestone: Rehearsal.MILESTONE }),
     })
     expect(response.status).toBe(202)
-    await BoundedDrain.wait(diagnostic, 1_000)
+    await BoundedDrain.wait(needsRecovery ? diagnostic : implementationAccepted.promise, 1_000)
     expect(await response.json()).toEqual({
       status: 'started',
       id: null,
@@ -589,8 +594,10 @@ describe('headless dispatch dry run', () => {
       root: boundaries.checkoutRoot,
       baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
     })
-    expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publication-refused'])
-    expect(spawnedDescriptors).toHaveLength(1)
+    expect(trace).toEqual(needsRecovery
+      ? ['claim', 'seed-slice', 'spawn-plan', 'publication-refused']
+      : ['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
+    expect(spawnedDescriptors).toHaveLength(needsRecovery ? 1 : 2)
     const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
     expect(plannerDescriptor.argv).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
@@ -610,6 +617,54 @@ describe('headless dispatch dry run', () => {
       + `Source: ${Rehearsal.PLAN_PATH}\n\n${Rehearsal.PLAN}`
     )
     expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
+
+    if (!needsRecovery) {
+      expect(boundaries.publicationAttempts).toBe(1)
+      const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
+      expect(implementationDescriptor.requestId).toBe(`implementation:${Rehearsal.PLAN_CALL}`)
+      expect(implementationDescriptor.argv).toEqual([
+        '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+        '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
+        '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
+        ClaudePlanCalls.OPENING,
+      ])
+      let restartSpawns = 0
+      const readOnlyCalls = new ClaudeCalls({
+        files,
+        binary: '/usr/local/bin/claude',
+        worker: '/backend/headless-call-worker.ts',
+        spawn: (() => { restartSpawns += 1; throw new Error('read-only restart must not spawn') }) as typeof import('node:child_process').spawn,
+        env: {},
+        newId: () => { throw new Error('read-only restart must not allocate identity') },
+        now: () => { throw new Error('read-only restart must preserve recorded time') },
+        budgetMs: 7_200_000,
+        killGraceMs: 5_000,
+        acceptanceMs: 10_000,
+        pollMs: 250,
+        sleep: async () => { throw new Error('read-only restart must not wait') },
+      })
+      const readOnlyPlanCalls = new ClaudePlanCalls({
+        calls: readOnlyCalls,
+        brief: new PlanAgentBrief({
+          dispatchCheck: '/plugin/dispatch-check.mjs',
+          conventions: '/plugin/conventions',
+          ctStep: '/plugin/ct-step.mjs',
+        }),
+        pluginRoot: '/plugin',
+        resumable: async () => { throw new Error('read-only restart must not inspect transcript') },
+        records,
+        nowMs: () => Date.parse('2026-09-16T09:00:03.000Z'),
+      })
+      const watch = await records.recorded(Rehearsal.CONVERSATION)
+      expect(watch).not.toBeNull()
+      const projected = await readOnlyPlanCalls.recoveryFor(watch!)
+      expect(projected.action).toBe('observe')
+      expect(projected.call().conversation).toBe(Rehearsal.CONVERSATION)
+      expect(projected.detail).toContain('implementation')
+      expect(restartSpawns).toBe(0)
+      expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
+      return
+    }
 
     const restartedCalls = new ClaudeCalls({
       files,

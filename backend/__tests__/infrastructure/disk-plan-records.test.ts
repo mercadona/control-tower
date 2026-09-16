@@ -13,6 +13,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import { CallDescriptor } from '../../src/infrastructure/claude-calls.ts'
 
 class PlanRecordMother {
   static readonly FIRST_AGENT = '11111111-1111-4111-8111-111111111111'
@@ -266,6 +267,119 @@ describe('DiskPlanRecords', () => {
     await contradict(directory)
 
     await expect(records.nonLaunch(watch)).rejects.toBeInstanceOf(PlanAgentNotNamed)
+  })
+
+  it('child spawn proof refuses each terminal contradiction', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-terminal-'))
+    roots.push(root)
+    const records = PlanRecordMother.records(root)
+    const watch = await records.prepare(PlanRecordMother.briefing('/checkout'))
+    const callId = '33333333-3333-4333-8333-333333333333'
+    const diagnostic = 'recorded child could not be spawned: binary absent'
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId,
+      source: 'child-spawn',
+      diagnostic,
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    await records.recordNonLaunch(watch, proof)
+    const directory = join(root, 'harness', watch.agent, 'calls', callId)
+    const descriptorPath = join(directory, CallDescriptor.FILE)
+    const completionPath = join(directory, CallDescriptor.COMPLETION)
+    const streamPath = join(directory, CallDescriptor.STREAM)
+    await mkdir(directory, { recursive: true })
+    const descriptor = new CallDescriptor({
+      conversation: watch.agent,
+      purpose: 'plan',
+      requestId: null,
+      cwd: watch.located.path,
+      binary: 'claude',
+      argv: ['--session-id', watch.agent],
+      startedAt: PlanRecordMother.STARTED_AT,
+      budgetMs: 10_000,
+      killGraceMs: 5_000,
+    })
+    type TerminalFixture = {
+      code: number | null,
+      signal: string | null,
+      finishedAt: string,
+      wallDurationMs: number,
+      execution: Record<string, unknown>,
+      measurement: {
+        cost: Record<string, unknown>,
+        turns: number | null,
+        durationMs: number | null,
+        unavailable: string[],
+      },
+    }
+    const terminal: TerminalFixture = {
+      code: null,
+      signal: null,
+      finishedAt: PlanRecordMother.STARTED_AT,
+      wallDurationMs: 0,
+      execution: { kind: 'child-spawn-failed', conversation: watch.agent, callId, diagnostic },
+      measurement: {
+        cost: { kind: 'unavailable', reason: diagnostic },
+        turns: null,
+        durationMs: null,
+        unavailable: [diagnostic],
+      },
+    }
+    const persist = async (asked: {
+      terminal?: Record<string, unknown> | null,
+      descriptor?: CallDescriptor,
+      stream?: string,
+    } = {}): Promise<void> => {
+      await writeFile(descriptorPath, (asked.descriptor ?? descriptor).text(), 'utf8')
+      await writeFile(streamPath, asked.stream ?? '', 'utf8')
+      await rm(completionPath, { force: true })
+      if (asked.terminal !== null) {
+        await writeFile(completionPath, `${JSON.stringify(asked.terminal ?? terminal)}\n`, 'utf8')
+      }
+    }
+    await persist()
+    expect(await records.nonLaunch(watch)).toEqual(proof)
+
+    const changed = (change: (copy: TerminalFixture) => void): Record<string, unknown> => {
+      const copy = structuredClone(terminal)
+      change(copy)
+      return copy
+    }
+    const foreignCall = '44444444-4444-4444-8444-444444444444'
+    const resume = new CallDescriptor({
+      conversation: watch.agent,
+      purpose: 'plan',
+      requestId: null,
+      cwd: watch.located.path,
+      binary: 'claude',
+      argv: ['--resume', watch.agent],
+      startedAt: PlanRecordMother.STARTED_AT,
+      budgetMs: 10_000,
+      killGraceMs: 5_000,
+    })
+    const cases: readonly [string, () => Promise<void>][] = [
+      ['terminal conversation', () => persist({ terminal: changed((copy) => { copy.execution.conversation = PlanRecordMother.SECOND_AGENT }) })],
+      ['terminal call id', () => persist({ terminal: changed((copy) => { copy.execution.callId = foreignCall }) })],
+      ['terminal diagnostic', () => persist({ terminal: changed((copy) => { copy.execution.diagnostic = 'different diagnostic' }) })],
+      ['terminal timestamp', () => persist({ terminal: changed((copy) => { copy.finishedAt = '2026-09-15T10:00:00.001Z' }) })],
+      ['numeric exit', () => persist({ terminal: changed((copy) => { copy.code = 1 }) })],
+      ['signal exit', () => persist({ terminal: changed((copy) => { copy.signal = 'SIGTERM' }) })],
+      ['reported cost', () => persist({ terminal: changed((copy) => { copy.measurement.cost = { kind: 'reported', totalUsd: 1, attribution: 'initial-invocation' } }) })],
+      ['reported turns', () => persist({ terminal: changed((copy) => { copy.measurement.turns = 1 }) })],
+      ['reported cli duration', () => persist({ terminal: changed((copy) => { copy.measurement.durationMs = 1 }) })],
+      ['missing terminal', () => persist({ terminal: null })],
+      ['resume descriptor', () => persist({ descriptor: resume })],
+      ['generic error terminal', () => persist({ terminal: changed((copy) => { copy.execution = { kind: 'error', diagnostic } }) })],
+      ['unavailable terminal', () => persist({ terminal: changed((copy) => { copy.execution = { kind: 'unavailable', diagnostic } }) })],
+      ['successful terminal', () => persist({ terminal: changed((copy) => { copy.execution = { kind: 'success' } }) })],
+      ['nonempty stream', () => persist({ stream: '{"type":"assistant"}\n' })],
+    ]
+    for (const [name, arrange] of cases) {
+      await arrange()
+      const refusal = await records.nonLaunch(watch).catch((cause) => cause)
+      expect(refusal, name).toBeInstanceOf(PlanAgentNotNamed)
+    }
   })
 
   it('record I/O failures retain their typed cause while implementation defects escape', async () => {
