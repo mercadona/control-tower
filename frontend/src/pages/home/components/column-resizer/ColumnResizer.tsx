@@ -12,14 +12,16 @@ type ColumnResizerProps = {
   max: number
   onChange: (width: number | null) => void
   label: string
+  disabled?: boolean
 }
 
 const clamp = (width: number, min: number, max: number): number => Math.min(Math.max(width, min), max)
 
-const ColumnResizer = ({ value, min, max, onChange, label }: ColumnResizerProps): ReactElement => {
+const ColumnResizer = ({ value, min, max, onChange, label, disabled = false }: ColumnResizerProps): ReactElement => {
   const draggingPointerId = useRef<number | null>(null)
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (disabled) return
     draggingPointerId.current = event.pointerId
     event.currentTarget.setPointerCapture?.(event.pointerId)
     event.currentTarget.classList.add(DRAGGING_CLASS)
@@ -42,6 +44,7 @@ const ColumnResizer = ({ value, min, max, onChange, label }: ColumnResizerProps)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return
     const current = value ?? max
     if (event.key === 'ArrowLeft') onChange(clamp(current + STEP_PX, min, max))
     else if (event.key === 'ArrowRight') onChange(clamp(current - STEP_PX, min, max))
@@ -67,7 +70,10 @@ const ColumnResizer = ({ value, min, max, onChange, label }: ColumnResizerProps)
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onKeyDown={onKeyDown}
-      onDoubleClick={() => onChange(null)}
+      onDoubleClick={() => {
+        if (disabled) return
+        onChange(null)
+      }}
     />
   )
 }

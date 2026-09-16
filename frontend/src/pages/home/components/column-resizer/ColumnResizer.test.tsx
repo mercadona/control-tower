@@ -158,4 +158,26 @@ describe('ColumnResizer', () => {
 
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('a disabled resizer ignores a drag', () => {
+    const { onChange, container } = renderInColumns({ value: 500, disabled: true })
+    mockColumnsRightEdge(container, 1200)
+    const separator = screen.getByRole('separator', { name: LABEL })
+
+    fireEvent(separator, pointerEvent('pointerdown', { pointerId: 1, clientX: 800 }))
+    fireEvent(separator, pointerEvent('pointermove', { pointerId: 1, clientX: 800 }))
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a disabled resizer ignores every key', () => {
+    const { onChange } = renderInColumns({ value: 500, disabled: true })
+    const separator = screen.getByRole('separator', { name: LABEL })
+
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' })
+    fireEvent.keyDown(separator, { key: 'Enter' })
+    fireEvent.doubleClick(separator)
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

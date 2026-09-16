@@ -11,9 +11,12 @@ const UNAVAILABLE_MESSAGE = 'No se pudo contactar con las sesiones en marcha'
 const NO_SESSIONS_MESSAGE = 'No hay ninguna sesión en marcha'
 const SESSIONS_TABLIST_LABEL = 'Sesiones abiertas'
 
-type SessionsPanelProps = { opened?: LiveSession | null }
+type SessionsPanelProps = {
+  opened?: LiveSession | null
+  onLiveSessionCount?: (count: number | null) => void
+}
 
-export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactElement => {
+export const SessionsPanel = ({ opened = null, onLiveSessionCount }: SessionsPanelProps): ReactElement => {
   const { state, refresh } = useLiveSessions()
   const [chosenId, setChosenId] = useState<string | null>(null)
 
@@ -22,6 +25,10 @@ export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactEleme
     setChosenId(opened.id)
     refresh()
   }, [opened, refresh])
+
+  useEffect(() => {
+    onLiveSessionCount?.(state.status === 'loaded' ? state.sessions.length : null)
+  }, [state, onLiveSessionCount])
 
   if (state.status === 'loading') {
     return <Loading />
