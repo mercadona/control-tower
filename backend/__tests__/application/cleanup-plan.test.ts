@@ -20,6 +20,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import type { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
 class CleanupMother {
   static readonly WATCH = new PlanWatch({
@@ -51,6 +52,7 @@ class RecordsDouble extends PlanRecords {
   archiveFailure: Error | null = null
   proofFailure: Error | null = null
   snapshotFailure: Error | null = null
+  snapshotWrites = 0
 
   constructor(events: string[]) {
     super()
@@ -67,6 +69,7 @@ class RecordsDouble extends PlanRecords {
   override async recordCleanupEvidence(evidence: UnusedWorkspace): Promise<void> {
     this.events.push('evidence')
     if (this.snapshotFailure !== null) throw this.snapshotFailure
+    this.snapshotWrites += 1
     this.snapshot = evidence
   }
   override async archive(watch: PlanWatch): Promise<void> {
@@ -86,6 +89,7 @@ class WorkspaceDouble extends Workspace {
   worktreePresent = true
   branchPresent = true
   reappearAtConfirmation: number | null = null
+  undoCalls = 0
 
   constructor(events: string[]) { super(); this.events = events }
 
@@ -97,6 +101,7 @@ class WorkspaceDouble extends Workspace {
 
   override async undoUnlaunched(): Promise<void> {
     this.events.push('undo')
+    this.undoCalls += 1
     if (this.failedEffect === 'worktree-removal') throw new Error('worktree-removal refused')
     this.worktreePresent = false
     if (this.failedEffect === 'branch-removal') throw new Error('branch-removal refused')
@@ -122,10 +127,12 @@ class ClaimsDouble extends DispatchClaims {
   calls = 0
   effectBeforeFailure = false
   readonly issues: IssuesDouble
+  readonly requests: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[] = []
 
   constructor(events: string[], issues: IssuesDouble) { super(); this.events = events; this.issues = issues }
 
-  override async requeue(): Promise<void> {
+  override async requeue(asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }): Promise<void> {
+    this.requests.push(asked)
     this.events.push('requeue')
     this.calls += 1
     if (this.effectBeforeFailure) this.issues.status = PlanIssueStatus.READY
@@ -138,8 +145,10 @@ class IssuesDouble extends PlanIssues {
   status: PlanIssueStatusValue = PlanIssueStatus.IN_PROGRESS
   reads = 0
   readonly failures = new Map<number, Error>()
+  readonly requests: { issueNumber: number, repository: RepositoryName }[] = []
 
-  override async statusOf(): Promise<PlanIssueStatusValue> {
+  override async statusOf(asked: { issueNumber: number, repository: RepositoryName }): Promise<PlanIssueStatusValue> {
+    this.requests.push(asked)
     this.reads += 1
     const failure = this.failures.get(this.reads)
     if (failure !== undefined) throw failure
@@ -167,6 +176,18 @@ class Flow {
       repository: CleanupMother.WATCH.repository,
     }))
   }
+
+  expectedStatusRequest(): { issueNumber: number, repository: RepositoryName } {
+    return { issueNumber: CleanupMother.WATCH.issue.number, repository: CleanupMother.WATCH.repository }
+  }
+
+  expectedClaimRequest(): { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot } {
+    return {
+      issue: CleanupMother.WATCH.issue,
+      repository: CleanupMother.WATCH.repository,
+      root: expect.objectContaining({ text: '/repo' }) as unknown as CheckoutRoot,
+    }
+  }
 }
 
 describe('CleanupPlan', () => {
@@ -180,6 +201,8 @@ describe('CleanupPlan', () => {
       'confirm-absent-1', 'requeue', 'confirm-absent-2', 'archive',
     ])
     expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.issues.requests).toEqual(Array(3).fill(flow.expectedStatusRequest()))
+    expect(flow.claims.requests).toEqual([flow.expectedClaimRequest()])
   })
 
   it('partial cleanup resumes from verified facts', async () => {
@@ -228,6 +251,9 @@ describe('CleanupPlan', () => {
 
     expect(flow.claims.calls).toBe(1)
     expect(flow.events.at(-1)).toBe('archive')
+    expect(flow.issues.status).toBe(PlanIssueStatus.READY)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 2 })
+    expect(flow.claims.requests).toEqual([flow.expectedClaimRequest()])
   })
 
   it.each([
@@ -246,7 +272,11 @@ describe('CleanupPlan', () => {
       `checked requeue failed: checked requeue answer was lost; status read failed: ${statusFailure.message}`
     )
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.issues.status).toBe(PlanIssueStatus.READY)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 1 })
     expect(flow.events).not.toContain('archive')
+    expect(flow.claims.requests).toEqual([flow.expectedClaimRequest()])
   })
 
   it('lost requeue status bugs escape unchanged', async () => {
@@ -259,6 +289,9 @@ describe('CleanupPlan', () => {
     await expect(flow.run()).rejects.toBe(defect)
 
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.issues.status).toBe(PlanIssueStatus.READY)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 1 })
     expect(flow.events).not.toContain('archive')
   })
 
@@ -270,6 +303,9 @@ describe('CleanupPlan', () => {
     await expect(flow.run()).rejects.toBe(defect)
 
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.issues.status).toBe(PlanIssueStatus.IN_PROGRESS)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 1 })
     expect(flow.events).not.toContain('archive')
   })
 
@@ -280,18 +316,23 @@ describe('CleanupPlan', () => {
     await expect(flow.run()).rejects.toThrow('archive refused')
 
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.issues.status).toBe(PlanIssueStatus.READY)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 2 })
   })
 
   it.each([
-    ['proof read', (flow: Flow) => { flow.records.proofFailure = new Error('proof read refused') }],
-    ['initial status read', (flow: Flow) => { flow.issues.failures.set(1, new Error('initial status refused')) }],
-    ['eligibility inspection', (flow: Flow) => { flow.workspace.refusal = new Error('inspection refused') }],
-    ['snapshot write', (flow: Flow) => { flow.records.snapshotFailure = new Error('snapshot write refused') }],
-    ['worktree removal', (flow: Flow) => { flow.workspace.failedEffect = 'worktree-removal' }],
-    ['branch removal', (flow: Flow) => { flow.workspace.failedEffect = 'branch-removal' }],
-    ['first absence confirmation', (flow: Flow) => { flow.workspace.failedEffect = 'confirm-absent-1' }],
-    ['status read before checked requeue', (flow: Flow) => { flow.issues.failures.set(2, new Error('release status refused')) }],
-  ] as const)('each cleanup cut before requeue preserves actual state at %s', async (_cut, arrange) => {
+    ['proof read', (flow: Flow) => { flow.records.proofFailure = new Error('proof read refused') }, null, true, true, 0, 0],
+    ['initial status read', (flow: Flow) => { flow.issues.failures.set(1, new Error('initial status refused')) }, null, true, true, 0, 0],
+    ['eligibility inspection', (flow: Flow) => { flow.workspace.refusal = new Error('inspection refused') }, null, true, true, 0, 0],
+    ['snapshot write', (flow: Flow) => { flow.records.snapshotFailure = new Error('snapshot write refused') }, null, true, true, 0, 0],
+    ['worktree removal', (flow: Flow) => { flow.workspace.failedEffect = 'worktree-removal' }, CleanupMother.EVIDENCE, true, true, 1, 0],
+    ['branch removal', (flow: Flow) => { flow.workspace.failedEffect = 'branch-removal' }, CleanupMother.EVIDENCE, false, true, 1, 0],
+    ['first absence confirmation', (flow: Flow) => { flow.workspace.failedEffect = 'confirm-absent-1' }, CleanupMother.EVIDENCE, false, false, 1, 1],
+    ['status read before checked requeue', (flow: Flow) => { flow.issues.failures.set(2, new Error('release status refused')) }, CleanupMother.EVIDENCE, false, false, 1, 1],
+  ] as const)(
+    'each cleanup cut preserves the actual claim and artifacts at %s',
+    async (_cut, arrange, snapshot, worktree, branch, undoCalls, confirmations) => {
     const flow = new Flow()
     arrange(flow)
 
@@ -300,7 +341,15 @@ describe('CleanupPlan', () => {
     expect(flow.issues.status).toBe(PlanIssueStatus.IN_PROGRESS)
     expect(flow.claims.calls).toBe(0)
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(snapshot)
+    expect(flow.workspace.worktreePresent).toBe(worktree)
+    expect(flow.workspace.branchPresent).toBe(branch)
+    expect(flow.workspace.undoCalls).toBe(undoCalls)
+    expect(flow.workspace.confirmations).toBe(confirmations)
     expect(flow.events).not.toContain('archive')
+    expect(flow.records.snapshotWrites).toBe(snapshot === CleanupMother.EVIDENCE ? 1 : 0)
+    expect(flow.issues.requests).toEqual(Array(flow.issues.reads).fill(flow.expectedStatusRequest()))
+    expect(flow.claims.requests).toEqual([])
   })
 
   it('checked requeue failure before effect invents no release', async () => {
@@ -311,7 +360,26 @@ describe('CleanupPlan', () => {
 
     expect(flow.issues.status).toBe(PlanIssueStatus.IN_PROGRESS)
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 1 })
     expect(flow.events).not.toContain('archive')
+    expect(flow.claims.requests).toEqual([flow.expectedClaimRequest()])
+  })
+
+  it('successful requeue followed by failed readback preserves ready state and active evidence', async () => {
+    const flow = new Flow()
+    flow.issues.failures.set(3, new PlanStatusNotRead('readback failed'))
+
+    await expect(flow.run()).rejects.toThrow('readback failed')
+
+    expect(flow.issues.status).toBe(PlanIssueStatus.READY)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 1 })
+    expect(flow.events).not.toContain('confirm-absent-2')
+    expect(flow.events).not.toContain('archive')
+    expect(flow.claims.requests).toEqual([flow.expectedClaimRequest()])
+    expect(flow.issues.requests).toEqual(Array(3).fill(flow.expectedStatusRequest()))
   })
 
   it('artifact reappearance after requeue blocks archive without another deletion', async () => {
@@ -323,6 +391,9 @@ describe('CleanupPlan', () => {
     expect(flow.issues.status).toBe(PlanIssueStatus.READY)
     expect(flow.events.filter((event) => event === 'undo')).toHaveLength(1)
     expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.workspace).toMatchObject({ worktreePresent: true, branchPresent: false, confirmations: 2 })
+    expect(flow.events).not.toContain('archive')
   })
 
   it('archive retry observes ready and does not requeue again', async () => {
@@ -331,6 +402,10 @@ describe('CleanupPlan', () => {
     await expect(flow.run()).rejects.toThrow('archive rename refused')
     expect(flow.issues.status).toBe(PlanIssueStatus.READY)
     expect(flow.claims.calls).toBe(1)
+    expect(flow.records.active).toBe(CleanupMother.WATCH)
+    expect(flow.records.snapshot).toBe(CleanupMother.EVIDENCE)
+    expect(flow.workspace).toMatchObject({ worktreePresent: false, branchPresent: false, confirmations: 2 })
+    expect(flow.events.at(-1)).toBe('archive')
 
     flow.records.archiveFailure = null
     await flow.run()

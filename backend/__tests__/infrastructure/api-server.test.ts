@@ -10,13 +10,16 @@ import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
 import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
 import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
-import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { Baseline, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
-  PlanAgentNeverLaunched, PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
+  PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed,
+  WorkspaceNotPrepared,
   PlanProgressNotRead,
+  PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
+  PlanIssueNotClaimed, PlanStatusNotRead, PlanStatusNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
@@ -62,6 +65,14 @@ import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts
 import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
 import { CleanupPlan } from '../../src/application/actions/cleanup-plan.ts'
 import { PlanOperationRequest } from '../../src/infrastructure/plan-operation-request.ts'
+import { GitWorkspace } from '../../src/infrastructure/git-workspace.ts'
+import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
+import { Gh } from '../../src/infrastructure/gh.ts'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
+import { PlanIssueStatus, type PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
 class StartPlanSpy extends StartPlan {
   static readonly AGENT = 'workspace:4'
@@ -669,6 +680,9 @@ describe('ApiServer', () => {
       '7',
       '{}',
       '{"repo":"owner/name"}',
+      `{"issue":331,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","agent":"${validAgent}"}`,
+      '{"repo":"owner/name","issue":331}',
       `{"repo":"owner/name","issue":331,"agent":"${validAgent}","extra":true}`,
       `{"repo":"name","issue":331,"agent":"${validAgent}"}`,
       `{"repo":"owner/name","issue":0,"agent":"${validAgent}"}`,
@@ -719,6 +733,282 @@ describe('ApiServer', () => {
       expect(projection.recover).not.toHaveBeenCalled()
     } finally {
       parser.mockRestore()
+      complaining.mockRestore()
+    }
+  })
+
+  it('actual cleanup producers retain their exact HTTP refusal and release the reservation', async () => {
+    const agent = '11111111-1111-4111-8111-111111111111'
+    const repository = new RepositoryName('owner/name')
+    const watch = new PlanWatch({
+      story: null,
+      issue: new PlanIssue({ number: 331, url: 'https://github.com/owner/name/issues/331' }),
+      located: new WorkspaceLocation({
+        root: '/repo/checkout', path: '/repo/checkout/.worktrees/331', branch: 'feat/331',
+      }),
+      repository,
+      agent,
+    })
+    const body = `{"repo":"owner/name","issue":331,"agent":"${agent}"}`
+    const output = (stdout = '') => new ProcessOutput({ code: 0, stdout, stderr: '' })
+    const listing = [
+      `worktree ${watch.located.root}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/main',
+      '',
+      `worktree ${watch.located.path}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/feat/331',
+      '',
+    ].join('\n')
+    const workspace = (read: (path: string) => Promise<string | null>) => new GitWorkspace({
+      baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
+      stderr: () => {},
+      write: async () => {},
+      read,
+      run: async (argv) => {
+        if (argv.includes('get-url')) return output('https://github.com/owner/name.git\n')
+        if (argv.includes('--show-toplevel')) return output(`${watch.located.root}\n`)
+        if (argv.includes('worktree') && argv.includes('list')) return output(listing)
+        throw new Error(`unlisted git request: ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async (argv) => { throw new Error(`unlisted gh request: ${argv.join(' ')}`) },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    const diskFailure = async (kind: 'snapshot-read' | 'malformed-record'): Promise<never> => {
+      const root = await fs.mkdtemp(join(tmpdir(), `ct-api-cleanup-${kind}-`))
+      try {
+        if (kind === 'malformed-record') {
+          const path = join(root, 'harness', agent, 'dispatch.json')
+          await fs.mkdir(join(root, 'harness', agent), { recursive: true })
+          await fs.writeFile(path, '{not json', 'utf8')
+          await new DiskPlanRecords({
+            files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+            newId: () => agent,
+            now: () => '2026-09-16T10:00:00.000Z',
+            exists: async () => true,
+          }).recorded(agent)
+          throw new Error('malformed record unexpectedly succeeded')
+        }
+        const original = new DiskPlanRecords({
+          files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+          newId: () => agent,
+          now: () => '2026-09-16T10:00:00.000Z',
+          exists: async () => true,
+        })
+        const recorded = await original.prepare(new PlanBriefing({
+          story: null, issue: watch.issue, repository, located: watch.located,
+        }))
+        const snapshotPath = join(root, 'harness', agent, DiskPlanRecords.CLEANUP_EVIDENCE)
+        const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+          read: async (path: string) => {
+            if (path === snapshotPath) {
+              throw Object.assign(new Error('snapshot input/output error'), { code: 'EIO' })
+            }
+            return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
+          },
+        })
+        await new DiskPlanRecords({
+          files, newId: () => agent, now: () => '2026-09-16T10:00:00.000Z', exists: async () => true,
+        }).cleanupEvidence(recorded)
+        throw new Error('snapshot read unexpectedly succeeded')
+      } finally {
+        await fs.rm(root, { recursive: true, force: true })
+      }
+    }
+    const lostRequeueFailure = async (statusFailure: Error, effects: { archives: number }): Promise<never> => {
+      let status: PlanIssueStatusValue = PlanIssueStatus.IN_PROGRESS
+      let reads = 0
+      class Records extends PlanRecords {
+        override async recorded(): Promise<PlanWatch | null> { return watch }
+        override async retired(): Promise<PlanWatch | null> { return null }
+        override async nonLaunch(): Promise<PlanNonLaunch> {
+          return new PlanNonLaunch({
+            conversation: agent,
+            callId: null,
+            source: 'before-worker',
+            diagnostic: 'worker did not start',
+            observedAt: '2026-09-16T10:00:00.000Z',
+          })
+        }
+        override async cleanupEvidence(): Promise<UnusedWorkspace | null> { return null }
+        override async recordCleanupEvidence(): Promise<void> {}
+        override async archive(): Promise<void> { effects.archives += 1 }
+      }
+      class CleanupWorkspace extends Workspace {
+        override async inspectUnlaunched(): Promise<UnusedWorkspace> {
+          return new UnusedWorkspace({ watch, baseSha: 'a'.repeat(40), checkedAt: '2026-09-16T10:01:00.000Z' })
+        }
+        override async undoUnlaunched(): Promise<void> {}
+        override async confirmAbsent(): Promise<void> {}
+      }
+      class Issues extends PlanIssues {
+        override async statusOf(): Promise<PlanIssueStatusValue> {
+          reads += 1
+          if (reads === 3) throw statusFailure
+          return status
+        }
+      }
+      class Claims extends DispatchClaims {
+        override async requeue(): Promise<void> {
+          status = PlanIssueStatus.READY
+          throw new PlanIssueNotClaimed('checked requeue answer was lost')
+        }
+      }
+      await new CleanupPlan({
+        records: new Records(), workspace: new CleanupWorkspace(), claims: new Claims(), planIssues: new Issues(),
+      }).execute({ agent, issue: 331, repository } as never)
+      throw new Error('lost requeue unexpectedly succeeded')
+    }
+    type Producer = (effects: { archives: number }) => Promise<never>
+    const cases: readonly [string, Producer, new (...args: never[]) => Error, string][] = [
+      [
+        'remaining registration',
+        async () => workspace(async () => null).confirmAbsent(watch) as Promise<never>,
+        PlanCleanupConflict,
+        'cleanup-plan-conflict',
+      ],
+      [
+        'seed errno',
+        async () => workspace(async () => {
+          throw Object.assign(new Error('seed permission denied'), { code: 'EACCES' })
+        }).inspectUnlaunched(watch, null) as Promise<never>,
+        PlanCleanupNotRead,
+        'cleanup-plan-failed',
+      ],
+      [
+        'malformed seed',
+        async () => workspace(async () => 'not a state document').inspectUnlaunched(watch, null) as Promise<never>,
+        PlanCleanupNotUnderstood,
+        'cleanup-plan-unreadable',
+      ],
+      ['record snapshot errno', async () => diskFailure('snapshot-read'), PlanAgentNotLaunched, 'cleanup-plan-failed'],
+      ['malformed record', async () => diskFailure('malformed-record'), PlanAgentNotNamed, 'cleanup-plan-unreadable'],
+      [
+        'lost requeue status read',
+        (effects) => lostRequeueFailure(new PlanStatusNotRead('status command failed'), effects),
+        PlanCleanupNotRead,
+        'cleanup-plan-failed',
+      ],
+      [
+        'lost requeue malformed status',
+        (effects) => lostRequeueFailure(new PlanStatusNotUnderstood('status labels malformed'), effects),
+        PlanCleanupNotUnderstood,
+        'cleanup-plan-unreadable',
+      ],
+    ]
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      for (const [name, produce, constructor, code] of cases) {
+        const effects = { archives: 0 }
+        const causes: Error[] = []
+        let first = true
+        const execute = vi.fn(async () => {
+          if (!first) return
+          first = false
+          try {
+            await produce(effects)
+          } catch (cause) {
+            causes.push(cause as Error)
+            throw cause
+          }
+          effects.archives += 1
+        })
+        const projection = { recover: vi.fn(async () => null) }
+        const port = await RunningApi.listening({
+          cleanupPlan: { execute } as unknown as CleanupPlan,
+          recovery: projection,
+        })
+
+        const refused = await RunningApi.post(port, '/cleanup-plan', body)
+        expect(refused.status, name).toBe(400)
+        expect(causes[0], name).toBeInstanceOf(constructor)
+        expect(await refused.json(), name).toEqual({ code, detail: causes[0]!.message })
+        expect(effects.archives, name).toBe(0)
+        expect(projection.recover, name).not.toHaveBeenCalled()
+
+        const retried = await RunningApi.post(port, '/cleanup-plan', body)
+        expect(retried.status, name).toBe(200)
+        expect(await retried.json(), name).toEqual({ agent })
+        expect(execute, name).toHaveBeenCalledTimes(2)
+        expect(projection.recover, name).toHaveBeenCalledTimes(1)
+      }
+      expect(complaining.mock.calls).toEqual([])
+    } finally {
+      complaining.mockRestore()
+    }
+  })
+
+  it('an actual cleanup adapter bug keeps identity through the shared fallback and releases the reservation', async () => {
+    const agent = '11111111-1111-4111-8111-111111111111'
+    const watch = new PlanWatch({
+      story: null,
+      issue: new PlanIssue({ number: 331, url: 'https://github.com/owner/name/issues/331' }),
+      located: new WorkspaceLocation({
+        root: '/repo/checkout', path: '/repo/checkout/.worktrees/331', branch: 'feat/331',
+      }),
+      repository: new RepositoryName('owner/name'),
+      agent,
+    })
+    const defect = new TypeError('seed reader sentinel defect')
+    const output = (stdout = '') => new ProcessOutput({ code: 0, stdout, stderr: '' })
+    const adapter = new GitWorkspace({
+      baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
+      stderr: () => {},
+      write: async () => {},
+      read: async () => { throw defect },
+      run: async (argv) => {
+        if (argv.includes('get-url')) return output('https://github.com/owner/name.git\n')
+        if (argv.includes('--show-toplevel')) return output(`${watch.located.root}\n`)
+        if (argv.includes('worktree') && argv.includes('list')) {
+          return output(
+            `worktree ${watch.located.root}\nHEAD ${'a'.repeat(40)}\nbranch refs/heads/main\n\n`
+            + `worktree ${watch.located.path}\nHEAD ${'a'.repeat(40)}\nbranch refs/heads/feat/331\n`
+          )
+        }
+        throw new Error(`unlisted git request: ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async () => { throw new Error('GitHub must not be reached') },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    const causes: unknown[] = []
+    let first = true
+    const execute = vi.fn(async () => {
+      if (!first) return
+      first = false
+      try {
+        await adapter.inspectUnlaunched(watch, null)
+      } catch (cause) {
+        causes.push(cause)
+        throw cause
+      }
+    })
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      cleanupPlan: { execute } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const body = `{"repo":"owner/name","issue":331,"agent":"${agent}"}`
+    try {
+      const refused = await RunningApi.post(port, '/cleanup-plan', body)
+      expect(refused.status).toBe(400)
+      expect(await refused.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+      expect(causes).toEqual([defect])
+      expect(projection.recover).not.toHaveBeenCalled()
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('seed reader sentinel defect')
+
+      const retried = await RunningApi.post(port, '/cleanup-plan', body)
+      expect(retried.status).toBe(200)
+      expect(execute).toHaveBeenCalledTimes(2)
+      expect(projection.recover).toHaveBeenCalledTimes(1)
+    } finally {
       complaining.mockRestore()
     }
   })

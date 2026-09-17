@@ -28,10 +28,13 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ClaudeCallResult } from '../../src/infrastructure/claude-call-result.ts'
@@ -550,75 +553,71 @@ describe('headless dispatch dry run', () => {
       session: CoordinatingLiveSessions.SESSION,
       attention: SessionAttention.working(),
     }))
-    const sessions = new PlanSessions()
-    const activePlans = new ActivePlans({ sessions })
-    const server = new ApiServer({
-      port: 0,
-      startPlan: null,
-      startMilestonePlan: start,
-      sessions,
-      activePlans,
-      coordinatingSessions: coordinating,
-      readEpicGroom: new AuthorisedGroom(),
-      frontendRoot: join(root, 'frontend-not-built'),
-    })
-    servers.push(server)
-    const port = await server.start()
-    pending.push({
-      release: releasePendingWait,
-      diagnostic,
-      supervised: implementationAccepted,
-      finalize: () => {
-        const descriptor = spawnedDescriptors[1]
-        if (descriptor !== undefined) {
-          writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
-        }
-      },
-    })
-
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ milestone: Rehearsal.MILESTONE }),
-    })
-    expect(response.status).toBe(202)
-    await BoundedDrain.wait(needsRecovery ? diagnostic : implementationAccepted.promise, 1_000)
-    expect(await response.json()).toEqual({
-      status: 'started',
-      id: null,
-      repo: Rehearsal.REPOSITORY,
-      issue: { number: Rehearsal.ISSUE, url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}` },
-      agent: Rehearsal.CONVERSATION,
-      branch: `feat/${Rehearsal.ISSUE}`,
-      worktree: boundaries.worktree,
-      root: boundaries.checkoutRoot,
-      baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
-    })
-    expect(trace).toEqual(needsRecovery
-      ? ['claim', 'seed-slice', 'spawn-plan', 'publication-refused']
-      : ['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
-    expect(spawnedDescriptors).toHaveLength(needsRecovery ? 1 : 2)
-    const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
-    expect(plannerDescriptor.argv).toEqual([
-      '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
-      '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
-      '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
-      ClaudePlanCalls.OPENING,
-    ])
-    expect(plannerCompletion.measurement).toEqual({
-      cost: { kind: 'reported', totalUsd: 0.4208795, attribution: 'initial-invocation' },
-      turns: 1,
-      durationMs: 7071,
-      unavailable: [],
-    })
-    expect(plannerCompletion.wallDurationMs).toBe(9_000)
-    expect(boundaries.postedBody).toBe(
-      `Plan ${Rehearsal.PLAN_HASH} — part 1/1\n`
-      + `Source: ${Rehearsal.PLAN_PATH}\n\n${Rehearsal.PLAN}`
-    )
-    expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
-
     if (!needsRecovery) {
+      const sessions = new PlanSessions()
+      const activePlans = new ActivePlans({ sessions })
+      const server = new ApiServer({
+        port: 0,
+        startPlan: null,
+        startMilestonePlan: start,
+        sessions,
+        activePlans,
+        coordinatingSessions: coordinating,
+        readEpicGroom: new AuthorisedGroom(),
+        frontendRoot: join(root, 'frontend-not-built'),
+      })
+      servers.push(server)
+      const port = await server.start()
+      pending.push({
+        release: releasePendingWait,
+        diagnostic,
+        supervised: implementationAccepted,
+        finalize: () => {
+          const descriptor = spawnedDescriptors[1]
+          if (descriptor !== undefined) {
+            writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
+          }
+        },
+      })
+      const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ milestone: Rehearsal.MILESTONE }),
+      })
+      expect(response.status).toBe(202)
+      await BoundedDrain.wait(implementationAccepted.promise, 1_000)
+      expect(await response.json()).toEqual({
+        status: 'started',
+        id: null,
+        repo: Rehearsal.REPOSITORY,
+        issue: { number: Rehearsal.ISSUE, url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}` },
+        agent: Rehearsal.CONVERSATION,
+        branch: `feat/${Rehearsal.ISSUE}`,
+        worktree: boundaries.worktree,
+        root: boundaries.checkoutRoot,
+        baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
+      })
+      expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
+      expect(spawnedDescriptors).toHaveLength(2)
+      const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
+      expect(plannerDescriptor.argv).toEqual([
+        '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+        '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
+        '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
+        ClaudePlanCalls.OPENING,
+      ])
+      expect(plannerCompletion.measurement).toEqual({
+        cost: { kind: 'reported', totalUsd: 0.4208795, attribution: 'initial-invocation' },
+        turns: 1,
+        durationMs: 7071,
+        unavailable: [],
+      })
+      expect(plannerCompletion.wallDurationMs).toBe(9_000)
+      expect(boundaries.postedBody).toBe(
+        `Plan ${Rehearsal.PLAN_HASH} — part 1/1\n`
+        + `Source: ${Rehearsal.PLAN_PATH}\n\n${Rehearsal.PLAN}`
+      )
+      expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
       expect(boundaries.publicationAttempts).toBe(1)
       const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
       expect(implementationDescriptor.requestId).toBe(`implementation:${Rehearsal.PLAN_CALL}`)
@@ -628,14 +627,22 @@ describe('headless dispatch dry run', () => {
         '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
         ClaudePlanCalls.OPENING,
       ])
+      const restartedFiles = new HeadlessFiles({ root: stateRoot, fs, newId: () => 'read-only-temporary-record' })
+      const restartedRecords = new DiskPlanRecords({
+        files: restartedFiles,
+        newId: () => { throw new Error('read-only restart must not allocate conversation identity') },
+        now: () => { throw new Error('read-only restart must preserve recorded time') },
+        exists: async (path) => fs.stat(path).then(() => true, () => false),
+      })
       let restartSpawns = 0
+      let restartIdentities = 0
       const readOnlyCalls = new ClaudeCalls({
-        files,
+        files: restartedFiles,
         binary: '/usr/local/bin/claude',
         worker: '/backend/headless-call-worker.ts',
         spawn: (() => { restartSpawns += 1; throw new Error('read-only restart must not spawn') }) as typeof import('node:child_process').spawn,
         env: {},
-        newId: () => { throw new Error('read-only restart must not allocate identity') },
+        newId: () => { restartIdentities += 1; throw new Error('read-only restart must not allocate identity') },
         now: () => { throw new Error('read-only restart must preserve recorded time') },
         budgetMs: 7_200_000,
         killGraceMs: 5_000,
@@ -652,22 +659,107 @@ describe('headless dispatch dry run', () => {
         }),
         pluginRoot: '/plugin',
         resumable: async () => { throw new Error('read-only restart must not inspect transcript') },
-        records,
+        records: restartedRecords,
         nowMs: () => Date.parse('2026-09-16T09:00:03.000Z'),
       })
-      const watch = await records.recorded(Rehearsal.CONVERSATION)
-      expect(watch).not.toBeNull()
-      const projected = await readOnlyPlanCalls.recoveryFor(watch!)
-      expect(projected.action).toBe('observe')
-      expect(projected.call().conversation).toBe(Rehearsal.CONVERSATION)
-      expect(projected.detail).toContain('implementation')
+      const restartedSessions = new PlanSessions()
+      const restartedActivePlans = new ActivePlans({ sessions: restartedSessions })
+      const projector = new RecordedPlanRecovery({
+        records: restartedRecords,
+        calls: readOnlyPlanCalls,
+        ownership: readOnlyCalls,
+        checkouts: new RememberingCheckouts(),
+        activePlans: restartedActivePlans,
+        reviews: new ReviewWatch({
+          asked: async () => ({ changes: [] }), review: async () => {},
+          sleep: () => new Promise<void>(() => {}), stderr: () => {},
+          label: 'headless rehearsal read-only restart', log: new ReviewLog(),
+        }),
+      })
+      expect(await projector.recover()).toBeNull()
+      expect(restartedActivePlans.known()).toEqual([
+        expect.objectContaining({
+          phase: 'uncertain',
+          diagnostic: expect.stringContaining('not owned by this API process'),
+          plan: expect.objectContaining({ agent: Rehearsal.CONVERSATION }),
+        }),
+      ])
       expect(restartSpawns).toBe(0)
+      expect(restartIdentities).toBe(0)
       expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
       return
     }
 
+    await fs.mkdir(dirname(boundaries.attemptsPath), { recursive: true })
+    await fs.writeFile(boundaries.attemptsPath, boundaries.attemptBytes, 'utf8')
+    const seededWatch = await records.prepare(new PlanBriefing({
+      story: null,
+      issue: new PlanIssue({
+        number: Rehearsal.ISSUE,
+        url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}`,
+      }),
+      repository: new RepositoryName(Rehearsal.REPOSITORY),
+      located: new WorkspaceLocation({
+        root: boundaries.checkoutRoot,
+        path: boundaries.worktree,
+        branch: `feat/${Rehearsal.ISSUE}`,
+      }),
+    }))
+    const seededPlanner = new StartedPlanCall({
+      conversation: Rehearsal.CONVERSATION,
+      id: Rehearsal.PLAN_CALL,
+    })
+    const seededDirectory = files.callDirectory(seededPlanner)
+    await fs.mkdir(seededDirectory, { recursive: true })
+    await fs.writeFile(join(seededDirectory, CallDescriptor.FILE), new CallDescriptor({
+      conversation: Rehearsal.CONVERSATION,
+      purpose: 'plan',
+      requestId: null,
+      cwd: boundaries.worktree,
+      binary: '/usr/local/bin/claude',
+      argv: [
+        '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
+        '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
+        '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
+        ClaudePlanCalls.OPENING,
+      ],
+      startedAt: '2026-09-16T09:00:01.000Z',
+      budgetMs: 7_200_000,
+      killGraceMs: 5_000,
+    }).text(), 'utf8')
+    await fs.writeFile(join(seededDirectory, CallDescriptor.PROMPT), 'Independently seeded planner prompt.', 'utf8')
+    await fs.writeFile(
+      join(seededDirectory, CallDescriptor.COMPLETION), StoredCompletion.text(plannerCompletion), 'utf8',
+    )
+    expect(seededWatch.agent).toBe(Rehearsal.CONVERSATION)
+    expect(plannerCompletion.measurement).toEqual({
+      cost: { kind: 'reported', totalUsd: 0.4208795, attribution: 'initial-invocation' },
+      turns: 1,
+      durationMs: 7071,
+      unavailable: [],
+    })
+    expect(plannerCompletion.wallDurationMs).toBe(9_000)
+    await agents.recover({
+      agent: Rehearsal.CONVERSATION,
+      issue: Rehearsal.ISSUE,
+      repository: new RepositoryName(Rehearsal.REPOSITORY),
+    })
+    await BoundedDrain.wait(diagnostic, 1_000)
+    expect(trace).toEqual(['publication-refused'])
+    expect(boundaries.publicationAttempts).toBe(1)
+    expect(spawnedDescriptors).toHaveLength(0)
+
+    const restartedFiles = new HeadlessFiles({ root: stateRoot, fs, newId: () => 'restarted-temporary-record' })
+    const restartedRecords = new DiskPlanRecords({
+      files: restartedFiles,
+      newId: () => { throw new Error('recovery must preserve the original conversation') },
+      now: () => { throw new Error('recovery must preserve the original dispatch time') },
+      exists: async (path) => fs.stat(path).then(() => true, () => false),
+    })
+    const restartedSupervisorDiagnostics = [new Deferred(), new Deferred()]
+    let restartedSupervisorIndex = 0
     const restartedCalls = new ClaudeCalls({
-      files,
+      files: restartedFiles,
       binary: '/usr/local/bin/claude',
       worker: '/backend/headless-call-worker.ts',
       spawn: ((binary: string, argv: readonly string[]) => {
@@ -700,7 +792,7 @@ describe('headless dispatch dry run', () => {
       }),
       pluginRoot: '/plugin',
       resumable: async () => true,
-      records,
+      records: restartedRecords,
       nowMs: () => Date.parse(Rehearsal.STARTED_AT),
     })
     const restartedPublication = new GhPlanPublication({
@@ -711,15 +803,15 @@ describe('headless dispatch dry run', () => {
         git: boundaries.git,
         dispatchCheck: '/plugin/dispatch-check.mjs',
       }),
-      files,
+      files: restartedFiles,
       digest: (text) => createHash('sha256').update(text).digest('hex'),
     })
     const restartedAgents = new HeadlessPlanAgents({
-      records,
+      records: restartedRecords,
       calls: restartedPlanCalls,
       continuation: new ContinuePlan({ calls: restartedPlanCalls, publication: restartedPublication }),
       newId: () => { throw new Error('fix identity is not requested') },
-      stderr: () => {},
+      stderr: () => restartedSupervisorDiagnostics[restartedSupervisorIndex++]?.release(),
     })
     const recoveredSessions = new PlanSessions()
     const recoveredPlans = new ActivePlans({ sessions: recoveredSessions })
@@ -732,7 +824,7 @@ describe('headless dispatch dry run', () => {
       log: new ReviewLog(),
     })
     const recovery = new RecordedPlanRecovery({
-      records,
+      records: restartedRecords,
       calls: restartedPlanCalls,
       ownership: restartedCalls,
       checkouts: new RememberingCheckouts(),
@@ -759,12 +851,24 @@ describe('headless dispatch dry run', () => {
     expect(recovered.status).toBe(202)
     expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
     await BoundedDrain.wait(implementationAccepted.promise, 1_000)
+    pending.push({
+      release: releasePendingWait,
+      diagnostic: restartedSupervisorDiagnostics[0].promise,
+      supervised: implementationAccepted,
+      finalize: () => writeFileSync(
+        join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion(),
+      ),
+    })
     expect(boundaries.publicationAttempts).toBe(2)
+    expect(boundaries.postedBody).toBe(
+      `Plan ${Rehearsal.PLAN_HASH} — part 1/1\n`
+      + `Source: ${Rehearsal.PLAN_PATH}\n\n${Rehearsal.PLAN}`
+    )
     expect(trace).toEqual([
-      'claim', 'seed-slice', 'spawn-plan', 'publication-refused', 'publish', 'spawn-implementation',
+      'publication-refused', 'publish', 'spawn-implementation',
     ])
-    expect(spawnedDescriptors).toHaveLength(2)
-    const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[1], 'utf8')) as Record<string, unknown>
+    expect(spawnedDescriptors).toHaveLength(1)
+    const implementationDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
     expect(implementationDescriptor.requestId).toBe(`implementation:${Rehearsal.PLAN_CALL}`)
     expect(implementationDescriptor.argv).toEqual([
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
@@ -773,7 +877,7 @@ describe('headless dispatch dry run', () => {
       ClaudePlanCalls.OPENING,
     ])
     expect(boundaries.publicationAttempts).toBe(2)
-    expect(spawnedDescriptors).toHaveLength(2)
+    expect(spawnedDescriptors).toHaveLength(1)
     expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
 
     const repeated = await BoundedDrain.value(fetch(`http://127.0.0.1:${recoveredPort}/recover-plan`, {
@@ -787,10 +891,18 @@ describe('headless dispatch dry run', () => {
     }), 1_000)
     expect(repeated.status).toBe(202)
     expect(await repeated.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    pending.push({
+      release: releasePendingWait,
+      diagnostic: restartedSupervisorDiagnostics[1].promise,
+      supervised: implementationAccepted,
+      finalize: () => writeFileSync(
+        join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion(),
+      ),
+    })
     expect(boundaries.publicationAttempts).toBe(2)
-    expect(spawnedDescriptors).toHaveLength(2)
+    expect(spawnedDescriptors).toHaveLength(1)
 
-    writeFileSync(join(dirname(spawnedDescriptors[1]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
+    writeFileSync(join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
     releasePendingWait.release()
     const completedImplementation = await BoundedDrain.value(restartedCalls.wait(new StartedPlanCall({
       conversation: Rehearsal.CONVERSATION,
@@ -800,14 +912,9 @@ describe('headless dispatch dry run', () => {
       succeeded: false,
       execution: { kind: 'unavailable', diagnostic: 'scripted rehearsal closed after accepted continuation' },
     })
+    await Promise.all(restartedSupervisorDiagnostics.map((barrier) => BoundedDrain.wait(barrier.promise, 1_000)))
 
-    expect(boundaries.calls.filter((call) => call.tool === 'node' && !call.argv.includes('--check-plan'))).toEqual([
-      {
-        tool: 'node',
-        argv: ['/plugin/dispatch-check.mjs', String(Rehearsal.ISSUE), '--repo', Rehearsal.REPOSITORY],
-        cwd: boundaries.checkoutRoot,
-      },
-    ])
+    expect(boundaries.calls.filter((call) => call.tool === 'node' && !call.argv.includes('--check-plan'))).toEqual([])
 
     await expect(boundaries.node([
       '/plugin/dispatch-check.mjs', '332', '--repo', Rehearsal.REPOSITORY, '--check-plan',

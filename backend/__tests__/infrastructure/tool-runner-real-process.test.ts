@@ -101,24 +101,37 @@ describe('ToolRunner', () => {
     const child = [...tracked.children][0]
     expect(child).toBeDefined()
     await once(child.stdout!, 'data')
-
-    await stopChildren()
+    const sentinel = new Error('abort after child readiness')
+    let aborted: unknown
+    try {
+      throw sentinel
+    } catch (cause) {
+      aborted = cause
+    } finally {
+      await stopChildren()
+    }
     const output = await running
 
+    expect(aborted).toBe(sentinel)
     expect(output.failed).toBe(true)
     expect(child.signalCode).toBe('SIGKILL')
     expect(Date.now() - started).toBeLessThan(5_000)
   })
 
   it('timeout exits keep a diagnostic even when the child exits numerically', async () => {
-    const output = await Node.running(5_000).run(['-e', [
+    const running = Node.running(5_000).run(['-e', [
       'process.stdout.write("ready\\n")',
       'process.on("SIGTERM", () => process.exit(1))',
       'setInterval(() => {}, 1_000)',
     ].join(';')])
+    const child = [...tracked.children][0]
+    expect(child).toBeDefined()
+    const output = await running
 
     expect(output).toMatchObject({ code: 1, stdout: 'ready\n' })
     expect(output.stderr).not.toBe('')
+    expect(child.exitCode).toBe(1)
+    expect(child.signalCode).toBeNull()
   })
 
   it('a_tool_that_refuses_is_a_code_and_a_reason_and_not_something_thrown_at_the_caller', async () => {

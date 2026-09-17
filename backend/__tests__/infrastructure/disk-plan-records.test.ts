@@ -382,7 +382,7 @@ describe('DiskPlanRecords', () => {
     }
   })
 
-  it('record I/O failures retain their typed cause while implementation defects escape', async () => {
+  it('snapshot and proof-history I/O failures retain bytes and typed causes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-io-'))
     roots.push(root)
     const original = PlanRecordMother.records(root)
@@ -394,25 +394,141 @@ describe('DiskPlanRecords', () => {
       diagnostic: 'worker preparation failed',
       observedAt: PlanRecordMother.STARTED_AT,
     })
-    const readFailure = Object.assign(new Error('input/output error'), { code: 'EIO' })
-    const unreadableFiles = Object.assign(
+    await original.recordNonLaunch(watch, proof)
+    const evidence = new UnusedWorkspace({
+      watch, baseSha: 'a'.repeat(40), checkedAt: PlanRecordMother.STARTED_AT,
+    })
+    await original.recordCleanupEvidence(evidence)
+    const descriptorPath = join(root, 'harness', watch.agent, 'dispatch.json')
+    const proofPath = join(root, 'harness', watch.agent, DiskPlanRecords.NON_LAUNCH)
+    const snapshotPath = join(root, 'harness', watch.agent, DiskPlanRecords.CLEANUP_EVIDENCE)
+    const callsPath = join(root, 'harness', watch.agent, 'calls')
+    const originalBytes = await Promise.all([
+      readFile(descriptorPath, 'utf8'), readFile(proofPath, 'utf8'), readFile(snapshotPath, 'utf8'),
+    ])
+    const snapshotFailure = Object.assign(new Error('snapshot input/output error'), { code: 'EIO' })
+    const snapshotFiles = Object.assign(
       new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
-      { read: async () => { throw readFailure } },
+      {
+        read: async (path: string) => {
+          if (path === snapshotPath) throw snapshotFailure
+          return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
+        },
+      },
     )
-    await expect(PlanRecordMother.records(root, { files: unreadableFiles }).nonLaunch(watch))
+    await expect(PlanRecordMother.records(root, { files: snapshotFiles }).cleanupEvidence(watch))
       .rejects.toBeInstanceOf(PlanAgentNotLaunched)
 
-    const writeFailure = Object.assign(new Error('disk full'), { code: 'ENOSPC' })
-    const unwritableFiles = Object.assign(
+    const listingFailure = Object.assign(new Error('proof directory input/output error'), { code: 'EIO' })
+    const listingFiles = Object.assign(
       new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
-      { writeOnce: async () => { throw writeFailure } },
+      {
+        list: async (path: string) => {
+          if (path === callsPath) throw listingFailure
+          return new HeadlessFiles({ root, fs, newId: () => 'unused' }).list(path)
+        },
+      },
     )
-    await expect(PlanRecordMother.records(root, { files: unwritableFiles }).recordNonLaunch(watch, proof))
+    await expect(PlanRecordMother.records(root, { files: listingFiles }).nonLaunch(watch))
       .rejects.toBeInstanceOf(PlanAgentNotLaunched)
 
-    const defect = new TypeError('existence implementation defect')
-    const defective = PlanRecordMother.records(root, { exists: async () => { throw defect } })
-    await expect(defective.find({ issue: watch.issue.number, repository: watch.repository })).rejects.toBe(defect)
+    expect(await Promise.all([
+      readFile(descriptorPath, 'utf8'), readFile(proofPath, 'utf8'), readFile(snapshotPath, 'utf8'),
+    ])).toEqual(originalBytes)
+  })
+
+  it('immutable proof readback failure retains original bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-readback-'))
+    roots.push(root)
+    const original = PlanRecordMother.records(root)
+    const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker preparation failed',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+    await original.recordNonLaunch(watch, proof)
+    const proofPath = join(root, 'harness', watch.agent, DiskPlanRecords.NON_LAUNCH)
+    const originalBytes = await readFile(proofPath, 'utf8')
+    const failure = Object.assign(new Error('immutable readback failed'), { code: 'EIO' })
+    const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+      read: async (path: string) => {
+        if (path === proofPath) throw failure
+        return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
+      },
+    })
+
+    await expect(PlanRecordMother.records(root, { files }).recordNonLaunch(watch, proof))
+      .rejects.toBeInstanceOf(PlanAgentNotLaunched)
+
+    expect(await readFile(proofPath, 'utf8')).toBe(originalBytes)
+  })
+
+  it.each(['mkdir', 'stat', 'rename'] as const)(
+    'archive %s failure retains every active record byte', async (operation) => {
+      const root = await mkdtemp(join(tmpdir(), `ct-plan-records-archive-${operation}-`))
+      roots.push(root)
+      const original = PlanRecordMother.records(root)
+      const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+      await original.recordNonLaunch(watch, new PlanNonLaunch({
+        conversation: watch.agent,
+        callId: null,
+        source: 'before-worker',
+        diagnostic: 'worker preparation failed',
+        observedAt: PlanRecordMother.STARTED_AT,
+      }))
+      await original.recordCleanupEvidence(new UnusedWorkspace({
+        watch, baseSha: 'a'.repeat(40), checkedAt: PlanRecordMother.STARTED_AT,
+      }))
+      const active = join(root, 'harness', watch.agent)
+      const destinationRoot = join(root, 'retired-harness')
+      const destination = join(destinationRoot, watch.agent)
+      const paths = ['dispatch.json', DiskPlanRecords.NON_LAUNCH, DiskPlanRecords.CLEANUP_EVIDENCE]
+      const originalBytes = await Promise.all(paths.map((name) => readFile(join(active, name), 'utf8')))
+      const failure = Object.assign(new Error(`archive ${operation} input/output error`), { code: 'EIO' })
+      const faultedFs = {
+        ...fs,
+        mkdir: (async (path: Parameters<typeof fs.mkdir>[0], options?: Parameters<typeof fs.mkdir>[1]) => {
+          if (operation === 'mkdir' && String(path) === destinationRoot) throw failure
+          return fs.mkdir(path, options)
+        }) as typeof fs.mkdir,
+        stat: (async (path: Parameters<typeof fs.stat>[0], options?: Parameters<typeof fs.stat>[1]) => {
+          if (operation === 'stat' && String(path) === destination) throw failure
+          return fs.stat(path, options)
+        }) as typeof fs.stat,
+        rename: async (oldPath: Parameters<typeof fs.rename>[0], newPath: Parameters<typeof fs.rename>[1]) => {
+          if (operation === 'rename' && String(oldPath) === active && String(newPath) === destination) throw failure
+          return fs.rename(oldPath, newPath)
+        },
+      }
+      const records = PlanRecordMother.records(root, {
+        files: new HeadlessFiles({ root, fs: faultedFs, newId: () => 'temporary-record' }),
+      })
+
+      await expect(records.archive(watch)).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+
+      expect(await Promise.all(paths.map((name) => readFile(join(active, name), 'utf8')))).toEqual(originalBytes)
+      await expect(fs.stat(destination)).rejects.toMatchObject({ code: 'ENOENT' })
+    },
+  )
+
+  it('unexpected record I/O defects escape with object identity', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-defect-'))
+    roots.push(root)
+    const original = PlanRecordMother.records(root)
+    const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+    const snapshotPath = join(root, 'harness', watch.agent, DiskPlanRecords.CLEANUP_EVIDENCE)
+    const defect = new TypeError('snapshot implementation defect')
+    const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+      read: async (path: string) => {
+        if (path === snapshotPath) throw defect
+        return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
+      },
+    })
+
+    await expect(PlanRecordMother.records(root, { files }).cleanupEvidence(watch)).rejects.toBe(defect)
   })
 
   it('retirement preserves bytes and permits preparation', async () => {

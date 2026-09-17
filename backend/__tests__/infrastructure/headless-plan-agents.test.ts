@@ -9,7 +9,7 @@ import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotResumed } fro
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
-import { StartedPlanCall, type CompletedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanRecovery } from '../../src/domain/policies/plan-recovery.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -157,6 +157,23 @@ class HeadlessMother {
     repository: HeadlessMother.REPOSITORY,
   })
 
+  static failed(call = HeadlessMother.CALL): CompletedPlanCall {
+    return new CompletedPlanCall({
+      call,
+      code: 1,
+      signal: null,
+      finishedAt: '2026-09-16T10:01:00.000Z',
+      wallDurationMs: 60_000,
+      execution: { kind: 'error', diagnostic: 'planner failed' },
+      measurement: {
+        cost: { kind: 'unavailable', reason: 'failed call' },
+        turns: null,
+        durationMs: null,
+        unavailable: ['failed call'],
+      },
+    })
+  }
+
   static invocation(requestId: string): CallInvocation {
     return new CallInvocation({
       conversation: HeadlessMother.CONVERSATION,
@@ -255,14 +272,32 @@ describe('HeadlessPlanAgents', () => {
     expect(events).toEqual(['recorded', 'proof-recorded'])
   })
 
-  it('restart observes the original planner deadline', async () => {
+  it('restart delegates from the planner call within its recorded deadline', async () => {
     const events: string[] = []
     const entered = new Deferred<void>()
     const completion = new Deferred<void>()
     const continuation = new ContinuationDouble(entered, completion)
+    const deadlineMs = Date.parse('2026-09-16T12:00:00.000Z')
+    class DeadlineCalls extends CallsDouble {
+      override async recoveryFor(): Promise<PlanRecovery> {
+        events.push('planner-read')
+        return PlanRecovery.from({
+          calls: [{
+            call: this.call,
+            purpose: 'plan',
+            startedAt: '2026-09-16T10:00:00.000Z',
+            deadlineMs,
+            completion: null,
+          }],
+          proof: null,
+          cleanup: null,
+          nowMs: deadlineMs - 1,
+        })
+      }
+    }
     const agents = new HeadlessPlanAgents({
       records: new RecordsDouble(HeadlessMother.WATCH, events),
-      calls: new CallsDouble(events, HeadlessMother.CALL),
+      calls: new DeadlineCalls(events, HeadlessMother.CALL),
       continuation,
       newId: () => '33333333-3333-4333-8333-333333333333',
       stderr: () => {},
@@ -282,30 +317,95 @@ describe('HeadlessPlanAgents', () => {
     completion.resolve()
   })
 
-  it('failed ambiguous or expired calls cannot relaunch', async () => {
-    const events: string[] = []
-    class RefusingCalls extends CallsDouble {
-      override async recoveryFor(): Promise<PlanRecovery> {
-        return PlanRecovery.from({
-          calls: [], proof: null, cleanup: null, nowMs: Date.parse('2026-09-16T10:00:00.000Z'),
-        })
-      }
-    }
-    const agents = new HeadlessPlanAgents({
-      records: new RecordsDouble(HeadlessMother.WATCH, events),
-      calls: new RefusingCalls(events, HeadlessMother.CALL),
-      continuation: new ContinuationDouble(new Deferred<void>(), new Deferred<void>()),
-      newId: () => '33333333-3333-4333-8333-333333333333',
-      stderr: () => {},
-    })
+  const refusalCases = [
+    {
+      name: 'failed planner',
+      calls: [{
+        call: HeadlessMother.CALL,
+        purpose: 'plan' as const,
+        startedAt: '2026-09-16T10:00:00.000Z',
+        deadlineMs: Date.parse('2026-09-16T12:00:00.000Z'),
+        completion: HeadlessMother.failed(),
+      }],
+      nowMs: Date.parse('2026-09-16T10:01:00.000Z'),
+      diagnostic: 'planner failed',
+    },
+    {
+      name: 'ambiguous planner history',
+      calls: [
+        {
+          call: HeadlessMother.CALL,
+          purpose: 'plan' as const,
+          startedAt: '2026-09-16T10:00:00.000Z',
+          deadlineMs: Date.parse('2026-09-16T12:00:00.000Z'),
+          completion: null,
+        },
+        {
+          call: new StartedPlanCall({
+            conversation: HeadlessMother.CONVERSATION,
+            id: '44444444-4444-4444-8444-444444444444',
+          }),
+          purpose: 'fix' as const,
+          startedAt: '2026-09-16T10:01:00.000Z',
+          deadlineMs: Date.parse('2026-09-16T12:01:00.000Z'),
+          completion: null,
+        },
+      ],
+      nowMs: Date.parse('2026-09-16T10:02:00.000Z'),
+      diagnostic: 'multiple unfinished calls',
+    },
+    {
+      name: 'expired planner',
+      calls: [{
+        call: HeadlessMother.CALL,
+        purpose: 'plan' as const,
+        startedAt: '2026-09-16T10:00:00.000Z',
+        deadlineMs: Date.parse('2026-09-16T12:00:00.000Z'),
+        completion: null,
+      }],
+      nowMs: Date.parse('2026-09-16T12:00:00.000Z'),
+      diagnostic: 'after its recorded deadline',
+    },
+    {
+      name: 'empty history',
+      calls: [],
+      nowMs: Date.parse('2026-09-16T10:00:00.000Z'),
+      diagnostic: 'no call descriptor',
+    },
+  ]
 
-    await expect(agents.recover({
-      agent: HeadlessMother.CONVERSATION,
-      issue: HeadlessMother.ISSUE.number,
-      repository: HeadlessMother.REPOSITORY,
-    })).rejects.toThrow('no call descriptor')
-    expect(events).toEqual([])
-  })
+  for (const refusal of refusalCases) {
+    it(`${refusal.name} cannot continue or start a replacement call`, async () => {
+      const events: string[] = []
+      const continuation = new ContinuationDouble(new Deferred<void>(), new Deferred<void>())
+      class RefusingCalls extends CallsDouble {
+        override async recoveryFor(): Promise<PlanRecovery> {
+          events.push('planner-read')
+          return PlanRecovery.from({
+            calls: refusal.calls,
+            proof: null,
+            cleanup: null,
+            nowMs: refusal.nowMs,
+          })
+        }
+      }
+      const agents = new HeadlessPlanAgents({
+        records: new RecordsDouble(HeadlessMother.WATCH, events),
+        calls: new RefusingCalls(events, HeadlessMother.CALL),
+        continuation,
+        newId: () => '33333333-3333-4333-8333-333333333333',
+        stderr: () => {},
+      })
+
+      await expect(agents.recover({
+        agent: HeadlessMother.CONVERSATION,
+        issue: HeadlessMother.ISSUE.number,
+        repository: HeadlessMother.REPOSITORY,
+      })).rejects.toThrow(refusal.diagnostic)
+      expect(continuation.params).toEqual([])
+      expect(events).toEqual(['planner-read'])
+    })
+  }
 
   it('fix recovery observes the recorded call', async () => {
     const events: string[] = []

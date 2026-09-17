@@ -125,3 +125,34 @@ Production unexpected errors remain HTTP 400 `request-failed` with stderr
 diagnostics. Bare route-only Express harnesses retain their default 500 behavior.
 No live Claude call, network mutation, GitHub write, push, governed-repository
 action, nested agent, Orca action or delivered-run mutation occurred.
+
+## Independent-review completion
+
+The 2026-09-17 review of
+`7ee2ed0f9578ade3f31e71865423f8791219ccc7` found that rows 96-100 and the
+associated all-closed handoff overstated what their assertions established. This
+section supersedes those closure claims; it does not rewrite the earlier record.
+
+| Finding | Completed evidence |
+|---|---|
+| F1 | Actual `GitWorkspace`, `DiskPlanRecords` and lost-requeue `CleanupPlan` errors are produced inside real `ApiServer` requests. Exact mapped 400 responses, shared bug fallback/stderr, same sentinel identity, no projection/archive and reservation release are asserted. |
+| F2 | Every action cut asserts exact snapshot, worktree, branch, confirmation, claim and request state. Successful requeue/readback failure is separate. Snapshot read, proof listing, immutable readback and archive mkdir/stat/rename errno cuts retain all original bytes; unexpected defects retain object identity. |
+| F3 | Four isolated disk/Git scenarios directly seed original descriptor/proof bytes and use real `DispatchCheckClaims`, `GhPlanIssues` and `GhDispatchCandidates` with exact requests. Complete snapshot bytes, pre/post-retry artifacts, claim, registration, ref, path, candidate selection and next preparation are checked. |
+| F4 | Normal start rebuilds `RecordedPlanRecovery` and observes unowned uncertainty with original identity and zero launches. Recovery independently seeds the completed planner, rebuilds records and collaborators, and drains both restarted supervisors before teardown. |
+| F5 | Supervisor tests use planner policy/deadline outcomes for failed, ambiguous, expired and empty histories. Both endpoint matrices omit each field individually. Runner tests assert native numeric exit/null signal and exercise sentinel early-abort teardown. |
+| F6 | Synchronous fixture Git uses a five-second timeout. |
+
+Verification after these test-only corrections:
+
+- Focused groups passed 50 cleanup/record/real-Git tests, 79 API tests and 30
+  durable/rehearsal/planner/runner tests.
+- Backend typecheck passed.
+- Full backend passed 110 files and 2,217 tests.
+- Full frontend passed 70 files and 1,350 tests; its existing jsdom canvas
+  diagnostics remained non-failing.
+- Frontend production build passed with the existing chunk-size advisory.
+- `git diff --check` and the protected-path comparison passed with no output.
+
+No production code or budget changed in this completion. No new mutation sweep,
+red-first observation, live Claude call, network mutation, GitHub write, push,
+governed-repository action, Orca action or delivered-run mutation is claimed.

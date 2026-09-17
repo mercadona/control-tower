@@ -174,3 +174,28 @@ Fresh verification passed backend typecheck; focused groups of 201, 47, 9 and
 25 tests; the full backend suite with 110 files and 2,206 tests; the full
 frontend suite with 70 files and 1,350 tests; and the frontend production build.
 Node was `v25.9.0`; Git was `2.50.1 (Apple Git-155)`.
+
+## Independent-review completion
+
+The review of `7ee2ed0f9578ade3f31e71865423f8791219ccc7`
+showed that the round-three result above overstated several verification seams.
+This appendix supersedes the blanket closure at lines 153-176 while preserving
+the historical report.
+
+The completion is test-only. Real workspace, disk-record and lost-requeue errors
+now flow through mounted production HTTP routing. Cleanup assertions measure
+every cut's actual artifacts, snapshot, claim and exact requests, including the
+distinct successful-requeue/readback failure. Named record-I/O failures preserve
+bytes and unexpected identity. Four durable scenarios use real claim/status
+adapters and connect cleanup state to real candidate selection and subsequent
+preparation. Start and recovery fixtures are independently seeded and all
+restarted supervisors drain. Planner deadline outcomes, all individual missing
+fields, native numeric termination, early-abort teardown and bounded synchronous
+Git complete the finite matrix.
+
+Focused verification passed groups of 50, 79 and 30 tests. Backend typecheck and
+the full backend suite with 110 files and 2,217 tests passed. The full frontend
+suite with 70 files and 1,350 tests and the frontend production build passed.
+`git diff --check` and the protected-path comparison passed. No new mutation or
+red-first claim is made, and production unexpected failures remain HTTP 400
+`request-failed`; only bare route harnesses retain their default 500 behavior.
