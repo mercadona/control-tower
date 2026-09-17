@@ -29,6 +29,9 @@ PACKAGES := plugin backend frontend
 -include .env
 
 CT_API_PORT ?= 8787
+
+# Probe for #385's pull request: a root-level touch, to see whether the frontend
+# suite fails on main itself. This branch is thrown away.
 HARVEST_VARIABLE := CT_HARVEST_BQ_TABLE
 
 .PHONY: help install-all test-all clean-all \
