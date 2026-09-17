@@ -570,6 +570,10 @@ export class ClaudeCalls {
     }
   }
 
+  descriptorOf(call: StartedPlanCall): Promise<CallDescriptor> {
+    return this.#descriptor(call)
+  }
+
   async completed(call: StartedPlanCall): Promise<CompletedPlanCall | null> {
     return (await this.#read(call)).completion
   }

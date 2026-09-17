@@ -52,7 +52,7 @@ The controlling amendment is https://github.com/mercadona/control-tower/issues/3
 | Deployment | Deploy the code through the existing entrypoints. Leave `Invocation`, `.env.example` and `Makefile` unchanged. |
 | Rollback | Redeploy the prior code revision. First drain or stop and preserve driver work; an older binary cannot safely recover driver-owned records. |
 | Ownership | One API process owns a state root. Coalesce one driver promise per conversation. No distributed lock guarantee. |
-| Legacy graph | Keep `ContinuePlan`, `HeadlessPlanAgents`, `ClaudePlanCalls`, `ClaudeCalls` and their worker bodies unchanged. |
+| Legacy graph | Keep existing method bodies in `ContinuePlan`, `HeadlessPlanAgents`, `ClaudePlanCalls`, `ClaudeCalls` and the worker unchanged. |
 | New graph | Always admit new work to the machine. Resolve existing recovery/fix ownership from durable provenance, never configuration. |
 | Call identity | Keep legacy purpose `implementation` for machine calls; correlate each through request ID `run:<ticket>`. |
 | History | New recovery reads machine evidence before legacy call classification. Multiple step calls are not multiple outer implementations. |
@@ -107,6 +107,52 @@ Do not synthesize an outer completion. The existing policy selects the latest fi
 Failed, expired, ambiguous or unowned incomplete fixes project uncertain/inspect, preserve diagnostics and stop the review watcher.
 Owned incomplete fixes retain observation within their recorded deadline; keep the review watcher stopped until success.
 Successful latest fixes permit implementing and review watching. Only no-fix histories use bare machine delivery as the successful projection.
+
+### Typed provenance and untouched establishment
+
+Task 7 adds only `ClaudeCalls.descriptorOf(call): Promise<CallDescriptor>` to the legacy transport.
+It delegates to the existing private descriptor reader. Keep all old method bodies, descriptor schemas, `RecordedCall` and its consumers unchanged.
+The returned descriptor is already immutable and validated, with request identity, purpose, cwd and mode.
+Keep its existing missing/IO and malformed/identity error families. The query writes nothing and changes no process ownership.
+
+`RunPlanAgents.provenance(watch)` owns classification once; Task 8 reuses it, not another descriptor parser.
+Its closed vocabulary is `RunProvenance.LEGACY` or `RunProvenance.DRIVER`; unknown or conflicting evidence throws `PlanRecoveryConflict`.
+Use the recorded watch, admission, journal presence and typed descriptors for every recorded call. Match descriptor cwd to the watch.
+
+A missing admission never proves legacy ownership. Any implementation request with the `run:` prefix refuses legacy delegation, even without other machine evidence.
+For positive legacy proof, need no backend manifest/operations, one initial planner with null request ID, and one resumed outer implementation.
+Its request ID must equal `implementation:<that-planner-call-id>`. Resumed fix records may accompany that pair; they do not prove ownership alone.
+
+Reject unknown implementation IDs, mixed ownership and identity/cwd mismatches. Valid admission identifies driver work unless contrary legacy evidence exists.
+
+No-call, planner-only and fix-only histories without admission remain unproven. This includes failed admission publication with no call.
+A bound legacy outer implementation can explain its existing plugin run; otherwise an unrecorded plugin run is not recovery permission.
+Preserve the original legacy recovery/fix effects and their exact argv, errand, UUID and response identity after positive proof.
+
+Task 7 adds `unstarted` to `RunInspection.fact`: validated manifest, zero command requests and absent actual plugin run file, all together.
+An empty journal with a real run file remains uncertain. Missing receipts, malformed or orphaned evidence never become `unstarted`.
+`inspect` stays read-only; `open` also rejects zero requests plus an unexplained run file before any command.
+
+The bridge resumes `unstarted` through real `DriveRun`, using original planner identity without a planner wait or publication.
+Keep incomplete-call guards. The first `next` and its receipt use the existing journal path; no fabricated command or mutable cursor.
+
+For new provenance reads, recovery maps transport read/parse failures to `PlanRecoveryNotRead`/`PlanRecoveryNotUnderstood`.
+Fix maps those failures to `PlanAgentNotResumed`; unexpected defects retain identity.
+
+### Internal run failures and the public refusal census
+
+Task 1 introduced `RunFailure` and its two causes; this slice owns the resulting census mismatch.
+The run family is internal: synchronous bridge failures use §2's declared mappings, while supervised failures reach stderr after acceptance.
+No public route needs a new run-error code. Keep exact-constructor lookup and every unknown-error guard unchanged.
+
+In `plan-refusal.test.ts`, add `RunFailure` to `FAMILIES` and exclude its descendants by prototype ancestry in `startingAPlan`.
+Do not filter leaf names, prefixes, missing registry entries or all `PlanFailure` descendants.
+Test that direct run-family instances still have no `PlanCollapse` mapping; an unrelated `RunPublicProbe extends PlanFailure` must remain in the census.
+
+Through real `RunPlanAgents` and `RunJournal`, trigger IO and malformed/conflicting evidence for launch, recovery and fix.
+Assert exact mapped constructors and unchanged diagnostic detail. Launch mappings must produce existing HTTP 400 codes through real `PlanCollapse.of`.
+Recovery keeps `PlanRecoveryNotRead`/`PlanRecoveryNotUnderstood`; fix keeps `PlanAgentNotResumed`. Add no registry entries or fallback mapping.
+Assert zero later launches/commands and same-object propagation for unexpected errors, including an unknown direct `RunFailure` subtype.
 
 ## 3. Reference patterns
 
@@ -465,7 +511,7 @@ npm --prefix backend test -- __tests__/infrastructure/claude-plan-calls.test.ts 
 
 **Objective:** Start the driver after publication and preserve legacy admissions and safe non-launch recovery.
 
-**Files:** `backend/src/infrastructure/run-plan-agents.ts` (create), `backend/src/infrastructure/run-journal.ts` (modify), `backend/__tests__/infrastructure/run-plan-agents.test.ts` (create).
+**Files:** `backend/src/infrastructure/run-plan-agents.ts` (create), `backend/src/infrastructure/run-journal.ts` (modify), `backend/__tests__/infrastructure/run-plan-agents.test.ts` (create), `backend/src/infrastructure/claude-calls.ts` (modify), `backend/__tests__/infrastructure/claude-calls.test.ts` (modify), `backend/src/infrastructure/ct-run-machine.ts` (modify), `backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify), `backend/__tests__/infrastructure/plan-refusal.test.ts` (modify).
 
 Contract (backend/src/infrastructure/run-plan-agents.ts):
 ```ts
@@ -475,38 +521,37 @@ export class RunPlanAgents extends PlanAgents {
     driver: DriveRun; machine: CtRunMachine; journal: RunJournal;
     measurements: ClaudeRunMeasurements; newId: () => string; nowMs: () => number;
     stderr: (line: string) => void })
+  provenance(watch: PlanWatch): Promise<RunProvenanceValue>
 }
+export const RunProvenance: Readonly<{ LEGACY: 'legacy'; DRIVER: 'driver' }>
+export type RunProvenanceValue = typeof RunProvenance[keyof typeof RunProvenance]
 ```
 
-Add journal `admitted(watch): Promise<boolean>` and `admit(watch): Promise<void>` for §2's immutable admission record.
-Every `launch` prepares through `PlanRecords`, admits to the machine, then starts the existing planner with `PlanCalls.start`.
-New launches never delegate to the legacy adapter.
-Return the same conversation and start supervised continuation. Capture planner measurements before driver execution, even on planner failure.
+Contract (backend/src/infrastructure/claude-calls.ts):
+```ts
+descriptorOf(call: StartedPlanCall): Promise<CallDescriptor>
+```
 
-Preserve definite non-launch proof and checked cleanup semantics from #331. Record `PlanAgentNeverLaunched.proof`; never delete uncertain work.
-If admission publication fails, preserve the dispatch record and report the failure. It does not prove a safe cleanup.
-Supervisor failures retain repository, issue, conversation, call and diagnostic in stderr. They do not become successful delivery.
+Keep `admitted`/`admit` and unconditional launch. Capture planner completion before driver execution, including recovered failures.
+Keep non-launch proof and scoped failure diagnostics. Admission failure permits no cleanup.
 
-For recover/fix, find the exact recorded watch and inspect provenance. Valid legacy records retain original recovery/fix calls and create no driver admission.
-Driver records retain their owner. Missing or conflicting provenance refuses; it never selects a legacy launch or migrates an implementation.
-Recovery follows §2's establishment and latest-fix precedence; uncertain commands and unowned incomplete calls remain inspect-only.
-Explicit driver recovery first restores missing measurement projections from completed history, including completed fixes; GET never performs this write.
+Use §2's provenance and `unstarted` contracts; add no sequencer.
+Keep legacy delegation, explicit-only measurement repair and F1/F2.
 
-After delivery, fixes use the existing `PlanCalls.start(watch,'fix',changes,requestId)` and errand without modification.
-Capture their completion before return from supervision. Refuse fixes while the machine is active or uncertain.
-Keep direct `resume` refused. Use §2's exact boundary failure mappings.
-Concurrent driver and fix requests share the conversation reservation; release it in `finally`.
+Keep original fix arguments/errand and capture; refuse active/uncertain fixes and direct resume.
+Use §2's mappings; release shared reservations in `finally`.
 
-**TDD:** `it('a machine admission publishes before the first oracle call')` asserts the production bridge effects and original UUID.
+**TDD:** `it('a machine admission publishes before the first oracle call')` uses real `DriveRun` and a publication barrier before oracle entry.
 
-**Tests:** `'a machine admission publishes before the first oracle call'`, `'legacy record recovery and fixes retain exact calls without new admission evidence'`, `'restart preserves recorded ownership without migrating a conversation'`, `'non-launch proof and ambiguous launch evidence keep their existing cleanup meanings'`, `'fixes wait for delivery and retain their original errand and measurements'`.
+**Tests:** `'a machine admission publishes before the first oracle call'`, `'legacy record recovery and fixes retain exact calls without new admission evidence'`, `'restart preserves recorded ownership without migrating a conversation'`, `'non-launch proof and ambiguous launch evidence keep their existing cleanup meanings'`, `'fixes wait for delivery and retain their original errand and measurements'`, `'descriptor provenance reuses the validated reader without writes'`, `'descriptor provenance preserves read and identity failures'`, `'missing admission never downgrades driver call provenance'`, `'untouched establishment differs from unrecorded machine activity'`, `'untouched established recovery issues next without planner wait or publication'`, `'internal run failures do not hide public refusal gaps'`, `'real run boundaries retain declared refusal mappings'`.
 
-The legacy case pins original argv, errand, UUID and response identity.
+Apply §2's census and mapping assertions; keep guards and bounded teardown.
 
-**Verification:** Run both plan-agent boundary suites.
+**Verification:** Run existing legacy and amended evidence boundaries.
 ```bash
 npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/infrastructure/headless-plan-agents.test.ts __tests__/infrastructure/run-plan-agents.test.ts
+npm --prefix backend test -- __tests__/infrastructure/claude-calls.test.ts __tests__/infrastructure/ct-run-machine.test.ts __tests__/infrastructure/plan-refusal.test.ts
 ```
 
 ### Task 8 — Project driver recovery from durable facts
@@ -526,21 +571,20 @@ export class RunPlanRecovery {
 ```
 
 Expose `RunPlanAgents.owns(watch: PlanWatch): boolean` from its active supervisor reservation.
-Read all records, admissions, histories and journal inspections before any active projection changes.
-A malformed or unreadable record returns its diagnostic and preserves the previous projection.
+Read all evidence before projection; malformed or unreadable records preserve previous projections and return diagnostics.
 
-For legacy admissions, use `PlanCalls.recoveryFor` and the existing `PlanRecovery` policy without another legacy state machine.
-If no admission belongs to the driver, delegate the whole read to `RecordedPlanRecovery.recover`.
-For driver admissions before a manifest, preserve planner and definite non-launch recovery semantics.
-An owned planner projects planning. A completed successful planner allows explicit continuation; a failed planner stays inspect-only.
+Reuse `agents.provenance` and the typed oracle inspection from Task 7; never parse descriptor JSON or diagnostic prose here.
+For proven legacy admissions, use `PlanCalls.recoveryFor` and the existing `PlanRecovery` policy.
+Delegate the whole read to `RecordedPlanRecovery.recover` only when every existing record has positive legacy provenance.
+Before a manifest, preserve planner/non-launch policy: owned planning, completed-planner continuation and failed-planner inspection.
 
 After a manifest, multiple `implementation` call records are valid only when their `run:<ticket>` identities match this journal.
 Owned driver work projects implementing. Apply §2's latest-fix policy before any delivered projection or explicit continuation.
 Unowned unfinished calls, pending commands, inconsistent identities and malformed evidence project uncertain with inspect-only detail.
 Completed calls with an unconsumed response permit explicit continuation, not automatic GET-driven execution.
+Typed `unstarted` permits explicit continuation without planner wait/publication; GET itself must issue no first command.
 
-GET recovery never starts a call, publishes metrics, executes a verb or writes run evidence.
-Keep original UUIDs and deadlines. No marker reset, replacement conversation, fabricated outer completion or new attempt row.
+GET writes no evidence and executes no call or verb. Preserve original identities and deadlines; never fabricate completion or reset counters.
 
 Stop review watches for uncertain work and incomplete fixes. Start them only for successful legacy or driver evidence under §2's precedence.
 Use registration identity so a stopped review loop cannot revive. Forget records that harvest removed.

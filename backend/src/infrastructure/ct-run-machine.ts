@@ -13,7 +13,7 @@ import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 
 type InspectionFact =
-  | { readonly kind: 'absent' | 'delivered' }
+  | { readonly kind: 'absent' | 'delivered' | 'unstarted' }
   | { readonly kind: 'active', readonly instruction: RunInstruction }
   | { readonly kind: 'uncertain', readonly detail: string }
 
@@ -409,6 +409,7 @@ export class RunInspection {
     switch (fact.kind) {
       case 'absent':
       case 'delivered':
+      case 'unstarted':
         this.fact = Object.freeze({ kind: fact.kind })
         break
       case 'active':
@@ -472,6 +473,9 @@ export class CtRunMachine extends RunMachine {
       await this.journal.establish(watch, manifest.text())
     }
     if (state.commands.length === 0) {
+      if (state.run !== null) {
+        throw new RunNotUnderstood('the established run has unexplained plugin activity before its first command')
+      }
       return this.#execute(watch, manifest, null, this.#nextArgv(manifest))
     }
     return this.#instruction(state.commands[state.commands.length - 1], manifest)
@@ -502,7 +506,12 @@ export class CtRunMachine extends RunMachine {
       return new RunInspection({ kind: 'absent' })
     }
     if (state.commands.length === 0) {
-      return new RunInspection({ kind: 'uncertain', detail: 'the established run has no first command yet' })
+      return state.run === null
+        ? new RunInspection({ kind: 'unstarted' })
+        : new RunInspection({
+          kind: 'uncertain',
+          detail: 'the established run has unexplained plugin activity before its first command',
+        })
     }
     const instruction = this.#instruction(state.commands[state.commands.length - 1], state.manifest)
     switch (instruction.work.kind) {

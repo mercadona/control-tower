@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 7,
+  "task_name": "Connect new admissions to the existing plan-agent surface",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Reviewed the entire task diff against the refreshed brief and both authorized amendments. Launch records admission before planning and supervises real DriveRun after planner measurement capture. Positive legacy provenance delegates the original recovery/fix arguments; absent or conflicting provenance refuses. The four prior high subjects are repaired: missing admission cannot downgrade run-prefixed calls, recovered planners capture successful and failed completions, untouched establishment resumes without publication, and publication ordering is exercised through real DriveRun. Completed-next command instructions are legitimately resumable; missing receipts remain uncertain and cannot execute.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The named publication-order test constructs real DriveRun and ExecuteRunInstruction. It holds publication at a deferred barrier, asserts that oracle entry has not occurred, releases publication, and then asserts publication completion before oracle entry with the original conversation identity. The ordering is implemented by production DriveRun rather than a replacement driver.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "RunPlanAgents retains the declared named constructor ports and exports the exact LEGACY/DRIVER provenance vocabulary and query signature. ClaudeCalls.descriptorOf delegates directly to the existing validated immutable descriptor reader without changing previous method bodies. Admission has the exact version/conversation shape. The unstarted inspection requires validated manifest, empty journal and absent plugin run. Actual journal-produced failures reach the declared launch/recovery/fix constructors with diagnostic detail retained; unrelated errors are rethrown.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The bridge adds no activation switch, transition table, plugin write, attempt row, PR operation or replacement conversation. It preserves explicit-only measurement repair, the existing fix request and errand, direct-resume refusal, and shared reservations released after supervised work or setup failure. Delivered recovery applies the existing PlanRecovery policy to actual fix facts with recorded deadlines and injected time. Legacy method bodies, proof recording and cleanup authority remain unchanged; an admission-write failure creates no non-launch proof.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Compared the bridge with the legacy continuation, transport, filesystem and recorded-recovery exemplars and the supplied repository/CT conventions. Dependencies are injected, durable evidence stays in infrastructure, and existing policy/descriptor authorities are reused. Defects review: closed vocabulary uses RunProvenance and typed inspection facts; admission/operation presence booleans are observations rather than ownership classifications. Raw map as the return value of logic: production returns typed descriptors, inspections, recovery values or call collections, with admission JSON confined to persistence. Two fields that have to agree: no new durable phase/cursor or absence sentinel is introduced; admission is provenance, not duplicated run progress. Error named for where it happens: existing cause-specific error families are preserved and mapped, with no new production error family. No blocking convention defect established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Existing oracle tests retain their assertions; fixture changes now establish absent initial run bytes and create run activity during next, as the amended evidence contract requires. The census exclusion is exactly the authorized RunFailure root plus prototype ancestry, retaining registry equality and unknown-constructor guards. The unrelated RunPublicProbe assertion prevents a broad name-prefix exclusion. No unauthorized weakened assertion found.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The claimed behavior has production implementations. Descriptor cases exercise the real reader over stored bytes; source-backed provenance uses real ClaudeCalls and RunJournal; unstarted and completed-next recovery use real CtRunMachine, DriveRun and journal receipts. The completed-next test asserts controls followed by next and three durable entries, then verifies no repeat. The pending-request case instead asserts refusal and zero oracle effects. Refusal tests induce actual journal IO/conflict failures and feed caught mapped launch errors into real PlanCollapse. Legacy delegation is observed separately from real ClaudePlanCalls request composition.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The additive descriptor, provenance, untouched-establishment and internal-refusal changes match the two authorized architecture amendments. The canonical plan diff retains original task paths and named tests, adds the required boundary suites, and specifies Task 8 reuse rather than a second parser. Production changes serve Task 7; plugin bytes, deferred #379 ingestion, activation configuration and live model execution are outside this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "New cases use temporary roots, fixed identities/timestamps, controlled external boundaries and deferred synchronization; timeout races bound waits rather than establish ordering. Assertions observe production delegation, immutable admission/receipt evidence, reader validation, ordering and mapped constructors. The repaired ordering assertion fails if production publication is bypassed or reordered, and provenance/empty-journal assertions distinguish authorized continuation from uncertain evidence. Controls are inherited as green and were not rerun. No high-severity determinism, isolation or real-behavior defect established by reading.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "ec8f115a92f4b9463c358d8bfaef14f12ad5172dd188e8044a9a1a7a28ead01e"
+  }
+}

@@ -24,6 +24,7 @@ export class JournalEntry {
 }
 
 export class RunJournal {
+  static readonly #ADMISSION = 'admission.json'
   static readonly #MANIFEST = 'manifest.json'
   static readonly #OPERATIONS = 'operations'
   static readonly #REQUEST = 'request.json'
@@ -36,6 +37,37 @@ export class RunJournal {
   constructor(ports: { files: HeadlessFiles, newId: () => string }) {
     this.files = ports.files
     this.newId = ports.newId
+  }
+
+  async admitted(watch: PlanWatch): Promise<boolean> {
+    const text = await this.#readOptional(this.#admissionPath(watch))
+    if (text === null) return false
+    let value: unknown
+    try {
+      value = JSON.parse(text)
+    } catch (cause) {
+      throw new RunNotUnderstood(`the run admission is not valid JSON: ${String(cause)}`)
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new RunNotUnderstood(`the run admission is not an object: ${text}`)
+    }
+    const keys = Object.keys(value).sort()
+    if (keys.length !== 2 || keys[0] !== 'conversation' || keys[1] !== 'version') {
+      throw new RunNotUnderstood(`the run admission has unexpected keys: ${text}`)
+    }
+    const version = Object.getOwnPropertyDescriptor(value, 'version')?.value
+    const conversation = Object.getOwnPropertyDescriptor(value, 'conversation')?.value
+    if (version !== 1 || conversation !== this.#conversation(watch)) {
+      throw new RunNotUnderstood(`the run admission does not identify this plan watch: ${text}`)
+    }
+    return true
+  }
+
+  async admit(watch: PlanWatch): Promise<void> {
+    await this.#publish(this.#admissionPath(watch), `${JSON.stringify({
+      version: 1,
+      conversation: this.#conversation(watch),
+    })}\n`)
   }
 
   async manifest(watch: PlanWatch): Promise<string | null> {
@@ -55,6 +87,14 @@ export class RunJournal {
     const entries: JournalEntry[] = []
     for (const name of tickets.sort()) entries.push(await this.#entryAt(operations, this.#ticket(name)))
     return Object.freeze(entries)
+  }
+
+  async operationsPresent(watch: PlanWatch): Promise<boolean> {
+    const operations = this.#operationsPath(watch)
+    const kind = await this.#kindOf(operations)
+    if (kind === 'absent') return false
+    if (kind !== 'directory') throw new RunNotUnderstood(`${operations} is not an operations directory`)
+    return true
   }
 
   async begin(watch: PlanWatch, request: string): Promise<string> {
@@ -195,6 +235,10 @@ export class RunJournal {
 
   #manifestPath(watch: PlanWatch): string {
     return join(this.#runPath(watch), RunJournal.#MANIFEST)
+  }
+
+  #admissionPath(watch: PlanWatch): string {
+    return join(this.#runPath(watch), RunJournal.#ADMISSION)
   }
 
   #operationsPath(watch: PlanWatch): string {

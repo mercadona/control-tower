@@ -295,7 +295,11 @@ describe('CtRunMachine', () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-order-')))
     roots.push(fixture.root)
     await fixture.establish()
-    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.controlsAnnouncement()))
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncement())
+    })
     const machine = fixture.machine()
     const first = await machine.open(OracleMother.watch())
     expect(first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
@@ -362,6 +366,39 @@ describe('CtRunMachine', () => {
     expect(await fixture.journal.manifest(OracleMother.watch())).toBe(OracleMother.manifest())
   })
 
+  it('untouched establishment differs from unrecorded machine activity', async () => {
+    const untouched = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-unstarted-')))
+    roots.push(untouched.root)
+    untouched.runBytes = null
+    await untouched.establish()
+
+    const inspection = await untouched.machine().inspect(OracleMother.watch())
+
+    expect(inspection.fact).toEqual({ kind: 'unstarted' })
+    expect(untouched.asked).toEqual([])
+    expect(await untouched.journal.entries(OracleMother.watch())).toEqual([])
+
+    const unexplained = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-unrecorded-')))
+    roots.push(unexplained.root)
+    await unexplained.establish()
+    const uncertain = await unexplained.machine().inspect(OracleMother.watch())
+    expect(uncertain.fact).toEqual({
+      kind: 'uncertain',
+      detail: 'the established run has unexplained plugin activity before its first command',
+    })
+    await expect(unexplained.machine().open(OracleMother.watch())).rejects.toThrow(
+      'the established run has unexplained plugin activity before its first command',
+    )
+    expect(unexplained.asked).toEqual([])
+
+    const orphaned = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-orphaned-')))
+    roots.push(orphaned.root)
+    orphaned.runBytes = null
+    await orphaned.journal.begin(OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()))
+    await expect(orphaned.machine().inspect(OracleMother.watch())).rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(orphaned.asked).toEqual([])
+  })
+
   it('unsupported slice-agent reconciliation refuses before another next', async () => {
     for (const output of [
       OracleMother.unmergeableReconciliation(),
@@ -370,7 +407,11 @@ describe('CtRunMachine', () => {
       const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-slice-agent-')))
       roots.push(fixture.root)
       await fixture.establish()
-      fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.reconcileAnnouncement()))
+      fixture.runBytes = null
+      fixture.answer(OracleMother.nextArgv(), () => {
+        fixture.runBytes = OracleMother.RUN_BYTES
+        return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+      })
       fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, output))
       const machine = fixture.machine()
       const reconcile = await machine.open(OracleMother.watch())
@@ -390,6 +431,7 @@ describe('CtRunMachine', () => {
     const pending = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-pending-')))
     roots.push(pending.root)
     await pending.establish()
+    pending.runBytes = null
     const interrupted = new TypeError('oracle runner interrupted after request publication')
     pending.answer(OracleMother.nextArgv(), () => { throw interrupted })
     await expect(pending.machine().open(OracleMother.watch())).rejects.toBe(interrupted)

@@ -262,6 +262,93 @@ describe('ClaudeCalls', () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
+  it('descriptor provenance reuses the validated reader without writes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-'))
+    roots.push(root)
+    const descriptorPath = await CallMother.prepared(root, {
+      purpose: 'implementation',
+      requestId: `implementation:${CallMother.CALL}`,
+      cwd: '/checkout/.worktrees/332',
+      argv: ['-p', '--resume', CallMother.CONVERSATION],
+    })
+    const original = await readFile(descriptorPath, 'utf8')
+    let writes = 0
+    let spawns = 0
+    const files = CallMother.files(root, {
+      writeOnce: async () => { writes += 1 },
+    })
+    const calls = CallMother.calls(root, (() => {
+      spawns += 1
+      throw new Error('descriptor reads must not spawn')
+    }) as typeof import('node:child_process').spawn, { files })
+
+    const legacy = await calls.descriptorOf(CallMother.call())
+    expect(legacy.requestId).toBe(`implementation:${CallMother.CALL}`)
+    expect(legacy.purpose).toBe('implementation')
+    expect(legacy.cwd).toBe('/checkout/.worktrees/332')
+    expect(legacy.mode()).toBe('resume')
+    expect(Object.isFrozen(legacy)).toBe(true)
+    expect(calls.owns(CallMother.call())).toBe(false)
+
+    await writeFile(descriptorPath, CallMother.descriptor(root, {
+      purpose: 'implementation',
+      requestId: 'run:33333333-3333-4333-8333-333333333333',
+      cwd: '/checkout/.worktrees/332',
+      argv: ['-p', '--resume', CallMother.CONVERSATION],
+    }), 'utf8')
+    const driverBytes = await readFile(descriptorPath, 'utf8')
+    const driver = await calls.descriptorOf(CallMother.call())
+
+    expect(driver.requestId).toBe('run:33333333-3333-4333-8333-333333333333')
+    expect(driver.mode()).toBe('resume')
+    expect(writes).toBe(0)
+    expect(spawns).toBe(0)
+    expect(calls.owns(CallMother.call())).toBe(false)
+    expect(await readFile(descriptorPath, 'utf8')).toBe(driverBytes)
+    expect(original).not.toBe(driverBytes)
+  })
+
+  it('descriptor provenance preserves read and identity failures', async () => {
+    const missingRoot = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-missing-'))
+    roots.push(missingRoot)
+    await expect(CallMother.calls(
+      missingRoot,
+      (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+    ).descriptorOf(CallMother.call())).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+
+    const ioRoot = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-io-'))
+    roots.push(ioRoot)
+    const ioFailure = Object.assign(new Error('descriptor disk refused'), { code: 'EIO' })
+    const ioFiles = CallMother.files(ioRoot, { read: async () => { throw ioFailure } })
+    await expect(CallMother.calls(
+      ioRoot,
+      (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+      { files: ioFiles },
+    ).descriptorOf(CallMother.call())).rejects.toMatchObject({
+      constructor: PlanAgentNotLaunched,
+      message: expect.stringContaining('descriptor disk refused'),
+    })
+
+    for (const [name, descriptor] of [
+      ['malformed schema', CallMother.descriptorWithoutRequest(ioRoot)],
+      ['wrong conversation', CallMother.descriptor(ioRoot, { conversation: '99999999-9999-4999-8999-999999999999' })],
+      ['wrong resume identity', CallMother.descriptor(ioRoot, {
+        purpose: 'implementation',
+        requestId: 'run:33333333-3333-4333-8333-333333333333',
+        argv: ['--resume', '99999999-9999-4999-8999-999999999999'],
+      })],
+    ] as const) {
+      const root = await mkdtemp(join(tmpdir(), `ct-claude-descriptor-${name.replaceAll(' ', '-')}-`))
+      roots.push(root)
+      const path = await CallMother.prepared(root)
+      await writeFile(path, descriptor.replaceAll(ioRoot, root), 'utf8')
+      await expect(CallMother.calls(
+        root,
+        (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+      ).descriptorOf(CallMother.call())).rejects.toBeInstanceOf(PlanAgentNotNamed)
+    }
+  })
+
   it('call and prompt files exist before the first spawn', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
