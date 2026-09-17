@@ -101,7 +101,11 @@ describe('ClaudeConversations', () => {
     conversations.start({ conversation, promptPath: Governed.PROMPT_PATH })
 
     const [call] = spawn.calls
-    expect(call.argv.slice(0, 2)).toEqual([PtyLiveSessions.LOGIN_INTERACTIVE, '-c'])
+    expect(call.argv).toEqual([
+      PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
+      `exec claude --session-id ${Governed.ID.text} --permission-mode auto --model opus ` +
+        '"Read the file at $CT_PHASE_PROMPT and do exactly what it says."',
+    ])
     expect(call.options.env[ClaudeConversations.PROMPT_VARIABLE]).toBe(Governed.PROMPT_PATH)
     expect(call.argv.join(' ')).not.toContain(Governed.PROMPT_PATH)
   })
@@ -115,8 +119,7 @@ describe('ClaudeConversations', () => {
     const [call] = spawn.calls
     expect(call.argv).toEqual([
       PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
-      `exec ${ClaudeConversations.BIN} --resume ${conversation.id.text} ` +
-        `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL}`,
+      `exec claude --resume ${conversation.id.text} --permission-mode auto --model opus`,
     ])
     expect(Object.keys(call.options.env)).not.toContain(ClaudeConversations.PROMPT_VARIABLE)
   })
