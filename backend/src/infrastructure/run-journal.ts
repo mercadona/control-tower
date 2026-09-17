@@ -28,6 +28,7 @@ export class RunJournal {
   static readonly #OPERATIONS = 'operations'
   static readonly #REQUEST = 'request.json'
   static readonly #RECEIPT = 'receipt.json'
+  static readonly #MATERIAL = 'material.json'
 
   readonly files: HeadlessFiles
   readonly newId: () => string
@@ -69,13 +70,28 @@ export class RunJournal {
     )
   }
 
+  async material(watch: PlanWatch, ticket: string): Promise<string | null> {
+    return this.#readOptional(
+      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#MATERIAL),
+    )
+  }
+
+  async seal(watch: PlanWatch, ticket: string, text: string): Promise<void> {
+    await this.#publish(
+      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#MATERIAL),
+      text,
+    )
+  }
+
   async #entryAt(operations: string, ticket: string): Promise<JournalEntry> {
     const directory = join(operations, ticket)
     if (await this.#kindOf(directory) !== 'directory') {
       throw new RunNotUnderstood(`${directory} is not an operation directory`)
     }
     const names = await this.#list(directory)
-    if (names.some((name) => name !== RunJournal.#REQUEST && name !== RunJournal.#RECEIPT)) {
+    if (names.some((name) => name !== RunJournal.#REQUEST
+      && name !== RunJournal.#RECEIPT
+      && name !== RunJournal.#MATERIAL)) {
       throw new RunNotUnderstood(`${directory} contains an unexpected journal entry`)
     }
     if (!names.includes(RunJournal.#REQUEST)) {

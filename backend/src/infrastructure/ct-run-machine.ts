@@ -9,6 +9,7 @@ import {
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
+import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 
 type InspectionFact =
@@ -17,7 +18,8 @@ type InspectionFact =
   | { readonly kind: 'uncertain', readonly detail: string }
 
 type OracleEffect =
-  | { readonly kind: 'call' | 'command', readonly ticket: string, readonly argv: readonly string[] }
+  | { readonly kind: 'call', readonly ticket: string, readonly argv: readonly string[], readonly command: RunConsumingCommand | null }
+  | { readonly kind: 'command', readonly ticket: string, readonly argv: readonly string[] }
   | { readonly kind: 'next' }
   | { readonly kind: 'delivered' }
   | { readonly kind: 'refused', readonly detail: string }
@@ -30,8 +32,8 @@ class OracleResult {
     Object.freeze(this)
   }
 
-  static call(ticket: string, argv: readonly string[]): OracleResult {
-    return new OracleResult({ kind: 'call', ticket, argv: Object.freeze([...argv]) })
+  static call(ticket: string, argv: readonly string[], command: RunConsumingCommand | null = null): OracleResult {
+    return new OracleResult({ kind: 'call', ticket, argv: Object.freeze([...argv]), command })
   }
 
   static command(ticket: string, argv: readonly string[]): OracleResult {
@@ -311,11 +313,19 @@ class OracleBoundary {
     const reconcileCommand = `When it comes back:  ct-step reconcile --plan ${manifest.plan} --issue ${manifest.issue}`
     if ((output.stdout.includes('DISPATCH ct-reconciler') || output.stdout.includes('REDISPATCH ct-reconciler'))
       && output.stdout.split('\n').some((line) => line.trim().startsWith(reconcileCommand))) {
-      return OracleResult.call(command.ticket, [
-        'reconcile', '--plan', manifest.plan, '--issue', String(manifest.issue),
-      ])
+      try {
+        const consuming = RunConsumingCommand.edits({
+          stdout: output.stdout,
+          plan: manifest.plan,
+          issue: manifest.issue,
+        })
+        return OracleResult.call(command.ticket, consuming.argv, consuming)
+      } catch (cause) {
+        if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
+        throw cause
+      }
     }
-    const step = /^step: ([a-z-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
+    const step = /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
     switch (step) {
       case STEPS.IMPLEMENT:
         return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.IMPLEMENT, 'report')
@@ -355,18 +365,21 @@ class OracleBoundary {
     ticket: string,
     manifest: RunManifest,
     step: string,
-    verb: string,
+    verb: 'report' | 'verdict' | 'advice' | 'slice-verdict',
   ): OracleResult {
-    const suffix = OracleBoundary.#suffix(manifest)
-    const line = new RegExp(
-      `^When it comes back:  ct-step ${OracleBoundary.#escape(verb)} (.+) ${suffix}$`, 'm',
-    ).exec(stdout)
-    if (line === null || line[1].length === 0 || !stdout.includes(`step: ${step} (`)) {
-      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
+    try {
+      const command = RunConsumingCommand.structured({
+        stdout,
+        plan: manifest.plan,
+        issue: manifest.issue,
+        step,
+        verb,
+      })
+      return OracleResult.call(ticket, command.argv, command)
+    } catch (cause) {
+      if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
+      throw cause
     }
-    return OracleResult.call(ticket, [
-      verb, line[1], '--plan', manifest.plan, '--issue', String(manifest.issue),
-    ])
   }
 
   static #plainCommand(
@@ -382,10 +395,6 @@ class OracleBoundary {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.command(ticket, [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)])
-  }
-
-  static #suffix(manifest: RunManifest): string {
-    return `--plan ${OracleBoundary.#escape(manifest.plan)} --issue ${manifest.issue}`
   }
 
   static #escape(value: string): string {
@@ -506,6 +515,39 @@ export class CtRunMachine extends RunMachine {
         return new RunInspection({ kind: 'active', instruction })
     }
     return instruction.work satisfies never
+  }
+
+  async dispatch(watch: PlanWatch, ticket: string): Promise<RunDispatch> {
+    const state = await this.#state(watch)
+    if (state.manifest === null) throw new RunNotUnderstood('dispatch material has no run manifest')
+    const command = state.commands.find((candidate) => candidate.ticket === ticket)
+    if (command === undefined) throw new RunNotUnderstood(`dispatch ticket ${ticket} is not in the run journal`)
+    if (command.receipt === null) throw new RunNotUnderstood(`dispatch ticket ${ticket} has no receipt`)
+    if (command.receipt.output.code !== 0) {
+      throw new RunNotUnderstood(`dispatch ticket ${ticket} did not record successful oracle output`)
+    }
+    if (command.receipt.output.stdout.includes("DISPATCH THE SLICE'S AGENT")) {
+      throw new RunNotUnderstood('ct-step requested unsupported slice-agent reconciliation material')
+    }
+    const effect = OracleBoundary.read(command, state.manifest).effect
+    if (effect.kind === 'refused') throw new RunNotUnderstood(effect.detail)
+    if (effect.kind !== 'call') throw new RunNotUnderstood(`ticket ${ticket} does not carry dispatch material`)
+    if (effect.command === null) {
+      if (command.receipt.output.stdout.includes('step: e2e (')) {
+        throw new RunNotUnderstood('ct-step requested unsupported E2E material')
+      }
+      throw new RunNotUnderstood(`ticket ${ticket} has no validated consuming command`)
+    }
+    const resolved = await RunDispatch.resolve({
+      ticket,
+      stdout: command.receipt.output.stdout,
+      command: effect.command,
+      cwd: command.request.cwd,
+      pluginRoot: this.pluginRoot,
+      sealed: await this.journal.material(watch, ticket),
+    })
+    await this.journal.seal(watch, ticket, resolved.seal)
+    return resolved.dispatch
   }
 
   async #advanceFrom(
