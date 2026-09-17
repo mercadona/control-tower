@@ -185,3 +185,35 @@ No production code or budget changed. No new mutation sweep, red-first
 observation, live Claude call, network mutation, GitHub write, push, nested
 agent, Orca action, governed-repository action or delivered-run mutation is
 claimed.
+
+## Post-round-four F4 completion
+
+The review of `0ad8e0eaacf528eacc6dd8b61340373cf89f9e51` found that registered
+supervision could fail before implementation acceptance. In that path stderr
+settled the actual completion, but the test finalizer waited only for acceptance,
+so cleanup could never reach its bounded drains.
+
+Each registered finalizer now uses a bounded race between its actual supervisor
+completion and implementation acceptance. Completion needs no descriptor;
+acceptance still writes the deferred completion when the descriptor exists. The
+existing three rehearsals and their two-barrier and sentinel-abort assertions
+remain. A fourth real HTTP recovery rehearsal refuses both publication attempts,
+creates no implementation descriptor, never releases implementation acceptance,
+and proves that stderr completion occurs while the fixture root exists before
+cleanup removes it.
+
+Observed verification:
+
+- Focused rehearsal passed 1 file and 4 tests.
+- Focused F4/N1/F1 command passed 3 files and 104 tests.
+- Backend typecheck passed.
+- Full backend passed 110 files and 2,221 tests.
+- The first full frontend run had one unrelated `Home.specFreeze` visibility
+  failure after 1,349 passes. Its immediate isolated rerun passed, and the fresh
+  full rerun passed 70 files and 1,350 tests; existing jsdom canvas diagnostics
+  remained non-failing.
+- Frontend production build passed with the existing chunk-size advisory.
+
+No production file or budget changed. No new mutation or red-first result, live
+Claude call, network mutation, GitHub write, push, nested agent, Orca action,
+governed-repository action or delivered-run mutation is claimed.

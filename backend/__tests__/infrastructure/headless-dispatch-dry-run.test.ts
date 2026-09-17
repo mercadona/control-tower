@@ -167,12 +167,14 @@ class ScriptedBoundaries {
   readonly seedPath: string
   readonly publicationBodyPath: string
   readonly failFirstPublication: boolean
+  readonly failRecoveryPublication: boolean
   postedBody: string | null = null
   publicationAttempts = 0
 
-  constructor(root: string, trace: string[], failFirstPublication: boolean) {
+  constructor(root: string, trace: string[], failFirstPublication: boolean, failRecoveryPublication: boolean) {
     this.trace = trace
     this.failFirstPublication = failFirstPublication
+    this.failRecoveryPublication = failRecoveryPublication
     this.checkoutRoot = join(root, 'checkout')
     this.worktree = join(this.checkoutRoot, '.worktrees', String(Rehearsal.ISSUE))
     this.commonGit = join(root, 'git-common')
@@ -221,7 +223,8 @@ class ScriptedBoundaries {
       this.accept('gh', argv, null)
       this.postedBody = await readFile(this.publicationBodyPath, 'utf8')
       this.publicationAttempts += 1
-      if (this.failFirstPublication && this.publicationAttempts === 1) {
+      if ((this.failFirstPublication && this.publicationAttempts === 1)
+        || (this.failRecoveryPublication && this.publicationAttempts === 2)) {
         this.trace.push('publication-refused')
         return new ProcessOutput({ code: 1, stdout: '', stderr: 'scripted publication refusal' })
       }
@@ -382,14 +385,16 @@ class Rehearsal {
 }
 
 describe('headless dispatch dry run', () => {
-  const roots: string[] = []
-  const servers: ApiServer[] = []
-  const pending: {
+  type CleanupObligation = {
     release: Deferred,
     completed: Deferred,
     registered: boolean,
     finalize: () => void | Promise<void>,
-  }[] = []
+  }
+
+  const roots: string[] = []
+  const servers: ApiServer[] = []
+  const pending: CleanupObligation[] = []
 
   async function cleanup(): Promise<void> {
     const failures: unknown[] = []
@@ -420,16 +425,29 @@ describe('headless dispatch dry run', () => {
   }
 
   it.each([
-    { title: 'headless start preserves publication', needsRecovery: false, abortAfterAcceptance: false },
-    { title: 'coordinator recovery reaches the production continuation', needsRecovery: true, abortAfterAcceptance: false },
-    { title: 'accepted recovery abort drains every registered supervisor', needsRecovery: true, abortAfterAcceptance: true },
-  ])('$title', async ({ needsRecovery, abortAfterAcceptance }) => {
+    {
+      title: 'headless start preserves publication', needsRecovery: false,
+      abortAfterAcceptance: false, failBeforeAcceptance: false,
+    },
+    {
+      title: 'coordinator recovery reaches the production continuation', needsRecovery: true,
+      abortAfterAcceptance: false, failBeforeAcceptance: false,
+    },
+    {
+      title: 'accepted recovery abort drains every registered supervisor', needsRecovery: true,
+      abortAfterAcceptance: true, failBeforeAcceptance: false,
+    },
+    {
+      title: 'publication failure before implementation acceptance drains its supervisor', needsRecovery: true,
+      abortAfterAcceptance: false, failBeforeAcceptance: true,
+    },
+  ])('$title', async ({ needsRecovery, abortAfterAcceptance, failBeforeAcceptance }) => {
     const root = await mkdtemp(join(tmpdir(), 'ct-331-headless-rehearsal-'))
     roots.push(root)
     try {
     const stateRoot = join(root, 'state')
     const trace: string[] = []
-    const boundaries = new ScriptedBoundaries(root, trace, needsRecovery)
+    const boundaries = new ScriptedBoundaries(root, trace, needsRecovery, failBeforeAcceptance)
     await fs.mkdir(boundaries.checkoutRoot, { recursive: true })
     const files = new HeadlessFiles({ root: stateRoot, fs, newId: () => 'temporary-record' })
     const plannerCompletion = await Rehearsal.plannerCompletion()
@@ -439,6 +457,18 @@ describe('headless dispatch dry run', () => {
     const implementationAccepted = new Deferred()
     const initialSupervisorCompleted = new Deferred()
     const initialRegistrations: typeof pending = []
+    const finalizeImplementation = async (obligation: CleanupObligation, descriptor: () => string | undefined) => {
+      if (!obligation.registered) return
+      const outcome = await BoundedDrain.value(Promise.race([
+        implementationAccepted.promise.then(() => 'accepted' as const),
+        obligation.completed.promise.then(() => 'completed' as const),
+      ]), 1_000)
+      if (outcome === 'completed') return
+      const path = descriptor()
+      if (path !== undefined) {
+        writeFileSync(join(dirname(path), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
+      }
+    }
     const callIds = [Rehearsal.PLAN_CALL, Rehearsal.IMPLEMENTATION_CALL]
     const spawnedDescriptors: string[] = []
     const calls = new ClaudeCalls({
@@ -597,14 +627,7 @@ describe('headless dispatch dry run', () => {
         release: releasePendingWait,
         completed: initialSupervisorCompleted,
         registered: false,
-        finalize: async () => {
-          if (!obligation.registered) return
-          await implementationAccepted.promise
-          const descriptor = spawnedDescriptors[1]
-          if (descriptor !== undefined) {
-            writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
-          }
-        },
+        finalize: () => finalizeImplementation(obligation, () => spawnedDescriptors[1]),
       }
       pending.push(obligation)
       initialRegistrations.push(obligation)
@@ -886,20 +909,11 @@ describe('headless dispatch dry run', () => {
     })
     servers.push(recoveredServer)
     const recoveredPort = await recoveredServer.start()
-    const completion = async (): Promise<void> => {
-      await implementationAccepted.promise
-      const descriptor = spawnedDescriptors[0]
-      if (descriptor !== undefined) {
-        writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
-      }
-    }
     const firstObligation = {
       release: releasePendingWait,
       completed: restartedSupervisorDiagnostics[0],
       registered: false,
-      finalize: async () => {
-        if (firstObligation.registered) await completion()
-      },
+      finalize: () => finalizeImplementation(firstObligation, () => spawnedDescriptors[0]),
     }
     pending.push(firstObligation)
     restartedRegistrations.push(firstObligation)
@@ -915,6 +929,18 @@ describe('headless dispatch dry run', () => {
     if (!abortAfterAcceptance) {
       expect(recovered.status).toBe(202)
       expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    }
+    if (failBeforeAcceptance) {
+      await cleanup()
+      expect(firstObligation.registered).toBe(true)
+      expect(firstObligation.completed.released).toBe(true)
+      expect(implementationAccepted.released).toBe(false)
+      expect(boundaries.publicationAttempts).toBe(2)
+      expect(trace).toEqual(['publication-refused', 'publication-refused'])
+      expect(spawnedDescriptors).toHaveLength(0)
+      expect(rootPresenceAtSupervisorCompletion).toEqual([true])
+      await expect(fs.stat(root)).rejects.toMatchObject({ code: 'ENOENT' })
+      return
     }
     await BoundedDrain.wait(implementationAccepted.promise, 1_000)
     expect(boundaries.publicationAttempts).toBe(2)
@@ -942,9 +968,7 @@ describe('headless dispatch dry run', () => {
       release: releasePendingWait,
       completed: restartedSupervisorDiagnostics[1],
       registered: false,
-      finalize: async () => {
-        if (secondObligation.registered) await completion()
-      },
+      finalize: () => finalizeImplementation(secondObligation, () => spawnedDescriptors[0]),
     }
     pending.push(secondObligation)
     restartedRegistrations.push(secondObligation)

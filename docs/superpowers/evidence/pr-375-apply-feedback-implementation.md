@@ -223,3 +223,21 @@ a 79-test API rerun. Backend typecheck and the full backend suite with 110 files
 and 2,220 tests passed. The full frontend suite with 70 files and 1,350 tests and
 the production build passed. No production file changed and no new mutation or
 red-first result is claimed.
+
+## Post-round-four F4 result
+
+The review of `0ad8e0eaacf528eacc6dd8b61340373cf89f9e51` identified one remaining
+test-teardown risk: a supervisor that failed before implementation acceptance
+completed through stderr while its finalizer still waited only for acceptance.
+Finalizers now race actual completion against readiness under the existing
+one-second bound. The new fourth rehearsal refuses restarted publication before
+any implementation descriptor or acceptance, then proves actual completion
+while the root exists and successful teardown only after that drain. The prior
+normal, recovery and sentinel-abort rehearsals remain intact.
+
+The focused rehearsal passed 4 tests and the combined F4/N1/F1 command passed
+104 tests. Backend typecheck and all 2,221 backend tests passed. The first full
+frontend run had one unrelated `Home.specFreeze` visibility failure; its isolated
+rerun and a fresh complete run passed, with the latter reporting 70 files and
+1,350 tests. The frontend production build passed. No production file, budget,
+mutation claim or red-first claim changed.
