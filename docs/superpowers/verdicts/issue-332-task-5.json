@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 5,
+  "task_name": "Project available CLI measurements without changing legacy records",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The production capture publishes available reported measurements with source paths and SHA-256 digests. It preserves measured zero, accompanying dimensions and independent wall time, omits invalid or absent metrics, and makes no attributable resumed bill. Known scalar validation now precedes recursive traversal, so objects, arrays, booleans and null cannot become valid nested replacements for those scalars.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named resumed-capture test reads the committed resumed fixture and asserts total 1.051838 with unverified-resume scope, one turn and 4876 ms. It separately asserts wall duration and absence of own-call billing language.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The exported class, injected files and calls, capture parameter and Promise<void> match the contract. The per-call measurements-v1.json envelope contains all specified fields. Descriptor mode controls total scope; direct metrics, nested groups and JSON-pointer extras retain reported meaning while structured_output is excluded. Publication is immutable and byte-identical retries succeed. Missing completion defers publication; unavailable, malformed, foreign and conflicting terminal evidence yields no asserted CLI metrics while preserving completion wall time and diagnostics. Identical terminal repeats are accepted by identity comparison. Recognized error captures retain measurements without being reclassified as success.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The diff adds only the two task files. It introduces no activation switch, plugin change, attempt row, legacy-record migration or live model invocation. Raw stream and completion remain unchanged; resumed totals stay unverified and nested costs are reported-only. Existing call ownership and execution policy are not changed. The supplied green controls are inherited without rerunning them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The new infrastructure module follows the injected collaborator and immutable publication patterns, uses erasable TypeScript and keeps helpers on types. TerminalResult owns the raw terminal payload, identity queries, compatibility check and metric projection; the adapter receives a typed terminal or diagnostic and a ReportedMeasurements object, rather than inspecting terminal fields itself. The additional raw stream is validated at its own boundary. Defects check: closed vocabulary is carried by discriminated reading, projection and inclusion outcomes and literal metric scopes; foreign subtype rejection is boundary validation. Raw map as the return value of logic: no exposed raw terminal map crosses to adapter logic, and the finished reported map is handed to serialization without downstream key-based decisions. Two fields that have to agree: terminal identity is derived privately from its payload, with no independently supplied identity or absence sentinel; measured zero remains data. Errors named for where they happen: no new location-named error hierarchy is introduced; refusals describe absent, inconsistent or colliding evidence. The review is limited to this task contract and does not demand future integration consumers.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Both files are additions. No pre-existing assertion, case or test is removed or weakened.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Assertions read the artifact produced by the real ClaudeRunMeasurements capture and exercise real immutable filesystem publication. Input records are seeded through filesystem writes using the existing descriptor and completion machinery, not through the projector under test. The corrected invalid-shape cases assert omission, diagnostics and surviving sibling measurements against production output.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All additions serve task 5 measurement projection, evidence provenance, omission or immutable publication. The three committed captures are reused without alteration. There is no plan amendment or adjacent implementation in the supplied diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests use fixed captured inputs and timestamps, isolated temporary state roots and afterEach cleanup. They assert actual persisted values, provenance, omission, diagnostics, unchanged legacy bytes and collision refusal. They require no network, real clock assertion, sleep or spawned model. Each test would fail if the production projection or publication behavior it exercises were absent. No finer test-style finding is raised.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "4913fde6cb6e79c3c91c92a89435c8f535eaff509d610ac8ff2b98ced04ae033"
+  }
+}
