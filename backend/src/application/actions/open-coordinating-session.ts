@@ -70,7 +70,7 @@ export class OpenCoordinatingSession {
   }
 
   async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
-    const root = await this.workspace.confirm({ root: params.root, repository: params.repository })
+    const root = await this.workspace.confirmForSession({ root: params.root, repository: params.repository })
     const story = params.story === null ? null : await this.userStories.detail(params.story)
 
     const conversation = new CoordinatingConversation({

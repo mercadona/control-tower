@@ -18,6 +18,7 @@ import { UnusedWorkspace } from '../domain/value-objects/unused-workspace.ts'
 import {
   PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
   WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
+  CheckoutNotOnDefaultBranch, CheckoutNotUpToDate,
 } from '../domain/exceptions.ts'
 import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
@@ -147,7 +148,9 @@ export class GitWorkspace extends Workspace {
   static readonly BIN = 'git'
   static readonly DIRECTORY = '.worktrees'
   static readonly REMOTE_HEAD = 'refs/remotes/origin/HEAD'
+  static readonly #SYMREF = /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m
   static readonly REMOTE = 'origin'
+  static readonly DECLARE_DEFAULT = `git remote set-head ${GitWorkspace.REMOTE} -a`
   static readonly #DECLARED = /^refs\/remotes\/origin\/(.+)$/
   static readonly #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
 
@@ -257,6 +260,23 @@ export class GitWorkspace extends Workspace {
     return ['-C', root, 'ls-remote', '--heads', GitWorkspace.REMOTE, branch]
   }
 
+  static currentBranchArgvFor(root: string): string[] {
+    return ['-C', root, 'rev-parse', '--abbrev-ref', 'HEAD']
+  }
+
+  static remoteHeadArgvFor(root: string): string[] {
+    return ['-C', root, 'ls-remote', '--symref', GitWorkspace.REMOTE, 'HEAD']
+  }
+
+  static remoteHeadBranchIn(printed: string): string | null {
+    const declared = printed.match(GitWorkspace.#SYMREF)
+    return declared === null ? null : declared[1]
+  }
+
+  static mergeFastForwardArgvFor(root: string, base: string): string[] {
+    return ['-C', root, 'merge', '--ff-only', `${GitWorkspace.REMOTE}/${base}`]
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     let held
     try {
@@ -269,6 +289,86 @@ export class GitWorkspace extends Workspace {
     }
 
     return await this.#canonicalRootOf(root.text, repository.text)
+  }
+
+  async confirmForSession({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
+    const confirmed = await this.confirm({ root, repository })
+    const base = await this.#defaultBranchNobodyHadToName(confirmed.text)
+    if (base === null) return confirmed
+    await this.#requireOnDefaultBranch(confirmed.text, base)
+    await this.#fastForwardToWhateverTheRemoteIsKnownToHold(confirmed.text, base)
+
+    return confirmed
+  }
+
+  async #defaultBranchNobodyHadToName(root: string): Promise<string | null> {
+    const declared = await this.run(GitWorkspace.defaultBranchArgvFor(root))
+    if (!declared.failed) {
+      const named = GitWorkspace.declaredBranchIn(declared.stdout)
+      if (named !== null) return named
+    }
+    const asked = await this.run(GitWorkspace.remoteHeadArgvFor(root))
+    if (asked.failed) {
+      this.stderr(
+        `${root}: neither ${GitWorkspace.REMOTE_HEAD} nor ${GitWorkspace.REMOTE} itself says which branch is ` +
+        `default, so the session opens on the branch the checkout is already on: ${GitWorkspace.#output(asked)}. ` +
+        `Run ${GitWorkspace.DECLARE_DEFAULT} in that checkout to have this checked\n`
+      )
+      return null
+    }
+    const named = GitWorkspace.remoteHeadBranchIn(asked.stdout)
+    if (named === null) {
+      this.stderr(
+        `${root}: ${GitWorkspace.REMOTE} was asked which branch is default and printed ` +
+        `${JSON.stringify(asked.stdout)}, which names none, so the session opens on the branch the checkout is ` +
+        `already on\n`
+      )
+    }
+
+    return named
+  }
+
+  async #requireOnDefaultBranch(root: string, base: string): Promise<void> {
+    const asked = await this.run(GitWorkspace.currentBranchArgvFor(root))
+    if (asked.failed) {
+      throw new WorkspaceNotRead(`the branch ${root} is on could not be read: ${GitWorkspace.#output(asked)}`)
+    }
+    const current = asked.stdout.trim()
+    if (current.length === 0) {
+      throw new WorkspaceNotUnderstood(`git was asked which branch ${root} is on and printed nothing`)
+    }
+    if (current !== base) {
+      throw new CheckoutNotOnDefaultBranch(
+        `${root} is on ${current}, and a session starts from ${base}: Control Tower cuts the branches the work ` +
+        `needs by itself, so there is no branch to make by hand. Run git switch ${base} in that checkout and open ` +
+        `the session again`
+      )
+    }
+  }
+
+  async #fastForwardToWhateverTheRemoteIsKnownToHold(root: string, base: string): Promise<void> {
+    const fetched = await this.run(GitWorkspace.fetchArgvFor(root, base))
+    if (fetched.failed) {
+      this.stderr(
+        `${root}: ${GitWorkspace.REMOTE}/${base} could not be fetched, so the session opens on the base this ` +
+        `checkout already holds: ${GitWorkspace.#output(fetched)}\n`
+      )
+    }
+    const known = await this.run(GitWorkspace.verifyBaseArgvFor(root, base))
+    if (known.failed) {
+      this.stderr(
+        `${root}: no ${GitWorkspace.REMOTE}/${base} is known here, so there is nothing to bring the checkout up ` +
+        `to date with: ${GitWorkspace.#output(known)}\n`
+      )
+      return
+    }
+    const merged = await this.run(GitWorkspace.mergeFastForwardArgvFor(root, base))
+    if (merged.failed) {
+      throw new CheckoutNotUpToDate(
+        `${root} is on ${base} and could not be brought up to date with ${GitWorkspace.REMOTE}/${base}: ` +
+        `${GitWorkspace.#output(merged)}`
+      )
+    }
   }
 
   async inspectUnlaunched(watch: PlanWatch, previous: UnusedWorkspace | null): Promise<UnusedWorkspace> {

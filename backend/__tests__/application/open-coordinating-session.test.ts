@@ -59,6 +59,13 @@ class WorkspaceDouble extends Workspace {
     return this.confirmedRoot
   }
 
+  async confirmForSession({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }):
+    Promise<CheckoutRoot> {
+    this.confirmed.push({ root, repository })
+    this.steps.push('confirmForSession')
+    return this.confirmedRoot
+  }
+
   async prepare(): Promise<never> {
     this.prepared += 1
     throw new Error('OpenCoordinatingSession must never call workspace.prepare')
@@ -169,6 +176,15 @@ class Flow {
 }
 
 describe('OpenCoordinatingSession', () => {
+  it('confirms the checkout with the preconditions a session needs, not only the identity of its repository', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.steps).toContain('confirmForSession')
+    expect(flow.steps).not.toContain('confirm')
+  })
+
   it('starts the conversation in the confirmed checkout and prepares no worktree', async () => {
     const flow = new Flow()
 

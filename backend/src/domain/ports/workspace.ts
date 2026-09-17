@@ -28,6 +28,12 @@ export class Workspace {
     )
   }
 
+  async confirmForSession({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
+    throw new Error(
+      `${this.constructor.name} must implement confirmForSession({ root, repository }) and answer the canonical checkout root of a checkout that is on its default branch and up to date, asked whether ${root} holds ${repository}`
+    )
+  }
+
   async prepare({ issue, repository, root }: {
     issue: PlanIssue,
     repository: RepositoryName,
