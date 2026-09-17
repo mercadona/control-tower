@@ -527,6 +527,7 @@ class CtApi {
       shell: environment.SHELL,
       env: environment,
       claudeDirectory: Invocation.configuredIn(environment, homedir()),
+      pluginRoot: PluginTree.root(),
       listNames: (path) => readdirSync(path),
       readText: (path) => readFileSync(path, 'utf8'),
       newId: randomUUID,
