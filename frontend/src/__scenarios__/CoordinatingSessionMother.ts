@@ -1,6 +1,7 @@
 import { CoordinatingSessionRead } from 'app/coordinating-session/useCoordinatingSession'
 
 const CONVERSATION = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
+const TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 const REPO = 'owner/name'
 const ROOT = '/Users/pedro/code/name'
 const SESSION = { id: 'session-1', name: 'brainstorming' }
@@ -30,55 +31,69 @@ const REPEATED_WAITING_TIMELINE = [
   { id: 'event-5', kind: 'waiting-for-permission' as const, at: THIRD_WAITING_AT, detail: THIRD_QUESTION },
 ]
 
-const none = () => ({ status: 200, body: '{"status":"none"}' })
+const none = () => ({ status: 200, body: '{"status":"none","operation":"idle"}' })
 
-const nothingRead = (): CoordinatingSessionRead => ({ phase: 'read', kind: 'none' })
+const nothingRead = (): CoordinatingSessionRead => ({ phase: 'read', kind: 'none', operation: 'idle' })
 
 const workingRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'live',
+  operation: 'idle',
+  target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
   root: ROOT,
   session: SESSION,
   attention: { status: 'working', question: null },
   timeline: WORKING_TIMELINE,
+  closureError: null,
 })
 
 const waitingRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'live',
+  operation: 'idle',
+  target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
   root: ROOT,
   session: SESSION,
   attention: { status: 'waiting', question: QUESTION },
   timeline: WAITING_TIMELINE,
+  closureError: null,
 })
 
 const repeatedWaitingRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'live',
+  operation: 'idle',
+  target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
   root: ROOT,
   session: SESSION,
   attention: { status: 'waiting', question: THIRD_QUESTION },
   timeline: REPEATED_WAITING_TIMELINE,
+  closureError: null,
 })
 
 const unresumableRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'unresumable',
+  operation: 'idle',
+  target: TARGET,
   conversation: CONVERSATION,
+  repo: REPO,
+  root: ROOT,
   detail: UNRESUMABLE_DETAIL,
   timeline: WORKING_TIMELINE,
+  closureError: null,
 })
 
 const working = () => ({
   status: 200,
   body:
-    `{"status":"live","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"working","question":null},` +
     `"timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
@@ -86,7 +101,7 @@ const working = () => ({
 const waiting = () => ({
   status: 200,
   body:
-    `{"status":"live","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},` +
     `"attention":{"status":"waiting","question":"${QUESTION}"},` +
     `"timeline":${JSON.stringify(WAITING_TIMELINE)}}`,
@@ -95,29 +110,34 @@ const waiting = () => ({
 const unresumable = () => ({
   status: 200,
   body:
-    `{"status":"unresumable","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"unresumable","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"detail":"${UNRESUMABLE_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const ended = () => ({
   status: 200,
   body:
-    `{"status":"ended","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"ended","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"detail":"${ENDED_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const endedRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'ended',
+  operation: 'idle',
+  target: TARGET,
   conversation: CONVERSATION,
+  repo: REPO,
+  root: ROOT,
   detail: ENDED_DETAIL,
   timeline: WORKING_TIMELINE,
+  closureError: null,
 })
 
 const opened = () => ({
   status: 202,
   body:
-    `{"status":"brainstorming","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"brainstorming","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
@@ -130,6 +150,7 @@ const alreadyLive = () => ({
 
 export const CoordinatingSessionMother = {
   CONVERSATION,
+  TARGET,
   REPO,
   ROOT,
   SESSION,

@@ -6,6 +6,7 @@ import { PlanCollapse } from './start-plan-route.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { ReslicingOutcome, PublishReslicingParams } from '../application/actions/publish-reslicing.ts'
 import { WorkInFlight, Reservation } from './work-in-flight.ts'
+import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type {
   PublishReslicing, ReslicingPublished, ReslicingOutcomeValue,
@@ -64,14 +65,8 @@ export class SpecReslicingRoute {
         )
         return
       }
-      const holding = held.held()
-      if (holding === null) {
-        Answer.refuse(
-          response, 400,
-          SpecReslicingOutcome.NO_COORDINATING_SESSION, SpecReslicingRoute.#NO_COORDINATING_SESSION_DETAIL
-        )
-        return
-      }
+      const holding = CoordinatingSessionTarget.admitted(request, response, held)
+      if (holding === null) return
       if (inFlight.reserve(holding.conversation.root.text) !== Reservation.RESERVED) {
         Answer.refuse(response, 409, SpecReslicingOutcome.IN_PROGRESS, SpecReslicingRoute.#IN_PROGRESS_DETAIL)
         return

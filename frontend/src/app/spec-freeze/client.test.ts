@@ -14,6 +14,7 @@ describe('SpecFreezeClient', () => {
 
     expect(outcome).toEqual({
       kind: 'draft',
+      target: SpecFreezeMother.TARGET,
       spec: SpecFreezeMother.SPEC,
       findings: [SpecFreezeMother.MARKER_FINDING, SpecFreezeMother.HYPOTHESIS_FINDING],
       key: SpecFreezeMother.KEY,
@@ -27,6 +28,7 @@ describe('SpecFreezeClient', () => {
 
     expect(outcome).toEqual({
       kind: 'draft',
+      target: SpecFreezeMother.TARGET,
       spec: SpecFreezeMother.SPEC,
       findings: [SpecFreezeMother.MARKER_FINDING, SpecFreezeMother.HYPOTHESIS_FINDING],
       key: null,
@@ -37,11 +39,14 @@ describe('SpecFreezeClient', () => {
     const pressing = vi.fn(async () => new Response(SpecFreezeMother.frozen().body, { status: 200 }))
     vi.stubGlobal('fetch', pressing)
 
-    const outcome = await SpecFreezeClient.freeze(SpecFreezeMother.KEY)
+    const outcome = await SpecFreezeClient.freeze(SpecFreezeMother.KEY, SpecFreezeMother.TARGET)
 
     expect(pressing).toHaveBeenCalledWith('/spec-freeze', {
       method: 'POST',
-      headers: { 'x-gate-key': SpecFreezeMother.KEY },
+      headers: {
+        'x-gate-key': SpecFreezeMother.KEY,
+        'x-coordinating-target': SpecFreezeMother.TARGET,
+      },
     })
     expect(outcome).toEqual({
       kind: 'frozen',
@@ -53,12 +58,12 @@ describe('SpecFreezeClient', () => {
   it('a refusal is read as its code and its detail', async () => {
     answerWith(SpecFreezeMother.notFreezable())
 
-    const outcome = await SpecFreezeClient.freeze(SpecFreezeMother.KEY)
+    const outcome = await SpecFreezeClient.freeze(SpecFreezeMother.KEY, SpecFreezeMother.TARGET)
 
     expect(outcome).toEqual({
       kind: 'refused',
       code: 'spec-not-freezable',
-      error: SpecFreezeMother.NOT_FREEZABLE_DETAIL,
+      error: 'El spec todavía no cumple las condiciones para congelarse.',
     })
   })
 
@@ -71,7 +76,7 @@ describe('SpecFreezeClient', () => {
     )
 
     const read = await SpecFreezeClient.read()
-    const pressed = await SpecFreezeClient.freeze(SpecFreezeMother.KEY)
+    const pressed = await SpecFreezeClient.freeze(SpecFreezeMother.KEY, SpecFreezeMother.TARGET)
 
     expect(read).toEqual({ kind: 'unavailable' })
     expect(pressed).toEqual({ kind: 'backend-unreachable' })
@@ -85,7 +90,7 @@ describe('SpecFreezeClient', () => {
     expect(outcome).toEqual({
       kind: 'refused',
       code: 'epic-spec-not-understood',
-      error: SpecFreezeMother.REFUSED_DETAIL,
+      error: 'No se ha podido interpretar el spec del epic.',
     })
   })
 })

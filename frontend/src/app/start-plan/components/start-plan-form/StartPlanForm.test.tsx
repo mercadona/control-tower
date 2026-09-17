@@ -11,7 +11,13 @@ vi.mock('app/coordinating-session/client', () => ({
 
 const OPENED = {
   kind: 'opened' as const,
-  opened: { conversation: CoordinatingSessionMother.CONVERSATION, session: CoordinatingSessionMother.SESSION },
+  opened: {
+    target: CoordinatingSessionMother.TARGET,
+    conversation: CoordinatingSessionMother.CONVERSATION,
+    repo: CoordinatingSessionMother.REPO,
+    root: CoordinatingSessionMother.ROOT,
+    session: CoordinatingSessionMother.SESSION,
+  },
 }
 
 const REFUSAL_ERROR = CoordinatingSessionMother.ALREADY_LIVE_DETAIL
@@ -27,6 +33,7 @@ const renderForm = ({ isCoordinatingSessionLive = false } = {}) => {
     <StartPlanForm
       isLocked={false}
       isCoordinatingSessionLive={isCoordinatingSessionLive}
+      openSession={CoordinatingSessionClient.open}
       onInteraction={vi.fn()}
       onOpened={onOpened}
       onUnreachable={onUnreachable}

@@ -832,12 +832,15 @@ knowing its summary and description — it does not replace it.
 
 ```json
 {"status":"brainstorming","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "repo":"owner/name","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
-`conversation` is the id `GET /coordinating-session` and `POST /session-hooks`
-both key on. `session` is the same shape `GET /sessions` answers, and the same
+`conversation` is the durable conversation id `GET /coordinating-session` and
+`POST /session-hooks` both key on. `target` is the opaque UUID of this held
+incarnation; a replacement receives a different target even in the same
+repository or conversation. `session` is the same shape `GET /sessions` answers, and the same
 `GET /sessions/:id/stream` streams — the coordinating session is a live session
 like any other.
 
@@ -898,18 +901,20 @@ Whatever coordinating session this backend holds right now, in-memory. No
 parameters. The page polls it to show the entrance conversation's state and to
 recover it after a reload.
 
-**200 OK** — three shapes, told apart by `status`.
+**200 OK** — the session shape is told apart by `status`; every answer also
+carries the authoritative lifecycle `operation`.
 
 Nothing has been opened yet:
 
 ```json
-{"status":"none"}
+{"status":"none","operation":"idle"}
 ```
 
 A conversation is live:
 
 ```json
-{"status":"live","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+{"status":"live","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
+ "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
  "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"},
@@ -941,7 +946,8 @@ Claude Code no longer holds a conversation this backend tried to resume at
 start-up:
 
 ```json
-{"status":"unresumable","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+{"status":"unresumable","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
+ "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "repo":"owner/name","root":"/repo/checkout",
  "detail":"claude code no longer holds this conversation: the coordinating session was not resumed",
  "timeline":[{"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null}]}
@@ -951,6 +957,12 @@ The cabin never opens a different conversation and presents it as this one: an
 `unresumable` conversation stays `unresumable` until a person opens a new one
 with `POST /coordinating-session`.
 
+`operation` is one of `idle`, `recovering`, `opening`, `closing`, or
+`close-failed`. Opening and recovery may accompany `status:none`. Closing and
+close failure retain the held target; `close-failed` additionally carries
+`closureError: {code, detail}` so the same target can be retried. An exited PTY
+answers `status:ended` without discarding its target or last terminal identity.
+
 **Refusals**
 
 None of its own. Only the shared refusals apply — 405 for a method other than
@@ -958,6 +970,65 @@ None of its own. Only the shared refusals apply — 405 for a method other than
 
 ```
 curl -s http://127.0.0.1:8787/coordinating-session
+```
+
+---
+
+## `POST /coordinating-session/close`
+
+Requests bounded termination of one exact coordinating target. The route does
+not answer success until the original PTY exit and process-group absence are
+confirmed and a durable `closed` receipt has replaced the durable `requested`
+receipt.
+
+**Request** — `Content-Type: application/json`, with exactly these two UUIDs:
+
+```json
+{"conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
+```
+
+**200 OK**
+
+```json
+{"status":"closed","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
+```
+
+Concurrent requests for the same target join one close. Repeating a durably
+closed target returns the same acknowledgement without clearing or signalling
+a replacement. An unknown or stale target is never treated as a generic reset.
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `malformed-session-close` | the body is not the exact object above or either identity is not a UUID |
+| 400 | `coordinating-session-target-changed` | the target is neither current nor the matching durably closed target |
+| 400 | `coordinating-session-opening` | opening or startup recovery owns the lifecycle slot |
+| 400 | `session-closure-not-recorded` | the requested or closed receipt could not be persisted |
+| 400 | `session-closure-not-understood` | existing closure evidence is malformed or names different immutable evidence |
+| 400 | `session-not-terminated` | signalling or the bounded termination wait failed; the target remains retryable |
+| 400 | `session-termination-unconfirmed` | recovery cannot prove a process group recorded before restart is absent; it never signals that disk-only PID |
+
+A backend interrupted after writing `requested` never resumes that
+conversation. At restart it either confirms absence and completes `closed`, or
+retains the target as `close-failed` for an explicit retry. Closure does not
+delete checkout files, revert git changes, or stop unrelated sessions or
+headless work.
+
+The numeric process group retained in a receipt is evidence, not renewable
+signal authority. While the original root identity is present, the backend
+tracks each observed member's PID and OS start identity. Before every TERM or
+KILL, including retries and escalation while the PTY exit callback is delayed,
+the currently present members must freshly match those original identities.
+Verified original children can therefore be terminated after their root exits,
+including while the durable close intent is being written; ambiguous survivors
+cannot. Any observed group absence retires signal authority permanently. A
+retry can confirm later absence, but it does not signal a group number that may
+have been reused; a completion-write retry uses retained in-memory confirmation
+without probing that number again.
+
+```sh
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/coordinating-session/close \
+  -d '{"conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}'
 ```
 
 ---
@@ -974,12 +1045,14 @@ worktree is cut and no branch is created.
 **Request** — no body. The checkout and the repository are the ones the
 coordinating session this backend holds already names, so nothing is sent.
 The gate key travels in `x-gate-key`, exactly as gate 1's and gate 2's other
-buttons carry it.
+buttons carry it. `x-coordinating-target` carries the target whose ended
+conversation supplies the checkout; it is never silently retargeted.
 
 **202 Accepted**
 
 ```json
 {"status":"grooming","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
+ "target":"69d8d78f-1f6f-47db-98c5-3a13b1710691",
  "repo":"owner/name","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
@@ -993,14 +1066,16 @@ its place, which is why a live conversation has to end before this door opens.
 | Status | `code` | When |
 |---|---|---|
 | 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
-| 400 | `no-coordinating-session` | nothing is held, so there is no checkout to open the conversation in |
+| 400 | `coordinating-session-target-changed` | the target header is missing, malformed, stale, or no longer held |
+| 400 | `coordinating-session-busy` | recovery, opening, closing, or a failed close owns the lifecycle slot |
 | 409 | `coordinating-session-already-live` | a conversation is live: it has to end first |
 | 409 | `coordinating-session-opening` | another opening is in flight |
 | 400 | `no-epic-spec` | no execution spec exists in this checkout to talk about |
 | 400 | `conversation-not-started` | `claude` could not be spawned in the checkout |
 
 ```
-curl -s -X POST http://127.0.0.1:8787/groom-session -H 'x-gate-key: <key>'
+curl -s -X POST http://127.0.0.1:8787/groom-session \
+  -H 'x-gate-key: <key>' -H 'x-coordinating-target: <target>'
 ```
 
 ---
@@ -1078,13 +1153,14 @@ A session is held, but the checkout carries no execution spec under
 `docs/superpowers/specs/`:
 
 ```json
-{"status":"no-spec"}
+{"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
 ```
 
 A spec exists and is not frozen yet:
 
 ```json
 {"status":"draft",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
  "findings":[
    {"code":"clarification-marker","line":42,"detail":"[NEEDS CLARIFICATION: which button?]"},
@@ -1112,6 +1188,7 @@ The spec is frozen:
 
 ```json
 {"status":"frozen",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
  "on":"2026-09-14",
  "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
@@ -1120,6 +1197,10 @@ The spec is frozen:
 `pullRequest` is `null` when the branch that carries the frozen spec has no
 open pull request `gh` can find today — the one `POST /spec-freeze` opened may
 since have merged or closed.
+
+Every non-`none` answer names the target captured before the read began. If
+that target changes while the query is running, the delayed answer is
+`{"status":"none"}` and carries no key or stale authority.
 
 **Refusals**
 
@@ -1178,6 +1259,7 @@ itself.
 | Header | Required | Shape |
 |---|---|---|
 | `x-gate-key` | yes | the exact value `GET /spec-freeze` minted for the page |
+| `x-coordinating-target` | yes | the exact `target` carried by the gate read |
 
 **200 OK**
 
@@ -1197,7 +1279,8 @@ Then, once the key holds:
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to freeze |
+| `coordinating-session-target-changed` | 400 | `x-coordinating-target` is missing, malformed, stale, or no longer held |
+| `coordinating-session-busy` | 400 | recovery, opening, closing, or a failed close owns the lifecycle slot |
 | `freeze-in-progress` | 409 | a freeze of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to freeze |
 | `spec-already-frozen` | 400 | the spec is already frozen: it cannot be frozen twice |
@@ -1208,7 +1291,7 @@ taken before the freeze starts and released once it answers (whether it froze th
 refused), keyed by the checkout so a second press while the first is still running is turned away
 instead of racing it into freezing — and possibly writing — the same spec twice.
 
-None of these six touches the spec, a commit or the remote.
+None of these seven touches the spec, a commit or the remote.
 
 From writing the spec, publishing the branch and opening the pull request,
 once the six above did not apply — the same `PlanCollapse` doctrine `POST
@@ -1231,7 +1314,9 @@ All seven answer 400 and carry the tool's own message in `detail`, the same
 convention every other tool refusal in this file follows.
 
 ```
-curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
+  -H 'x-coordinating-target: 6d13bc52-740f-49f8-b128-15e597674f3a' \
+  http://127.0.0.1:8787/spec-freeze
 ```
 
 ---
@@ -1251,7 +1336,8 @@ state line nor its freeze date. That is what makes this a correction and not a
 second freeze.
 
 **Request** — no body. The checkout and the repository are the ones the held
-coordinating session names; the gate key travels in `x-gate-key`.
+coordinating session names; the gate key travels in `x-gate-key` and the exact
+incarnation travels in `x-coordinating-target`.
 
 **200 OK**
 
@@ -1277,7 +1363,8 @@ milestone published from the same branch, and not by a later edit of this spec.
 | Status | `code` | When |
 |---|---|---|
 | 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
-| 400 | `no-coordinating-session` | nothing is held, so there is no checkout whose slicing could be published |
+| 400 | `coordinating-session-target-changed` | the target header is missing, malformed, stale, or no longer held |
+| 400 | `coordinating-session-busy` | recovery, opening, closing, or a failed close owns the lifecycle slot |
 | 409 | `reslicing-in-progress` | a publication of this slicing is under way |
 | 400 | `no-epic-spec` | no execution spec exists in this checkout to publish |
 | 400 | `spec-not-frozen` | the spec is not frozen: gate 1 owns a draft, not this door |
@@ -1289,7 +1376,8 @@ Plus every `PlanCollapse` code gate 1 can meet on the same path —
 `detail`.
 
 ```
-curl -s -X POST http://127.0.0.1:8787/spec-reslicing -H 'x-gate-key: <key>'
+curl -s -X POST http://127.0.0.1:8787/spec-reslicing \
+  -H 'x-gate-key: <key>' -H 'x-coordinating-target: <target>'
 ```
 
 ---
@@ -1312,13 +1400,13 @@ A session is held, but the checkout carries no execution spec — the same absen
 /spec-freeze` answers with `no-spec`:
 
 ```json
-{"status":"no-spec"}
+{"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
 ```
 
 The spec exists and is not frozen yet:
 
 ```json
-{"status":"draft"}
+{"status":"draft","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
 ```
 
 The spec is frozen and what the default branch holds is not the text this checkout holds, and that
@@ -1326,7 +1414,7 @@ edit is **not committed**: the coordinating session changed the slicing and the 
 left the checkout yet. `POST /spec-reslicing` is what makes it travel:
 
 ```json
-{"status":"resliced","key":"3f9c1a…"}
+{"status":"resliced","target":"6d13bc52-740f-49f8-b128-15e597674f3a","key":"3f9c1a…"}
 ```
 
 The spec is frozen, but what the default branch holds is **not the text this checkout holds** — the
@@ -1339,6 +1427,7 @@ creating issues from a table nobody approved:
 
 ```json
 {"status":"awaiting-publication",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
 
@@ -1362,6 +1451,7 @@ person reads for why:
 
 ```json
 {"status":"issues-uncertain",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "milestone":"The loop enters through brainstorming",
  "reason":"gh issue list answered exactly as many issues as it was asked for at every limit up to the ceiling of 1600: the milestone \"The loop enters through brainstorming\" may hold more issues than this backend could read"}
 ```
@@ -1372,6 +1462,7 @@ spec's slices table, the order, the title, the labels and the repository the rea
 
 ```json
 {"status":"groomable",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "milestone":"The loop enters through brainstorming",
  "plan":{"home":"mercadona/control-tower","issues":[
    {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
@@ -1389,6 +1480,7 @@ never read as missing:
 
 ```json
 {"status":"partially-groomed",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "milestone":"The loop enters through brainstorming",
  "plan":{"home":"mercadona/control-tower","issues":[
    {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
@@ -1406,6 +1498,7 @@ already ran, gate 2's promotion has not:
 
 ```json
 {"status":"groomed",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "milestone":"The loop enters through brainstorming",
  "issues":[
    {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"backlog"},
@@ -1419,6 +1512,7 @@ promote:
 
 ```json
 {"status":"authorised",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "milestone":"The loop enters through brainstorming",
  "issues":[
    {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"ready"},
@@ -1434,6 +1528,9 @@ for the page's own request — `resliced` carries it because the button it offer
 `POST /spec-reslicing`, which demands the same key; `no-spec`, `draft`, `awaiting-publication`,
 `issues-uncertain` and `authorised` never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
 `issues-uncertain` offers nothing to press while its own listing cannot be trusted.
+Every non-`none` shape carries the captured `target`. As with gate 1, a read
+that resolves after replacement answers `status:none` instead of attaching old
+data or a key to the new target.
 
 `plan.home` is the milestone's **home repository**, the one the coordinating session holds, and
 each issue's `repo` is the repository that issue will be created in: the milestone's slices table
@@ -1498,6 +1595,7 @@ epic back to.
 | Header | Required | Shape |
 |---|---|---|
 | `x-gate-key` | yes | the exact value `GET /epic-groom` minted for the page |
+| `x-coordinating-target` | yes | the exact `target` carried by the gate read |
 | `x-plan-fingerprint` | yes | the exact `planFingerprint` the `groomable` or `partially-groomed` body carried for the plan on screen |
 
 **200 OK**
@@ -1523,7 +1621,8 @@ Then, once the key holds:
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to groom |
+| `coordinating-session-target-changed` | 400 | `x-coordinating-target` is missing, malformed, stale, or no longer held |
+| `coordinating-session-busy` | 400 | recovery, opening, closing, or a failed close owns the lifecycle slot |
 | `groom-in-progress` | 409 | a groom of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
@@ -1548,7 +1647,7 @@ mismatch means the spec changed underneath the page between the preview and the 
 carrying no `x-plan-fingerprint` at all meets the same code, because the page always has one to send
 at a pressable rung, so its absence means the request did not come from a preview.
 
-None of these nine touches the milestone or an issue.
+None of these ten touches the milestone or an issue.
 
 From running the groom itself, once the eight above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
@@ -1571,7 +1670,9 @@ All seven answer 400 and carry the tool's own message in `detail`, the same conv
 tool refusal in this file follows.
 
 ```
-curl -s -X POST -H 'x-gate-key: 3f9c1a…' -H 'x-plan-fingerprint: 9c1a3f…' http://127.0.0.1:8787/epic-groom
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' -H 'x-plan-fingerprint: 9c1a3f…' \
+  -H 'x-coordinating-target: 6d13bc52-740f-49f8-b128-15e597674f3a' \
+  http://127.0.0.1:8787/epic-groom
 ```
 
 ---
@@ -1589,6 +1690,7 @@ session, the same way `GET /epic-groom` does. Unlike `POST /epic-groom`, it take
 | Header | Required | Shape |
 |---|---|---|
 | `x-gate-key` | yes | the exact value `GET /epic-groom` minted for the page |
+| `x-coordinating-target` | yes | the exact `target` carried by the gate read |
 
 **200 OK**
 
@@ -1616,13 +1718,14 @@ Then, once the key holds:
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to promote |
+| `coordinating-session-target-changed` | 400 | `x-coordinating-target` is missing, malformed, stale, or no longer held |
+| `coordinating-session-busy` | 400 | recovery, opening, closing, or a failed close owns the lifecycle slot |
 | `no-epic-issues` | 400 | the milestone holds no issue yet: the groom has to run first |
 | `epic-partially-groomed` | 400 | the milestone holds some but not every planned issue: `detail` names how many of how many exist and that the groom has to be finished first — this route's own code, met by no other endpoint |
 | `epic-issues-uncertain` | 400 | `gh issue list`'s paging could not be exhausted: `detail` is the same reason `GET /epic-groom`'s `issues-uncertain` body carries — authorising past a page this backend never saw is exactly the defect this code exists to refuse |
 
-None of these five touches a label. From reading the milestone's issues and moving them, once
-the five above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
+None of these six touches a label. From reading the milestone's issues and moving them, once
+the six above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
 documents above, and it is the only route that can meet `epic-issue-not-promoted`.
 
 `epic-issues-uncertain` is deliberately the same spelling `POST /epic-groom` uses for the identical
@@ -1631,7 +1734,9 @@ independently inventing their own; `backend/__tests__/infrastructure/refusal-cod
 the sharing on purpose so a future rename of either has to touch both.
 
 ```
-curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-promotion
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
+  -H 'x-coordinating-target: 6d13bc52-740f-49f8-b128-15e597674f3a' \
+  http://127.0.0.1:8787/epic-promotion
 ```
 
 ---

@@ -17,6 +17,7 @@ type RecordedSpawn = {
 }
 
 class TerminalDouble implements Terminal {
+  readonly pid = 4101
   onData(): void {}
   onExit(): void {}
   write(): void {}
@@ -78,7 +79,17 @@ class Adapter {
   }
 
   static #built(spawn: TerminalSpawn, overrides: OverridableCollaborators): ClaudeConversations {
-    const liveSessions = new PtyLiveSessions({ spawn, newId: () => 'terminal-1', stderr: (): void => {} })
+    const liveSessions = new PtyLiveSessions({
+      spawn,
+      newId: () => 'terminal-1',
+      stderr: (): void => {},
+      signal: (): void => {},
+      sleep: async (): Promise<void> => {},
+      now: () => 0,
+      termGraceMs: 1,
+      killGraceMs: 1,
+      pollMs: 1,
+    })
 
     return new ClaudeConversations({
       liveSessions,

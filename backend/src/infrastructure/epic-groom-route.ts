@@ -7,6 +7,7 @@ import { GroomEpic, GroomEpicParams, PlanStaleness } from '../application/action
 import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
+import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { ReadEpicGroom, EpicGroomRead, EpicGroomStateValue } from '../application/queries/read-epic-groom.ts'
 import type { EpicGroomed } from '../application/actions/groom-epic.ts'
@@ -107,12 +108,16 @@ export class EpicGroomRoute {
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       }
+      if (!CoordinatingSessionTarget.stillCurrent(held, holding)) {
+        Answer.send(response, 200, { status: 'none' })
+        return
+      }
       const minted = key.forThePage({
         origin: request.get('Origin'),
         host: request.get('Host'),
         site: request.get(GateKey.SITE_HEADER),
       })
-      EpicGroomRoute.#answerRead(response, outcome, minted)
+      EpicGroomRoute.#answerRead(response, outcome, minted, holding.target)
     }
   }
 
@@ -124,11 +129,8 @@ export class EpicGroomRoute {
         Answer.refuse(response, 403, EpicGroomOutcome.NOT_FROM_THE_PAGE, EpicGroomRoute.#NOT_FROM_THE_PAGE_DETAIL)
         return
       }
-      const holding = held.held()
-      if (holding === null) {
-        Answer.refuse(response, 400, EpicGroomOutcome.NO_COORDINATING_SESSION, EpicGroomRoute.#NO_COORDINATING_SESSION_DETAIL)
-        return
-      }
+      const holding = CoordinatingSessionTarget.admitted(request, response, held)
+      if (holding === null) return
       if (inFlight.reserve(holding.conversation.root.text) !== Reservation.RESERVED) {
         Answer.refuse(response, 409, EpicGroomOutcome.GROOM_IN_PROGRESS, EpicGroomRoute.#GROOM_IN_PROGRESS_DETAIL)
         return
@@ -172,29 +174,32 @@ export class EpicGroomRoute {
     return `${EpicGroomRoute.RECORD}: "${groomed.milestone}" ${planned}, holds ${groomed.issues.length} now\n`
   }
 
-  static #answerRead(response: Response, outcome: EpicGroomRead, minted: string | null): void {
+  static #answerRead(response: Response, outcome: EpicGroomRead, minted: string | null, target: string): void {
     switch (outcome.state) {
       case EpicGroomState.NO_SPEC:
-        Answer.send(response, 200, { status: EpicGroomState.NO_SPEC })
+        Answer.send(response, 200, { status: EpicGroomState.NO_SPEC, target })
         return
       case EpicGroomState.DRAFT:
-        Answer.send(response, 200, { status: EpicGroomState.DRAFT })
+        Answer.send(response, 200, { status: EpicGroomState.DRAFT, target })
         return
       case EpicGroomState.RESLICED:
         Answer.send(response, 200, {
           status: EpicGroomState.RESLICED,
+          target,
           ...(minted === null ? {} : { key: minted }),
         })
         return
       case EpicGroomState.AWAITING_PUBLICATION:
         Answer.send(response, 200, {
           status: EpicGroomState.AWAITING_PUBLICATION,
+          target,
           pullRequest: outcome.pullRequest,
         })
         return
       case EpicGroomState.ISSUES_UNCERTAIN:
         Answer.send(response, 200, {
           status: EpicGroomState.ISSUES_UNCERTAIN,
+          target,
           milestone: outcome.milestone,
           reason: outcome.reason,
         })
@@ -202,6 +207,7 @@ export class EpicGroomRoute {
       case EpicGroomState.GROOMABLE:
         Answer.send(response, 200, {
           status: EpicGroomState.GROOMABLE,
+          target,
           milestone: outcome.milestone,
           plan: { home: outcome.plan!.home, issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
           planFingerprint: outcome.planFingerprint,
@@ -212,6 +218,7 @@ export class EpicGroomRoute {
       case EpicGroomState.PARTIALLY_GROOMED:
         Answer.send(response, 200, {
           status: EpicGroomState.PARTIALLY_GROOMED,
+          target,
           milestone: outcome.milestone,
           plan: { home: outcome.plan!.home, issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
           planFingerprint: outcome.planFingerprint,
@@ -222,6 +229,7 @@ export class EpicGroomRoute {
       case EpicGroomState.GROOMED:
         Answer.send(response, 200, {
           status: EpicGroomState.GROOMED,
+          target,
           milestone: outcome.milestone,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
           ...(minted === null ? {} : { key: minted }),
@@ -230,6 +238,7 @@ export class EpicGroomRoute {
       case EpicGroomState.AUTHORISED:
         Answer.send(response, 200, {
           status: EpicGroomState.AUTHORISED,
+          target,
           milestone: outcome.milestone,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
         })

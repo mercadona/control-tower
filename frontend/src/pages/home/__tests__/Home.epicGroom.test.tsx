@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
@@ -18,7 +18,6 @@ type Answer = { status: number; body: string }
 const A_LOADED_SUITE = { timeout: 5000 }
 const HEADING = 'Puerta 2 · El groom y la autorización'
 const REVIEW_THE_SLICING = 'Revisar el slicing con la sesión'
-const SESSION_OPENED = 'Sesión del groom abierta: habla con ella en el panel de sesiones.'
 const IMPLEMENTATION_HEADING = 'Implementación'
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
 const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = {
@@ -46,15 +45,26 @@ const implementingPlan = () => ({
 })
 
 const stubGroomableBackendWithASession = () => {
+  let opened = false
+  const groomLive = CoordinatingSessionMother.working().body
+    .replace(CoordinatingSessionMother.TARGET, EpicGroomMother.GROOM_TARGET)
+    .replace(CoordinatingSessionMother.CONVERSATION, EpicGroomMother.GROOM_CONVERSATION)
+    .replace(CoordinatingSessionMother.SESSION.id, EpicGroomMother.GROOM_SESSION.id)
+    .replace(CoordinatingSessionMother.SESSION.name, EpicGroomMother.GROOM_SESSION.name)
   const fetching = vi.fn(async (input: string | URL | Request) => {
     const path = String(input)
     if (path === '/spec-freeze') return responseFor(SpecFreezeMother.none())
     if (path === '/epic-groom') return responseFor(EpicGroomMother.groomable())
-    if (path === '/groom-session') return responseFor(EpicGroomMother.groomSessionOpened())
+    if (path === '/groom-session') {
+      opened = true
+      return responseFor(EpicGroomMother.groomSessionOpened())
+    }
     if (path === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.withGroomSession())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.none())
+    if (path === '/coordinating-session') return opened
+      ? new Response(groomLive)
+      : responseFor(CoordinatingSessionMother.ended())
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -72,7 +82,7 @@ const stubBackend = (activePlans: Answer) => {
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.none())
+    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.working())
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -108,19 +118,27 @@ describe('Home and gate 2', () => {
     implementing.unmount()
   })
 
-  it('the groom conversation gate 2 opens is selected in the sessions panel, with no second refresh to force', async () => {
-    const fetching = stubGroomableBackendWithASession()
+  it('a mounted live coordinator blocks the groom session entrance without blocking current-work groom', async () => {
+    const fetching = stubBackend(NO_ACTIVE_PLANS)
     openHome()
+    const session = await screen.findByRole('button', { name: REVIEW_THE_SLICING }, A_LOADED_SUITE)
+
+    expect(session).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
+    expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(0)
+  })
+
+  it('opens and selects a groom conversation over an idle ended coordinator', async () => {
+    const fetching = stubGroomableBackendWithASession()
     const user = userEvent.setup()
-    await screen.findByRole('button', { name: REVIEW_THE_SLICING }, A_LOADED_SUITE)
+    openHome()
+    const session = await screen.findByRole('button', { name: REVIEW_THE_SLICING }, A_LOADED_SUITE)
+    expect(session).toBeEnabled()
 
-    await user.click(screen.getByRole('button', { name: REVIEW_THE_SLICING }))
+    await user.click(session)
 
-    expect(await screen.findByText(SESSION_OPENED)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
-    await vi.waitFor(() => expect(
-      screen.getByRole('tab', { name: EpicGroomMother.GROOM_SESSION.name }),
-    ).toHaveAttribute('aria-selected', 'true'))
-    expect(fetching.mock.calls.filter(([input]) => String(input) === '/sessions').length).toBeGreaterThan(1)
+    expect(await screen.findByRole('tab', { name: EpicGroomMother.GROOM_SESSION.name })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(1)
   })
 })

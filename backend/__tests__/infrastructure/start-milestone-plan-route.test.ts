@@ -180,6 +180,7 @@ class Mother {
   static coordinating(): CoordinatingSessions {
     const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
     sessions.remember(new HeldCoordinatingSession({
+      target: '6d13bc52-740f-49f8-b128-15e597674f3a',
       state: CoordinatingSessionState.LIVE,
       conversation: new CoordinatingConversation({
         id: new ConversationId('22222222-2222-4222-8222-222222222222'),

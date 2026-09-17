@@ -74,8 +74,9 @@ backend's run and the other two endpoints refuse that id with
 `session-not-live`.
 
 `app/coordinating-session` (`CoordinatingSessionStatus`, rendered by `Home`
-beside `SessionsPanel`) polls `GET /coordinating-session` every two seconds
-(`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) and renders the backend's
+beside `SessionsPanel`) is the page's single owner of coordinating-session
+opening, polling and closure. It polls `GET /coordinating-session` every two
+seconds (`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) and renders the backend's
 `timeline` as a compact vertical `system-ui/timeline` — the session's
 chronological history (opened, resumed, working, waiting for a permission
 prompt, completed, ended), each with a timestamp, and only the last event
@@ -87,8 +88,19 @@ every poll, so a page reload rebuilds it from that field rather than from
 anything kept only in React state, and it survives a backend restart the same
 way the conversation itself does. An `unresumable` or `ended` conversation
 still shows its banner, with the timeline it had kept underneath it.
-`StartPlanForm`'s one button opens the conversation with `POST
-/coordinating-session`.
+Both the request form and gate 2 delegate their opening to that owner. Its
+synchronous mutation guard blocks both entrances before either request settles;
+an uncertain response stays occupied until a later authoritative read confirms
+the slot idle. Every held response carries an opaque target, and mutation
+generations prevent reads started before an open or close from repainting an
+older target.
+
+The session header offers **Cancelar la sesión** for a live target and **Cerrar
+sesión** for ended or unresumable state. Closure sends the exact conversation
+and target to `POST /coordinating-session/close`; **Cancelando…** remains visible
+until a matching durable acknowledgement arrives. A refusal or unreadable
+answer retains the target, its timeline and an actionable retry. Confirmed
+closure removes only that target's terminal presentation, timeline and gates.
 
 The visible timeline carries no `aria-live` of its own — every poll can
 rewrite the whole list, and a live region over all of it would have assistive
@@ -110,8 +122,11 @@ label in the brand colour and every earlier one muted. It declares no
 an overlay, that holds a `Drawer` titled **Sesión coordinadora** with
 `CoordinatingSessionStatus`, `SessionsPanel` and, while implementation runs,
 `ImplementHistory` inside it. The drawer starts collapsed to a 48 px rail and
-persists the person's choice under `ct.sessions-column-collapsed`; its toggle is
-available in every phase. Collapsing applies the native `hidden` attribute to
+persists the person's choice under `ct.sessions-column-collapsed`; a newly
+discovered coordinating target expands it once and selects that target's
+terminal, including after reload. A later manual selection or collapse is not
+undone by another poll for the same target. Its toggle is available in every
+phase. Collapsing applies the native `hidden` attribute to
 the content instead of unmounting it, so the terminal keeps its xterm scrollback
 and SSE subscription. `useLiveSessions` polls `GET /sessions` every three
 seconds, so the list discovers a session opened outside the page without
@@ -170,7 +185,8 @@ the workspace, outside every `currentStage` branch) is gate 1's panel.
 answers `none`, `no-spec`, `draft` — with the yardstick's findings and the
 one-time gate key — or `frozen`, with the freeze date and the pull request.
 The **Congelar el spec** button stays disabled while any finding remains, and
-`POST /spec-freeze` carries the gate key in `x-gate-key` to freeze it. Under
+`POST /spec-freeze` carries the gate key in `x-gate-key` and the read's target
+in `x-coordinating-target` to freeze it. Under
 `make dev-frontend` the vite proxy strips `Origin` before the request reaches
 the backend, so no gate key is ever minted for it: the button can only be
 pressed from the page the backend itself serves.
@@ -212,21 +228,22 @@ shows the issues the milestone already holds and offers the authorisation;
 `POST /epic-groom`, **Autorizar el trabajo** calls `POST /epic-promotion`,
 **Revisar el slicing con la sesión** calls `POST /groom-session` and
 **Publicar el nuevo slicing** calls `POST /spec-reslicing`,
-each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
+each carrying the same gate key `x-gate-key` that gate 1 uses and the read's
+target in `x-coordinating-target`; the same vite
 proxy that strips `Origin` for `/spec-freeze` does it for all four, so no
 button can be pressed from anywhere but the page the backend itself serves,
 and a press without the key is refused with `gate-not-from-the-page`.
 `useGatePresses.ts` holds those four presses and which one is in flight, so a
 button never borrows another's label while it waits.
 
-The conversation **Revisar el slicing con la sesión** opens travels the same way
-the brainstorming's does: `POST /groom-session` answers the session it created,
-`CoordinatingSessionClient.openedIn` reads that payload — one reader for the two
-doors that answer it — and the panel hands it up through `GateSequence` to
-`Home`'s own `sessionOpened`, the very callback `StartPlanForm` reports an
-opening to. `SessionsPanel` therefore refreshes its listing and selects the new
-terminal, instead of showing «habla con ella en el panel de sesiones» beside a
-listing that never changed.
+The conversation **Revisar el slicing con la sesión** opens through the same
+lifecycle owner as the request form. `POST /groom-session` answers the session
+it created, `CoordinatingSessionClient.openedIn` reads that payload — one reader
+for the two doors that answer it — and the adopted session appears and is
+selected without waiting for the next `GET /sessions`. A delayed old listing
+cannot remove that adoption or resurrect a terminal after confirmed closure.
+`GateSequence` is keyed by the current target, so old gate reads, confirmation
+fallbacks and automatic reslicing presses cannot repaint a replacement target.
 
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a

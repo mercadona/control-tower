@@ -6,6 +6,7 @@ import express from 'express'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { SpecFreezeRoute } from '../../src/infrastructure/spec-freeze-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
 import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import { EpicSpecNotUnderstood } from '../../src/domain/exceptions.ts'
 import {
@@ -18,7 +19,7 @@ import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import {
-  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
+  CoordinatingSessions, HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
@@ -52,6 +53,22 @@ class ReadSpecFreezeSpy extends ReadSpecFreeze {
     return new ReadSpecFreezeSpy(async () => { throw new Error('the read must not be asked') })
   }
 
+  static hanging(): ReadSpecFreezeSpy {
+    let announce: () => void = () => undefined
+    let answer: (read: SpecFreezeRead) => void = () => undefined
+    const hanging = new ReadSpecFreezeSpy(async () => {
+      announce()
+      return await new Promise<SpecFreezeRead>((resolve) => { answer = resolve })
+    })
+    hanging.started = new Promise<void>((resolve) => { announce = resolve })
+    hanging.answerTheHangingOne = (): void => answer(Mother.draftRead())
+
+    return hanging
+  }
+
+  started: Promise<void> = Promise.resolve()
+  answerTheHangingOne: () => void = () => undefined
+
   async execute(params: ReadSpecFreezeParams): Promise<SpecFreezeRead> {
     this.asked.push(params)
 
@@ -84,15 +101,21 @@ class FreezeSpecSpy extends FreezeSpec {
   }
 
   static hanging(): FreezeSpecSpy {
+    let announce: () => void = () => undefined
     let answer: (frozen: SpecFrozen) => void = () => undefined
     const pending = new Promise<SpecFrozen>((resolve) => { answer = resolve })
-    const hanging = new FreezeSpecSpy(async () => await pending)
+    const hanging = new FreezeSpecSpy(async () => {
+      announce()
+      return await pending
+    })
+    hanging.started = new Promise<void>((resolve) => { announce = resolve })
     hanging.answerTheHangingOne = (): void => answer(Mother.frozenOutcome())
 
     return hanging
   }
 
   answerTheHangingOne: () => void = () => undefined
+  started: Promise<void> = Promise.resolve()
 
   async execute(params: FreezeSpecParams): Promise<SpecFrozen> {
     this.asked.push(params)
@@ -129,6 +152,9 @@ class LiveSessionsDouble extends LiveSessions {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly OLD_TARGET = 'f135ce89-e980-4fa3-a02d-44dd12228304'
+  static readonly NEXT_TARGET = '69d8d78f-1f6f-47db-98c5-3a13b1710691'
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly CONVERSATION = new CoordinatingConversation({
@@ -146,6 +172,7 @@ class Mother {
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
     })
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
@@ -159,6 +186,37 @@ class Mother {
     return new CoordinatingSessions({
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
     })
+  }
+
+  static replacement(): HeldCoordinatingSession {
+    return new HeldCoordinatingSession({
+      target: Mother.NEXT_TARGET,
+      state: CoordinatingSessionState.LIVE,
+      conversation: new CoordinatingConversation({
+        id: new ConversationId('b596b567-dfc7-46ec-9777-55d1664e9f46'),
+        repository: Mother.REPOSITORY,
+        root: new CheckoutRoot('/replacement'),
+      }),
+      session: Mother.SESSION,
+      attention: SessionAttention.working(),
+    })
+  }
+
+  static occupied(operation: 'opening' | 'recovering' | 'closing' | 'close-failed'): CoordinatingSessions {
+    const held = operation === CoordinatingOperation.OPENING || operation === CoordinatingOperation.RECOVERING
+      ? Mother.none()
+      : Mother.live()
+    if (operation === CoordinatingOperation.OPENING) held.reserve()
+    if (operation === CoordinatingOperation.RECOVERING) held.beginRecovery()
+    if (operation === CoordinatingOperation.CLOSING || operation === CoordinatingOperation.CLOSE_FAILED) {
+      const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+      held.beginClose(identity)
+      if (operation === CoordinatingOperation.CLOSE_FAILED) {
+        held.failClose(identity, { code: 'session-not-terminated', detail: 'the process group remains alive' })
+      }
+    }
+
+    return held
   }
 
   static spec(): EpicSpec {
@@ -271,8 +329,13 @@ class RunningApi {
     return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, { headers })
   }
 
-  static async posting(port: number, headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, { method: 'POST', headers })
+  static async posting(
+    port: number, headers: Record<string, string> = {}, target: string | null = Mother.TARGET
+  ): Promise<Response> {
+    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { ...(target === null ? {} : { [CoordinatingSessionTarget.HEADER]: target }), ...headers },
+    })
   }
 
   static async get(held: CoordinatingSessions, read: ReadSpecFreeze, freeze: FreezeSpec, key: GateKey): Promise<Response> {
@@ -306,6 +369,7 @@ describe('SpecFreezeRoute', () => {
     expect(fromThePage.status).toBe(200)
     expect(await fromThePage.json()).toEqual({
       status: 'draft',
+      target: Mother.TARGET,
       spec: Mother.SPEC_PATH,
       findings: [
         { code: 'clarification-marker', line: 9, detail: '- [NEEDS CLARIFICATION: who signs the freeze?]' },
@@ -316,6 +380,7 @@ describe('SpecFreezeRoute', () => {
     expect(fromElsewhere.status).toBe(200)
     expect(await fromElsewhere.json()).toEqual({
       status: 'draft',
+      target: Mother.TARGET,
       spec: Mother.SPEC_PATH,
       findings: [
         { code: 'clarification-marker', line: 9, detail: '- [NEEDS CLARIFICATION: who signs the freeze?]' },
@@ -330,6 +395,7 @@ describe('SpecFreezeRoute', () => {
     const port = await RunningApi.listening(held, ReadSpecFreezeSpy.answering(Mother.draftRead()), freeze, key)
 
     const first = RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    await freeze.started
     const second = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
 
     expect(second.status).toBe(409)
@@ -341,6 +407,62 @@ describe('SpecFreezeRoute', () => {
     freeze.answerTheHangingOne()
     await first
     expect(freeze.asked).toHaveLength(1)
+  })
+
+  it.each([
+    CoordinatingOperation.OPENING,
+    CoordinatingOperation.RECOVERING,
+    CoordinatingOperation.CLOSING,
+    CoordinatingOperation.CLOSE_FAILED,
+  ])('a gate mutation is refused while the coordinating session is %s', async (operation) => {
+    const freeze = FreezeSpecSpy.neverAsked()
+    const port = await RunningApi.listening(
+      Mother.occupied(operation), ReadSpecFreezeSpy.neverAsked(), freeze, Keys.minted()
+    )
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.BUSY,
+      detail: `the coordinating session is ${operation}: wait for it to settle before acting`,
+    })
+    expect(freeze.asked).toEqual([])
+  })
+
+  it('a delayed read cannot issue gate authority after its coordinating target is replaced', async () => {
+    const held = Mother.live()
+    const read = ReadSpecFreezeSpy.hanging()
+    const port = await RunningApi.listening(held, read, FreezeSpecSpy.neverAsked(), Keys.minted())
+
+    const pending = RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+    await read.started
+    held.remember(Mother.replacement())
+    read.answerTheHangingOne()
+    const response = await pending
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+  })
+
+  it('an admitted freeze finishes against its captured checkout after the target is replaced', async () => {
+    const held = Mother.live()
+    const freeze = FreezeSpecSpy.hanging()
+    const port = await RunningApi.listening(
+      held, ReadSpecFreezeSpy.neverAsked(), freeze, Keys.minted()
+    )
+
+    const pending = RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    await freeze.started
+    held.remember(Mother.replacement())
+    freeze.answerTheHangingOne()
+    const response = await pending
+
+    expect(response.status).toBe(200)
+    expect(freeze.asked).toEqual([new FreezeSpecParams({
+      root: Mother.ROOT, repository: Mother.REPOSITORY,
+    })])
+    expect(held.held()?.target).toBe(Mother.NEXT_TARGET)
   })
 
   it('a freeze that failed frees the next press instead of locking the checkout for ever', async () => {
@@ -383,6 +505,7 @@ describe('SpecFreezeRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'draft',
+      target: Mother.TARGET,
       spec: Mother.SPEC_PATH,
       findings: [
         { code: 'clarification-marker', line: 9, detail: '- [NEEDS CLARIFICATION: who signs the freeze?]' },
@@ -403,6 +526,7 @@ describe('SpecFreezeRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'frozen',
+      target: Mother.TARGET,
       spec: Mother.SPEC_PATH,
       on: '2026-09-14',
       pullRequest: Mother.PULL_REQUEST,
@@ -449,6 +573,26 @@ describe('SpecFreezeRoute', () => {
     expect(await response.json()).toEqual({
       code: 'gate-not-from-the-page',
       detail: 'gate 1 answers only a request carrying the key the page was given',
+    })
+    expect(freeze.asked).toEqual([])
+  })
+
+  it.each([
+    ['missing', null],
+    ['malformed', 'not-a-uuid'],
+    ['stale', Mother.OLD_TARGET],
+  ])('a post with a %s coordinating target is refused before freezing', async (_kind, target) => {
+    const freeze = FreezeSpecSpy.neverAsked()
+    const port = await RunningApi.listening(
+      Mother.live(), ReadSpecFreezeSpy.neverAsked(), freeze, Keys.minted()
+    )
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED }, target)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(freeze.asked).toEqual([])
   })
@@ -517,8 +661,8 @@ describe('SpecFreezeRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: 'no-coordinating-session',
-      detail: 'no coordinating session is held: there is nothing to freeze',
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(freeze.asked).toEqual([])
   })

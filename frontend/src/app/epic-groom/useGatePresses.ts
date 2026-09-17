@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { EpicGroomClient } from 'app/epic-groom/client'
-import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomAskOutcome, GroomSessionOutcome, ReslicingOutcome } from 'app/epic-groom/EpicGroom.types'
 
 type Pressed = 'none' | 'groom' | 'promote' | 'session' | 'reslicing'
@@ -21,7 +20,17 @@ type GatePresses = {
 
 const NOTHING: Pressed = 'none'
 
-const useGatePresses = (onSessionOpened: (opened: OpenedCoordinatingSession) => void): GatePresses => {
+const useGatePresses = ({
+  target,
+  openingBlocked,
+  operationBusy,
+  openSession,
+}: {
+  target: string
+  openingBlocked: boolean
+  operationBusy: boolean
+  openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
+}): GatePresses => {
   const [pressed, setPressed] = useState<Pressed>(NOTHING)
   const [acted, setActed] = useState<EpicGroomActed | null>(null)
   const [refusal, setRefusal] = useState<EpicGroomAskRefusal | null>(null)
@@ -30,7 +39,7 @@ const useGatePresses = (onSessionOpened: (opened: OpenedCoordinatingSession) => 
   const pressing = useRef<Pressed>(NOTHING)
 
   const held = (what: Pressed, gateKey: string | null): boolean => {
-    if (gateKey === null || pressing.current !== NOTHING) return false
+    if (gateKey === null || pressing.current !== NOTHING || operationBusy || (what === 'session' && openingBlocked)) return false
     pressing.current = what
     setPressed(what)
 
@@ -69,18 +78,23 @@ const useGatePresses = (onSessionOpened: (opened: OpenedCoordinatingSession) => 
     session,
     reslicing,
     groom: (gateKey: string | null, planFingerprint: string) => asked(
-      'groom', gateKey, async (key) => settle(await EpicGroomClient.groom(key, planFingerprint))
+      'groom', gateKey, async (key) => {
+        settle(await EpicGroomClient.groom(key, planFingerprint, target))
+      }
     ),
     promote: (gateKey: string | null) => asked(
-      'promote', gateKey, async (key) => settle(await EpicGroomClient.promote(key))
+      'promote', gateKey, async (key) => {
+        settle(await EpicGroomClient.promote(key, target))
+      }
     ),
     openSession: (gateKey: string | null) => asked('session', gateKey, async (key) => {
-      const answered = await EpicGroomClient.openSession(key)
+      const answered = await openSession(key, target)
       setSession(answered)
-      if (answered.kind === 'opened') onSessionOpened(answered.opened)
     }),
     publishReslicing: (gateKey: string | null) => asked(
-      'reslicing', gateKey, async (key) => setReslicing(await EpicGroomClient.publishReslicing(key))
+      'reslicing', gateKey, async (key) => {
+        setReslicing(await EpicGroomClient.publishReslicing(key, target))
+      }
     ),
   }
 }

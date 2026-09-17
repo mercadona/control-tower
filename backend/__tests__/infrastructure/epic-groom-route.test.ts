@@ -6,6 +6,7 @@ import express from 'express'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { EpicGroomRoute } from '../../src/infrastructure/epic-groom-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
 import {
   ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState,
 } from '../../src/application/queries/read-epic-groom.ts'
@@ -56,6 +57,22 @@ class ReadEpicGroomSpy extends ReadEpicGroom {
   static answering(read: EpicGroomRead): ReadEpicGroomSpy {
     return new ReadEpicGroomSpy(async () => read)
   }
+
+  static hanging(): ReadEpicGroomSpy {
+    let announce: () => void = () => undefined
+    let answer: (read: EpicGroomRead) => void = () => undefined
+    const hanging = new ReadEpicGroomSpy(async () => {
+      announce()
+      return await new Promise<EpicGroomRead>((resolve) => { answer = resolve })
+    })
+    hanging.started = new Promise<void>((resolve) => { announce = resolve })
+    hanging.answerTheHangingOne = (): void => answer(Mother.groomableRead())
+
+    return hanging
+  }
+
+  started: Promise<void> = Promise.resolve()
+  answerTheHangingOne: () => void = () => undefined
 
   async execute(params: ReadEpicGroomParams): Promise<EpicGroomRead> {
     this.asked.push(params)
@@ -139,6 +156,9 @@ class LiveSessionsDouble extends LiveSessions {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly OLD_TARGET = 'f135ce89-e980-4fa3-a02d-44dd12228304'
+  static readonly NEXT_TARGET = '69d8d78f-1f6f-47db-98c5-3a13b1710691'
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly HOME = Mother.REPOSITORY.text
   static readonly ROOT = new CheckoutRoot('/repo')
@@ -165,6 +185,7 @@ class Mother {
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
     })
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
@@ -177,6 +198,16 @@ class Mother {
   static none(): CoordinatingSessions {
     return new CoordinatingSessions({
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
+    })
+  }
+
+  static replacement(): HeldCoordinatingSession {
+    return new HeldCoordinatingSession({
+      target: Mother.NEXT_TARGET,
+      state: CoordinatingSessionState.LIVE,
+      conversation: Mother.CONVERSATION,
+      session: Mother.SESSION,
+      attention: SessionAttention.working(),
     })
   }
 
@@ -358,8 +389,13 @@ class RunningApi {
     return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, { headers })
   }
 
-  static async posting(port: number, headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, { method: 'POST', headers })
+  static async posting(
+    port: number, headers: Record<string, string> = {}, target: string | null = Mother.TARGET
+  ): Promise<Response> {
+    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { ...(target === null ? {} : { [CoordinatingSessionTarget.HEADER]: target }), ...headers },
+    })
   }
 
   static async get(held: CoordinatingSessions, read: ReadEpicGroom, groom: GroomEpic, key: GateKey): Promise<Response> {
@@ -396,6 +432,7 @@ describe('EpicGroomRoute', () => {
 
     expect(await groomable.json()).toEqual({
       status: 'groomable',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
@@ -404,6 +441,7 @@ describe('EpicGroomRoute', () => {
     })
     expect(await authorised.json()).toEqual({
       status: 'authorised',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       issues: [{
         number: 2,
@@ -414,6 +452,7 @@ describe('EpicGroomRoute', () => {
     })
     expect(await fromThePage.json()).toEqual({
       status: 'groomable',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
@@ -422,6 +461,7 @@ describe('EpicGroomRoute', () => {
     })
     expect(await fromElsewhere.json()).toEqual({
       status: 'groomable',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
@@ -441,6 +481,24 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       code: 'gate-not-from-the-page',
       detail: 'gate 2 answers only a request carrying the key the page was given',
+    })
+    expect(groom.asked).toEqual([])
+  })
+
+  it.each([
+    ['missing', null],
+    ['malformed', 'not-a-uuid'],
+    ['stale', Mother.OLD_TARGET],
+  ])('a post with a %s coordinating target is refused before grooming', async (_kind, target) => {
+    const groom = GroomEpicSpy.neverAsked()
+    const port = await RunningApi.listening(Mother.live(), ReadEpicGroomSpy.neverAsked(), groom, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED }, target)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(groom.asked).toEqual([])
   })
@@ -493,12 +551,28 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'groomable',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       reslicing: null,
       key: Keys.MINTED,
     })
+  })
+
+  it('a delayed read cannot issue gate authority after its coordinating target is replaced', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.hanging()
+    const port = await RunningApi.listening(held, read, GroomEpicSpy.neverAsked(), Keys.minted())
+
+    const pending = RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+    await read.started
+    held.remember(Mother.replacement())
+    read.answerTheHangingOne()
+    const response = await pending
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
   })
 
   it('a groomable answer carries the merged re-slicing that authorised it, so the page needs no click', async () => {
@@ -512,6 +586,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'groomable',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
@@ -532,6 +607,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'groomed',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       issues: [
         {
@@ -562,6 +638,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'partially-groomed',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
@@ -586,6 +663,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'awaiting-publication',
+      target: Mother.TARGET,
       pullRequest: { number: 341, url: `https://github.com/${Mother.REPOSITORY.text}/pull/341` },
     })
   })
@@ -599,7 +677,9 @@ describe('EpicGroomRoute', () => {
     const response = await RunningApi.get(held, read, groom, key)
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: 'awaiting-publication', pullRequest: null })
+    expect(await response.json()).toEqual({
+      status: 'awaiting-publication', target: Mother.TARGET, pullRequest: null,
+    })
   })
 
   it('a resliced read answers the state and the gate key, and names no plan to press over', async () => {
@@ -611,7 +691,7 @@ describe('EpicGroomRoute', () => {
     const response = await RunningApi.get(held, read, groom, key)
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: 'resliced', key: Keys.MINTED })
+    expect(await response.json()).toEqual({ status: 'resliced', target: Mother.TARGET, key: Keys.MINTED })
   })
 
   it('a press over a resliced spec is refused as spec-resliced and names what has to happen first', async () => {
@@ -641,6 +721,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'issues-uncertain',
+      target: Mother.TARGET,
       milestone: Mother.MILESTONE,
       reason: Mother.ISSUES_UNCERTAIN_REASON,
     })

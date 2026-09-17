@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { ConversationRecords } from '../domain/ports/conversation-records.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../domain/value-objects/session-timeline-event.ts'
+import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import type { TimelineEventKindValue } from '../domain/value-objects/session-timeline-event.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 import type { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
@@ -16,30 +16,64 @@ export const CoordinatingSessionState = Object.freeze({
 
 export type CoordinatingSessionStateValue = (typeof CoordinatingSessionState)[keyof typeof CoordinatingSessionState]
 
+export const CoordinatingOperation = Object.freeze({
+  IDLE: 'idle',
+  RECOVERING: 'recovering',
+  OPENING: 'opening',
+  CLOSING: 'closing',
+  CLOSE_FAILED: 'close-failed',
+} as const)
+
+export type CoordinatingOperationValue = (typeof CoordinatingOperation)[keyof typeof CoordinatingOperation]
+
+export type CoordinatingSessionIdentity = { readonly conversation: string, readonly target: string }
+
+export class CoordinatingClosureError {
+  readonly code: string
+  readonly detail: string
+
+  constructor({ code, detail }: { code: string, detail: string }) {
+    this.code = code
+    this.detail = detail
+    Object.freeze(this)
+  }
+}
+
 export class HeldCoordinatingSession {
+  readonly target: string
   readonly state: CoordinatingSessionStateValue
   readonly conversation: CoordinatingConversation
   readonly session: LiveSession | null
+  readonly terminal: LiveSession | null
   readonly attention: SessionAttention | null
 
-  constructor({ state, conversation, session, attention }: {
+  constructor({ target, state, conversation, session, terminal, attention }: {
+    target: string,
     state: CoordinatingSessionStateValue,
     conversation: CoordinatingConversation,
     session: LiveSession | null,
+    terminal?: LiveSession | null,
     attention: SessionAttention | null,
   }) {
+    if (!ConversationId.isWellFormed(target)) {
+      throw new Error(`a coordinating target must be a UUID, got ${JSON.stringify(target)}`)
+    }
+    this.target = target
     this.state = state
     this.conversation = conversation
     this.session = session
+    this.terminal = terminal === undefined ? session : terminal
     this.attention = attention
     Object.freeze(this)
   }
 
-  static ended(conversation: CoordinatingConversation): HeldCoordinatingSession {
+  static ended(held: HeldCoordinatingSession): HeldCoordinatingSession {
     return new HeldCoordinatingSession({
+      target: held.target,
       state: CoordinatingSessionState.ENDED,
-      conversation,
+      conversation: held.conversation,
       session: null,
+      terminal: held.terminal,
       attention: null,
     })
   }
@@ -52,6 +86,46 @@ export const OpeningReservation = Object.freeze({
 } as const)
 
 export type OpeningReservationValue = (typeof OpeningReservation)[keyof typeof OpeningReservation]
+
+export const CloseReservation = Object.freeze({
+  RESERVED: 'reserved',
+  JOINED: 'joined',
+  TARGET_CHANGED: 'target-changed',
+  OPENING: 'opening',
+} as const)
+
+export type CloseReservationValue = (typeof CloseReservation)[keyof typeof CloseReservation]
+
+export class ReservedClosure {
+  readonly outcome: CloseReservationValue
+  readonly held: HeldCoordinatingSession | null
+  readonly closing: Promise<unknown> | null
+
+  private constructor({ outcome, held, closing }: {
+    outcome: CloseReservationValue, held: HeldCoordinatingSession | null, closing: Promise<unknown> | null,
+  }) {
+    this.outcome = outcome
+    this.held = held
+    this.closing = closing
+    Object.freeze(this)
+  }
+
+  static reserved(held: HeldCoordinatingSession): ReservedClosure {
+    return new ReservedClosure({ outcome: CloseReservation.RESERVED, held, closing: null })
+  }
+
+  static joined(held: HeldCoordinatingSession, closing: Promise<unknown>): ReservedClosure {
+    return new ReservedClosure({ outcome: CloseReservation.JOINED, held, closing })
+  }
+
+  static targetChanged(): ReservedClosure {
+    return new ReservedClosure({ outcome: CloseReservation.TARGET_CHANGED, held: null, closing: null })
+  }
+
+  static opening(): ReservedClosure {
+    return new ReservedClosure({ outcome: CloseReservation.OPENING, held: null, closing: null })
+  }
+}
 
 export const AttendOutcome = Object.freeze({
   NO_MATCH: 'no-match',
@@ -106,58 +180,111 @@ export class ReservedOpening {
 }
 
 export class CoordinatingSessions {
-  static readonly #OPENING = 'opening'
-
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   readonly records: ConversationRecords
   readonly newId: () => string
   readonly now: () => string
+  readonly newTarget: () => string
   #held: HeldCoordinatingSession | null
   #timeline: readonly SessionTimelineEvent[]
   #persisting: Promise<void>
   #stopFollowing: (() => void) | null
-  readonly #opening: WorkInFlight
+  #operation: CoordinatingOperationValue
+  #closureError: CoordinatingClosureError | null
+  #closing: Promise<unknown> | null
 
   constructor({
-    liveSessions, stderr, records = new ConversationRecords(), newId = randomUUID, now = () => new Date().toISOString(),
+    liveSessions,
+    stderr,
+    records = new ConversationRecords(),
+    newId = randomUUID,
+    newTarget = randomUUID,
+    now = () => new Date().toISOString(),
   }: {
     liveSessions: LiveSessions, stderr: (line: string) => void,
-    records?: ConversationRecords, newId?: () => string, now?: () => string,
+    records?: ConversationRecords, newId?: () => string, newTarget?: () => string, now?: () => string,
   }) {
     this.liveSessions = liveSessions
     this.stderr = stderr
     this.records = records
     this.newId = newId
+    this.newTarget = newTarget
     this.now = now
     this.#held = null
     this.#timeline = []
     this.#persisting = Promise.resolve()
     this.#stopFollowing = null
-    this.#opening = new WorkInFlight()
+    this.#operation = CoordinatingOperation.IDLE
+    this.#closureError = null
+    this.#closing = null
   }
 
   reserve(): ReservedOpening {
-    const live = this.#live()
-    if (live !== null) return ReservedOpening.liveHeld(live)
-    if (this.#opening.reserve(CoordinatingSessions.#OPENING) !== Reservation.RESERVED) {
+    if (this.#operation === CoordinatingOperation.OPENING || this.#operation === CoordinatingOperation.RECOVERING) {
       return ReservedOpening.openingInProgress()
     }
+    if (this.#operation === CoordinatingOperation.CLOSING || this.#operation === CoordinatingOperation.CLOSE_FAILED) {
+      return ReservedOpening.liveHeld(this.#held!)
+    }
+    const live = this.#live()
+    if (live !== null) return ReservedOpening.liveHeld(live)
+    this.#operation = CoordinatingOperation.OPENING
 
     return ReservedOpening.reserved()
   }
 
   release(): void {
-    this.#opening.release(CoordinatingSessions.#OPENING)
+    if (this.#operation === CoordinatingOperation.OPENING) this.#operation = CoordinatingOperation.IDLE
+  }
+
+  beginRecovery(): void {
+    if (this.#operation !== CoordinatingOperation.IDLE) {
+      throw new Error(`coordinating recovery cannot begin while ${this.#operation}`)
+    }
+    this.#operation = CoordinatingOperation.RECOVERING
+  }
+
+  finishRecoveryWithoutSession(): void {
+    if (this.#operation !== CoordinatingOperation.RECOVERING) {
+      throw new Error(`coordinating recovery cannot finish while ${this.#operation}`)
+    }
+    this.#held = null
+    this.#timeline = []
+    this.#operation = CoordinatingOperation.IDLE
+  }
+
+  mintTarget(): string {
+    const target = this.newTarget()
+    if (!ConversationId.isWellFormed(target)) {
+      throw new Error(`a coordinating target must be a UUID, got ${JSON.stringify(target)}`)
+    }
+
+    return target
   }
 
   remember(held: HeldCoordinatingSession, timeline: readonly SessionTimelineEvent[] = []): void {
-    this.#opening.release(CoordinatingSessions.#OPENING)
     this.#stopFollowingTheHeldSession()
     this.#held = held
     this.#timeline = timeline
+    this.#operation = CoordinatingOperation.IDLE
+    this.#closureError = null
+    this.#closing = null
     if (held.state !== CoordinatingSessionState.LIVE) return
     this.#follow(held)
+  }
+
+  rememberFailedClosure(
+    held: HeldCoordinatingSession,
+    error: CoordinatingClosureError,
+    timeline: readonly SessionTimelineEvent[] = [],
+  ): void {
+    this.#stopFollowingTheHeldSession()
+    this.#held = held
+    this.#timeline = timeline
+    this.#operation = CoordinatingOperation.CLOSE_FAILED
+    this.#closureError = error
+    this.#closing = null
   }
 
   held(): HeldCoordinatingSession | null {
@@ -168,6 +295,61 @@ export class CoordinatingSessions {
     return this.#timeline
   }
 
+  operation(): CoordinatingOperationValue {
+    return this.#operation
+  }
+
+  closureError(): CoordinatingClosureError | null {
+    return this.#closureError
+  }
+
+  isCurrent(holding: HeldCoordinatingSession): boolean {
+    return this.#held?.target === holding.target
+  }
+
+  beginClose(identity: CoordinatingSessionIdentity): ReservedClosure {
+    if (this.#operation === CoordinatingOperation.OPENING || this.#operation === CoordinatingOperation.RECOVERING) {
+      return ReservedClosure.opening()
+    }
+    if (!this.#matches(identity)) return ReservedClosure.targetChanged()
+    if (this.#operation === CoordinatingOperation.CLOSING) {
+      if (this.#closing === null) throw new Error('a coordinating close has no in-flight promise')
+      return ReservedClosure.joined(this.#held!, this.#closing)
+    }
+    this.#operation = CoordinatingOperation.CLOSING
+    this.#closureError = null
+
+    return ReservedClosure.reserved(this.#held!)
+  }
+
+  trackClose(identity: CoordinatingSessionIdentity, closing: Promise<unknown>): void {
+    if (!this.#matches(identity) || this.#operation !== CoordinatingOperation.CLOSING || this.#closing !== null) {
+      throw new Error(`cannot track closure for coordinating target ${identity.target}`)
+    }
+    this.#closing = closing
+  }
+
+  finishClose(identity: CoordinatingSessionIdentity): boolean {
+    if (!this.#matches(identity) || this.#operation !== CoordinatingOperation.CLOSING) return false
+    this.#stopFollowingTheHeldSession()
+    this.#held = null
+    this.#timeline = []
+    this.#operation = CoordinatingOperation.IDLE
+    this.#closureError = null
+    this.#closing = null
+
+    return true
+  }
+
+  failClose(identity: CoordinatingSessionIdentity, error: { readonly code: string, readonly detail: string }): boolean {
+    if (!this.#matches(identity) || this.#operation !== CoordinatingOperation.CLOSING) return false
+    this.#operation = CoordinatingOperation.CLOSE_FAILED
+    this.#closureError = new CoordinatingClosureError(error)
+    this.#closing = null
+
+    return true
+  }
+
   settled(): Promise<void> {
     return this.#persisting
   }
@@ -175,13 +357,16 @@ export class CoordinatingSessions {
   async attend({ conversation, attention, event }: {
     conversation: string, attention: SessionAttention, event: TimelineEventKindValue,
   }): Promise<AttendResult> {
+    if (this.#operation !== CoordinatingOperation.IDLE) return AttendResult.noMatch()
     const current = this.#live()
     if (current === null || current.conversation.id.text !== conversation) return AttendResult.noMatch()
 
     this.#held = new HeldCoordinatingSession({
+      target: current.target,
       state: current.state,
       conversation: current.conversation,
       session: current.session,
+      terminal: current.terminal,
       attention,
     })
     const recorded = await this.#record(current.conversation, event, attention.question)
@@ -197,22 +382,28 @@ export class CoordinatingSessions {
   #follow(held: HeldCoordinatingSession): void {
     const session = this.liveSessions.find(held.session!.id)
     if (session === null) {
-      this.#ended(held.conversation)
+      this.#ended(held.target)
       return
     }
     const { stop } = this.liveSessions.watch({
       session,
       onBytes: (): void => {},
-      onEnded: (): void => this.#ended(held.conversation),
+      onEnded: (): void => this.#ended(held.target),
     })
     this.#stopFollowing = stop
   }
 
-  #ended(conversation: CoordinatingConversation): void {
+  #ended(target: string): void {
+    if (this.#held?.target !== target) return
     this.#stopFollowing = null
-    this.#held = HeldCoordinatingSession.ended(conversation)
-    this.#record(conversation, TimelineEventKind.ENDED)
-    this.stderr(`coordinating session ${conversation.id.text} ended\n`)
+    const ended = HeldCoordinatingSession.ended(this.#held)
+    this.#held = ended
+    this.#record(ended.conversation, TimelineEventKind.ENDED)
+    this.stderr(`coordinating session ${ended.conversation.id.text} ended\n`)
+  }
+
+  #matches(identity: CoordinatingSessionIdentity): boolean {
+    return this.#held?.conversation.id.text === identity.conversation && this.#held.target === identity.target
   }
 
   #record(conversation: CoordinatingConversation, kind: TimelineEventKindValue, detail: string | null = null): Promise<boolean> {

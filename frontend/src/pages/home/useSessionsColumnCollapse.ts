@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const STORAGE_KEY = 'ct.sessions-column-collapsed'
 
@@ -23,8 +23,15 @@ const writeStoredCollapsed = (collapsed: boolean) => {
   }
 }
 
-const useSessionsColumnCollapse = (): SessionsColumnCollapse => {
+const useSessionsColumnCollapse = (revealKey: string | null = null): SessionsColumnCollapse => {
   const [collapsed, setCollapsed] = useState<boolean>(readStoredCollapsed)
+  const revealedRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (revealKey === null || revealedRef.current === revealKey) return
+    revealedRef.current = revealKey
+    setCollapsed(false)
+  }, [revealKey])
 
   const toggle = useCallback(() => {
     setCollapsed((current) => {

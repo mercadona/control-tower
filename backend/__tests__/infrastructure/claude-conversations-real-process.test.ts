@@ -12,6 +12,7 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class TerminalDouble implements Terminal {
+  readonly pid = 4101
   onData(): void {}
   onExit(): void {}
   write(): void {}
@@ -40,7 +41,17 @@ class TheOpeningCommand {
       return new TerminalDouble()
     }
     const conversations = new ClaudeConversations({
-      liveSessions: new PtyLiveSessions({ spawn, newId: () => 'terminal-1', stderr: (): void => {} }),
+      liveSessions: new PtyLiveSessions({
+        spawn,
+        newId: () => 'terminal-1',
+        stderr: (): void => {},
+        signal: (): void => {},
+        sleep: async (): Promise<void> => {},
+        now: () => 0,
+        termGraceMs: 1,
+        killGraceMs: 1,
+        pollMs: 1,
+      }),
       shell: '/bin/sh',
       env: {},
       claudeDirectory: '/home/someone/.claude',

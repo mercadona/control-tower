@@ -4,11 +4,16 @@ import type { ConversationRecords } from '../../domain/ports/conversation-record
 import type { Conversations } from '../../domain/ports/conversations.ts'
 import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
+import { ClosureStatus } from '../../domain/value-objects/session-closure.ts'
+import { SessionClosureNotRecorded, SessionTerminationUnconfirmed } from '../../domain/exceptions.ts'
+import type { SessionClosure } from '../../domain/value-objects/session-closure.ts'
+import type { LiveSessions } from '../../domain/ports/live-sessions.ts'
 
 export const RecoveredConversation = Object.freeze({
   NONE: 'none',
   LIVE: 'live',
   UNRESUMABLE: 'unresumable',
+  INTERRUPTED: 'interrupted',
 } as const)
 
 export type RecoveredConversationValue = (typeof RecoveredConversation)[keyof typeof RecoveredConversation]
@@ -18,17 +23,23 @@ export class CoordinatingSessionRecovered {
   readonly conversation: CoordinatingConversation | null
   readonly session: LiveSession | null
   readonly timeline: readonly SessionTimelineEvent[]
+  readonly closure: SessionClosure | null
+  readonly failure: Error | null
 
-  constructor({ outcome, conversation, session, timeline }: {
+  constructor({ outcome, conversation, session, timeline, closure, failure }: {
     outcome: RecoveredConversationValue,
     conversation: CoordinatingConversation | null,
     session: LiveSession | null,
     timeline: readonly SessionTimelineEvent[],
+    closure?: SessionClosure | null,
+    failure?: Error | null,
   }) {
     this.outcome = outcome
     this.conversation = conversation
     this.session = session
     this.timeline = timeline
+    this.closure = closure ?? null
+    this.failure = failure ?? null
     Object.freeze(this)
   }
 
@@ -51,23 +62,39 @@ export class CoordinatingSessionRecovered {
       outcome: RecoveredConversation.UNRESUMABLE, conversation, session: null, timeline,
     })
   }
+
+  static interrupted(
+    conversation: CoordinatingConversation, closure: SessionClosure, failure: Error
+  ): CoordinatingSessionRecovered {
+    return new CoordinatingSessionRecovered({
+      outcome: RecoveredConversation.INTERRUPTED,
+      conversation,
+      session: null,
+      timeline: [],
+      closure,
+      failure,
+    })
+  }
 }
 
 export class RecoverCoordinatingSession {
   readonly conversations: Conversations
   readonly sessionHooks: SessionHooks
   readonly records: ConversationRecords
+  readonly liveSessions: LiveSessions
   readonly newId: () => string
   readonly now: () => string
   readonly stderr: (line: string) => void
 
-  constructor({ conversations, sessionHooks, records, newId, now, stderr }: {
+  constructor({ conversations, sessionHooks, records, liveSessions, newId, now, stderr }: {
     conversations: Conversations, sessionHooks: SessionHooks, records: ConversationRecords,
+    liveSessions: LiveSessions,
     newId: () => string, now: () => string, stderr: (line: string) => void,
   }) {
     this.conversations = conversations
     this.sessionHooks = sessionHooks
     this.records = records
+    this.liveSessions = liveSessions
     this.newId = newId
     this.now = now
     this.stderr = stderr
@@ -88,6 +115,29 @@ export class RecoverCoordinatingSession {
   async execute(): Promise<CoordinatingSessionRecovered> {
     const conversation = await this.records.recall()
     if (conversation === null) return CoordinatingSessionRecovered.none()
+
+    const closure = await this.records.recallClosure(conversation.id)
+    if (closure !== null) {
+      switch (closure.status) {
+        case ClosureStatus.CLOSED:
+          return CoordinatingSessionRecovered.none()
+        case ClosureStatus.REQUESTED:
+          try {
+            await this.liveSessions.confirmTermination(closure)
+            await this.records.completeClosure(closure.closed())
+            return CoordinatingSessionRecovered.none()
+          } catch (cause) {
+            if (cause instanceof SessionTerminationUnconfirmed || cause instanceof SessionClosureNotRecorded) {
+              return CoordinatingSessionRecovered.interrupted(conversation, closure, cause)
+            }
+            throw cause
+          }
+        default: {
+          const exhaustive: never = closure.status
+          throw new Error(`no coordinating session closure recovery declared for ${exhaustive}`)
+        }
+      }
+    }
 
     const prior = await this.records.recallTimeline(conversation)
     if (!this.conversations.isResumable(conversation)) {

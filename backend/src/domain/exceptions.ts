@@ -136,6 +136,18 @@ export class ConversationNotRecorded extends ConversationFailure {}
 
 export class ConversationNotUnderstood extends ConversationFailure {}
 
+export class SessionClosureFailure extends PlanFailure {}
+
+export class SessionClosureNotRecorded extends SessionClosureFailure {}
+
+export class SessionClosureNotUnderstood extends SessionClosureFailure {}
+
+export class SessionNotTerminated extends SessionClosureFailure {}
+
+export class SessionTerminationUnconfirmed extends SessionClosureFailure {}
+
+export class CoordinatingSessionTargetChanged extends SessionClosureFailure {}
+
 export class SessionHooksFailure extends PlanFailure {}
 
 export class SessionHooksNotWritten extends SessionHooksFailure {}

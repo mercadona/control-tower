@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DiskConversationRecords } from '../../src/infrastructure/disk-conversation-records.ts'
-import { ConversationNotRecorded, ConversationNotUnderstood } from '../../src/domain/exceptions.ts'
+import {
+  ConversationNotRecorded,
+  ConversationNotUnderstood,
+  SessionClosureNotRecorded,
+  SessionClosureNotUnderstood,
+} from '../../src/domain/exceptions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 
 const STATE_ROOT = '/state'
 const REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
@@ -25,6 +31,7 @@ const PROMPT_TEXT = [
 const PROMPT_PATH = '/state/coordinating-session/2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f/phase-prompt.md'
 const RECORD_PATH = '/state/coordinating-session/conversation.json'
 const TIMELINE_PATH = '/state/coordinating-session/2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f/timeline.json'
+const CLOSURE_PATH = '/state/coordinating-session/2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f/closure.json'
 
 const EVENT_ID = 'e5b1a6c2-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
 const AT = '2026-09-15T10:00:00.000Z'
@@ -40,6 +47,33 @@ class Collaborators {
       newId: () => EVENT_ID,
       now: () => AT,
     }
+  }
+}
+
+class ClosureMother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+
+  static requested({ session = 'terminal-1', processGroup = 4102 }: {
+    session?: string | null, processGroup?: number | null,
+  } = {}): SessionClosure {
+    return new SessionClosure({
+      conversation: CONVERSATION_ID,
+      target: ClosureMother.TARGET,
+      session,
+      processGroup,
+      status: ClosureStatus.REQUESTED,
+    })
+  }
+
+  static payload(status: 'requested' | 'closed' = 'requested'): string {
+    return `${JSON.stringify({
+      version: 1,
+      conversation: CONVERSATION_ID.text,
+      target: ClosureMother.TARGET,
+      session: 'terminal-1',
+      processGroup: 4102,
+      status,
+    }, null, 2)}\n`
   }
 }
 
@@ -216,5 +250,116 @@ describe('DiskConversationRecords', () => {
         { id: 'second-event', kind: 'working', at: '2026-09-15T10:01:00.000Z', detail: null },
       ], null, 2)}\n`
     )
+  })
+
+  it('writes closure intent and completion without deleting the pointer prompt or timeline', async () => {
+    const writes: { path: string, text: string }[] = []
+    const stored = new Map<string, string>()
+    const write = vi.fn(async (path: string, text: string) => {
+      writes.push({ path, text })
+      stored.set(path, text)
+    })
+    const read = vi.fn(async (path: string) => stored.get(path) ?? null)
+    const records = new DiskConversationRecords(Collaborators.of({ read, write }))
+    const requested = ClosureMother.requested()
+
+    await records.requestClosure(requested)
+    await records.completeClosure(requested.closed())
+    await records.requestClosure(requested)
+
+    expect(writes).toEqual([
+      { path: CLOSURE_PATH, text: ClosureMother.payload('requested') },
+      { path: CLOSURE_PATH, text: ClosureMother.payload('closed') },
+    ])
+    expect(writes.map(({ path }) => path)).not.toContain(RECORD_PATH)
+    expect(writes.map(({ path }) => path)).not.toContain(PROMPT_PATH)
+    expect(writes.map(({ path }) => path)).not.toContain(TIMELINE_PATH)
+
+    const endedWrites: { path: string, text: string }[] = []
+    const ended = new DiskConversationRecords(Collaborators.of({
+      write: vi.fn(async (path: string, text: string) => { endedWrites.push({ path, text }) }),
+    }))
+    await ended.requestClosure(ClosureMother.requested({ session: null, processGroup: null }))
+    expect(endedWrites).toEqual([{
+      path: CLOSURE_PATH,
+      text: `${JSON.stringify({
+        version: 1,
+        conversation: CONVERSATION_ID.text,
+        target: ClosureMother.TARGET,
+        session: null,
+        processGroup: null,
+        status: 'requested',
+      }, null, 2)}\n`,
+    }])
+  })
+
+  it('rejects corrupt closure evidence instead of treating it as recoverable', async () => {
+    const valid = JSON.parse(ClosureMother.payload()) as Record<string, unknown>
+    const corrupt: unknown[] = [
+      '{not json',
+      null,
+      [],
+      { ...valid, extra: true },
+      Object.fromEntries(Object.entries(valid).filter(([key]) => key !== 'target')),
+      { ...valid, version: 2 },
+      { ...valid, status: 'ended' },
+      { ...valid, conversation: 'not-a-uuid' },
+      { ...valid, target: 'not-a-uuid' },
+      { ...valid, session: 42 },
+      { ...valid, processGroup: 0 },
+      { ...valid, processGroup: 1.5 },
+      { ...valid, processGroup: Number.MAX_SAFE_INTEGER + 1 },
+      { ...valid, processGroup: null },
+      { ...valid, session: null },
+    ]
+
+    for (const raw of corrupt) {
+      const text = typeof raw === 'string' ? raw : JSON.stringify(raw)
+      const records = new DiskConversationRecords(Collaborators.of({
+        read: vi.fn(async (path: string) => path === CLOSURE_PATH ? text : null),
+      }))
+      await expect(records.recallClosure(CONVERSATION_ID)).rejects.toBeInstanceOf(SessionClosureNotUnderstood)
+    }
+
+    const absent = new DiskConversationRecords(Collaborators.of())
+    await expect(absent.recallClosure(CONVERSATION_ID)).resolves.toBeNull()
+
+    const unreadable = new DiskConversationRecords(Collaborators.of({
+      read: vi.fn(async () => { throw new Error('permission denied') }),
+    }))
+    await expect(unreadable.recallClosure(CONVERSATION_ID)).rejects.toBeInstanceOf(SessionClosureNotUnderstood)
+
+    const unwritable = new DiskConversationRecords(Collaborators.of({
+      write: vi.fn(async () => { throw new Error('disk full') }),
+    }))
+    await expect(unwritable.requestClosure(ClosureMother.requested()))
+      .rejects.toBeInstanceOf(SessionClosureNotRecorded)
+  })
+
+  it('a delayed timeline append cannot remove a completed cancellation receipt', async () => {
+    const stored = new Map<string, string>([
+      [TIMELINE_PATH, JSON.stringify([{ id: EVENT_ID, kind: 'opened', at: AT, detail: null }], null, 2)],
+    ])
+    let releaseTimeline: (() => void) | null = null
+    const delayedTimeline = new Promise<void>((resolve) => { releaseTimeline = resolve })
+    const write = vi.fn(async (path: string, text: string) => {
+      if (path === TIMELINE_PATH) await delayedTimeline
+      stored.set(path, text)
+    })
+    const read = vi.fn(async (path: string) => stored.get(path) ?? null)
+    const records = new DiskConversationRecords(Collaborators.of({ read, write }))
+    const event = new SessionTimelineEvent({
+      id: 'second-event', kind: TimelineEventKind.WORKING, at: '2026-09-15T10:01:00.000Z', detail: null,
+    })
+
+    const appending = records.appendTimelineEvent({ conversation: CONVERSATION, event })
+    await Promise.resolve()
+    await records.requestClosure(ClosureMother.requested())
+    await records.completeClosure(ClosureMother.requested().closed())
+    releaseTimeline!()
+    await appending
+
+    const restarted = new DiskConversationRecords(Collaborators.of({ read }))
+    await expect(restarted.recallClosure(CONVERSATION_ID)).resolves.toEqual(ClosureMother.requested().closed())
   })
 })

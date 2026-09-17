@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
+import { GroomSessionOutcome } from 'app/epic-groom/EpicGroom.types'
 import {
   EPIC_GROOM_GATE_HEADING,
   EPIC_GROOM_NOTHING_TO_SHOW_KINDS,
@@ -20,11 +20,16 @@ const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' 
   return `Completada ${on}${pullRequest}`
 }
 
-type GateSequenceProps = { onSessionOpened: (opened: OpenedCoordinatingSession) => void }
+type GateSequenceProps = {
+  target: string
+  openingBlocked: boolean
+  operationBusy: boolean
+  openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
+}
 
-const GateSequence = ({ onSessionOpened }: GateSequenceProps) => {
-  const specFreezeRead = useSpecFreeze()
-  const epicGroomRead = useEpicGroom()
+const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
+  const specFreezeRead = useSpecFreeze(target)
+  const epicGroomRead = useEpicGroom(false, target)
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
   const [gate2ManualExpanded, setGate2ManualExpanded] = useState<boolean | null>(null)
 
@@ -58,7 +63,7 @@ const GateSequence = ({ onSessionOpened }: GateSequenceProps) => {
         onToggle={setGate1ManualExpanded}
         hidden={gate1Summary.kind === 'hidden'}
       >
-        <SpecFreezePanel isGate2Actionable={isGate2Actionable} />
+        <SpecFreezePanel isGate2Actionable={isGate2Actionable} target={target} operationBusy={operationBusy} />
       </CollapsableCard>
       <CollapsableCard
         heading={EPIC_GROOM_GATE_HEADING}
@@ -66,7 +71,12 @@ const GateSequence = ({ onSessionOpened }: GateSequenceProps) => {
         onToggle={setGate2ManualExpanded}
         hidden={!isGate2Visible}
       >
-        <EpicGroomPanel onSessionOpened={onSessionOpened} />
+        <EpicGroomPanel
+          target={target}
+          openingBlocked={openingBlocked}
+          operationBusy={operationBusy}
+          openSession={openSession}
+        />
       </CollapsableCard>
     </div>
   )

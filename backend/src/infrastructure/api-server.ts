@@ -16,6 +16,7 @@ import { SessionStreamRoute } from './session-stream-route.ts'
 import { SessionInputRoute } from './session-input-route.ts'
 import { SessionResizeRoute } from './session-resize-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
+import { CoordinatingSessionCloseRoute } from './coordinating-session-close-route.ts'
 import { GroomSessionRoute } from './groom-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
@@ -30,6 +31,7 @@ import type { RecoverPlan } from '../application/actions/recover-plan.ts'
 import type { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
+import type { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
 import { WorkInFlight } from './work-in-flight.ts'
@@ -120,6 +122,7 @@ export type ApiCollaborators = {
   recovery?: ActivePlanRecovering | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
+  closeCoordinatingSession?: CloseCoordinatingSession | null,
   coordinatingSessions?: CoordinatingSessions | null,
   readSpecFreeze?: ReadSpecFreeze | null,
   freezeSpec?: FreezeSpec | null,
@@ -185,6 +188,7 @@ export class ApiServer {
   readonly recovery: ActivePlanRecovering | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
+  readonly closeCoordinatingSession: CloseCoordinatingSession | null | undefined
   readonly coordinatingSessions: CoordinatingSessions | null | undefined
   readonly readSpecFreeze: ReadSpecFreeze | null | undefined
   readonly freezeSpec: FreezeSpec | null | undefined
@@ -204,7 +208,8 @@ export class ApiServer {
     port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementProgress, implementHistory,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null,
-    openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
+    openCoordinatingSession, openGroomSession, closeCoordinatingSession, coordinatingSessions,
+    readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
   }: ApiCollaborators) {
@@ -228,6 +233,7 @@ export class ApiServer {
     this.recovery = recovery
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession
+    this.closeCoordinatingSession = closeCoordinatingSession
     this.coordinatingSessions = coordinatingSessions
     this.readSpecFreeze = readSpecFreeze
     this.freezeSpec = freezeSpec
@@ -341,6 +347,14 @@ export class ApiServer {
       SessionResizeRoute.handledBy(this.liveSessions!, this.resizeSession!)
     )
     app.all(SessionResizeRoute.PATH, SessionResizeRoute.refuseOtherMethods)
+    app.post(
+      CoordinatingSessionCloseRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      CoordinatingSessionCloseRoute.closing(this.closeCoordinatingSession!, this.coordinatingSessions!)
+    )
+    app.all(CoordinatingSessionCloseRoute.PATH, CoordinatingSessionCloseRoute.refuseOtherMethods)
     app.post(
       CoordinatingSessionRoute.PATH,
       Browsers.turnAwayForeign,

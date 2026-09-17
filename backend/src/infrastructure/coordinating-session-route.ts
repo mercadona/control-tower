@@ -2,7 +2,9 @@ import type { Request, RequestHandler, Response } from 'express'
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse } from './start-plan-route.ts'
-import { HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation } from './coordinating-sessions.ts'
+import {
+  HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState, OpeningReservation,
+} from './coordinating-sessions.ts'
 import { OpenCoordinatingSessionParams } from '../application/actions/open-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
@@ -52,10 +54,10 @@ export class CoordinatingSessionRoute {
     return (request: Request, response: Response): void => {
       const holding = held.held()
       if (holding === null) {
-        Answer.send(response, 200, { status: 'none' })
+        Answer.send(response, 200, { status: 'none', operation: held.operation() })
         return
       }
-      CoordinatingSessionRoute.#answerHolding(response, holding, held.timeline())
+      CoordinatingSessionRoute.#answerHolding(response, holding, held.timeline(), held.operation(), held.closureError())
     }
   }
 
@@ -64,12 +66,24 @@ export class CoordinatingSessionRoute {
   }
 
   static #answerHolding(
-    response: Response, holding: HeldCoordinatingSession, timeline: readonly SessionTimelineEvent[]
+    response: Response,
+    holding: HeldCoordinatingSession,
+    timeline: readonly SessionTimelineEvent[],
+    operation: ReturnType<CoordinatingSessions['operation']>,
+    closureError: ReturnType<CoordinatingSessions['closureError']>,
   ): void {
+    const lifecycle = {
+      operation,
+      target: holding.target,
+      ...(operation === CoordinatingOperation.CLOSE_FAILED && closureError !== null
+        ? { closureError: { code: closureError.code, detail: closureError.detail } }
+        : {}),
+    }
     switch (holding.state) {
       case CoordinatingSessionState.LIVE:
         Answer.send(response, 200, {
           status: CoordinatingSessionState.LIVE,
+          ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
@@ -81,6 +95,7 @@ export class CoordinatingSessionRoute {
       case CoordinatingSessionState.UNRESUMABLE:
         Answer.send(response, 200, {
           status: CoordinatingSessionState.UNRESUMABLE,
+          ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
@@ -91,6 +106,7 @@ export class CoordinatingSessionRoute {
       case CoordinatingSessionState.ENDED:
         Answer.send(response, 200, {
           status: CoordinatingSessionState.ENDED,
+          ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
@@ -132,7 +148,9 @@ export class CoordinatingSessionRoute {
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       }
+      const sessionTarget = held.mintTarget()
       held.remember(new HeldCoordinatingSession({
+        target: sessionTarget,
         state: CoordinatingSessionState.LIVE,
         conversation: opened.conversation,
         session: opened.session,
@@ -141,6 +159,7 @@ export class CoordinatingSessionRoute {
       Answer.send(response, 202, {
         status: 'brainstorming',
         conversation: opened.conversation.id.text,
+        target: sessionTarget,
         repo: opened.conversation.repository.text,
         root: opened.conversation.root.text,
         session: { id: opened.session.id, name: opened.session.name },
@@ -170,7 +189,8 @@ export class CoordinatingSessionRoute {
 
     return {
       conversation: live.conversation.id.text,
-      session: { id: live.session!.id, name: live.session!.name },
+      target: live.target,
+      ...(live.session === null ? {} : { session: { id: live.session.id, name: live.session.name } }),
     }
   }
 

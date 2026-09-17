@@ -33,7 +33,12 @@ import { ActivePlans } from './active-plans-route.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
-import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from './coordinating-sessions.ts'
+import {
+  CoordinatingClosureError,
+  CoordinatingSessions,
+  HeldCoordinatingSession,
+  CoordinatingSessionState,
+} from './coordinating-sessions.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
 import { GitEpicBranch } from './git-epic-branch.ts'
@@ -49,6 +54,7 @@ import { RecoverPlan } from '../application/actions/recover-plan.ts'
 import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
+import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
@@ -96,6 +102,7 @@ import type { CoordinatingSessionRecovered } from '../application/actions/recove
 import type { PlanAgents } from '../domain/ports/plan-agents.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
 import type { DispatchClaims } from '../domain/ports/dispatch-claims.ts'
+import { SessionClosureNotRecorded } from '../domain/exceptions.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -229,6 +236,9 @@ class CtApi {
   static readonly #SECONDS_BETWEEN_RETRIES = 2
   static readonly #SECONDS_BETWEEN_READS = 2
   static readonly #SECONDS_BETWEEN_ASKS = 30
+  static readonly #SESSION_TERM_GRACE_MS = 2_000
+  static readonly #SESSION_KILL_GRACE_MS = 2_000
+  static readonly #SESSION_TERMINATION_POLL_MS = 25
 
   static #refuseUsage(reason: string | null): never {
     process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
@@ -406,10 +416,12 @@ class CtApi {
   ): void {
     switch (recovered.outcome) {
       case RecoveredConversation.NONE:
+        coordinatingSessions.finishRecoveryWithoutSession()
         stderr('coordinating session: nothing recorded to recover\n')
         return
       case RecoveredConversation.UNRESUMABLE:
         coordinatingSessions.remember(new HeldCoordinatingSession({
+          target: coordinatingSessions.mintTarget(),
           state: CoordinatingSessionState.UNRESUMABLE,
           conversation: recovered.conversation!,
           session: null,
@@ -417,8 +429,26 @@ class CtApi {
         }), recovered.timeline)
         stderr(`coordinating session ${recovered.conversation!.id.text}: claude code no longer holds it, nothing was resumed\n`)
         return
+      case RecoveredConversation.INTERRUPTED:
+        coordinatingSessions.rememberFailedClosure(new HeldCoordinatingSession({
+          target: recovered.closure!.target,
+          state: CoordinatingSessionState.ENDED,
+          conversation: recovered.conversation!,
+          session: null,
+          attention: null,
+        }), new CoordinatingClosureError({
+          code: recovered.failure instanceof SessionClosureNotRecorded
+            ? 'session-closure-not-recorded'
+            : 'session-termination-unconfirmed',
+          detail: recovered.failure!.message,
+        }))
+        stderr(
+          `coordinating session ${recovered.conversation!.id.text}: cancellation was interrupted; recovery remains reserved and nothing was resumed\n`
+        )
+        return
       case RecoveredConversation.LIVE:
         coordinatingSessions.remember(new HeldCoordinatingSession({
+          target: coordinatingSessions.mintTarget(),
           state: CoordinatingSessionState.LIVE,
           conversation: recovered.conversation!,
           session: recovered.session!,
@@ -545,6 +575,12 @@ class CtApi {
     })
     const liveSessions = new PtyLiveSessions({
       spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
+      signal: (pid, signal) => process.kill(pid, signal),
+      sleep: (milliseconds) => after(milliseconds),
+      now: Date.now,
+      termGraceMs: CtApi.#SESSION_TERM_GRACE_MS,
+      killGraceMs: CtApi.#SESSION_KILL_GRACE_MS,
+      pollMs: CtApi.#SESSION_TERMINATION_POLL_MS,
     })
     let listeningPort: number | null = null
     const claudeConversations = new ClaudeConversations({
@@ -583,9 +619,14 @@ class CtApi {
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
+      liveSessions,
       newId: randomUUID,
       now: () => new Date().toISOString(),
       stderr: (line) => process.stderr.write(line),
+    })
+    const closeCoordinatingSession = new CloseCoordinatingSession({
+      records: conversationRecords,
+      liveSessions,
     })
     const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
@@ -665,6 +706,7 @@ class CtApi {
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
       openGroomSession,
+      closeCoordinatingSession,
       coordinatingSessions,
       readSpecFreeze,
       freezeSpec,
@@ -680,6 +722,7 @@ class CtApi {
       frontendRoot: FrontendBuild.root(),
     })
     let port: number
+    coordinatingSessions.beginRecovery()
     try {
       port = await server.start()
     } catch (error) {

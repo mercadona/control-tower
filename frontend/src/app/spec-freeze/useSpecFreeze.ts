@@ -9,7 +9,7 @@ type SpecFreezeRead =
 const CONNECTING: SpecFreezeRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 2000
 
-const useSpecFreeze = (): SpecFreezeRead => {
+const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
   const [read, setRead] = useState<SpecFreezeRead>(CONNECTING)
 
   useEffect(() => {
@@ -19,6 +19,14 @@ const useSpecFreeze = (): SpecFreezeRead => {
     const poll = async (): Promise<void> => {
       const outcome = await SpecFreezeClient.read()
       if (cancelled) return
+      if (
+        target !== null && outcome.kind !== 'none' && outcome.kind !== 'refused' &&
+        outcome.kind !== 'unavailable' && outcome.target !== target
+      ) {
+        setRead({ phase: 'read', kind: 'none' })
+        timer = window.setTimeout(poll, POLL_INTERVAL_MS)
+        return
+      }
       setRead({ phase: 'read', ...outcome })
       if (outcome.kind === 'frozen') return
       timer = window.setTimeout(poll, POLL_INTERVAL_MS)
@@ -30,7 +38,7 @@ const useSpecFreeze = (): SpecFreezeRead => {
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [])
+  }, [target])
 
   return read
 }

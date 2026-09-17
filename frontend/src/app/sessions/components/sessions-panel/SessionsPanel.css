@@ -11,6 +11,13 @@
   color: var(--foreground-secondary);
 }
 
+.sessions-panel__coordinating-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
 /* The plain block role="tabpanel" div breaks the flex chain down to xterm:
    without this the pane has a height and the terminal inside it still does
    not. */

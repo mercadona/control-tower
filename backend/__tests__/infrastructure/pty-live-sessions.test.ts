@@ -4,6 +4,14 @@ import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-
 import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
 import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
+import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
+import { SessionNotTerminated, SessionTerminationUnconfirmed } from '../../src/domain/exceptions.ts'
+import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
+import {
+  CloseCoordinatingSession,
+  CloseCoordinatingSessionParams,
+} from '../../src/application/actions/close-coordinating-session.ts'
+import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 
 type RecordedSpawn = {
   file: string,
@@ -14,11 +22,16 @@ type RecordedSpawn = {
 type ResizedTo = { cols: number, rows: number }
 
 class TerminalDouble implements Terminal {
+  readonly pid: number
   readonly written: string[] = []
   readonly resized: ResizedTo[] = []
   resizeFailure: Error | null = null
   #onData: ((bytes: string) => void) | null = null
   #onExit: (() => void) | null = null
+
+  constructor(pid: number) {
+    this.pid = pid
+  }
 
   onData(listener: (bytes: string) => void): void {
     this.#onData = listener
@@ -52,11 +65,15 @@ type RecordingSpawn = TerminalSpawn & { calls: RecordedSpawn[], terminals: Termi
 
 class SpawnDouble {
   static recording(): RecordingSpawn {
+    return SpawnDouble.withPids()
+  }
+
+  static withPids(...pids: number[]): RecordingSpawn {
     const calls: RecordedSpawn[] = []
     const terminals: TerminalDouble[] = []
     const spawn: TerminalSpawn = (file, argv, options) => {
       calls.push({ file, argv, options })
-      const terminal = new TerminalDouble()
+      const terminal = new TerminalDouble(pids[terminals.length] ?? 4101 + terminals.length)
       terminals.push(terminal)
 
       return terminal
@@ -84,18 +101,104 @@ class Cabin {
 
   static opening(overrides: Partial<{
     spawn: TerminalSpawn, newId: () => string, stderr: (line: string) => void,
+    signal: (pid: number, signal: NodeJS.Signals | 0) => void,
+    sleep: (milliseconds: number) => Promise<void>,
+    now: () => number,
+    inspectProcessGroup: (processGroup: number) => ReadonlyMap<number, string>,
+    termGraceMs: number,
+    killGraceMs: number,
+    pollMs: number,
   }> = {}): PtyLiveSessions {
     return new PtyLiveSessions({
       spawn: overrides.spawn ?? SpawnDouble.recording(),
       newId: overrides.newId ?? Ids.sequential(),
       stderr: overrides.stderr ?? ((): void => {}),
+      signal: overrides.signal ?? ((): void => {}),
+      sleep: overrides.sleep ?? (async (): Promise<void> => {}),
+      now: overrides.now ?? (() => 0),
+      termGraceMs: overrides.termGraceMs ?? 10,
+      killGraceMs: overrides.killGraceMs ?? 10,
+      pollMs: overrides.pollMs ?? 1,
+      inspectProcessGroup: overrides.inspectProcessGroup ?? ((processGroup) => new Map([
+        [processGroup, `${processGroup}:original`],
+      ])),
     })
+  }
+}
+
+class TerminationMother {
+  static readonly CONVERSATION = new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+
+  static evidence(sessions: PtyLiveSessions, session: LiveSession) {
+    return sessions.terminationEvidence({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+  }
+}
+
+class ControlledProcesses {
+  readonly alive = new Set<number>()
+  readonly signals: { pid: number, signal: NodeJS.Signals | 0 }[] = []
+  now = 0
+  onSignal: ((pid: number, signal: NodeJS.Signals | 0) => void) | null = null
+
+  signal = (pid: number, signal: NodeJS.Signals | 0): void => {
+    this.signals.push({ pid, signal })
+    const group = -pid
+    if (!this.alive.has(group)) {
+      const absent = new Error('no such process') as NodeJS.ErrnoException
+      absent.code = 'ESRCH'
+      throw absent
+    }
+    this.onSignal?.(pid, signal)
+  }
+
+  sleep = async (milliseconds: number): Promise<void> => {
+    this.now += milliseconds
   }
 }
 
 class LoginProgram {
   static default(): SessionProgram {
     return PtyLiveSessions.loginShell('/bin/zsh', Cabin.CWD, { PATH: '/usr/bin' })
+  }
+}
+
+class ClosureRecords extends ConversationRecords {
+  closure: SessionClosure | null = null
+  failCompletion = false
+  requestStarted: Deferred | null = null
+  requestRelease: Deferred | null = null
+
+  async recallClosure(): Promise<SessionClosure | null> {
+    return this.closure
+  }
+
+  async requestClosure(closure: SessionClosure): Promise<void> {
+    this.closure = closure
+    this.requestStarted?.resolve()
+    await this.requestRelease?.promise
+  }
+
+  async completeClosure(closure: SessionClosure): Promise<void> {
+    if (this.failCompletion) throw new Error('completion refused')
+    this.closure = closure
+  }
+}
+
+class Deferred {
+  readonly promise: Promise<void>
+  #resolve: (() => void) | null = null
+
+  constructor() {
+    this.promise = new Promise((resolve) => { this.#resolve = resolve })
+  }
+
+  resolve(): void {
+    this.#resolve?.()
   }
 }
 
@@ -338,5 +441,524 @@ describe('PtyLiveSessions', () => {
     const program = PtyLiveSessions.loginShell('/usr/local/bin/fish', Cabin.CWD, { PATH: '/usr/bin' })
 
     expect(program.name).toBe('fish')
+  })
+
+  it('waits for exit and group absence before confirming termination', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 4,
+      killGraceMs: 4,
+      pollMs: 1,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(terminal.pid)
+    let ended = 0
+    sessions.watch({ session, onBytes: () => {}, onEnded: () => { ended += 1 } })
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') processes.alive.delete(terminal.pid)
+    }
+
+    const closing = sessions.terminate(TerminationMother.evidence(sessions, session))
+    await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.signals).toContainEqual({ pid: -terminal.pid, signal: 'SIGKILL' })
+
+    processes.now = 0
+    processes.signals.length = 0
+    terminal.exits()
+    const retry = sessions.terminate(TerminationMother.evidence(sessions, session))
+    await expect(retry).resolves.toBeUndefined()
+    expect(ended).toBe(1)
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+  })
+
+  it('never signals a reused group after the original root and group exited', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.withPids(4101, 4101)
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(terminal.pid)
+    const evidence = TerminationMother.evidence(sessions, session)
+
+    processes.alive.delete(terminal.pid)
+    terminal.exits()
+    const replacement = sessions.open(LoginProgram.default())
+    processes.alive.add(terminal.pid)
+    processes.onSignal = (_pid, signal) => {
+      if (signal !== 0) spawn.terminals[1].exits()
+    }
+
+    await expect(sessions.terminate(evidence)).resolves.toBeUndefined()
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+    expect(sessions.find(replacement.id)).toBe(replacement)
+  })
+
+  it('does not escalate an active close after the original group identity was replaced', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(terminal.pid)
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') {
+        terminal.exits()
+        identity = new Map([[4101, '4101:replacement']])
+      }
+    }
+
+    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
+      .rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
+  })
+
+  it('does not kill a reused group after absence retired authority during the TERM wait', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original']])
+    let sleeps = 0
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: async (milliseconds) => {
+        processes.now += milliseconds
+        sleeps += 1
+        if (sleeps === 1) processes.alive.delete(4101)
+        if (sleeps === 2) {
+          identity = new Map([[4101, '4101:replacement']])
+          processes.alive.add(4101)
+        }
+      },
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+
+    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
+      .rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
+  })
+
+  it('validates the original identities before KILL when the exit callback is delayed', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    let replaced = false
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: async (milliseconds) => {
+        processes.now += milliseconds
+        if (!replaced) {
+          replaced = true
+          identity = new Map([[4101, '4101:replacement']])
+        }
+      },
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+
+    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
+      .rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
+  })
+
+  it('validates the original identities before retrying TERM after root exit', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    let firstTerm = true
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(4101)
+    processes.onSignal = (_pid, signal) => {
+      if (signal !== 'SIGTERM' || !firstTerm) return
+      firstTerm = false
+      identity = new Map([[4200, '4200:original-child']])
+      terminal.exits()
+      const refused = new Error('operation not permitted') as NodeJS.ErrnoException
+      refused.code = 'EPERM'
+      throw refused
+    }
+    const records = new ClosureRecords()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    identity = new Map([[4101, '4101:replacement']])
+    processes.signals.length = 0
+
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+  })
+
+  it('terminates a verified original child after the root exited before close', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(4101)
+    terminal.prints('child ready')
+    identity = new Map([[4200, '4200:original-child']])
+    terminal.exits()
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') processes.alive.delete(4101)
+    }
+
+    await expect(sessions.terminate(TerminationMother.evidence(sessions, session))).resolves.toBeUndefined()
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toHaveLength(1)
+  })
+
+  it('retains authority over a verified child when close evidence is sampled before the delayed exit callback', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    let exitDelivered = false
+    let retryCanExit = false
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: async (milliseconds) => {
+        processes.now += milliseconds
+        if (!exitDelivered) {
+          exitDelivered = true
+          spawn.terminals[0].exits()
+        }
+      },
+      now: () => processes.now,
+      inspectProcessGroup: () => identity,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    spawn.terminals[0].prints('child ready')
+    identity = new Map([[4200, '4200:original-child']])
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL' && retryCanExit) processes.alive.delete(4101)
+    }
+    const records = new ClosureRecords()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    retryCanExit = true
+    processes.now = 0
+    processes.signals.length = 0
+
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toHaveLength(1)
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+  })
+
+  it('terminates a verified original child when the root exits during the durable intent write', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(4101)
+    terminal.prints('child ready')
+    const records = new ClosureRecords()
+    records.requestStarted = new Deferred()
+    records.requestRelease = new Deferred()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') processes.alive.delete(4101)
+    }
+
+    const closing = close.execute(params)
+    await records.requestStarted.promise
+    identity = new Map([[4200, '4200:original-child']])
+    terminal.exits()
+    records.requestRelease.resolve()
+
+    await expect(closing).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toHaveLength(1)
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+  })
+
+  it('retains authority when buffered output follows physical root exit during the durable intent write', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
+    let firstTerm = true
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      inspectProcessGroup: () => identity,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(4101)
+    terminal.prints('child ready')
+    const records = new ClosureRecords()
+    records.requestStarted = new Deferred()
+    records.requestRelease = new Deferred()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM' && firstTerm) {
+        firstTerm = false
+        const refused = new Error('operation not permitted') as NodeJS.ErrnoException
+        refused.code = 'EPERM'
+        throw refused
+      }
+      if (signal === 'SIGKILL') processes.alive.delete(4101)
+    }
+
+    const closing = close.execute(params)
+    await records.requestStarted.promise
+    identity = new Map([[4200, '4200:original-child']])
+    terminal.prints('buffered trailing output')
+    terminal.exits()
+    records.requestRelease.resolve()
+
+    await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    processes.now = 0
+    processes.signals.length = 0
+
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toHaveLength(1)
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+  })
+
+  it('a requested close retry still waits for the PTY exit and retires the terminal', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(terminal.pid)
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') processes.alive.delete(terminal.pid)
+    }
+    const records = new ClosureRecords()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    processes.alive.add(terminal.pid)
+    processes.now = 0
+    processes.signals.length = 0
+
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    processes.alive.delete(terminal.pid)
+    terminal.exits()
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+    expect(sessions.all()).toEqual([])
+  })
+
+  it('a completion-write retry trusts retired in-memory evidence without signalling a reused group', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    const sessions = Cabin.opening({ spawn, signal: processes.signal, sleep: processes.sleep, now: () => processes.now })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+    processes.alive.add(terminal.pid)
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') {
+        processes.alive.delete(terminal.pid)
+        terminal.exits()
+      }
+    }
+    const records = new ClosureRecords()
+    records.failCompletion = true
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+
+    await expect(close.execute(params)).rejects.toThrow('completion refused')
+    processes.alive.add(terminal.pid)
+    processes.signals.length = 0
+    records.failCompletion = false
+
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+  })
+
+  it('escalates within the bound and keeps failed termination retryable', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    const sessions = Cabin.opening({
+      spawn,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+    })
+    const first = sessions.open(LoginProgram.default())
+    const second = sessions.open(LoginProgram.default())
+    const firstTerminal = spawn.terminals[0]
+    const secondTerminal = spawn.terminals[1]
+    processes.alive.add(firstTerminal.pid)
+    processes.alive.add(secondTerminal.pid)
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') {
+        processes.alive.delete(firstTerminal.pid)
+        firstTerminal.exits()
+      }
+    }
+
+    const evidence = TerminationMother.evidence(sessions, first)
+    await Promise.all([sessions.terminate(evidence), sessions.terminate(evidence)])
+
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toHaveLength(1)
+    expect(processes.signals.map(({ pid }) => pid)).not.toContain(-secondTerminal.pid)
+    sessions.write({ session: second, text: 'still live' })
+    expect(secondTerminal.written).toEqual(['still live'])
+
+    const broken = sessions.open(LoginProgram.default())
+    const brokenTerminal = spawn.terminals[2]
+    processes.alive.add(brokenTerminal.pid)
+    brokenTerminal.resizeFailure = new Error('EBADF')
+    expect(() => sessions.resize({ session: broken, cols: 120, rows: 40 })).toThrow(LiveSessionNotLive)
+    processes.now = 0
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') {
+        processes.alive.delete(brokenTerminal.pid)
+        brokenTerminal.exits()
+      }
+    }
+    await expect(sessions.terminate(TerminationMother.evidence(sessions, broken))).resolves.toBeUndefined()
+
+    const guardedSignals: { pid: number, signal: NodeJS.Signals | 0 }[] = []
+    const guardedSpawn = SpawnDouble.recording()
+    const guarded = Cabin.opening({
+      spawn: guardedSpawn,
+      signal: (pid, signal) => {
+        guardedSignals.push({ pid, signal })
+        if (signal !== 0) {
+          const refused = new Error('operation not permitted') as NodeJS.ErrnoException
+          refused.code = 'EPERM'
+          throw refused
+        }
+      },
+      sleep: async (): Promise<void> => {},
+      now: () => 0,
+      termGraceMs: 1,
+      killGraceMs: 1,
+      pollMs: 1,
+    })
+    const guardedSession = guarded.open(LoginProgram.default())
+    const guardedEvidence = TerminationMother.evidence(guarded, guardedSession)
+
+    await expect(guarded.terminate(guardedEvidence)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(guardedSignals).toContainEqual({ pid: -guardedSpawn.terminals[0].pid, signal: 'SIGTERM' })
+
+    guardedSignals.length = 0
+    await expect(guarded.confirmTermination(guardedEvidence))
+      .rejects.toBeInstanceOf(SessionTerminationUnconfirmed)
+    expect(guardedSignals).toEqual([{ pid: -guardedSpawn.terminals[0].pid, signal: 0 }])
   })
 })

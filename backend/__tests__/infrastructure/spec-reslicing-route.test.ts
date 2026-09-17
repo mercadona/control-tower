@@ -5,6 +5,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
 import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import { SpecReslicingRoute, SpecReslicingOutcome } from '../../src/infrastructure/spec-reslicing-route.ts'
 import {
@@ -104,6 +105,8 @@ class Keys {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly OLD_TARGET = 'f135ce89-e980-4fa3-a02d-44dd12228304'
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly PULL_REQUEST = Object.freeze({
@@ -124,6 +127,7 @@ class Mother {
   static live(): CoordinatingSessions {
     const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
@@ -166,14 +170,22 @@ class RunningApi {
     })))
   }
 
-  static posting(port: number, headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'POST', headers })
+  static posting(
+    port: number, headers: Record<string, string> = {}, target: string | null = Mother.TARGET
+  ): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { ...(target === null ? {} : { [CoordinatingSessionTarget.HEADER]: target }), ...headers },
+    })
   }
 
   static async press(
-    held: CoordinatingSessions, publish: PublishReslicing, headers: Record<string, string> = {}
+    held: CoordinatingSessions,
+    publish: PublishReslicing,
+    headers: Record<string, string> = {},
+    target: string | null = Mother.TARGET,
   ): Promise<Response> {
-    return RunningApi.posting(await RunningApi.listening(held, publish, Keys.minted()), headers)
+    return RunningApi.posting(await RunningApi.listening(held, publish, Keys.minted()), headers, target)
   }
 
   static async getting(held: CoordinatingSessions, publish: PublishReslicing): Promise<Response> {
@@ -215,6 +227,25 @@ describe('SpecReslicingRoute', () => {
     expect(publish.asked).toEqual([])
   })
 
+  it.each([
+    ['missing', null],
+    ['malformed', 'not-a-uuid'],
+    ['stale', Mother.OLD_TARGET],
+  ])('a press with a %s coordinating target is refused before publication', async (_kind, target) => {
+    const publish = PublishReslicingSpy.neverAsked()
+
+    const response = await RunningApi.press(
+      Mother.live(), publish, { [GateKey.HEADER]: Keys.MINTED }, target
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
+    })
+    expect(publish.asked).toEqual([])
+  })
+
   it('a press with no coordinating session held is refused before the use case is asked', async () => {
     const publish = PublishReslicingSpy.neverAsked()
 
@@ -222,8 +253,8 @@ describe('SpecReslicingRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: SpecReslicingOutcome.NO_COORDINATING_SESSION,
-      detail: 'no coordinating session is held: there is no checkout whose slicing could be published',
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(publish.asked).toEqual([])
   })

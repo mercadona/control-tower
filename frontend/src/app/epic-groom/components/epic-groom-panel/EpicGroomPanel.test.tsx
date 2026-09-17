@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
+import { EpicGroomClient } from 'app/epic-groom/client'
 import { EpicGroomPanel } from './EpicGroomPanel'
 
 const GROOM_BUTTON = { name: 'Ejecutar el groom' }
@@ -9,8 +10,20 @@ const PROMOTE_BUTTON = { name: 'Autorizar el trabajo' }
 const SESSION_BUTTON = { name: 'Revisar el slicing con la sesión' }
 const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
 
-const renderPanel = (onSessionOpened: (opened: OpenedCoordinatingSession) => void = vi.fn()) =>
-  render(<EpicGroomPanel onSessionOpened={onSessionOpened} />)
+const renderPanel = (
+  onSessionOpened: (opened: OpenedCoordinatingSession) => void = vi.fn(),
+  { openingBlocked = false, operationBusy = false } = {},
+) =>
+  render(<EpicGroomPanel
+    target={EpicGroomMother.TARGET}
+    openingBlocked={openingBlocked}
+    operationBusy={operationBusy}
+    openSession={async (key, target) => {
+      const outcome = await EpicGroomClient.openSession(key, target)
+      if (outcome.kind === 'opened') onSessionOpened(outcome.opened)
+      return outcome
+    }}
+  />)
 
 describe('EpicGroomPanel', () => {
   afterEach(() => {
@@ -59,7 +72,11 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
+      headers: {
+        'x-gate-key': EpicGroomMother.KEY,
+        'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT,
+        'x-coordinating-target': EpicGroomMother.TARGET,
+      },
     })
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('#349 · The session channel')).toBeInTheDocument()
@@ -80,7 +97,7 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/groom-session', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
     })
     expect(
       await screen.findByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
@@ -127,10 +144,51 @@ describe('EpicGroomPanel', () => {
     await user.click(screen.getByRole('button', SESSION_BUTTON))
 
     await vi.waitFor(() => expect(listening).toHaveBeenCalledWith({
+      target: EpicGroomMother.GROOM_TARGET,
       conversation: EpicGroomMother.GROOM_CONVERSATION,
+      repo: 'owner/name',
+      root: '/repo',
       session: EpicGroomMother.GROOM_SESSION,
     }))
     expect(listening).toHaveBeenCalledTimes(1)
+  })
+
+  it('live occupancy blocks only session opening while current-work groom stays eligible', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { openingBlocked: true })
+
+    expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it('operation busy disables every gate action', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { operationBusy: true })
+
+    expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
+  })
+
+  it('operation busy does not consume the automatic groom after merged reslicing', async () => {
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomableAfterReslicing().body))
+      .mockResolvedValue(new Response(EpicGroomMother.groomedByThePress().body))
+    vi.stubGlobal('fetch', fetching)
+    const listening = vi.fn()
+    const shown = renderPanel(listening, { operationBusy: true })
+    await screen.findByText('El nuevo slicing se aprobó al mergear su pull request: las issues se crean sin pulsar nada.')
+    expect(fetching).toHaveBeenCalledTimes(1)
+
+    shown.rerender(<EpicGroomPanel
+      target={EpicGroomMother.TARGET}
+      openingBlocked={false}
+      operationBusy={false}
+      openSession={async (key, target) => EpicGroomClient.openSession(key, target)}
+    />)
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledWith('/epic-groom', expect.objectContaining({ method: 'POST' })))
   })
 
   it('a refused opening is shown with the words the program printed and nobody is sent anywhere', async () => {
@@ -146,7 +204,7 @@ describe('EpicGroomPanel', () => {
 
     await user.click(screen.getByRole('button', SESSION_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
     expect(listening).not.toHaveBeenCalled()
     expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
     expect(
@@ -182,7 +240,11 @@ describe('EpicGroomPanel', () => {
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
+      headers: {
+        'x-gate-key': EpicGroomMother.KEY,
+        'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT,
+        'x-coordinating-target': EpicGroomMother.TARGET,
+      },
     })
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
   })
@@ -285,7 +347,11 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
+      headers: {
+        'x-gate-key': EpicGroomMother.KEY,
+        'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT,
+        'x-coordinating-target': EpicGroomMother.TARGET,
+      },
     })
     expect(await screen.findByText('#349 · The session channel')).toBeInTheDocument()
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
@@ -305,7 +371,7 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-promotion', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
     })
     expect(
       await screen.findByText('Trabajo autorizado: el loop ya puede despachar el primer slice.'),
@@ -327,7 +393,7 @@ describe('EpicGroomPanel', () => {
     await screen.findByRole('button', PROMOTE_BUTTON)
     await user.click(screen.getByRole('button', PROMOTE_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
     expect(screen.getByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('#349 · The session channel')).toBeInTheDocument()
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
@@ -383,7 +449,7 @@ describe('EpicGroomPanel', () => {
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
   })
 
   it('a plan that changed since the preview is shown in the same banner as any other refusal', async () => {
@@ -398,7 +464,7 @@ describe('EpicGroomPanel', () => {
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.PLAN_CHANGED_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('El plan ha cambiado. Revisa la versión nueva antes de volver a intentarlo.')
   })
 
   it('without a key the buttons stay disabled and it says where the gate opens from', async () => {
@@ -487,7 +553,7 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/spec-reslicing', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
     })
     expect(await screen.findByRole('link', { name: 'Pull request #363' })).toHaveAttribute(
       'href',
@@ -510,7 +576,7 @@ describe('EpicGroomPanel', () => {
 
     await user.click(screen.getByRole('button', PUBLISH_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 

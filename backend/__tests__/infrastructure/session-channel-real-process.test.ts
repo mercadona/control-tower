@@ -50,6 +50,12 @@ class RunningApi {
       spawn: realTerminals.spawn(),
       newId: () => randomUUID(),
       stderr: () => {},
+      signal: (pid, signal) => process.kill(pid, signal),
+      sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+      now: Date.now,
+      termGraceMs: 2_000,
+      killGraceMs: 2_000,
+      pollMs: 25,
     })
     const session = liveSessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const server = new ApiServer({

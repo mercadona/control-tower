@@ -42,7 +42,7 @@ const stubBackend = (activePlans: Answer) => {
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.none())
+    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.ended())
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -69,7 +69,7 @@ describe('Home and gate 1', () => {
     const implementing = openHome()
 
     expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: HEADING })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: HEADING })).toBeInTheDocument()
     implementing.unmount()
   })
 })

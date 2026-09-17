@@ -1,8 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { FakeEventSource } from './FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import {
   backendAnswering,
   backendPending,
@@ -15,6 +17,9 @@ import {
   typeTicket,
   typeUserComment,
 } from './helpers'
+
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 const openFailsToReachBackend = () => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => {
@@ -35,7 +40,13 @@ const openFailsToReachBackend = () => {
 }
 
 describe('Home · opens the brainstorming', () => {
+  beforeEach(() => {
+    FakeTerminal.install()
+    FakeFitAddon.install()
+    FakeEventSource.install()
+  })
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -63,13 +74,13 @@ describe('Home · opens the brainstorming', () => {
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY)
   })
 
-  it('should show the backend refusal text as it came', async () => {
+  it('should translate a known backend refusal for the user', async () => {
     backendAnswering(CoordinatingSessionMother.alreadyLive())
     const { user } = openHome()
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(CoordinatingSessionMother.ALREADY_LIVE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ya hay una sesión coordinadora en marcha.')
   })
 
   it('should keep the form unlocked after a backend refusal', async () => {
@@ -85,13 +96,13 @@ describe('Home · opens the brainstorming', () => {
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
-  it('should show the refusal text as it came when the path is not a checkout of the repository', async () => {
+  it('should translate the refusal when the path is not a checkout of the repository', async () => {
     backendAnswering(StartPlanMother.notACheckout())
     const { user } = openHome()
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('owner/name: /repo holds someone/else')
+    expect(await screen.findByRole('alert')).toHaveTextContent('La ruta local no corresponde al repositorio indicado.')
   })
 
   it('should say the backend is unreachable when the network fails', async () => {
@@ -108,16 +119,16 @@ describe('Home · opens the brainstorming', () => {
     expect(within(recovery).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
   })
 
-  it('should clear the unreachable banner once the form is edited again', async () => {
+  it('releases an uncertain opening after the backend authoritatively confirms idle', async () => {
     openFailsToReachBackend()
     const { user } = openHome()
 
     await openBrainstorming(user)
     await waitFor(() => expect(document.querySelector('.home__recovery')).not.toBeNull())
 
-    await typeTicket(user, '2')
-
-    expect(document.querySelector('.home__recovery')).toBeNull()
+    expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
+    await waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
+    expect(document.querySelector('.home__recovery')).not.toBeNull()
   })
 
   it('should keep the start button disabled until the ticket key is well formed', async () => {

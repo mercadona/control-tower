@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  AttendOutcome, CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation,
+  AttendOutcome,
+  CloseReservation,
+  CoordinatingOperation,
+  CoordinatingSessions,
+  HeldCoordinatingSession,
+  CoordinatingSessionState,
+  OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
@@ -51,6 +57,13 @@ class LiveSessionsDouble extends LiveSessions {
     return this.#following.has(session.id)
   }
 
+  exitCallback(session: LiveSession): () => void {
+    const ended = this.#following.get(session.id)
+    if (ended === undefined) throw new Error(`LiveSessionsDouble: nobody follows ${session.id}`)
+
+    return ended
+  }
+
   exits(session: LiveSession): void {
     this.#open.delete(session.id)
     const ended = this.#following.get(session.id)
@@ -65,6 +78,8 @@ class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly FIRST_SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
   static readonly SECOND_SESSION = new LiveSession({ id: 'session-2', name: 'brainstorming' })
+  static readonly FIRST_TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly SECOND_TARGET = 'f910a470-13f7-4956-b750-bef89f55dd6d'
 
   static conversation(id: string): CoordinatingConversation {
     return new CoordinatingConversation({
@@ -79,6 +94,7 @@ class Mother {
 
   static live(conversation: CoordinatingConversation, session: LiveSession): HeldCoordinatingSession {
     return new HeldCoordinatingSession({
+      target: conversation === Mother.FIRST ? Mother.FIRST_TARGET : Mother.SECOND_TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation,
       session,
@@ -205,6 +221,7 @@ describe('CoordinatingSessions', () => {
     const { held } = Registry.of(liveSessions)
 
     held.remember(new HeldCoordinatingSession({
+      target: Mother.FIRST_TARGET,
       state: CoordinatingSessionState.UNRESUMABLE,
       conversation: Mother.FIRST,
       session: null,
@@ -262,6 +279,7 @@ describe('CoordinatingSessions', () => {
   it('reserves the opening over a conversation Claude Code no longer holds', () => {
     const { held } = Registry.of(LiveSessionsDouble.holding())
     held.remember(new HeldCoordinatingSession({
+      target: Mother.FIRST_TARGET,
       state: CoordinatingSessionState.UNRESUMABLE,
       conversation: Mother.FIRST,
       session: null,
@@ -389,5 +407,92 @@ describe('CoordinatingSessions', () => {
       TimelineEventKind.WAITING_FOR_PERMISSION, TimelineEventKind.WORKING,
     ])
     expect(said.some((line) => line.includes('timeline event not recorded'))).toBe(true)
+  })
+
+  it('opening and closing reserve the same slot before any asynchronous work', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    liveSessions.exits(Mother.FIRST_SESSION)
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
+    expect(held.beginClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }).outcome)
+      .toBe(CloseReservation.OPENING)
+    held.release()
+
+    expect(held.beginClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }).outcome)
+      .toBe(CloseReservation.RESERVED)
+    expect(held.operation()).toBe(CoordinatingOperation.CLOSING)
+    expect(held.reserve().outcome).toBe(OpeningReservation.LIVE_HELD)
+
+    held.failClose(
+      { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET },
+      { code: 'session-not-terminated', detail: 'the process group is still present' },
+    )
+    expect(held.operation()).toBe(CoordinatingOperation.CLOSE_FAILED)
+    expect(held.reserve().outcome).toBe(OpeningReservation.LIVE_HELD)
+  })
+
+  it('old exit and attention callbacks cannot replace or repopulate a newer target', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION, Mother.SECOND_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const firstTimeline = held.timeline()
+    const oldExit = liveSessions.exitCallback(Mother.FIRST_SESSION)
+
+    held.remember(Mother.live(Mother.SECOND, Mother.SECOND_SESSION))
+    oldExit()
+    const attended = await held.attend({
+      conversation: Mother.FIRST.id.text,
+      attention: SessionAttention.waiting('old question'),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
+    })
+
+    expect(attended.outcome).toBe(AttendOutcome.NO_MATCH)
+    expect(held.held()?.target).toBe(Mother.SECOND_TARGET)
+    expect(held.held()?.state).toBe(CoordinatingSessionState.LIVE)
+    expect(held.timeline()).not.toBe(firstTimeline)
+    expect(held.timeline()).toEqual([])
+  })
+
+  it('duplicate closes join while ended and unresumable targets remain explicitly closeable', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    liveSessions.exits(Mother.FIRST_SESSION)
+
+    const first = held.beginClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET })
+    const closing = Promise.resolve()
+    held.trackClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }, closing)
+    const duplicate = held.beginClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET })
+
+    expect(first.outcome).toBe(CloseReservation.RESERVED)
+    expect(duplicate.outcome).toBe(CloseReservation.JOINED)
+    expect(duplicate.closing).toBe(closing)
+
+    held.failClose(
+      { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET },
+      { code: 'session-closure-not-recorded', detail: 'disk is full' },
+    )
+    expect(held.beginClose({ conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }).outcome)
+      .toBe(CloseReservation.RESERVED)
+  })
+
+  it('root exit during closure keeps the slot occupied until durable completion', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const identity = { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }
+
+    expect(held.beginClose(identity).outcome).toBe(CloseReservation.RESERVED)
+    held.trackClose(identity, Promise.resolve())
+    liveSessions.exits(Mother.FIRST_SESSION)
+
+    expect(held.operation()).toBe(CoordinatingOperation.CLOSING)
+    expect(held.held()?.state).toBe(CoordinatingSessionState.ENDED)
+    expect(held.reserve().outcome).toBe(OpeningReservation.LIVE_HELD)
+
+    expect(held.finishClose(identity)).toBe(true)
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
 })
