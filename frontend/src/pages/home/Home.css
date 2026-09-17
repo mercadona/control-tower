@@ -8,6 +8,8 @@
   --home-sessions-width: clamp(480px, 40vw, 680px);
   --home-sessions-min-height: 480px;
   --home-sessions-stacked-height: 60vh;
+  /* The value used before useSessionTerminalHeight has read storage. */
+  --home-terminal-height: 320px;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -60,6 +62,36 @@
 
 .home__history {
   flex: none;
+}
+
+/* The terminal sits above the timeline in a definite-height column, so xterm
+   gets a real box to fit into instead of only the rows it asks for, and
+   dragging the resizer below it never moves the timeline's own top edge. */
+.home__session-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.home__terminal-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--home-terminal-height);
+  min-height: 0;
+}
+
+.home__timeline-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.home__session-panel--resizing {
+  user-select: none;
 }
 
 .home__flow ol {

@@ -17,8 +17,10 @@ import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { ColumnResizer } from 'pages/home/components/column-resizer'
+import { RowResizer } from 'pages/home/components/row-resizer'
 import { useSessionsColumnCollapse } from 'pages/home/useSessionsColumnCollapse'
 import { useSessionsColumnWidth } from 'pages/home/useSessionsColumnWidth'
+import { useSessionTerminalHeight } from 'pages/home/useSessionTerminalHeight'
 import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
@@ -29,6 +31,7 @@ import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
+const TERMINAL_HEIGHT_LABEL = 'Alto de la terminal'
 const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
@@ -61,6 +64,8 @@ const Home = () => {
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const sessionsColumnCollapse = useSessionsColumnCollapse()
+  const sessionPanelRef = useRef<HTMLDivElement>(null)
+  const terminalHeight = useSessionTerminalHeight(sessionPanelRef)
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -533,18 +538,34 @@ const Home = () => {
             collapsed={sessionsColumnCollapse.collapsed}
             onToggle={() => sessionsColumnCollapse.toggle()}
           >
-            <CoordinatingSessionStatus read={coordinatingSession} />
-            <SessionsPanel opened={openedSession} />
-            {showHistory && workflow !== null && (
-              <aside className="home__history" aria-label="Progreso de la implementación">
-                <ImplementHistory
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
-                  issue={workflow.plan.issue.number}
-                  root={workflow.plan.root ?? workflow.request.path}
-                  repo={workflow.plan.repo}
-                />
-              </aside>
-            )}
+            <div className="home__session-panel" ref={sessionPanelRef}>
+              <div
+                className="home__terminal-pane"
+                style={{ '--home-terminal-height': `${terminalHeight.value}px` } as CSSProperties}
+              >
+                <SessionsPanel opened={openedSession} />
+              </div>
+              <RowResizer
+                value={terminalHeight.value}
+                min={terminalHeight.min}
+                max={terminalHeight.max}
+                onChange={terminalHeight.setValue}
+                label={TERMINAL_HEIGHT_LABEL}
+              />
+              <div className="home__timeline-pane">
+                <CoordinatingSessionStatus read={coordinatingSession} />
+                {showHistory && workflow !== null && (
+                  <aside className="home__history" aria-label="Progreso de la implementación">
+                    <ImplementHistory
+                      key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
+                      issue={workflow.plan.issue.number}
+                      root={workflow.plan.root ?? workflow.request.path}
+                      repo={workflow.plan.repo}
+                    />
+                  </aside>
+                )}
+              </div>
+            </div>
           </Drawer>
         </div>
       </div>

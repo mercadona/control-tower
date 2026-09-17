@@ -27,14 +27,44 @@ const timeOf = (at: string): string | undefined => {
   return Number.isNaN(parsed.getTime()) ? undefined : TIME_FORMAT.format(parsed)
 }
 
-const itemsFor = (timeline: readonly TimelineEvent[]): TimelineItem[] =>
-  timeline.map((event, index) => ({
-    id: event.id,
-    label: LABEL_BY_KIND[event.kind],
-    detail: event.detail ?? undefined,
-    timestamp: timeOf(event.at),
-    status: index === timeline.length - 1 ? 'current' : 'past',
-  }))
+type EventRun = { kind: TimelineEventKind; events: TimelineEvent[] }
+
+const runsOf = (timeline: readonly TimelineEvent[]): EventRun[] =>
+  timeline.reduce<EventRun[]>((runs, event) => {
+    if (runs.length === 0) return [{ kind: event.kind, events: [event] }]
+    const last = runs[runs.length - 1]
+    if (last.kind === event.kind) {
+      last.events.push(event)
+      return runs
+    }
+    return [...runs, { kind: event.kind, events: [event] }]
+  }, [])
+
+const labelFor = (run: EventRun): string => {
+  const plain = LABEL_BY_KIND[run.kind]
+  return run.events.length > 1 ? `${plain} ×${run.events.length}` : plain
+}
+
+const timestampFor = (run: EventRun, lastEvent: TimelineEvent): string | undefined => {
+  const first = timeOf(run.events[0].at)
+  const last = timeOf(lastEvent.at)
+  if (first === undefined || last === undefined) return undefined
+  return run.events.length > 1 ? `${first} – ${last}` : first
+}
+
+const itemsFor = (timeline: readonly TimelineEvent[]): TimelineItem[] => {
+  const runs = runsOf(timeline)
+  return runs.map((run, index) => {
+    const lastEvent = run.events[run.events.length - 1]
+    return {
+      id: lastEvent.id,
+      label: labelFor(run),
+      detail: lastEvent.detail ?? undefined,
+      timestamp: timestampFor(run, lastEvent),
+      status: index === runs.length - 1 ? 'current' : 'past',
+    }
+  })
+}
 
 const announcementFor = (event: TimelineEvent): string => {
   const label = LABEL_BY_KIND[event.kind]

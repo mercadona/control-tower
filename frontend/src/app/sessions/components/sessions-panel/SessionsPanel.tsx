@@ -41,7 +41,7 @@ export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactEleme
   return (
     <div className="sessions-panel">
       <Tabs options={tabOptions} value={chosen.id} onChange={setChosenId} aria-label={SESSIONS_TABLIST_LABEL} />
-      <div role="tabpanel" aria-label={chosen.name}>
+      <div role="tabpanel" className="sessions-panel__screen" aria-label={chosen.name}>
         <SessionTerminal session={chosen} onGone={refresh} />
       </div>
     </div>
