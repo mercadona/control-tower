@@ -10,3 +10,13 @@
   margin: 0;
   color: var(--foreground-secondary);
 }
+
+/* The plain block role="tabpanel" div breaks the flex chain down to xterm:
+   without this the pane has a height and the terminal inside it still does
+   not. */
+.sessions-panel__screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}

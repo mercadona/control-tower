@@ -38,6 +38,32 @@ describe('CoordinatingSessionStatus', () => {
     expect(items[2]).toHaveClass('timeline__item--current')
   })
 
+  it('collapses consecutive events of the same kind into one item counted', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.repeatedWaitingRead()} />)
+
+    const items = screen.getAllByRole('listitem')
+    expect(items).toHaveLength(3)
+    expect(items[2]).toHaveTextContent('Esperando permiso ×3')
+  })
+
+  it('shows the range of a collapsed run and the last event detail', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.repeatedWaitingRead()} />)
+
+    const items = screen.getAllByRole('listitem')
+    expect(items[2]).toHaveTextContent('–')
+    expect(items[2]).toHaveTextContent('can I delete the stale branch?')
+    expect(items[2]).not.toHaveTextContent('the button should read Arrancar brainstorming, right?')
+  })
+
+  it('keeps a single event with its plain label and one timestamp', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.waitingRead()} />)
+
+    const items = screen.getAllByRole('listitem')
+    expect(items[2]).toHaveTextContent('Esperando permiso')
+    expect(items[2]).not.toHaveTextContent('×')
+    expect(items[2]).not.toHaveTextContent('–')
+  })
+
   it('warns that the conversation could not be recovered, keeping the events already known', () => {
     render(<CoordinatingSessionStatus read={CoordinatingSessionMother.unresumableRead()} />)
 
