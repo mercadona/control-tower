@@ -152,6 +152,39 @@ describe('the checks are measured by the program, not by the implementer', () =>
     expect(ct('controls').status).toBe(5)
   })
 
+  // THE PLAN OF THE NEXT TWO IS COMMITTED, not merely written: the amendment
+  // control compares the working tree's plan against `HEAD:plan.md`, so
+  // changing a task's **Files:** without committing reads as an amendment that
+  // REMOVES a path, and that is red before any command is reached.
+  const commitThePlanOfThisScenario = (plan) => {
+    writeFileSync(join(repo, 'plan.md'), plan)
+    execFileSync('git', ['add', '--', 'plan.md'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'the plan of this scenario'], { cwd: repo })
+  }
+
+  it('a task whose diff carries only documentation says why it did not run the suite, and does not run it', () => {
+    commitThePlanOfThisScenario(PLAN
+      .replace('**Files:** `uno.txt` (create).', '**Files:** `guia.md` (create).')
+      .replace('test -f uno.txt', 'test -f no-existe.txt'))
+    ct('report', writeReport(['guia.md']))
+
+    const r = ct('controls')
+
+    expect(r.stdout).toContain('controls: done')
+    expect(r.stdout).toMatch(/no code/i)
+  })
+
+  it('a diff that carries documentation AND code runs the suite: one path of code is enough', () => {
+    commitThePlanOfThisScenario(PLAN
+      .replace('**Files:** `uno.txt` (create).', '**Files:** `guia.md` (create), `uno.ts` (create).')
+      .replace('test -f uno.txt', 'test -f no-existe.txt'))
+    ct('report', writeReport(['guia.md', 'uno.ts']))
+
+    const r = ct('controls')
+
+    expect(r.stdout).toContain('controls: failed')
+  })
+
   it('the tests the task promised have to exist in what was staged', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(
       '**Tests:** N/A — fixture.\n**Verification:** the file is there.',
