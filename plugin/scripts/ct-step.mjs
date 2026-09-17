@@ -1398,7 +1398,24 @@ function controlsVerb() {
     result = OUTCOMES.INDETERMINATE
   }
 
-  for (const command of result === OUTCOMES.DONE ? t.commands : []) {
+  // AND ONLY THEN THE COMMANDS, WHICH ARE THE ONLY EXPENSIVE PART — and they do
+  // not run over a diff that carries no code (#394). Everything above DOES run
+  // whatever the diff carries: those controls execute nothing and they are what
+  // keeps the task inside its declared scope.
+  //
+  // A task that declares no command is not a skip: there was nothing to run, and
+  // saying "the suite did not run" of it would be a report about a suite nobody
+  // asked for.
+  const skippedForNoCode = result === OUTCOMES.DONE && t.commands.length > 0 && carriesNoCode()
+  if (skippedForNoCode) {
+    lines.push(
+      '# the suite did not run: the diff carries no code, only documentation',
+      ...workingPathsInTheIndex().map((path) => `- ${path}`),
+      '',
+    )
+  }
+
+  for (const command of result === OUTCOMES.DONE && !skippedForNoCode ? t.commands : []) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
     if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
@@ -1406,9 +1423,15 @@ function controlsVerb() {
   }
 
   writeFileSync(log, lines.join('\n'))
-  measure('controls', { outcome: result, controls_log: log, commands: t.commands.length, duration_ms: Date.now() - startedAt })
+  measure('controls', {
+    outcome: result,
+    controls_log: log,
+    commands: skippedForNoCode ? 0 : t.commands.length,
+    ...(skippedForNoCode ? { skipped: 'no-code' } : {}),
+    duration_ms: Date.now() - startedAt,
+  })
   run = { ...run, lastControlsLog: log }
-  out(`controls: ${result} (log at ${log})`)
+  out(`controls: ${result}${skippedForNoCode ? ' (the suite did not run: the diff carries no code, only documentation)' : ''} (log at ${log})`)
   return result
 }
 
@@ -1441,6 +1464,33 @@ const workingPathsInTheIndex = () =>
 // vector `scope.js` documents from dispatch 1, and would make it travel inside
 // the task's commit without any control seeing it.
 const workPathsInTheIndex = () => stagedPaths().filter((p) => p !== planRelPath())
+
+// WHAT IS NOT CODE, AND WHY THE LIST ONLY NAMES DOCUMENTATION. A task's
+// **Verification:** commands are declared by the plan and run whatever the diff
+// carries, so a commit that is a heading and a paragraph paid for the whole
+// suite. The list below enumerates what this program KNOWS executes nothing;
+// anything outside it counts as code. That direction is the CI workflow's, on
+// purpose: its `changes` job names the three package prefixes it can classify
+// and turns every suite ON for a path outside them, because a filter that fails
+// quietly green is worse than a slow run.
+//
+// CONFIGURATION IS DELIBERATELY ABSENT. A `.claude/settings.json` or a workflow
+// decides what gets executed even though no suite looks at it, so calling it
+// "no code" would be exactly the quiet green this control exists to avoid.
+// Widening the list is a decision taken with evidence, not a guess.
+const DOCUMENTATION_PATTERNS = ['**/*.md', 'docs/**']
+
+// AN EMPTY LIST RUNS THE SUITE. `stagedPaths` turns a `git diff --cached` that
+// could not run into an empty list, so "there is nothing to classify" and "the
+// diff could not be read" arrive here as the same answer — and both have to end
+// up running, never skipping. The plan and the loop's own artifacts are already
+// out (`workingPathsInTheIndex`), so what is left is the task's own work.
+const carriesNoCode = () => {
+  const paths = workingPathsInTheIndex()
+
+  return paths.length > 0 &&
+    paths.every((path) => DOCUMENTATION_PATTERNS.some((pattern) => matchesPattern(path, pattern)))
+}
 
 // WHAT IS FOREIGN IN THE INDEX: what is staged that this program did NOT put there.
 //
