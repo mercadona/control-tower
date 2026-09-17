@@ -155,7 +155,7 @@ class Subject {
 }
 
 describe('ClaudePlanCalls', () => {
-  it('headless tools are explicitly authorized for every call purpose', async () => {
+  it('headless permission mode and tools are explicitly preserved for every call purpose', async () => {
     const subject = new Subject()
 
     await subject.adapter.start(PlanCallMother.watch(), 'plan', null)
@@ -164,6 +164,10 @@ describe('ClaudePlanCalls', () => {
 
     expect(subject.calls.invocations.map((invocation) => invocation.purpose)).toEqual(['plan', 'implementation', 'fix'])
     for (const invocation of subject.calls.invocations) {
+      const permission = invocation.argv.indexOf('--permission-mode')
+      expect(permission, invocation.purpose).toBeGreaterThan(-1)
+      expect(invocation.argv.slice(permission, permission + 2), invocation.purpose)
+        .toEqual(['--permission-mode', 'acceptEdits'])
       const grant = invocation.argv.indexOf('--allowedTools')
       expect(grant, invocation.purpose).toBeGreaterThan(-1)
       expect(invocation.argv[grant + 1], invocation.purpose).toBe('Read,Glob,Grep,Edit,Write,Bash,Skill,Agent')

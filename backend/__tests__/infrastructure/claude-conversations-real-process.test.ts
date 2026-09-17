@@ -89,7 +89,7 @@ describe('ClaudeConversations against a real shell', () => {
       '--session-id',
       conversation.id.text,
       '--permission-mode',
-      ClaudeConversations.PERMISSION_MODE,
+      'auto',
       '--model',
       ClaudeConversations.MODEL,
       `Read the file at ${Governed.PROMPT_PATH} and do exactly what it says.`,

@@ -12,7 +12,7 @@ export class ClaudeConversations extends Conversations {
   static readonly NAME = 'brainstorming'
   static readonly PROMPT_VARIABLE = 'CT_PHASE_PROMPT'
   static readonly HOOKS_URL_VARIABLE = 'CT_SESSION_HOOKS_URL'
-  static readonly PERMISSION_MODE = 'acceptEdits'
+  static readonly PERMISSION_MODE = 'auto'
   static readonly MODEL = 'opus'
   static readonly OPENING = `Read the file at $${ClaudeConversations.PROMPT_VARIABLE} and do exactly what it says.`
 

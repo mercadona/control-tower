@@ -177,6 +177,14 @@ Spanish and keep their filenames.
 forward, and the same applies to git history: past commit messages stay as they
 were written and nothing here rewrites them.
 
+## Feature flags are opt-in in this repository
+
+The user has disabled the `flag-discipline` default for this project. Do not
+invoke that skill or require a feature flag for a development or behavior change.
+Implement changes directly unless the user explicitly requests a feature flag.
+This is a repository-local instruction; it does not change other projects or
+the conventions the plugin distributes to governed repositories.
+
 ## Start every issue in the Project
 
 Before editing files or running an implementation command for a GitHub issue,
