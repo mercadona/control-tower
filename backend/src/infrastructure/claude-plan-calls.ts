@@ -140,7 +140,7 @@ export class ClaudePlanCalls extends PlanCalls {
       '--permission-mode', ClaudePlanCalls.PERMISSION_MODE,
       '--allowedTools', ClaudePlanCalls.ALLOWED_TOOLS,
       '--model', ClaudeConversations.MODEL,
-      '--plugin-dir', this.pluginRoot,
+      ClaudeConversations.PLUGIN_DIR_FLAG, this.pluginRoot,
       mode === 'resume' ? '--resume' : '--session-id', conversation,
       ClaudePlanCalls.OPENING,
     ]

@@ -13,10 +13,13 @@ export class ClaudeConversations extends Conversations {
   static readonly NAME = 'brainstorming'
   static readonly PROMPT_VARIABLE = 'CT_PHASE_PROMPT'
   static readonly HOOKS_URL_VARIABLE = 'CT_SESSION_HOOKS_URL'
+  static readonly PLUGIN_ROOT_VARIABLE = 'CT_PLUGIN_ROOT'
   static readonly PERMISSION_MODE = 'auto'
   static readonly MODEL = 'opus'
   static readonly PLUGIN_DIR_FLAG = '--plugin-dir'
   static readonly OPENING = `Read the file at $${ClaudeConversations.PROMPT_VARIABLE} and do exactly what it says.`
+  static readonly #PLUGIN_DIR_ARGUMENTS =
+    `${ClaudeConversations.PLUGIN_DIR_FLAG} "$${ClaudeConversations.PLUGIN_ROOT_VARIABLE}"`
 
   readonly liveSessions: PtyLiveSessions
   readonly shell: string | undefined
@@ -65,7 +68,7 @@ export class ClaudeConversations extends Conversations {
   }): LiveSession {
     return this.#open({
       conversation,
-      command: this.#startCommand(conversation.id.text),
+      command: ClaudeConversations.#startCommand(conversation.id.text),
       extra: { [ClaudeConversations.PROMPT_VARIABLE]: promptPath },
     })
   }
@@ -73,22 +76,22 @@ export class ClaudeConversations extends Conversations {
   resume(conversation: CoordinatingConversation): LiveSession {
     return this.#open({
       conversation,
-      command: this.#resumeCommand(conversation.id.text),
+      command: ClaudeConversations.#resumeCommand(conversation.id.text),
       extra: {},
     })
   }
 
-  #startCommand(id: string): string {
+  static #startCommand(id: string): string {
     return `exec ${ClaudeConversations.BIN} --session-id ${id} ` +
       `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL} ` +
-      `${ClaudeConversations.PLUGIN_DIR_FLAG} '${this.pluginRoot}' ` +
+      `${ClaudeConversations.#PLUGIN_DIR_ARGUMENTS} ` +
       `"${ClaudeConversations.OPENING}"`
   }
 
-  #resumeCommand(id: string): string {
+  static #resumeCommand(id: string): string {
     return `exec ${ClaudeConversations.BIN} --resume ${id} ` +
       `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL} ` +
-      `${ClaudeConversations.PLUGIN_DIR_FLAG} '${this.pluginRoot}'`
+      `${ClaudeConversations.#PLUGIN_DIR_ARGUMENTS}`
   }
 
   #open({ conversation, command, extra }: {
@@ -103,6 +106,7 @@ export class ClaudeConversations extends Conversations {
         ...ClaudeConversations.#definedEntriesOf(this.env),
         [Invocation.CONFIG_VARIABLE]: this.claudeDirectory,
         [ClaudeConversations.HOOKS_URL_VARIABLE]: this.hooksUrl(),
+        [ClaudeConversations.PLUGIN_ROOT_VARIABLE]: this.pluginRoot,
         ...extra,
       },
     })
