@@ -437,6 +437,69 @@ describe('DiskPlanRecords', () => {
     ])).toEqual(originalBytes)
   })
 
+  it('proof publication ENOSPC retains the dispatch and converts the exact write failure', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-proof-write-'))
+    roots.push(root)
+    const original = PlanRecordMother.records(root)
+    const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+    const descriptorPath = join(root, 'harness', watch.agent, 'dispatch.json')
+    const proofPath = join(root, 'harness', watch.agent, DiskPlanRecords.NON_LAUNCH)
+    const descriptorBytes = await readFile(descriptorPath, 'utf8')
+    const writeFailure = Object.assign(new Error('proof disk full'), { code: 'ENOSPC' })
+    const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+      writeOnce: async (path: string, text: string) => {
+        expect(path).toBe(proofPath)
+        expect(JSON.parse(text)).toEqual({
+          conversation: watch.agent,
+          callId: null,
+          source: 'before-worker',
+          diagnostic: 'worker preparation failed',
+          observedAt: PlanRecordMother.STARTED_AT,
+        })
+        throw writeFailure
+      },
+    })
+    const proof = new PlanNonLaunch({
+      conversation: watch.agent,
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker preparation failed',
+      observedAt: PlanRecordMother.STARTED_AT,
+    })
+
+    const refusal = await PlanRecordMother.records(root, { files }).recordNonLaunch(watch, proof)
+      .catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toContain(`${proofPath} could not be written`)
+    expect(refusal.message).toContain('proof disk full')
+    expect(await readFile(descriptorPath, 'utf8')).toBe(descriptorBytes)
+    await expect(readFile(proofPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('find preserves an exact worktree existence-reader defect and descriptor bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-exists-defect-'))
+    roots.push(root)
+    const original = PlanRecordMother.records(root)
+    const watch = await original.prepare(PlanRecordMother.briefing('/checkout'))
+    const descriptorPath = join(root, 'harness', watch.agent, 'dispatch.json')
+    const descriptorBytes = await readFile(descriptorPath, 'utf8')
+    const defect = new TypeError('worktree existence reader defect')
+    const checked: string[] = []
+    const records = PlanRecordMother.records(root, {
+      exists: async (path) => {
+        checked.push(path)
+        if (path === watch.located.path) throw defect
+        throw new Error(`unlisted existence request ${path}`)
+      },
+    })
+
+    await expect(records.find({ issue: watch.issue.number, repository: watch.repository })).rejects.toBe(defect)
+
+    expect(checked).toEqual([watch.located.path])
+    expect(await readFile(descriptorPath, 'utf8')).toBe(descriptorBytes)
+  })
+
   it('immutable proof readback failure retains original bytes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-readback-'))
     roots.push(root)

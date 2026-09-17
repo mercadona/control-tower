@@ -199,3 +199,27 @@ suite with 70 files and 1,350 tests and the frontend production build passed.
 `git diff --check` and the protected-path comparison passed. No new mutation or
 red-first claim is made, and production unexpected failures remain HTTP 400
 `request-failed`; only bare route harnesses retain their default 500 behavior.
+
+## Round-four completion
+
+The review of `a3854aa5312e45d966654a4115972532f7b40291`
+identified three remaining test-only corrections. This appendix supersedes the
+earlier complete-drain, complete-preservation and complete-consumer wording.
+
+Every HTTP-created supervisor now has a cleanup obligation before its request.
+Actual agent return marks registration and stderr settlement marks completion;
+cleanup begins all finalizers, releases all waits and drains every registered
+supervisor before root removal, even when one operation fails. The retained
+normal two-barrier assertion is joined by a sentinel abort case that observes
+both completions while the root exists. Distinct `DiskPlanRecords` regressions
+for proof-write `ENOSPC` and exact existence-reader bug identity are restored.
+The remaining proof-listing, immutable-readback and three archive operation
+errors now cross the real HTTP consumer with exact response and state oracles;
+archive attempt is distinguished from forbidden retirement. HTTP sentinel
+identity is asserted with `toBe`.
+
+Focused verification passed 103 tests across the three owning files, followed by
+a 79-test API rerun. Backend typecheck and the full backend suite with 110 files
+and 2,220 tests passed. The full frontend suite with 70 files and 1,350 tests and
+the production build passed. No production file changed and no new mutation or
+red-first result is claimed.

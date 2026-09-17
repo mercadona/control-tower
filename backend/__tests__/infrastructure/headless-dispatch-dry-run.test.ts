@@ -1,7 +1,7 @@
 import { ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -386,31 +386,44 @@ describe('headless dispatch dry run', () => {
   const servers: ApiServer[] = []
   const pending: {
     release: Deferred,
-    diagnostic: Promise<void>,
-    supervised: Deferred,
-    finalize: () => void,
+    completed: Deferred,
+    registered: boolean,
+    finalize: () => void | Promise<void>,
   }[] = []
 
   async function cleanup(): Promise<void> {
-    try {
-      for (const wait of pending.splice(0)) {
-        wait.finalize()
-        wait.release.release()
-        if (wait.supervised.released) await BoundedDrain.wait(wait.diagnostic, 1_000)
-      }
-    } finally {
+    const failures: unknown[] = []
+    const obligations = pending.splice(0)
+    const finalizations = obligations.map(async (obligation) => {
       try {
-        await Promise.all(servers.splice(0).map((server) => server.stop()))
-      } finally {
-        await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+        await obligation.finalize()
+      } catch (cause) {
+        failures.push(cause)
       }
+    })
+    for (const obligation of obligations) obligation.release.release()
+    await Promise.all(finalizations)
+    await Promise.all(obligations.map(async (obligation) => {
+      if (!obligation.registered) return
+      try {
+        await BoundedDrain.wait(obligation.completed.promise, 1_000)
+      } catch (cause) {
+        failures.push(cause)
+      }
+    }))
+    try {
+      await Promise.all(servers.splice(0).map((server) => server.stop()))
+    } finally {
+      await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
     }
+    if (failures.length > 0) throw new AggregateError(failures, 'supervisor cleanup failed')
   }
 
   it.each([
-    { title: 'headless start preserves publication', needsRecovery: false },
-    { title: 'coordinator recovery reaches the production continuation', needsRecovery: true },
-  ])('$title', async ({ needsRecovery }) => {
+    { title: 'headless start preserves publication', needsRecovery: false, abortAfterAcceptance: false },
+    { title: 'coordinator recovery reaches the production continuation', needsRecovery: true, abortAfterAcceptance: false },
+    { title: 'accepted recovery abort drains every registered supervisor', needsRecovery: true, abortAfterAcceptance: true },
+  ])('$title', async ({ needsRecovery, abortAfterAcceptance }) => {
     const root = await mkdtemp(join(tmpdir(), 'ct-331-headless-rehearsal-'))
     roots.push(root)
     try {
@@ -424,6 +437,8 @@ describe('headless dispatch dry run', () => {
     let reportFailure!: () => void
     const diagnostic = new Promise<void>((resolve) => { reportFailure = resolve })
     const implementationAccepted = new Deferred()
+    const initialSupervisorCompleted = new Deferred()
+    const initialRegistrations: typeof pending = []
     const callIds = [Rehearsal.PLAN_CALL, Rehearsal.IMPLEMENTATION_CALL]
     const spawnedDescriptors: string[] = []
     const calls = new ClaudeCalls({
@@ -509,12 +524,22 @@ describe('headless dispatch dry run', () => {
       digest: (text) => createHash('sha256').update(text).digest('hex'),
     })
     const continuation = new ContinuePlan({ calls: planCalls, publication })
-    const agents = new HeadlessPlanAgents({
+    const agents = new class extends HeadlessPlanAgents {
+      override async launch(briefing: PlanBriefing): Promise<string> {
+        const launched = await super.launch(briefing)
+        const obligation = initialRegistrations.shift()
+        if (obligation !== undefined) obligation.registered = true
+        return launched
+      }
+    }({
       records,
       calls: planCalls,
       continuation,
       newId: () => { throw new Error('fix identity is not requested') },
-      stderr: () => reportFailure(),
+      stderr: () => {
+        reportFailure()
+        initialSupervisorCompleted.release()
+      },
     })
     const workspace = new GitWorkspace({
       run: boundaries.git,
@@ -568,17 +593,21 @@ describe('headless dispatch dry run', () => {
       })
       servers.push(server)
       const port = await server.start()
-      pending.push({
+      const obligation = {
         release: releasePendingWait,
-        diagnostic,
-        supervised: implementationAccepted,
-        finalize: () => {
+        completed: initialSupervisorCompleted,
+        registered: false,
+        finalize: async () => {
+          if (!obligation.registered) return
+          await implementationAccepted.promise
           const descriptor = spawnedDescriptors[1]
           if (descriptor !== undefined) {
             writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
           }
         },
-      })
+      }
+      pending.push(obligation)
+      initialRegistrations.push(obligation)
       const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -757,7 +786,9 @@ describe('headless dispatch dry run', () => {
       exists: async (path) => fs.stat(path).then(() => true, () => false),
     })
     const restartedSupervisorDiagnostics = [new Deferred(), new Deferred()]
-    let restartedSupervisorIndex = 0
+    const restartedRegistrations: typeof pending = []
+    const registeredSupervisors: typeof pending = []
+    const rootPresenceAtSupervisorCompletion: boolean[] = []
     const restartedCalls = new ClaudeCalls({
       files: restartedFiles,
       binary: '/usr/local/bin/claude',
@@ -806,12 +837,28 @@ describe('headless dispatch dry run', () => {
       files: restartedFiles,
       digest: (text) => createHash('sha256').update(text).digest('hex'),
     })
-    const restartedAgents = new HeadlessPlanAgents({
+    const restartedAgents = new class extends HeadlessPlanAgents {
+      override async recover(asked: {
+        agent: string,
+        issue: number,
+        repository: RepositoryName,
+      }): Promise<void> {
+        await super.recover(asked)
+        const obligation = restartedRegistrations.shift()
+        if (obligation !== undefined) {
+          obligation.registered = true
+          registeredSupervisors.push(obligation)
+        }
+      }
+    }({
       records: restartedRecords,
       calls: restartedPlanCalls,
       continuation: new ContinuePlan({ calls: restartedPlanCalls, publication: restartedPublication }),
       newId: () => { throw new Error('fix identity is not requested') },
-      stderr: () => restartedSupervisorDiagnostics[restartedSupervisorIndex++]?.release(),
+      stderr: () => {
+        rootPresenceAtSupervisorCompletion.push(existsSync(root))
+        registeredSupervisors.shift()?.completed.release()
+      },
     })
     const recoveredSessions = new PlanSessions()
     const recoveredPlans = new ActivePlans({ sessions: recoveredSessions })
@@ -839,6 +886,23 @@ describe('headless dispatch dry run', () => {
     })
     servers.push(recoveredServer)
     const recoveredPort = await recoveredServer.start()
+    const completion = async (): Promise<void> => {
+      await implementationAccepted.promise
+      const descriptor = spawnedDescriptors[0]
+      if (descriptor !== undefined) {
+        writeFileSync(join(dirname(descriptor), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
+      }
+    }
+    const firstObligation = {
+      release: releasePendingWait,
+      completed: restartedSupervisorDiagnostics[0],
+      registered: false,
+      finalize: async () => {
+        if (firstObligation.registered) await completion()
+      },
+    }
+    pending.push(firstObligation)
+    restartedRegistrations.push(firstObligation)
     const recovered = await fetch(`http://127.0.0.1:${recoveredPort}/recover-plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -848,17 +912,11 @@ describe('headless dispatch dry run', () => {
         agent: Rehearsal.CONVERSATION,
       }),
     })
-    expect(recovered.status).toBe(202)
-    expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    if (!abortAfterAcceptance) {
+      expect(recovered.status).toBe(202)
+      expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    }
     await BoundedDrain.wait(implementationAccepted.promise, 1_000)
-    pending.push({
-      release: releasePendingWait,
-      diagnostic: restartedSupervisorDiagnostics[0].promise,
-      supervised: implementationAccepted,
-      finalize: () => writeFileSync(
-        join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion(),
-      ),
-    })
     expect(boundaries.publicationAttempts).toBe(2)
     expect(boundaries.postedBody).toBe(
       `Plan ${Rehearsal.PLAN_HASH} — part 1/1\n`
@@ -880,6 +938,16 @@ describe('headless dispatch dry run', () => {
     expect(spawnedDescriptors).toHaveLength(1)
     expect(await readFile(boundaries.attemptsPath, 'utf8')).toBe(boundaries.attemptBytes)
 
+    const secondObligation = {
+      release: releasePendingWait,
+      completed: restartedSupervisorDiagnostics[1],
+      registered: false,
+      finalize: async () => {
+        if (secondObligation.registered) await completion()
+      },
+    }
+    pending.push(secondObligation)
+    restartedRegistrations.push(secondObligation)
     const repeated = await BoundedDrain.value(fetch(`http://127.0.0.1:${recoveredPort}/recover-plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -889,18 +957,36 @@ describe('headless dispatch dry run', () => {
         agent: Rehearsal.CONVERSATION,
       }),
     }), 1_000)
-    expect(repeated.status).toBe(202)
-    expect(await repeated.json()).toEqual({ agent: Rehearsal.CONVERSATION })
-    pending.push({
-      release: releasePendingWait,
-      diagnostic: restartedSupervisorDiagnostics[1].promise,
-      supervised: implementationAccepted,
-      finalize: () => writeFileSync(
-        join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion(),
-      ),
-    })
+    if (!abortAfterAcceptance) {
+      expect(repeated.status).toBe(202)
+      expect(await repeated.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+    }
     expect(boundaries.publicationAttempts).toBe(2)
     expect(spawnedDescriptors).toHaveLength(1)
+
+    if (abortAfterAcceptance) {
+      const sentinel = new Error('response assertion aborted after both supervisors registered')
+      let aborted: unknown
+      try {
+        expect(recovered.status).toBe(202)
+        expect(await recovered.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+        expect(repeated.status).toBe(202)
+        expect(await repeated.json()).toEqual({ agent: Rehearsal.CONVERSATION })
+        throw sentinel
+      } catch (cause) {
+        aborted = cause
+      } finally {
+        await cleanup()
+      }
+      expect(aborted).toBe(sentinel)
+      expect(firstObligation.registered).toBe(true)
+      expect(secondObligation.registered).toBe(true)
+      expect(firstObligation.completed.released).toBe(true)
+      expect(secondObligation.completed.released).toBe(true)
+      expect(rootPresenceAtSupervisorCompletion).toEqual([true, true])
+      await expect(fs.stat(root)).rejects.toMatchObject({ code: 'ENOENT' })
+      return
+    }
 
     writeFileSync(join(dirname(spawnedDescriptors[0]), CallDescriptor.COMPLETION), Rehearsal.deferredCompletion())
     releasePendingWait.release()

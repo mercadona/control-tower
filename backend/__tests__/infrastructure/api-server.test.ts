@@ -778,19 +778,42 @@ describe('ApiServer', () => {
         sleep: async () => {},
       }),
     })
-    const diskFailure = async (kind: 'snapshot-read' | 'malformed-record'): Promise<never> => {
+    type ProducerEffects = {
+      laterEffects: number,
+      archiveAttempts: number,
+      successfulRetirements: number,
+      activeBytesPreserved: boolean | null,
+    }
+    type DiskFailure =
+      | 'snapshot-read'
+      | 'malformed-record'
+      | 'proof-listing'
+      | 'immutable-readback'
+      | 'archive-mkdir'
+      | 'archive-stat'
+      | 'archive-rename'
+    const diskFailure = async (kind: DiskFailure, effects: ProducerEffects): Promise<never> => {
       const root = await fs.mkdtemp(join(tmpdir(), `ct-api-cleanup-${kind}-`))
       try {
+        const active = join(root, DiskPlanRecords.DIRECTORY, agent)
+        const destinationRoot = join(root, DiskPlanRecords.RETIRED_DIRECTORY)
+        const destination = join(destinationRoot, agent)
         if (kind === 'malformed-record') {
-          const path = join(root, 'harness', agent, 'dispatch.json')
-          await fs.mkdir(join(root, 'harness', agent), { recursive: true })
+          const path = join(active, 'dispatch.json')
+          await fs.mkdir(active, { recursive: true })
           await fs.writeFile(path, '{not json', 'utf8')
-          await new DiskPlanRecords({
-            files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
-            newId: () => agent,
-            now: () => '2026-09-16T10:00:00.000Z',
-            exists: async () => true,
-          }).recorded(agent)
+          const malformedBytes = await fs.readFile(path, 'utf8')
+          try {
+            await new DiskPlanRecords({
+              files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+              newId: () => agent,
+              now: () => '2026-09-16T10:00:00.000Z',
+              exists: async () => true,
+            }).recorded(agent)
+          } catch (cause) {
+            effects.activeBytesPreserved = await fs.readFile(path, 'utf8') === malformedBytes
+            throw cause
+          }
           throw new Error('malformed record unexpectedly succeeded')
         }
         const original = new DiskPlanRecords({
@@ -802,24 +825,88 @@ describe('ApiServer', () => {
         const recorded = await original.prepare(new PlanBriefing({
           story: null, issue: watch.issue, repository, located: watch.located,
         }))
+        const proof = new PlanNonLaunch({
+          conversation: agent,
+          callId: null,
+          source: 'before-worker',
+          diagnostic: 'worker did not start',
+          observedAt: '2026-09-16T10:00:00.000Z',
+        })
+        if (kind !== 'snapshot-read') await original.recordNonLaunch(recorded, proof)
+        if (kind.startsWith('archive-')) {
+          await original.recordCleanupEvidence(new UnusedWorkspace({
+            watch: recorded, baseSha: 'a'.repeat(40), checkedAt: '2026-09-16T10:01:00.000Z',
+          }))
+        }
         const snapshotPath = join(root, 'harness', agent, DiskPlanRecords.CLEANUP_EVIDENCE)
+        const proofPath = join(active, DiskPlanRecords.NON_LAUNCH)
+        const callsPath = join(active, 'calls')
+        const names = await fs.readdir(active)
+        const originalBytes = new Map(await Promise.all(names.map(async (name) => [
+          name, await fs.readFile(join(active, name), 'utf8'),
+        ] as const)))
+        const failure = Object.assign(new Error(`${kind} input/output error`), { code: 'EIO' })
         const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
           read: async (path: string) => {
-            if (path === snapshotPath) {
-              throw Object.assign(new Error('snapshot input/output error'), { code: 'EIO' })
-            }
+            if (kind === 'snapshot-read' && path === snapshotPath) throw failure
+            if (kind === 'immutable-readback' && path === proofPath) throw failure
             return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
           },
+          list: async (path: string) => {
+            if (kind === 'proof-listing' && path === callsPath) throw failure
+            return new HeadlessFiles({ root, fs, newId: () => 'unused' }).list(path)
+          },
         })
-        await new DiskPlanRecords({
-          files, newId: () => agent, now: () => '2026-09-16T10:00:00.000Z', exists: async () => true,
-        }).cleanupEvidence(recorded)
-        throw new Error('snapshot read unexpectedly succeeded')
+        const faultedFs = {
+          ...fs,
+          mkdir: (async (path: Parameters<typeof fs.mkdir>[0], options?: Parameters<typeof fs.mkdir>[1]) => {
+            if (kind === 'archive-mkdir' && String(path) === destinationRoot) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.mkdir(path, options)
+          }) as typeof fs.mkdir,
+          stat: (async (path: Parameters<typeof fs.stat>[0], options?: Parameters<typeof fs.stat>[1]) => {
+            if (kind === 'archive-stat' && String(path) === destination) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.stat(path, options)
+          }) as typeof fs.stat,
+          rename: async (source: Parameters<typeof fs.rename>[0], target: Parameters<typeof fs.rename>[1]) => {
+            if (kind === 'archive-rename' && String(source) === active && String(target) === destination) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.rename(source, target)
+          },
+        }
+        const records = new DiskPlanRecords({
+          files: kind.startsWith('archive-')
+            ? new HeadlessFiles({ root, fs: faultedFs, newId: () => 'temporary-record' })
+            : files,
+          newId: () => agent,
+          now: () => '2026-09-16T10:00:00.000Z',
+          exists: async () => true,
+        })
+        try {
+          if (kind === 'snapshot-read') await records.cleanupEvidence(recorded)
+          else if (kind === 'proof-listing') await records.nonLaunch(recorded)
+          else if (kind === 'immutable-readback') await records.recordNonLaunch(recorded, proof)
+          else await records.archive(recorded)
+        } catch (cause) {
+          effects.activeBytesPreserved = (await Promise.all([...originalBytes].map(async ([name, bytes]) => (
+            await fs.readFile(join(active, name), 'utf8') === bytes
+          )))).every(Boolean)
+          effects.successfulRetirements = await fs.stat(destination).then(() => 1, () => 0)
+          throw cause
+        }
+        throw new Error(`${kind} unexpectedly succeeded`)
       } finally {
         await fs.rm(root, { recursive: true, force: true })
       }
     }
-    const lostRequeueFailure = async (statusFailure: Error, effects: { archives: number }): Promise<never> => {
+    const lostRequeueFailure = async (statusFailure: Error, effects: ProducerEffects): Promise<never> => {
       let status: PlanIssueStatusValue = PlanIssueStatus.IN_PROGRESS
       let reads = 0
       class Records extends PlanRecords {
@@ -836,7 +923,7 @@ describe('ApiServer', () => {
         }
         override async cleanupEvidence(): Promise<UnusedWorkspace | null> { return null }
         override async recordCleanupEvidence(): Promise<void> {}
-        override async archive(): Promise<void> { effects.archives += 1 }
+        override async archive(): Promise<void> { effects.successfulRetirements += 1 }
       }
       class CleanupWorkspace extends Workspace {
         override async inspectUnlaunched(): Promise<UnusedWorkspace> {
@@ -863,13 +950,17 @@ describe('ApiServer', () => {
       }).execute({ agent, issue: 331, repository } as never)
       throw new Error('lost requeue unexpectedly succeeded')
     }
-    type Producer = (effects: { archives: number }) => Promise<never>
-    const cases: readonly [string, Producer, new (...args: never[]) => Error, string][] = [
+    type Producer = (effects: ProducerEffects) => Promise<never>
+    const cases: readonly [
+      string, Producer, new (...args: never[]) => Error, string, number, boolean | null,
+    ][] = [
       [
         'remaining registration',
         async () => workspace(async () => null).confirmAbsent(watch) as Promise<never>,
         PlanCleanupConflict,
         'cleanup-plan-conflict',
+        0,
+        null,
       ],
       [
         'seed errno',
@@ -878,32 +969,50 @@ describe('ApiServer', () => {
         }).inspectUnlaunched(watch, null) as Promise<never>,
         PlanCleanupNotRead,
         'cleanup-plan-failed',
+        0,
+        null,
       ],
       [
         'malformed seed',
         async () => workspace(async () => 'not a state document').inspectUnlaunched(watch, null) as Promise<never>,
         PlanCleanupNotUnderstood,
         'cleanup-plan-unreadable',
+        0,
+        null,
       ],
-      ['record snapshot errno', async () => diskFailure('snapshot-read'), PlanAgentNotLaunched, 'cleanup-plan-failed'],
-      ['malformed record', async () => diskFailure('malformed-record'), PlanAgentNotNamed, 'cleanup-plan-unreadable'],
+      ['record snapshot errno', (effects) => diskFailure('snapshot-read', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record proof listing errno', (effects) => diskFailure('proof-listing', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record immutable readback errno', (effects) => diskFailure('immutable-readback', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record archive mkdir errno', (effects) => diskFailure('archive-mkdir', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['record archive stat errno', (effects) => diskFailure('archive-stat', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['record archive rename errno', (effects) => diskFailure('archive-rename', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['malformed record', (effects) => diskFailure('malformed-record', effects), PlanAgentNotNamed, 'cleanup-plan-unreadable', 0, true],
       [
         'lost requeue status read',
         (effects) => lostRequeueFailure(new PlanStatusNotRead('status command failed'), effects),
         PlanCleanupNotRead,
         'cleanup-plan-failed',
+        0,
+        null,
       ],
       [
         'lost requeue malformed status',
         (effects) => lostRequeueFailure(new PlanStatusNotUnderstood('status labels malformed'), effects),
         PlanCleanupNotUnderstood,
         'cleanup-plan-unreadable',
+        0,
+        null,
       ],
     ]
     const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
     try {
-      for (const [name, produce, constructor, code] of cases) {
-        const effects = { archives: 0 }
+      for (const [name, produce, constructor, code, archiveAttempts, activeBytesPreserved] of cases) {
+        const effects: ProducerEffects = {
+          laterEffects: 0,
+          archiveAttempts: 0,
+          successfulRetirements: 0,
+          activeBytesPreserved: null,
+        }
         const causes: Error[] = []
         let first = true
         const execute = vi.fn(async () => {
@@ -915,7 +1024,7 @@ describe('ApiServer', () => {
             causes.push(cause as Error)
             throw cause
           }
-          effects.archives += 1
+          effects.laterEffects += 1
         })
         const projection = { recover: vi.fn(async () => null) }
         const port = await RunningApi.listening({
@@ -927,7 +1036,10 @@ describe('ApiServer', () => {
         expect(refused.status, name).toBe(400)
         expect(causes[0], name).toBeInstanceOf(constructor)
         expect(await refused.json(), name).toEqual({ code, detail: causes[0]!.message })
-        expect(effects.archives, name).toBe(0)
+        expect(effects.laterEffects, name).toBe(0)
+        expect(effects.archiveAttempts, name).toBe(archiveAttempts)
+        expect(effects.successfulRetirements, name).toBe(0)
+        expect(effects.activeBytesPreserved, name).toBe(activeBytesPreserved)
         expect(projection.recover, name).not.toHaveBeenCalled()
 
         const retried = await RunningApi.post(port, '/cleanup-plan', body)
@@ -1000,7 +1112,8 @@ describe('ApiServer', () => {
       const refused = await RunningApi.post(port, '/cleanup-plan', body)
       expect(refused.status).toBe(400)
       expect(await refused.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
-      expect(causes).toEqual([defect])
+      expect(causes).toHaveLength(1)
+      expect(causes[0]).toBe(defect)
       expect(projection.recover).not.toHaveBeenCalled()
       expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('seed reader sentinel defect')
 

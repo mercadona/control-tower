@@ -156,3 +156,32 @@ Verification after these test-only corrections:
 No production code or budget changed in this completion. No new mutation sweep,
 red-first observation, live Claude call, network mutation, GitHub write, push,
 governed-repository action, Orca action or delivered-run mutation is claimed.
+
+## Round-four completion
+
+The review of `a3854aa5312e45d966654a4115972532f7b40291`
+found three remaining test-integrity gaps. This section supersedes the prior
+claims of unconditional supervisor draining, complete assertion preservation and
+complete named record-I/O HTTP linkage without deleting their history.
+
+| Finding | Completed evidence |
+|---|---|
+| F4 | Cleanup obligations are registered before each HTTP request can create detached supervision. Test-only agent subclasses mark actual registration, and each stderr settlement marks actual completion. Cleanup starts every finalizer, releases every wait, collects each failure and awaits every registered drain before stopping servers or deleting roots. Finalizers tolerate a not-yet-created implementation descriptor. The successful two-barrier assertion remains, and a sentinel abort after two accepted registrations proves both supervisors complete while the root exists before the root is removed. |
+| N1 | Separate real `DiskPlanRecords` tests restore non-`EEXIST` proof publication `ENOSPC` conversion at the exact `non-launch.json` path and same-object `TypeError` propagation from the exact worktree existence request in `find`. Descriptor bytes and absent proof, or unchanged descriptor bytes, are asserted alongside every newer I/O case. |
+| F1 | Proof-directory listing, immutable collision readback, archive mkdir, archive destination stat and archive source-to-destination rename failures are produced by real `DiskPlanRecords` calls inside the existing mounted `ApiServer` table. All retain exact 400 code/detail, no projection/later effect, reservation release and a successful following request. Archive rows assert one named archive attempt, no successful retirement and exact active bytes. The separate HTTP sentinel now asserts `toBe` object identity. |
+
+Observed verification:
+
+- Focused F4/N1/F1 command passed 3 files and 103 tests.
+- Final API rerun passed 1 file and 79 tests.
+- Backend typecheck passed.
+- Full backend passed 110 files and 2,220 tests.
+- Full frontend passed 70 files and 1,350 tests; existing jsdom canvas
+  diagnostics remained non-failing.
+- Frontend production build passed with the existing chunk-size advisory.
+- `git diff --check` passed.
+
+No production code or budget changed. No new mutation sweep, red-first
+observation, live Claude call, network mutation, GitHub write, push, nested
+agent, Orca action, governed-repository action or delivered-run mutation is
+claimed.
