@@ -7,7 +7,6 @@ import type { ToolLaunch } from './external-tool.ts'
 export class GitEpicBranch extends EpicBranch {
   static readonly REMOTE = 'origin'
   static readonly DECLARE_DEFAULT = `git remote set-head ${GitEpicBranch.REMOTE} -a`
-  static readonly #SYMREF = /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m
 
   readonly run: ToolLaunch
 
@@ -17,7 +16,7 @@ export class GitEpicBranch extends EpicBranch {
   }
 
   static currentArgvFor(root: string): string[] {
-    return ['-C', root, 'rev-parse', '--abbrev-ref', 'HEAD']
+    return GitWorkspace.currentBranchArgvFor(root)
   }
 
   static addArgvFor(root: string, paths: string[]): string[] {
@@ -44,10 +43,6 @@ export class GitEpicBranch extends EpicBranch {
     return ['-C', root, 'push', '--set-upstream', GitEpicBranch.REMOTE, branch]
   }
 
-  static #remoteHeadArgvFor(root: string): string[] {
-    return ['-C', root, 'ls-remote', '--symref', GitEpicBranch.REMOTE, 'HEAD']
-  }
-
   static #localRefArgvFor(root: string, branch: string): string[] {
     return ['-C', root, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
   }
@@ -66,11 +61,6 @@ export class GitEpicBranch extends EpicBranch {
 
   static #cutArgvFor(root: string, branch: string): string[] {
     return ['-C', root, 'switch', '--create', branch]
-  }
-
-  static #symrefBranchIn(printed: string): string | null {
-    const declared = printed.match(GitEpicBranch.#SYMREF)
-    return declared === null ? null : declared[1]
   }
 
   async current(root: CheckoutRoot): Promise<string> {
@@ -187,7 +177,7 @@ export class GitEpicBranch extends EpicBranch {
   async defaultBranch(root: CheckoutRoot): Promise<string> {
     const declared = await this.run(GitWorkspace.defaultBranchArgvFor(root.text))
     if (!declared.failed) return GitEpicBranch.#branchIn(declared.stdout, GitWorkspace.declaredBranchIn)
-    const asked = await this.run(GitEpicBranch.#remoteHeadArgvFor(root.text))
+    const asked = await this.run(GitWorkspace.remoteHeadArgvFor(root.text))
     if (asked.failed) {
       throw new EpicBranchNotPublished(
         `neither ${GitWorkspace.REMOTE_HEAD} in ${root.text} nor ${GitEpicBranch.REMOTE} itself says which branch ` +
@@ -195,7 +185,7 @@ export class GitEpicBranch extends EpicBranch {
       )
     }
 
-    return GitEpicBranch.#branchIn(asked.stdout, GitEpicBranch.#symrefBranchIn)
+    return GitEpicBranch.#branchIn(asked.stdout, GitWorkspace.remoteHeadBranchIn)
   }
 
   static #branchIn(printed: string, reading: (printed: string) => string | null): string {

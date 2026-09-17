@@ -14,7 +14,8 @@ import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import {
   WorkspaceFailure, WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood,
-  CheckoutNotConfirmed, PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
+  CheckoutNotConfirmed, CheckoutNotOnDefaultBranch, CheckoutNotUpToDate,
+  PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -100,11 +101,15 @@ class GitDouble {
   stderr: string[]
   ghCalls: string[][]
   issueRead: ProcessOutput
+  current: ProcessOutput
+  baseKnown: boolean
+  merge: ProcessOutput
+  remoteHead: ProcessOutput
 
   constructor({
     answer, status, existingExclude = null, commonDir, declared, fetch, remote, toplevel,
     removal = null, deletion = null,
-    baseline, issueRead,
+    baseline, issueRead, current, merge, remoteHead,
   }: {
     answer?: ProcessOutput,
     status?: ProcessOutput,
@@ -118,6 +123,9 @@ class GitDouble {
     deletion?: ProcessOutput | null,
     baseline?: BaselineDouble,
     issueRead?: ProcessOutput,
+    current?: ProcessOutput,
+    merge?: ProcessOutput,
+    remoteHead?: ProcessOutput,
   } = {}) {
     this.baseline = baseline ?? new BaselineDouble()
     this.answer = answer ?? GitDouble.ok()
@@ -136,6 +144,10 @@ class GitDouble {
     this.stderr = []
     this.ghCalls = []
     this.issueRead = issueRead ?? GitDouble.issueAnswer()
+    this.current = current ?? GitDouble.printing(`${GitDouble.BASE}\n`)
+    this.baseKnown = true
+    this.merge = merge ?? GitDouble.ok()
+    this.remoteHead = remoteHead ?? GitDouble.printing(`ref: refs/heads/${GitDouble.BASE}\tHEAD\n`)
   }
 
   workspace(): GitWorkspace {
@@ -175,8 +187,15 @@ class GitDouble {
     if (argv.includes('get-url')) return this.remote
     if (argv.includes('--show-toplevel')) return this.toplevel
     if (argv.includes('symbolic-ref')) return this.declared
+    if (argv.includes('--abbrev-ref')) return this.current
+    if (argv.includes('merge')) return this.merge
+    if (argv.includes('--symref')) return this.remoteHead
     if (argv.includes('fetch')) return this.fetch
-    if (argv.includes('--verify')) return GitDouble.printing(`${GitDouble.CUT}\n`)
+    if (argv.includes('--verify')) {
+      return this.baseKnown
+        ? GitDouble.printing(`${GitDouble.CUT}\n`)
+        : new ProcessOutput({ code: 1, stdout: '', stderr: '' })
+    }
     if (argv.includes('--git-common-dir')) return GitDouble.printing(`${this.commonDir}\n`)
     if (argv.includes('HEAD')) return GitDouble.printing(`${GitDouble.CUT}\n`)
     if (argv.includes('status')) return this.status
@@ -196,6 +215,10 @@ class GitDouble {
 
   confirmed(): Promise<CheckoutRoot> {
     return this.workspace().confirm({ root: GitDouble.CHECKOUT, repository: GitDouble.REPOSITORY })
+  }
+
+  confirmedForSession(): Promise<CheckoutRoot> {
+    return this.workspace().confirmForSession({ root: GitDouble.CHECKOUT, repository: GitDouble.REPOSITORY })
   }
 
   refusedTo(asking: Promise<CheckoutRoot>) {
@@ -443,6 +466,86 @@ describe('GitWorkspace', () => {
     expect(refusal.message).toContain('someone/else')
     expect(refusal.message).toContain('owner/name')
     expect(refusal.message).toContain(GitDouble.ROOT)
+  })
+
+  it('a_checkout_on_a_branch_other_than_the_default_one_is_refused_naming_the_branch_it_found', async () => {
+    const git = new GitDouble({ current: GitDouble.printing('feat/something\n') })
+
+    const refusal = await git.refusedTo(git.confirmedForSession())
+
+    expect(refusal).toBeInstanceOf(CheckoutNotOnDefaultBranch)
+    expect(refusal.message).toContain('feat/something')
+    expect(refusal.message).toContain(GitDouble.BASE)
+  })
+
+  it('a_checkout_on_the_default_branch_is_brought_up_to_date_before_the_session_opens', async () => {
+    const git = new GitDouble()
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(git.asking('fetch')).toEqual(['-C', GitDouble.ROOT, 'fetch', 'origin', GitDouble.BASE])
+    expect(git.asking('merge')).toEqual(['-C', GitDouble.ROOT, 'merge', '--ff-only', `origin/${GitDouble.BASE}`])
+  })
+
+  it('a_default_branch_that_cannot_be_fast_forwarded_is_refused_with_what_git_printed', async () => {
+    const git = new GitDouble({
+      merge: new ProcessOutput({
+        code: 128, stdout: '', stderr: "Diverging branches can't be fast-forwarded",
+      }),
+    })
+
+    const refusal = await git.refusedTo(git.confirmedForSession())
+
+    expect(refusal).toBeInstanceOf(CheckoutNotUpToDate)
+    expect(refusal.message).toContain("can't be fast-forwarded")
+  })
+
+  it('a_fetch_that_cannot_reach_the_remote_still_opens_the_session_and_says_so_instead_of_refusing', async () => {
+    const git = new GitDouble({
+      fetch: new ProcessOutput({ code: 128, stdout: '', stderr: 'could not read from remote repository' }),
+    })
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(git.stderr.join('\n')).toContain('could not read from remote repository')
+  })
+
+  it('with_no_origin_base_known_here_there_is_nothing_to_fast_forward_to_and_the_session_still_opens', async () => {
+    const git = new GitDouble({
+      fetch: new ProcessOutput({ code: 128, stdout: '', stderr: 'could not read from remote repository' }),
+    })
+    git.baseKnown = false
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(git.asking('merge')).toBeUndefined()
+  })
+
+  it('a_default_branch_nobody_can_name_still_opens_the_session_and_says_so', async () => {
+    const git = new GitDouble({
+      declared: new ProcessOutput({ code: 1, stdout: '', stderr: 'not a symbolic ref' }),
+      remoteHead: new ProcessOutput({ code: 128, stdout: '', stderr: 'could not read from remote repository' }),
+    })
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(git.stderr.join('\n')).toContain('could not read from remote repository')
+    expect(git.asking('--abbrev-ref')).toBeUndefined()
+  })
+
+  it('an_origin_HEAD_that_declares_nothing_is_resolved_by_asking_the_remote_itself', async () => {
+    const git = new GitDouble({
+      declared: new ProcessOutput({ code: 1, stdout: '', stderr: 'ref refs/remotes/origin/HEAD is not a symbolic ref' }),
+    })
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(git.asking('--symref')).toEqual(['-C', GitDouble.ROOT, 'ls-remote', '--symref', 'origin', 'HEAD'])
   })
 
   it('an_https_remote_names_the_same_repository_as_its_ssh_form_so_neither_checkout_is_refused', async () => {

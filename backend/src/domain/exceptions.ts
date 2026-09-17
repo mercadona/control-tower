@@ -84,6 +84,10 @@ export class WorkspaceNotUnderstood extends WorkspaceFailure {}
 
 export class CheckoutNotConfirmed extends WorkspaceFailure {}
 
+export class CheckoutNotOnDefaultBranch extends WorkspaceFailure {}
+
+export class CheckoutNotUpToDate extends WorkspaceFailure {}
+
 export class PlanProgressFailure extends PlanFailure {}
 
 export class PlanProgressNotRead extends PlanProgressFailure {}
