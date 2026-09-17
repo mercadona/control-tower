@@ -87,6 +87,25 @@ One unbroken chain defines the current leaf. Forks, cycles, dangling links and p
 Only the oracle adapter parses this contract. It never resolves an ambiguous command through another invocation.
 All verb arguments go through `ToolRunner`, never a shell or an evaluated stdout command.
 
+### Recovery precedence
+
+Read validated establishment evidence before any planner wait or publication. Admission alone does not establish a run.
+Absent manifest plus no operations or machine run means `ABSENT`; inconsistent or unreadable evidence refuses, never falls back to publication.
+A valid manifest and journal mean `ESTABLISHED`, including an empty journal before the first `next`.
+Only the absent path waits for successful planning, publishes, then establishes through `open`.
+
+Established recovery uses that journal without publication, current-tree citation checks, committed-plan checks or initial-hash equality against amended plan content.
+The unchanged plugin still validates amendments and consuming verbs. Preserve the original publisher and legacy continuation.
+
+After delivery, actual fix evidence precedes the permanent machine closure in recovery and explicit continuation decisions.
+Use `PlanRecovery.from` over actual fix `RecoveryCall` values only, with null proof/cleanup and an injected `nowMs`.
+Keep original start times, deadlines and completions. Do not pass machine implementation calls into the legacy single-implementation classifier.
+Do not synthesize an outer completion. The existing policy selects the latest fix and rejects ambiguous histories.
+
+Failed, expired, ambiguous or unowned incomplete fixes project uncertain/inspect, preserve diagnostics and stop the review watcher.
+Owned incomplete fixes retain observation within their recorded deadline; keep the review watcher stopped until success.
+Successful latest fixes permit implementing and review watching. Only no-fix histories use bare machine delivery as the successful projection.
+
 ## 3. Reference patterns
 
 Files to imitate:
@@ -136,6 +155,7 @@ Consumes: actual `ct-step next` output, consuming verbs, `RoleBytes.filesOf`, `A
 Produces: `DriveRun.execute(params: DriveRunParams): Promise<void>`.
 Produces: `ExecuteRunInstruction.execute(params: ExecuteRunInstructionParams): Promise<RunInstruction>`.
 Produces: `RunMachine.open(watch: PlanWatch): Promise<RunInstruction>` and `advance(watch, instruction): Promise<RunInstruction>`.
+Produces: `RunMachine.establishment(watch: PlanWatch): Promise<RunEstablishmentValue>`, a read-only evidence query.
 Produces: `RunCalls.perform(watch: PlanWatch, instruction: RunInstruction): Promise<void>`.
 
 An instruction carries an opaque immutable evidence ticket, not a backend step number.
@@ -173,13 +193,20 @@ export class RunInstruction {
 }
 ```
 
+Contract (backend/src/domain/ports/run-machine.ts):
+```ts
+export const RunEstablishment: Readonly<{ ABSENT: 'absent'; ESTABLISHED: 'established' }>
+export type RunEstablishmentValue = typeof RunEstablishment[keyof typeof RunEstablishment]
+```
+
 Freeze the value and reject empty tickets/details. Ports expose §5's exact methods as abstract classes.
 Add `RunFailure` under `PlanFailure`, with `RunNotAdvanced` and `RunNotUnderstood` as its two causes.
 Keep tool diagnostics and numeric exit codes in their detail.
 `DriveRun` receives `calls: PlanCalls`, `publication: PlanPublication`, `machine: RunMachine`, `step: ExecuteRunInstruction`.
 Its immutable params contain `watch: PlanWatch` and `planner: StartedPlanCall`.
 
-Coalesce concurrent execute calls by conversation. Wait for successful planning, publish, then ask `machine.open`.
+Coalesce concurrent execute calls by conversation. Query `machine.establishment` first.
+Only `ABSENT` waits for successful planning and publishes before `machine.open`; `ESTABLISHED` calls `open` directly.
 Loop over returned instructions until delivered; refusals throw `RunNotAdvanced`. Always release the in-memory promise in `finally`.
 
 `ExecuteRunInstruction` receives `machine` and `calls: RunCalls`; its immutable params hold watch and instruction.
@@ -188,7 +215,9 @@ Return terminal instructions unchanged. Do not store a phase, choose a successor
 
 **TDD:** `it('the driver follows oracle instructions without a local step order')` feeds nonstandard instruction order and asserts exact effects.
 
-**Tests:** `'the driver follows oracle instructions without a local step order'`, `'a failed planner or publication starts no machine work'`, `'concurrent continuation shares one driver and releases it after failure'`, `'a refused instruction preserves the oracle detail without another effect'`.
+**Tests:** `'the driver follows oracle instructions without a local step order'`, `'a failed planner or publication starts no machine work'`, `'concurrent continuation shares one driver and releases it after failure'`, `'a refused instruction preserves the oracle detail without another effect'`, `'established continuation reaches the journal without planner wait or publication'`.
+
+The established case injects throwing planner/publication doubles; neither may run. Unreadable establishment also reaches neither collaborator.
 
 **Verification:** Run the application boundary suites and typecheck.
 ```bash
@@ -251,6 +280,7 @@ export class CtRunMachine extends RunMachine {
   constructor(ports: { journal: RunJournal; node: ToolRunner['runWholeOutput'];
     git: ToolRunner['runWholeOutput']; read: (path: string) => Promise<string | null>;
     ctStep: string; dispatchCheck: string; pluginRoot: string })
+  establishment(watch: PlanWatch): Promise<RunEstablishmentValue>
   open(watch: PlanWatch): Promise<RunInstruction>
   advance(watch: PlanWatch, instruction: RunInstruction): Promise<RunInstruction>
   inspect(watch: PlanWatch): Promise<RunInspection>
@@ -260,8 +290,10 @@ export class CtRunMachine extends RunMachine {
 `RunInspection` is a frozen payload beside its sole constructor. It holds a tagged `absent`, `active`, `delivered` or `uncertain` fact.
 Active facts carry the leaf instruction; uncertain facts carry detail. Inspection reads only and executes no command.
 
-On first open, list committed plans through Git and `planFilesForIssue`; demand exactly one and a successful real `--check-plan`.
+Only absent establishment lists committed plans through Git and `planFilesForIssue`, demands exactly one, and runs real `--check-plan`.
 Establish §2's manifest after publication, before the first `next`. Refuse a pre-existing machine run without this manifest.
+Both `establishment` and `inspect` use the same validated journal reader. Established `open` skips all pre-implementation publication and plan gates.
+
 Read full output with the injected capped runner. Publish the request before execution and the receipt before any further effect.
 
 Parse known output through a boundary model in this module. Import `STEPS` and `RUN_STATES`; never invoke `after`.
@@ -276,7 +308,9 @@ No startup read advances a run. No error becomes successful delivery.
 
 **TDD:** `it('oracle exit nine survives the adapter unchanged')` asserts the real boundary code and zero follow-up effects.
 
-**Tests:** `'oracle exit nine survives the adapter unchanged'`, `'a command request precedes execution and its receipt precedes the next effect'`, `'a pending forked or malformed command chain cannot resume'`, `'a delivered oracle ends the driver without another model call'`.
+**Tests:** `'oracle exit nine survives the adapter unchanged'`, `'a command request precedes execution and its receipt precedes the next effect'`, `'a pending forked or malformed command chain cannot resume'`, `'a delivered oracle ends the driver without another model call'`, `'established open never repeats current-tree plan validation'`.
+
+The established-open case makes Git plan discovery and `--check-plan` throw if called; the existing journal still supplies its instruction.
 
 **Verification:** Run oracle and existing process boundaries.
 ```bash
@@ -438,7 +472,7 @@ export class RunPlanAgents extends PlanAgents {
   constructor(ports: { mode: 'legacy' | 'machine'; legacy: PlanAgents;
     records: PlanRecords; calls: PlanCalls; transport: ClaudeCalls;
     driver: DriveRun; machine: CtRunMachine; journal: RunJournal;
-    measurements: ClaudeRunMeasurements; newId: () => string;
+    measurements: ClaudeRunMeasurements; newId: () => string; nowMs: () => number;
     stderr: (line: string) => void })
 }
 ```
@@ -454,7 +488,7 @@ Supervisor failures retain repository, issue, conversation, call and diagnostic 
 
 For recover/fix, find the exact recorded watch and inspect admission. Missing admission delegates to the legacy adapter regardless of flag.
 Existing admission retains driver ownership regardless of the current flag. No existing legacy implementation becomes a machine run.
-Recovery observes owned calls, or resumes from completed evidence only; pending command receipts and unowned incomplete calls remain inspect-only.
+Recovery follows §2's establishment and latest-fix precedence; uncertain commands and unowned incomplete calls remain inspect-only.
 Explicit driver recovery first restores missing measurement projections from completed history, including completed fixes; GET never performs this write.
 
 After delivery, fixes use the existing `PlanCalls.start(watch,'fix',changes,requestId)` and errand without modification.
@@ -483,7 +517,7 @@ Contract (backend/src/infrastructure/run-plan-recovery.ts):
 export class RunPlanRecovery {
   constructor(ports: { legacy: RecordedPlanRecovery; records: PlanRecords; calls: PlanCalls; transport: ClaudeCalls;
     machine: CtRunMachine; journal: RunJournal; agents: RunPlanAgents;
-    checkouts: CheckoutRegistry; activePlans: ActivePlans; reviews: ReviewWatch })
+    checkouts: CheckoutRegistry; activePlans: ActivePlans; reviews: ReviewWatch; nowMs: () => number })
   recover(): Promise<string | null>
 }
 ```
@@ -491,7 +525,6 @@ export class RunPlanRecovery {
 Expose `RunPlanAgents.owns(watch: PlanWatch): boolean` from its active supervisor reservation.
 Read all records, admissions, histories and journal inspections before any active projection changes.
 A malformed or unreadable record returns its diagnostic and preserves the previous projection.
-Rebuild collaborators over the same files in restart tests; do not use an in-memory call map as durable evidence.
 
 For legacy admissions, use `PlanCalls.recoveryFor` and the existing `PlanRecovery` policy without another legacy state machine.
 If no admission belongs to the driver, delegate the whole read to `RecordedPlanRecovery.recover`.
@@ -499,19 +532,21 @@ For driver admissions before a manifest, preserve planner and definite non-launc
 An owned planner projects planning. A completed successful planner allows explicit continuation; a failed planner stays inspect-only.
 
 After a manifest, multiple `implementation` call records are valid only when their `run:<ticket>` identities match this journal.
-Owned driver work projects implementing. Delivered plugin evidence projects implementing while the coordinator arranges PR delivery.
+Owned driver work projects implementing. Apply §2's latest-fix policy before any delivered projection or explicit continuation.
 Unowned unfinished calls, pending commands, inconsistent identities and malformed evidence project uncertain with inspect-only detail.
 Completed calls with an unconsumed response permit explicit continuation, not automatic GET-driven execution.
 
 GET recovery never starts a call, publishes metrics, executes a verb or writes run evidence.
 Keep original UUIDs and deadlines. No marker reset, replacement conversation, fabricated outer completion or new attempt row.
 
-Stop review watches when work becomes uncertain. Start them only for legacy completed work or delivered driver work.
+Stop review watches for uncertain work and incomplete fixes. Start them only for successful legacy or driver evidence under §2's precedence.
 Use registration identity so a stopped review loop cannot revive. Forget records that harvest removed.
 
 **TDD:** `it('restart recovers a driver identity without replaying an unowned call')` asserts original records and zero launch/verb effects.
 
-**Tests:** `'restart recovers a driver identity without replaying an unowned call'`, `'completed response recovery consumes once without another model invocation'`, `'mixed legacy and driver histories keep distinct ownership and recovery rules'`, `'GET recovery writes no evidence and cannot revive an obsolete review watcher'`.
+**Tests:** `'restart recovers a driver identity without replaying an unowned call'`, `'completed response recovery consumes once without another model invocation'`, `'mixed legacy and driver histories keep distinct ownership and recovery rules'`, `'GET recovery writes no evidence and cannot revive an obsolete review watcher'`, `'post-delivery fix policy precedes the permanent delivered marker'`.
+
+Pin failed/successful, owned/unowned incomplete, equal-timestamp and exact-deadline fix cases. Assert projection, diagnostic, watcher effects and zero executions.
 
 **Verification:** Run legacy and driver recovery boundaries.
 ```bash
@@ -546,6 +581,7 @@ Refuse malformed configuration before any process or API graph starts.
 Construct journal, oracle, measurements, model-call adapter, step action, driver and ownership-aware plan-agent wrapper.
 Use the existing files, records, transport, publication, clock and process caps. Inject separate oracle and Git runners.
 Pass `runWholeOutput` bound to its runner. Model call budgets stay on the existing transport.
+Inject `Date.now` into both new wrappers' `nowMs`; preserve recorded fix deadlines.
 
 Select the wrapper for starts, recovery and fixes; its OFF launch delegates immediately to the intact legacy adapter.
 Wire review delivery to the selected agents. Wrap the original recovery with `RunPlanRecovery`; pass both through existing server interfaces.
@@ -571,38 +607,40 @@ npm --prefix backend test -- __tests__/infrastructure/ct-api-real-process.test.t
 
 **Objective:** Prove the new driver consumes real oracle outputs through delivery without a live model or plugin edit.
 
-**Files:** `backend/__tests__/infrastructure/run-driver-real-process.test.ts` (create), `backend/__tests__/infrastructure/ct-run-machine-real-process.test.ts` (create), `backend/__tests__/infrastructure/fixtures/run-driver-mother.ts` (create).
+**Files:** `backend/__tests__/infrastructure/run-driver-real-process.test.ts` (create), `backend/__tests__/infrastructure/ct-run-machine-real-process.test.ts` (create), `backend/__tests__/infrastructure/run-recovery-real-process.test.ts` (create), `backend/__tests__/infrastructure/fixtures/run-driver-mother.ts` (create).
 
 No code — this task adds integration tests whose bodies follow the named assertions.
 
 `RunDriverMother` exposes `static ready(): Promise<RunDriverMother>`, `static conflictingBase(): Promise<RunDriverMother>` and `dispose(): Promise<void>`.
 
-The mother owns temporary Git repositories, local bare origin, state root and process handles.
-Use a complete contract-valid one-task documentation plan and actual plugin seed APIs.
-Use real local commits and oracle commands. Never hand-edit run state, counters, verdict tokens or seals.
-Register cleanup before each process; kill and await children in `afterEach`, even after a failed assertion.
+Use temporary Git repositories, a local bare origin, plugin seeds and a contract-valid plan.
+Never edit run state, counters, verdict tokens or seals. Register cleanup before spawn; kill and await children in `afterEach`.
 
-One ON happy path enters through the mounted API with real actions and adapters. Script only external GitHub and model boundaries.
-The model double answers exact requests and rejects unknown ones. It performs the task's file effect and returns synthetic schema-valid responses.
-Use separate driver OFF coverage from Task 9; do not add a second full legacy edge audit.
+The ON happy path uses the mounted API and real collaborators; double only GitHub/model boundaries with exact-request scripts that reject unknown requests.
+The model double performs task file effects and returns labelled synthetic schema responses. Task 9 owns OFF coverage.
 
-Run the real machine through report, controls, verdict, commit, reconcile, global and slice-verdict to delivered.
-Assert each emitted dispatch's files equal its consumer inputs, all call descriptors share one conversation, and judge calls have distinct identities.
-Assert private measurement evidence exists and only the plugin wrote the real attempt rows.
+Drive the real plugin to delivery; compare emitted paths, consumer inputs, conversation UUIDs and distinct judge call identities.
+Assert private measurement files; only plugin verbs write attempt rows.
 
-Keep refusal/retry cases at the oracle adapter, not the HTTP edge: wrong verb, two vetoes/advice, and a content conflict.
-Produce every state with actual verbs. A competing real consumer advances the stale-ticket case; the adapter must receive actual exit 9.
-For advice, assert the third brief contains the plugin's advice bytes. For conflict, consume the real reconciliation package and edits.
-Compare task packages to the actual staged diff and slice packages to `run.baseSha..HEAD`; never substitute `HEAD~1`.
+At the oracle adapter, use real verbs for stale-ticket exit 9, two vetoes/advice and conflict resolution.
+A competing real consumer advances the stale ticket. Check third-brief advice bytes, reconciler inputs, staged task diffs and `run.baseSha..HEAD` slice diffs.
+
+The recovery suite establishes through the real initial path, then stops after a completed role, before response consumption.
+Two cases rewrite a cited source span or add a permitted uncommitted task-scope amendment. Rebuild collaborators over the same disk.
+Explicit recovery consumes the existing response once; a repeated request adds no publication, model launch or duplicate consuming verb.
+
+Produce a delivered journal through real verbs, then persist synthetic failed/successful fix completions in separate cases and rebuild collaborators.
+Failure must project uncertain/inspect with the exact diagnostic and stopped watcher. Success must retain implementing and review watching.
+Both cases execute zero model calls or verbs. Keep these assertions at the recovery adapter, not HTTP.
 
 **TDD:** `it('the ON request reaches real machine delivery with one conversation')` asserts effects through the production graph.
 
-**Tests:** `'the ON request reaches real machine delivery with one conversation'`, `'a stale oracle ticket returns the real wrong-step exit nine'`, `'two real vetoes produce advice and the third plugin brief'`, `'a real merge conflict uses the prepared reconciler package'`.
+**Tests:** `'the ON request reaches real machine delivery with one conversation'`, `'a stale oracle ticket returns the real wrong-step exit nine'`, `'two real vetoes produce advice and the third plugin brief'`, `'a real merge conflict uses the prepared reconciler package'`, `'established recovery consumes rewritten citations and dirty scope amendments once'`, `'a later fix result overrides real delivered journal evidence after restart'`.
 
 **Verification:** Run the finite real-process matrix and retained dispatcher rehearsal.
 ```bash
 npm --prefix backend run typecheck
-npm --prefix backend test -- __tests__/infrastructure/headless-dispatch-dry-run.test.ts __tests__/infrastructure/run-driver-real-process.test.ts __tests__/infrastructure/ct-run-machine-real-process.test.ts
+npm --prefix backend test -- __tests__/infrastructure/headless-dispatch-dry-run.test.ts __tests__/infrastructure/run-driver-real-process.test.ts __tests__/infrastructure/ct-run-machine-real-process.test.ts __tests__/infrastructure/run-recovery-real-process.test.ts
 ```
 
 ### Task 11 — Record the amended delivery boundary and rollout evidence
