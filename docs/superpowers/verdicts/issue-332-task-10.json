@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 10,
+  "task_name": "Rehearse the finite producer-consumer matrix",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Independently read the entire current task-10-review.diff, identified by review token 42f6b78842fe15cab37b206e6b8db0b5e1d298ebbab6984c802838d64685960d, against the task brief and advice. The mounted API admits and publishes through real collaborators, real plugin verbs reach delivery, and the model subprocess supplies only labelled synthetic responses and task effects. The matrix preserves competing-consumer stale exit 9, two vetoes and third-brief advice, real merge conflict reconciliation, completed-role recovery after citation/scope changes, and later-fix precedence. Advisor and reconciler evidence now crosses the actual subprocess boundary: producer paths and hashes are captured before execution; the child records complete argv, prompt, ordered paths and hashes; recorded request identity links the child capture to its dispatch. Complete comparisons, original conversation assertions and package requirements close the identified input-capture gap. PR-list scripts enumerate two complete supported requests and reject the three exercised mutations. Cleanup ownership is constructed before initialization, injected into both direct model graphs, and used by the API fixture; disposal retains worker groups, captures separately detached model PIDs, discovers descendants, releases barriers, terminates/escalates, awaits registered children and checks remaining processes before removing files. No remaining task-shortfall finding is established by this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The literal test 'a new admission reaches real machine delivery with one conversation' exercises POST /start-plan against the real ct-api process. It asserts the admission conversation across recorded implementation calls and actual child captures, distinct call identities, the implement/judge/slice-judge sequence, plugin material and schemas, reported measurement attribution, the complete attempt-step sequence against consuming journal verbs, publication and real delivery. This is the production-graph assertion the TDD sentence requires.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "RunDriverMother exposes static ready(): Promise<RunDriverMother>, static conflictingBase(): Promise<RunDriverMother> and dispose(): Promise<void> as specified. The fixture uses temporary repositories, a local bare origin, plugin-rendered slice seed and a contract-valid committed plan. The changed files do not rewrite run counters, seals or plugin-produced state. Synthetic judge responses echo the token read from the real review package rather than changing it. CLI schemas, tools and agent definitions come from plugin exports/material; full child argv validation covers advisor and reconciler definitions as well as the explicit test assertions. No production signature or durable evidence contract is changed.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The four-file test-only diff leaves plugin bytes and the legacy graph unchanged, introduces no activation switch or live model invocation, and delegates transitions and consuming verbs to the real oracle. Model calls retain implementation purpose and run:<ticket> correlation, resume the original conversation, and use plugin-prepared material. Measurements remain private backend evidence with unverified-resume attribution; actual plugin attempt output is compared with the journal's consuming sequence. Recovery rebuilds collaborators over established disk evidence without republication or another model launch, and post-delivery fix assertions stay at the recovery adapter. Synthetic CLI responses are explicitly labelled and are not represented as proof of live CLI schema enforcement.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the embedded eight-document yardstick, repository conventions and the named reference files, using the package's rule-by-rule precedence. The named mother supplies scenarios shared by the three real-process suites; methods own helper behavior; new repository files are English TypeScript and carry the real-process marker. Actual application, transport, publication and recovery collaborators are assembled at fixture boundaries. Closed vocabulary: scenario selection is a literal union, oracle instructions use the production discriminant, and finite boundary scripts reject unlisted roles/requests; serialized capture fields are observations, not a new transition policy. Raw map as the return value of logic: helper results have explicit property-bearing TypeScript shapes, with no untyped dictionary used as an internal decision protocol. Two fields that have to agree: no new duplicated durable execution state is introduced; local accumulators and process bookkeeping do not create a second run phase or cursor. Errors named for where they happen: no new exception taxonomy is introduced; fixture failures describe the missing evidence or failed operation. No convention-based finding is established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "All four files are additions. The current diff removes or relaxes no pre-existing test, assertion or case, and does not amend the plan's controls.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The fixture supplies external GitHub/model answers, while production API admission, publication, ClaudeRunCalls, the detached worker, CtRunMachine and real plugin verbs produce the observed delivery and recovery effects. Advice/conflict packages originate from real oracle execution; consumer material is captured independently inside the model executable before its answer or edit. Reconciler promptPaths is taken from that child capture. Recovery cuts only after a real completed role and awaits the next-role barrier after two explicit recovery requests; the assertions observe zero new publication/launches and one report consumption. Later-fix cases start with genuinely delivered evidence, add the explicitly permitted synthetic fix completions, and exercise real recovery projection. Fixture-only PR refusal probes and the owned-process disposal check support the harness rather than substitute for driver behavior.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every changed path is one of the four task-10 files. The test cases, subprocess captures, finite request scripts and process owner serve the task's finite matrix and the advice's three remaining gaps. There is no plugin, production, frontend, activation, historical-spec, plan or telemetry migration edit in the reviewed diff. Legacy compatibility remains outside this task's implementation scope.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests assert effects from real driver/oracle execution and actual child inputs rather than accepting helper-generated expected results as consumer evidence. Cases use separate temporary roots, local bare origins, ephemeral API ports and finite local boundary scripts. Fixed post-delivery fix times avoid dependence on today's date; live timestamps are recorded inputs rather than wall-clock expectations. Recovery synchronization uses an explicit lifecycle barrier; delivery polling checks durable receipts rather than treating elapsed sleep as success. afterEach disposal covers registered fixtures, setup failures dispose internally, and nested recovery fixtures dispose in finally. Cleanup is idempotent, owns detached workers and model groups, and checks disappearance before deleting the temporary root; the happy-path test additionally verifies disposal of a live owned detached process. No concrete determinism, isolation or real-behavior violation is established. The supplied task-10-controls-4.log records successful typecheck and all 10 tests across four files; those controls are inherited, not rerun. No finer test-style finding is being made.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "42f6b78842fe15cab37b206e6b8db0b5e1d298ebbab6984c802838d64685960d"
+  }
+}
