@@ -99,10 +99,29 @@ not send `null`, which is a malformed value.
 ```
 
 For a milestone body, `id` is `null`. `agent` is the durable Claude conversation
-UUID. Planning runs with `--session-id <agent>`; after a successful committed
-plan is published to the issue, implementation is accepted automatically with
-`--resume <agent>`. `root` is git's canonical checkout path, which may differ
-from a loose request's `path`.
+UUID. Every new loose or milestone admission writes machine provenance before
+planning. After a successful committed plan is published to the issue, the
+backend drives the plugin's run sequencer in that same conversation. There is no
+feature flag, toggle, environment variable or alternate activation path for new
+admissions. `root` is git's canonical checkout path, which may differ from a
+loose request's `path`.
+
+The plugin remains the sequencing authority: its real `ct-step next` output
+chooses each call, command, retry, discard, reconciliation and terminal result.
+For each supported model dispatch the backend makes one recorded `--resume
+<agent>` call, identified by `run:<oracle-ticket>`, with the exact prepared file
+paths. The implementer receives the plugin's report schema and declared model
+and tools. Judge, advisor, slice-judge and reconciler calls receive the plugin's
+role files; the first four also receive their response schema, and judge roles
+receive their parsed plugin agent definition through `--agents` and `--agent`.
+Commands run through the dedicated tool adapter and do not create model calls.
+
+The currently supported model roles are implementer, task judge, advisor,
+slice judge and `ct-reconciler`. The plugin's current E2E dispatch has no role in
+`RoleBytes`, and slice-agent reconciliation fallbacks have no prepared role
+package. Both are refused as unsupported material rather than run with invented
+context. A malformed or ambiguous consuming command, changed sealed input, or
+missing prepared file is also a refusal.
 
 `baseline` is what the target repository's suite answered in the worktree that
 was just cut, **the same measurement that is sown into `.agent/SLICE.md`** for
@@ -273,7 +292,7 @@ applicable at this step*, not *unknown*.
 | `global` | the global gates | no |
 | `slice-judge` | the slice judge | no |
 | `e2e` | the end-to-end gate | no |
-| `delivered` | the pull request is open, nobody on it | no |
+| `delivered` | the plugin machine reached its delivered result | no |
 | `in-review` | waiting for a person on the pull request | no |
 | `fixing` | applying what a person asked for | no |
 
@@ -281,9 +300,11 @@ applicable at this step*, not *unknown*.
 
 The last three are the same underlying delivery, told apart by the plan issue's
 status: `in-review` from `in-review`, `fixing` from `in-progress`, and
-`delivered` from any other. **`pull_request` is only sent for the first two**, so
-a delivered slice whose issue never reached the review rung shows `delivered`
-with `pull_request: null` even though a pull request is open.
+`delivered` from any other. **`pull_request` is only sent for the first two.**
+The backend driver stops when the plugin reports delivery; it does not open,
+edit or merge a pull request and makes no delivery model call. The coordinating
+flow owns pull-request publication and checked release, so `delivered` alone is
+not evidence that either happened.
 
 **Refusals**
 
@@ -432,6 +453,50 @@ enclosing conversation and call directories. A descriptor records the
 conversation, purpose, nullable request identity, cwd, binary, argv, start time,
 call budget and kill grace, but no process id or environment dump.
 
+New machine work also keeps this immutable run evidence:
+
+```text
+harness/<conversation>/run/admission.json
+harness/<conversation>/run/manifest.json
+harness/<conversation>/run/operations/<ticket>/request.json
+harness/<conversation>/run/operations/<ticket>/receipt.json
+harness/<conversation>/run/operations/<ticket>/material.json
+harness/<conversation>/calls/<call>/measurements-v1.json
+```
+
+`admission.json` has exactly `version` and `conversation`; it is provenance, not
+an activation setting. The manifest identifies the repository, issue, committed
+plan path and its initial SHA-256. Each request links to the previous receipt,
+records exact argv and cwd, and hashes the plan at that operation. Each receipt
+retains the process code, stdout, stderr and raw before/after run-file bytes.
+Prepared model material is sealed separately. Forks, cycles, dangling links,
+pending requests, conflicting bytes and unexplained run files are ambiguous and
+refuse continuation. No mutating command is retried after an uncertain result.
+
+Recovery reads this evidence before legacy call classification. Established
+driver work resumes the journal without republishing the plan; an unowned or
+otherwise ambiguous operation remains `uncertain`/`inspect` and is never replayed
+automatically. An untouched established manifest can be continued explicitly.
+Existing records are delegated to the legacy path only when durable descriptors
+prove the exact initial planner plus its bound outer implementation call.
+Planner-only, fix-only, no-call, unknown-request, mixed-ownership and identity or
+cwd conflicts do not prove legacy ownership. Post-delivery fixes retain their
+existing resume path after positive provenance; a fix is refused while machine
+work is active.
+
+Each completed backend call may add `measurements-v1.json` beside its raw stream
+and completion. It includes SHA-256 source references, independently measured
+`wallDurationMs`, diagnostics and only available finite nonnegative CLI values.
+Missing values are omitted and measured zero remains zero. `total_cost_usd` is
+labelled `initial-invocation` for an initial call and `unverified-resume` for a
+resumed call; other retained CLI values are `reported-only`. These are raw
+reported totals, never incremental own-call bills, an aggregate spend, an
+invoice or a billing-limit guarantee. Existing completion records and API
+history rows keep their legacy nullable fields, for example
+`{"duration_ms":null,"tool_total_tokens":null}`; they are not migrated into the
+new private projection. The plugin still writes no backend-derived attempt row:
+issue #379 owns plugin attempt-row ingestion.
+
 An initial OS child-spawn failure writes a typed `child-spawn-failed` terminal
 before its matching non-launch receipt. The terminal has no exit code, signal or
 CLI measurement because no Claude process ran. Cleanup accepts that pair only
@@ -446,6 +511,14 @@ descriptor is uncertain because publication/continuation may still be pending;
 an incomplete call not owned by this API process is uncertain even when other
 run evidence exists. Recovery preserves the same conversation UUID and never
 spawns or replays an uncertain call automatically.
+
+Deployment uses the existing backend entrypoints and makes the machine driver
+unconditional for new admissions. Rollback is a code redeploy only, not a
+runtime switch. Before an older binary is deployed, stop or drain new admissions
+and preserve any driver-owned work for a compatible binary; the older code does
+not understand this recovery contract and must not reinterpret driver calls as
+a legacy outer implementation. There is no automatic migration, deletion or
+safe automatic downgrade.
 
 When a person requests changes on an implementation pull request, the review
 path first runs `dispatch-check --reopen` to move the issue back to the

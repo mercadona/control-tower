@@ -73,6 +73,8 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Conversation** | The identity of a coordinating session across a restart: an id minted once, a repository and a checkout root, recorded on disk so `records.recall()` can find it again; a conversation Claude Code no longer holds answers `unresumable` instead of being silently reopened as a different one |
 | **Headless call** | One immutable invocation record under `harness/<conversation>/calls/<call>/`: purpose, request identity, cwd, binary, argv and operational bounds are published before its detached worker is spawned; output and completion are separate evidence |
 | **Reported call total** | Claude CLI's `total_cost_usd` retained exactly as reported. It is attributable to an initial invocation, but a resumed total has `unverified-resume` attribution and contributes `null` attributable cost; totals are never differenced, summed as invocation spending or replaced by token-price estimates |
+| **Run admission** | The immutable `harness/<conversation>/run/admission.json` written for every new plan before planning starts. It proves that the conversation belongs to the backend driver; it is not a flag or setting, and its absence does not by itself prove legacy ownership |
+| **Run journal** | The immutable manifest and linked request/receipt chain under `harness/<conversation>/run/`. It records exact oracle argv, cwd, plan hash, process output and before/after run bytes; it is execution evidence rather than a second phase, cursor or transition table |
 | **Session attention** | Whether the coordinating session is `working` or `waiting`, with the live question while it waits; moved by `POST /session-hooks` from Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks, and dropped the moment the session works again |
 | **Execution spec** | The epic's central document in the governed checkout, `docs/superpowers/specs/*-execution.md`; gate 1 reads its state line to know whether the epic is frozen, and is what writes it |
 | **Gate 1** | The freeze as an act of this program: `analyzeSpecFreeze`'s findings on screen and a button that writes the state line and the date, commits both documents, pushes the epic's branch and opens its pull request. Only the page this backend serves can press it |
@@ -98,18 +100,46 @@ infrastructure words.
 
 ## Delivery boundary after headless continuation
 
-`ContinuePlan` owns the outer ordering: require successful planning, publish the
-committed contract-valid plan, then accept an implementation resume of the same
-conversation. Restart recovery reads durable records before any live-process
-knowledge and leaves unowned incomplete calls uncertain; it never creates a
-replacement conversation or automatically replays a call.
+`ContinuePlan` remains the legacy outer implementation path. Every new admission
+instead enters `RunPlanAgents` before planning and, after successful publication,
+`DriveRun` follows the unchanged plugin oracle in the original conversation.
+This is unconditional composition in the existing entrypoint: no feature flag,
+toggle, environment setting or configurable alternate path exists. The driver
+ends at the plugin's delivered result. It owns neither pull-request publication
+nor checked release, and the existing post-review fix path remains separate.
 
-Issue #331 records whole outer calls only. CLI `duration_ms` is retained apart
-from independently measured wall duration, and the raw reported total is
-retained apart from attributable cost. Issue #332 owns backend-driven machine
-steps and evidence-based attribution of call cost, turns and CLI duration to the
-existing per-step attempt rows. #331 neither appends a duplicate attempt nor
-derives resumed cost by subtraction or token pricing.
+Durable provenance, not configuration, chooses compatibility behavior. A valid
+admission identifies driver work unless contradictory legacy evidence exists.
+Legacy delegation requires one initial planner and one resumed outer
+implementation whose request id is exactly bound to that planner, with no
+manifest, operation or driver request. Missing admission, planner-only, fix-only,
+unknown request ids, mixed ownership and identity or cwd mismatch refuse rather
+than guess. Restart recovery reads the manifest, journal, calls and descriptors
+before live-process knowledge; unowned or ambiguous operations remain inspect
+only and are never replayed automatically.
+
+The journal is an immutable linked chain, not a backend copy of the plugin's
+transition table. Requests and receipts retain exact oracle argv, cwd, plan hash,
+exit code, stdout, stderr and before/after run bytes. A prepared dispatch is
+sealed from the plugin's printed paths, role files, schema, tools and agent
+definition. Implementer, task judge, advisor, slice judge and `ct-reconciler`
+are supported. E2E and slice-agent reconciliation fallback are refused while the
+plugin supplies no complete role package for them.
+
+Issue #331 records whole outer calls only. Issue #332 adds private immutable
+`measurements-v1.json` projections beside completed call evidence: source hashes,
+wall duration, diagnostics and available CLI-reported values. Missing metric keys
+are omitted, zero is retained, and existing nullable completion/history fields
+are unchanged. A resumed `total_cost_usd` is an `unverified-resume` reported
+total, never an incremental own-call bill; totals are not differenced, summed as
+invocation spending or replaced by token-price estimates. The backend writes no
+plugin attempt rows. Issue #379 owns any future ingestion into those rows.
+
+Deployment uses the existing entrypoint. Rollback means redeploying an older code
+revision only after driver-owned admissions are stopped or drained and their
+records preserved for compatible recovery. An older binary cannot safely adopt
+driver records as legacy work; no runtime toggle, automatic migration, deletion
+or automatic downgrade makes that safe.
 
 ## The backend leans on the plugin, never the reverse
 
