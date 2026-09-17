@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 2,
+  "task_name": "Keep immutable oracle requests and receipts",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Reviewed the complete task-2 package with token eed8d412e275e3fb50d30a979d38e54aeb494ef4137835bb4512119226ddfb7f. RunJournal preserves request and receipt text using writeOnce, exposes a missing receipt as absent, and performs no command execution or replay. Ancestor validation precedes publication and reads: lstat rejects symlink ancestors below the configured state root, and leaf inspection rejects non-regular journal files. UUID validation confines conversation and ticket path components. Malformed operation layouts refuse rather than silently disappearing.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test reconstructs RunJournal over the same temporary disk after begin, injects an ID allocator that throws if recovery allocates an identity, and asserts the retained ticket and exact request with receipt kind absent. It also verifies entry and receipt freezing. This matches the task's missing-receipt assertion without adding replay policy to the storage layer.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The constructor and all five public methods match the declared parameter order and return types. Manifest and operation paths match the contract. All three publications use HeadlessFiles.writeOnce; EEXIST is accepted only when the existing text equals the supplied text. JournalEntry lives beside its sole production constructor and freezes its fields and the absent/present receipt union. Missing requests, unexpected operation filenames, invalid ticket names and non-directory entries raise RunNotUnderstood; filesystem failures become RunNotAdvanced and unexpected filesystem defects are rethrown unchanged. The journal leaves JSON and chain interpretation to the oracle adapter as required.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The applicable decisions hold: new backend modules are TypeScript, durable evidence is immutable, no phase or latest pointer is persisted, HeadlessFiles is reused, and no plugin decisions or transition tables are copied. This task adds storage without changing admission, legacy workers, flag behavior, publication policy, model calls or plugin telemetry. Chain validation and consuming-verb decisions remain the oracle adapter's responsibility, rather than requirements imposed on this journal task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Compared the infrastructure implementation with HeadlessFiles and its real-disk fixture pattern, the backend TypeScript conventions, and the eight yardstick documents supplied in the brief under the package's precedence rule. Dependencies enter through the constructor; filesystem handling stays in infrastructure; helpers belong to types; identifiers and diagnostics are English. The four defects.md checks: closed vocabulary — receipt presence and inspected path kinds use explicit unions, with absent distinct from success; raw map as the return value of logic — entries are frozen JournalEntry instances rather than untyped maps; two fields that have to agree — no success flag, mutable cursor or sentinel receipt text duplicates evidence; errors named for where they happen — the existing RunNotAdvanced and RunNotUnderstood causes distinguish failed IO from unreadable evidence. No concrete convention defect was identified.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Both task files are additions. The diff removes or weakens no pre-existing assertion, case or test.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production code supplies persistence, collision refusal, layout validation, containment and error translation. Tests exercise the real RunJournal and HeadlessFiles on temporary disk; proxies inject only specific readFile or link failures while forwarding other filesystem operations. The symlink fixtures are built directly with mkdir, writeFile and symlink, independently of the journal. They assert rejection of reads and publications and compare the outside files' actual bytes before and after. Lifecycle tests that create evidence through begin also inspect literal disk bytes in the collision cases.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The complete diff adds only run-journal.ts and run-journal.test.ts. Its helpers and additional symlink tests serve the explicit immutable-publication, malformed-layout, filesystem-failure and conversation-containment requirements. There is no plan amendment, parser implementation, plugin change, call-directory mutation, metrics write or governed-worktree operation. No future task requirement has been used to expand this review.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The five new tests use fresh temporary directories with afterEach cleanup registered before writes, fixed identities and payloads, and no network, clock assertions or sleeps. Assertions measure retained evidence, real on-disk collision behavior, distinct refusal causes, unexpected-error identity, and symlink containment. Removing the relevant production persistence or guard behavior would invalidate those assertions. The supplied task-2-controls-2.log records successful typecheck and both test files passing with six total tests; those results were inherited without reruns. No defect in determinism, isolation or verification of real behavior was found.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "eed8d412e275e3fb50d30a979d38e54aeb494ef4137835bb4512119226ddfb7f"
+  }
+}
