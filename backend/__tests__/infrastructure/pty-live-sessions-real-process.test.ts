@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
@@ -135,6 +136,7 @@ class RealTerminals {
 class RealCabin {
   static opening(realTerminals: RealTerminals, over: Partial<{
     termGraceMs: number, killGraceMs: number, pollMs: number,
+    inspectProcessTable: (signal: AbortSignal) => Promise<string>,
   }> = {}): PtyLiveSessions {
     return new PtyLiveSessions({
       spawn: realTerminals.spawn(),
@@ -146,6 +148,53 @@ class RealCabin {
       termGraceMs: over.termGraceMs ?? 500,
       killGraceMs: over.killGraceMs ?? 500,
       pollMs: over.pollMs ?? 10,
+      inspectProcessTable: over.inspectProcessTable,
+    })
+  }
+}
+
+class ObservedProcessTables {
+  readonly completed = new Deferred()
+  observations = 0
+  targetGroup: number | null = null
+  child: number | null = null
+
+  watch(processGroup: number): void {
+    this.targetGroup = processGroup
+  }
+
+  inspect = async (signal: AbortSignal): Promise<string> => {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile('/bin/ps', ['-axo', 'pid=,pgid=,lstart='], {
+        encoding: 'utf8',
+        timeout: PtyLiveSessions.INSPECTION_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+        maxBuffer: PtyLiveSessions.INSPECTION_MAX_BUFFER_BYTES,
+        env: { ...process.env, LC_ALL: 'C' },
+        signal,
+      }, (failure, output) => {
+        if (failure !== null) reject(failure)
+        else resolve(output)
+      })
+    })
+    const members = this.#membersOf(stdout)
+    if (this.targetGroup !== null && members.includes(this.targetGroup) && members.some((pid) => pid !== this.targetGroup)) {
+      this.observations += 1
+      this.child = members.find((pid) => pid !== this.targetGroup) ?? null
+      if (this.observations >= 2) this.completed.resolve()
+    }
+
+    return stdout
+  }
+
+  #membersOf(stdout: string): number[] {
+    if (this.targetGroup === null) return []
+
+    return stdout.split('\n').flatMap((row) => {
+      const matched = row.match(/^\s*(\d+)\s+(\d+)\s+/)
+      if (matched === null || Number(matched[2]) !== this.targetGroup) return []
+
+      return [Number(matched[1])]
     })
   }
 }
@@ -172,6 +221,14 @@ class Programs {
     "const code = `process.on('SIGTERM', () => {}); process.on('SIGHUP', () => {}); if (process.send) process.send('ready'); setInterval(() => {}, 1000)`",
     "const child = spawn(process.execPath, ['-e', code], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })",
     "child.on('message', () => { console.log(`READY:${process.pid}:${child.pid}`); setTimeout(() => process.exit(0), 200) })",
+  ].join(';')
+
+  static readonly SILENT_CHILD = [
+    "const { spawn } = require('node:child_process')",
+    "const child = spawn(process.execPath, ['-e', `process.on('SIGTERM', () => {}); process.on('SIGHUP', () => {}); setInterval(() => {}, 1000)`], { stdio: 'ignore' })",
+    "process.stdin.once('data', () => process.exit(0))",
+    "process.on('exit', () => child.unref())",
+    'setInterval(() => {}, 1000)',
   ].join(';')
 
   static node(name: string, code: string): SessionProgram {
@@ -369,5 +426,38 @@ describe('PtyLiveSessions with real processes', () => {
     await closing
     await Processes.absent(child)
     expect(sessions.find(session.id)).toBeNull()
+  })
+
+  it('a silently sampled surviving child can be closed after its root exits', async () => {
+    const observations = new ObservedProcessTables()
+    const sessions = RealCabin.opening(terminals, {
+      termGraceMs: 100,
+      killGraceMs: 500,
+      pollMs: 10,
+      inspectProcessTable: observations.inspect,
+    })
+    const session = sessions.open(Programs.node('silent-child', Programs.SILENT_CHILD))
+    const other = sessions.open(Programs.echo())
+    observations.watch(terminals.opened[0].pid)
+    await Deadline.within(observations.completed.promise, 3_000, 'two ownership observations did not complete')
+    const child = observations.child
+    if (child === null) throw new Error('the silent child was not present in the observed process group')
+
+    sessions.write({ session, text: 'exit\n' })
+    await Deadline.within(new Promise<void>((resolve) => {
+      const watch = sessions.watch({ session, onBytes: () => {}, onEnded: resolve })
+      if (sessions.find(session.id) === null) {
+        watch.stop()
+        resolve()
+      }
+    }), 3_000, 'silent parent did not exit')
+    await sessions.terminate(ClosureMother.evidence(sessions, session))
+    await Promise.all([Processes.absent(child), Processes.groupAbsent(terminals.opened[0].pid)])
+
+    const token = `silent-child-other-${randomUUID()}`
+    const echoed = Printed.until(sessions, other, new RegExp(token))
+    sessions.write({ session: other, text: token })
+    await echoed
+    expect(sessions.find(other.id)).toBe(other)
   })
 })

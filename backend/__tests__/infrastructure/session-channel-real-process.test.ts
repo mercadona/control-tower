@@ -99,6 +99,7 @@ class RunningApi {
 }
 
 class SseFrames {
+  static readonly #opened = new Set<SseFrames>()
   readonly #reader: ReadableStreamDefaultReader<Uint8Array>
   readonly #decoder: TextDecoder
   #buffer: string
@@ -107,6 +108,7 @@ class SseFrames {
     this.#reader = reader
     this.#decoder = new TextDecoder()
     this.#buffer = ''
+    SseFrames.#opened.add(this)
   }
 
   static async openedOn(port: number, id: string): Promise<SseFrames> {
@@ -132,6 +134,12 @@ class SseFrames {
 
   async closedByAbort(): Promise<void> {
     await this.#reader.cancel().catch(() => {})
+    SseFrames.#opened.delete(this)
+  }
+
+  static async closeAll(): Promise<void> {
+    const opened = [...SseFrames.#opened]
+    await Promise.all(opened.map((frames) => frames.closedByAbort()))
   }
 
   static bytesOf(frame: string): string {
@@ -143,11 +151,15 @@ class Echo {
   static readonly #BUDGET_MS = 30_000
 
   static async reachesTheStream(frames: SseFrames, token: string): Promise<void> {
+    await Echo.through(frames, token)
+  }
+
+  static async through(frames: SseFrames, token: string): Promise<string> {
     const held = { seen: '' }
     const reading = (async () => {
       for (;;) {
         held.seen += SseFrames.bytesOf(await frames.next())
-        if (held.seen.includes(token)) return
+        if (held.seen.includes(token)) return held.seen
       }
     })()
     let timer: ReturnType<typeof setTimeout>
@@ -158,7 +170,7 @@ class Echo {
       )), Echo.#BUDGET_MS)
     })
     try {
-      await Promise.race([reading, budget])
+      return await Promise.race([reading, budget])
     } finally {
       clearTimeout(timer!)
     }
@@ -178,6 +190,20 @@ class AssembledToken {
   }
 }
 
+class Deadline {
+  static async within<T>(promise: Promise<T>, milliseconds: number, detail: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`${detail} within ${milliseconds}ms`)), milliseconds)
+    })
+    try {
+      return await Promise.race([promise, expired])
+    } finally {
+      clearTimeout(timer!)
+    }
+  }
+}
+
 describe('the session channel over one real process', () => {
   let realTerminals: RealTerminals
 
@@ -186,8 +212,12 @@ describe('the session channel over one real process', () => {
   })
 
   afterEach(async () => {
-    await RunningApi.stopAll()
-    realTerminals.killAll()
+    try {
+      await SseFrames.closeAll()
+      await RunningApi.stopAll()
+    } finally {
+      realTerminals.killAll()
+    }
   })
 
   it('the live session is listed, its stream carries what it prints and what is typed reaches it', async () => {
@@ -232,5 +262,48 @@ describe('the session channel over one real process', () => {
     const secondSubscription = await SseFrames.openedOn(port, session.id)
     await Echo.reachesTheStream(secondSubscription, token)
     await secondSubscription.closedByAbort()
+  })
+
+  it('HTTP and SSE progress while noisy terminal ownership is inspected', async () => {
+    const { port, session } = await RunningApi.openedOn(realTerminals)
+    const frames = await SseFrames.openedOn(port, session.id)
+    await frames.next()
+    expect((await RunningApi.typed(port, session.id, 'A=CT_; B=READY; stty -echo; printf "$A$B\\n"\r')).status).toBe(202)
+    await Deadline.within(Echo.through(frames, 'CT_READY'), 3_000, 'terminal echo was not disabled')
+    const command = `node -e 'let i=0; process.stdout.write("CT_"+"BEGIN\\n"); ` +
+      `const timer=setInterval(()=>{process.stdout.write(String(i).padStart(3,"0")+","); i++; ` +
+      `if(i===60){clearInterval(timer); process.stdout.write("\\nCT_"+"PAUSED\\n"); ` +
+      `process.stdin.once("data",()=>{while(i<120){process.stdout.write(String(i).padStart(3,"0")+","); i++} ` +
+      `process.stdout.write("\\nCT_"+"END\\n")})}},5)' ; stty echo\r`
+    try {
+      expect((await RunningApi.typed(port, session.id, command)).status).toBe(202)
+      const paused = await Deadline.within(
+        Echo.through(frames, 'CT_PAUSED'), 10_000, 'the output flood did not reach its pause handshake'
+      )
+      const normalizedPaused = paused.replace(/\r/g, '')
+      const firstHalf = normalizedPaused.match(/CT_BEGIN\n([^\n]+)\nCT_PAUSED\n/)?.[1]
+      if (firstHalf === undefined) throw new Error(`paused flood framing was ${JSON.stringify(normalizedPaused)}`)
+      expect(firstHalf).toBe(Array.from({ length: 60 }, (_, index) => `${String(index).padStart(3, '0')},`).join(''))
+
+      const response = await Deadline.within(
+        RunningApi.listed(port), 3_000, 'session listing did not progress while flood completion was blocked'
+      )
+      expect(response.status).toBe(200)
+      expect((await response.json() as SessionsBody).sessions).toContainEqual({ id: session.id, name: session.name })
+      expect(normalizedPaused).not.toContain('CT_END')
+
+      expect((await RunningApi.typed(port, session.id, '\n')).status).toBe(202)
+      const completed = await Deadline.within(
+        Echo.through(frames, 'CT_END'), 10_000, 'the blocked output flood did not complete after its release handshake'
+      )
+      const assembled = (paused + completed).replace(/\r/g, '')
+      const numbered = assembled.match(/CT_BEGIN\n([\s\S]*?)\nCT_END\n/)?.[1]
+        ?.replace(/\nCT_PAUSED\n\n?/g, '')
+      expect(numbered).toBe(
+        Array.from({ length: 120 }, (_, index) => `${String(index).padStart(3, '0')},`).join('')
+      )
+    } finally {
+      await frames.closedByAbort()
+    }
   })
 })
