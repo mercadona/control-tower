@@ -100,7 +100,9 @@ Then, **once per repository you want to govern**:
 ```
 
 `/ct-init` leaves `.agent/STATE.md`, `.agent/conventions.md`, the slice table
-contract in `docs/superpowers/CONTRATO-SLICES.md`, a short section in
+contract (`docs/superpowers/SLICES-CONTRACT.md` on a fresh repository;
+`docs/superpowers/CONTRATO-SLICES.md`, kept in place, on one that already had
+that legacy name), a short section in
 `AGENTS.md` that links to it, the `.gitignore` rules, `.claude/settings.json`
 and the scope gate under `.github/` (the workflow, the bundle, and the one-line `package.json` that keeps node reading that bundle as ESM). **It plans nothing**: filling in the
 repository's real commands — build, test, lint, CI — in `AGENTS.md` is up to

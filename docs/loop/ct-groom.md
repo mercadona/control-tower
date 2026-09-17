@@ -1,6 +1,6 @@
 # `/ct-groom` — reference and design
 
-> Text moved in full from `plugin/commands/ct-groom.md` (sub-issue #93). The command keeps the invocation, the table of exit codes and a link to this document; what follows is the reference for the spec's format aimed at whoever writes it, the detail of every validation and abort, and the history of the decisions (F5, F15, F21, F23, F32…). The slices table contract that `/ct-init` seeds into every governed repo (`docs/superpowers/CONTRATO-SLICES.md`) is the version for whoever drafts specs; this is the version for whoever runs the groom.
+> Text moved in full from `plugin/commands/ct-groom.md` (sub-issue #93). The command keeps the invocation, the table of exit codes and a link to this document; what follows is the reference for the spec's format aimed at whoever writes it, the detail of every validation and abort, and the history of the decisions (F5, F15, F21, F23, F32…). The slices table contract that `/ct-init` seeds into every governed repo (`docs/superpowers/SLICES-CONTRACT.md` on a fresh repo, or the legacy `docs/superpowers/CONTRATO-SLICES.md` where it already existed) is the version for whoever drafts specs; this is the version for whoever runs the groom.
 
 The invocation:
 

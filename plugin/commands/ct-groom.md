@@ -21,4 +21,4 @@ Groom with the spec already pushed to the default branch (otherwise the issues a
 
 `--dry-run --repo` returns the same `3` as the real run: if you automate this, do not chain with `&&`.
 
-The table's format is fixed by the contract that `/ct-init` seeds into every repo (`docs/superpowers/CONTRATO-SLICES.md`). Full reference —columns, aborts, `--reconcile`, the link to the spec and the history—: `docs/loop/ct-groom.md` in the plugin's repo.
+The table's format is fixed by the contract that `/ct-init` seeds into every repo (`docs/superpowers/SLICES-CONTRACT.md` on a fresh repo, or the legacy `docs/superpowers/CONTRATO-SLICES.md` where it already existed). Full reference —columns, aborts, `--reconcile`, the link to the spec and the history—: `docs/loop/ct-groom.md` in the plugin's repo.

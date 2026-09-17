@@ -2085,3 +2085,35 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+// #188 follow-up — the documentation must name BOTH contract filenames the
+// script can actually write: SLICES-CONTRACT.md (a fresh repo) and the legacy
+// CONTRATO-SLICES.md (a repo that already carried it). A doc that names only
+// one of them is wrong for the other case, and this pins both names against
+// the script's own source so a future rename of either cannot drift silently.
+describe('the documented contract filenames match what ct-init.sh can write', () => {
+  const FRESH_NAME = initScriptSrc.match(/^\s*CONTRATO_MD="\$CONTRATO_DIR\/(.+)"$/m)?.[1]
+  const LEGACY_NAME = initScriptSrc.match(/^\s*CONTRATO_MD_LEGACY="\$CONTRATO_DIR\/(.+)"$/m)?.[1]
+
+  it('extracted both names from ct-init.sh', () => {
+    expect(FRESH_NAME).toBe('SLICES-CONTRACT.md')
+    expect(LEGACY_NAME).toBe('CONTRATO-SLICES.md')
+  })
+
+  const docsRoot = join(root, '..')
+  const DOCS_NAMING_THE_CONTRACT = [
+    'plugin/commands/ct-init.md',
+    'plugin/commands/ct-groom.md',
+    'plugin/README.md',
+    'docs/loop/ct-init.md',
+    'docs/loop/ct-groom.md',
+    'docs/loop/README.md',
+    'README.md',
+  ]
+
+  it.each(DOCS_NAMING_THE_CONTRACT)('%s names both the fresh and the legacy contract filename', (relPath) => {
+    const text = readFileSync(join(docsRoot, relPath), 'utf8')
+    expect(text).toContain(FRESH_NAME)
+    expect(text).toContain(LEGACY_NAME)
+  })
+})
