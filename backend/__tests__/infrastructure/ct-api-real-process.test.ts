@@ -49,6 +49,7 @@ class HostCheckout {
 
 class Entrypoint {
   static readonly #PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'infrastructure', 'ct-api.ts')
+  static readonly #ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
   static readonly #TIMEOUT_MS = 30_000
   static readonly #spawned: ChildProcess[] = []
 
@@ -129,6 +130,36 @@ class Entrypoint {
 
   static async listening(environment: NodeJS.ProcessEnv): Promise<number> {
     return (await Entrypoint.#started(environment)).port
+  }
+
+  static async makeStart(environment: NodeJS.ProcessEnv): Promise<number> {
+    const child = spawn('make', ['--silent', 'start'], {
+      cwd: Entrypoint.#ROOT,
+      env: { ...process.env, ...environment },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    Entrypoint.#spawned.push(child)
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
+    return new Promise<number>((resolve, reject) => {
+      let stdout = ''
+      const timer = setTimeout(() => reject(new Error(`make start did not print a port: ${stderr}`)), Entrypoint.#TIMEOUT_MS)
+      child.stdout.on('data', (chunk) => {
+        stdout += String(chunk)
+        const line = stdout.split('\n').find((candidate) => candidate.startsWith('{"port":'))
+        if (line === undefined) return
+        clearTimeout(timer)
+        resolve((JSON.parse(line) as { port: number }).port)
+      })
+      child.once('error', reject)
+      child.once('close', (code) => reject(new Error(`make start exited ${String(code)}: ${stderr}`)))
+    })
+  }
+
+  static makeRunBackendCommand(): string {
+    return execFileSync('make', ['--dry-run', 'run-backend'], {
+      cwd: Entrypoint.#ROOT, encoding: 'utf8', timeout: Entrypoint.#TIMEOUT_MS,
+    })
   }
 
   static async #started(environment: NodeJS.ProcessEnv): Promise<Started> {
@@ -807,6 +838,23 @@ describe('ct-api entrypoint', () => {
 
     expect(port).toBeGreaterThan(0)
   })
+
+  it('existing entrypoints start without an activation setting', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-entrypoint-settings-'))
+    try {
+      const port = await Entrypoint.makeStart({
+        CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, CT_HARVEST_BQ_TABLE: '', SHELL: '/bin/sh',
+      })
+
+      expect(port).toBeGreaterThan(0)
+      expect(Entrypoint.makeRunBackendCommand()).toMatch(
+        /CT_API_PORT=.* CLAUDE_CONFIG_DIR=.* CT_HARVEST_BQ_TABLE=.* node backend\/src\/infrastructure\/ct-api\.ts/,
+      )
+    } finally {
+      Entrypoint.killAll()
+      await RunFileFixture.remove(state)
+    }
+  }, 60_000)
 
   it('a_freshly_started_backend_lists_no_session_because_nothing_has_been_asked_of_it_yet', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0', SHELL: '/bin/sh' })

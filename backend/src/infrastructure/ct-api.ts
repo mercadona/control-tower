@@ -46,6 +46,8 @@ import { CtGroomEpic } from './ct-groom-epic.ts'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
+import { DriveRun } from '../application/actions/drive-run.ts'
+import { ExecuteRunInstruction } from '../application/actions/execute-run-instruction.ts'
 import { RecoverPlan } from '../application/actions/recover-plan.ts'
 import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -90,6 +92,12 @@ import { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
 import { GhPlanPublication } from './gh-plan-publication.ts'
 import { GhDispatchCandidates } from './gh-dispatch-candidates.ts'
 import { DispatchCheckClaims } from './dispatch-check-claims.ts'
+import { RunJournal } from './run-journal.ts'
+import { CtRunMachine } from './ct-run-machine.ts'
+import { ClaudeRunMeasurements } from './claude-run-measurements.ts'
+import { ClaudeRunCalls } from './claude-run-calls.ts'
+import { RunPlanAgents } from './run-plan-agents.ts'
+import { RunPlanRecovery } from './run-plan-recovery.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
 import type { UserStories } from '../domain/ports/user-stories.ts'
@@ -490,11 +498,50 @@ class CtApi {
       digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
     })
     const continuation = new ContinuePlan({ calls: planCalls, publication })
-    const planAgents = new HeadlessPlanAgents({
+    const legacyPlanAgents = new HeadlessPlanAgents({
       records,
       calls: planCalls,
       continuation,
       newId: randomUUID,
+      stderr: (line) => process.stderr.write(line),
+    })
+    const journal = new RunJournal({ files, newId: randomUUID })
+    const oracleRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS })
+    const runGitRunner = new ToolRunner({ bin: GitWorkspace.BIN, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+    const machine = new CtRunMachine({
+      journal,
+      node: oracleRunner.runWholeOutput.bind(oracleRunner),
+      git: runGitRunner.runWholeOutput.bind(runGitRunner),
+      read: Disk.read,
+      ctStep: PluginTree.ctStep(),
+      dispatchCheck: PluginTree.dispatchCheck(),
+      pluginRoot: PluginTree.root(),
+    })
+    const measurements = new ClaudeRunMeasurements({ files, calls })
+    const runCalls = new ClaudeRunCalls({
+      calls,
+      machine,
+      measurements,
+      files,
+      pluginRoot: PluginTree.root(),
+    })
+    const driver = new DriveRun({
+      calls: planCalls,
+      publication,
+      machine,
+      step: new ExecuteRunInstruction({ machine, calls: runCalls }),
+    })
+    const planAgents = new RunPlanAgents({
+      legacy: legacyPlanAgents,
+      records,
+      calls: planCalls,
+      transport: calls,
+      driver,
+      machine,
+      journal,
+      measurements,
+      newId: randomUUID,
+      nowMs: Date.now,
       stderr: (line) => process.stderr.write(line),
     })
     const claims = new DispatchCheckClaims({
@@ -504,13 +551,26 @@ class CtApi {
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
-    const recovery = new RecordedPlanRecovery({
+    const legacyRecovery = new RecordedPlanRecovery({
       records,
       calls: planCalls,
       ownership: calls,
       checkouts,
       activePlans,
       reviews: pullRequestReviews,
+    })
+    const recovery = new RunPlanRecovery({
+      legacy: legacyRecovery,
+      records,
+      calls: planCalls,
+      transport: calls,
+      machine,
+      journal,
+      agents: planAgents,
+      checkouts,
+      activePlans,
+      reviews: pullRequestReviews,
+      nowMs: Date.now,
     })
     const liveSessions = new PtyLiveSessions({
       spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
