@@ -16,7 +16,7 @@ import type { UserStory } from '../../domain/value-objects/user-story.ts'
 import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
 import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 import type { Workspace } from '../../domain/ports/workspace.ts'
-import type { WorkspaceLocation } from '../../domain/value-objects/workspace-location.ts'
+import type { RootedWorkspaceLocation } from '../../domain/value-objects/rooted-workspace-location.ts'
 import type { DispatchClaims } from '../../domain/ports/dispatch-claims.ts'
 import type { PlanRecords } from '../../domain/ports/plan-records.ts'
 
@@ -155,7 +155,7 @@ export class StartPlan {
     target: PlanTarget,
     story: UserStoryKey | UserStoryUrl | null,
     issue: PlanIssue,
-    located: WorkspaceLocation
+    located: RootedWorkspaceLocation
   ): Promise<string> {
     try {
       return await this.planAgents.launch(new PlanBriefing({

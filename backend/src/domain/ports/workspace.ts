@@ -2,7 +2,7 @@ import type { CheckoutRoot } from '../value-objects/checkout-root.ts'
 import type { PlanIssue } from '../value-objects/plan-issue.ts'
 import type { RepositoryName } from '../value-objects/repository-name.ts'
 import type { SownWorkspace } from '../value-objects/sown-workspace.ts'
-import type { WorkspaceLocation } from '../value-objects/workspace-location.ts'
+import type { RootedWorkspaceLocation } from '../value-objects/rooted-workspace-location.ts'
 import type { WorkspaceSurvey } from '../value-objects/workspace-survey.ts'
 import type { PlanWatch } from '../value-objects/plan-watch.ts'
 import type { UnusedWorkspace } from '../value-objects/unused-workspace.ts'
@@ -48,7 +48,7 @@ export class Workspace {
     throw new Error(`${this.constructor.name} must implement survey(root), asked about ${root}`)
   }
 
-  async undo(located: WorkspaceLocation): Promise<void> {
+  async undo(located: RootedWorkspaceLocation): Promise<void> {
     throw new Error(`${this.constructor.name} must implement undo(located), asked for ${located?.path}`)
   }
 }

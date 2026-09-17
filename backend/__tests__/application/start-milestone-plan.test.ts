@@ -18,7 +18,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.ts'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 
 class DispatchCandidatesDouble extends DispatchCandidates {
@@ -90,7 +90,7 @@ class WorkspaceDouble extends Workspace {
   readonly steps: string[]
   readonly confirmed: { root: CheckoutRoot, repository: RepositoryName }[] = []
   readonly prepared: ClaimAsked[] = []
-  readonly undone: WorkspaceLocation[] = []
+  readonly undone: RootedWorkspaceLocation[] = []
 
   constructor({ prepareAnswer, undoAnswer, steps }: {
     prepareAnswer: SownWorkspace | Error,
@@ -118,7 +118,7 @@ class WorkspaceDouble extends Workspace {
     return this.prepareAnswer
   }
 
-  override async undo(located: WorkspaceLocation): Promise<void> {
+  override async undo(located: RootedWorkspaceLocation): Promise<void> {
     this.steps.push('undo')
     this.undone.push(located)
     if (this.undoAnswer !== null) throw this.undoAnswer
@@ -164,7 +164,7 @@ class MilestoneFlow {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly MILESTONE = 'ready milestone'
   static readonly ISSUE = new PlanIssue({ number: 31, url: 'https://github.com/owner/name/issues/31' })
-  static readonly LOCATED = new WorkspaceLocation({
+  static readonly LOCATED = new RootedWorkspaceLocation({
     root: '/repo', path: '/repo/.worktrees/31', branch: 'feat/31',
   })
   static readonly BASELINE = new BaselineResult({

@@ -11,7 +11,7 @@ import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
 import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -112,7 +112,7 @@ class PlanIssuesDouble extends PlanIssues {
 }
 
 class WorkspaceDouble extends Workspace {
-  static LOCATED = new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/7', branch: 'feat/7' })
+  static LOCATED = new RootedWorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/7', branch: 'feat/7' })
   static GREEN = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
   static SOWN = new SownWorkspace({ located: WorkspaceDouble.LOCATED, baseline: WorkspaceDouble.GREEN })
 
@@ -122,7 +122,7 @@ class WorkspaceDouble extends Workspace {
   confirmFailureRoot: CheckoutRoot | null
   undoFailure: WorkspaceNotCleaned | null
   asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
-  undone: WorkspaceLocation[]
+  undone: RootedWorkspaceLocation[]
   confirmed: { root: CheckoutRoot, repository: RepositoryName }[]
   steps: string[]
 
@@ -191,7 +191,7 @@ class WorkspaceDouble extends Workspace {
     return this.answer
   }
 
-  async undo(located: WorkspaceLocation): Promise<void> {
+  async undo(located: RootedWorkspaceLocation): Promise<void> {
     this.undone.push(located)
     this.steps.push('undo')
     if (this.undoFailure !== null) throw this.undoFailure
