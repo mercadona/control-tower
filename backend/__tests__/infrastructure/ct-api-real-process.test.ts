@@ -554,6 +554,15 @@ describe('ct-api entrypoint', () => {
     expect(port).toBeGreaterThan(0)
   })
 
+  it('a_freshly_started_backend_lists_no_session_because_nothing_has_been_asked_of_it_yet', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', SHELL: '/bin/sh' })
+
+    const listed = await (await fetch(`http://127.0.0.1:${port}/sessions`)).json() as
+      { sessions: { name: string }[] }
+
+    expect(listed.sessions).toEqual([])
+  })
+
   it('a_bad_invocation_is_refused_with_the_reason_and_a_usage_line_that_names_the_command_the_documentation_starts_the_backend_with', async () => {
     const refusal = await Entrypoint.refused({ CT_API_PORT: 'a fistful of ports' })
 

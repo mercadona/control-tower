@@ -546,7 +546,6 @@ class CtApi {
     const liveSessions = new PtyLiveSessions({
       spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
     })
-    liveSessions.open(PtyLiveSessions.loginShell(environment.SHELL, process.cwd(), environment))
     let listeningPort: number | null = null
     const claudeConversations = new ClaudeConversations({
       liveSessions,
