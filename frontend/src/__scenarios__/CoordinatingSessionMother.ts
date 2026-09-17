@@ -121,6 +121,22 @@ const ended = () => ({
     `"detail":"${ENDED_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
+const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof ended>) => ({
+  ...answer,
+  body: JSON.stringify({
+    ...JSON.parse(answer.body),
+    operation: 'close-failed',
+    closureError: {
+      code: 'session-termination-permission-denied',
+      detail: 'permission denied for the saved process group',
+    },
+  }),
+})
+
+const liveCloseFailed = () => closeFailed(working())
+
+const endedCloseFailed = () => closeFailed(ended())
+
 const endedRead = (): CoordinatingSessionRead => ({
   phase: 'read',
   kind: 'ended',
@@ -172,6 +188,8 @@ export const CoordinatingSessionMother = {
   waiting,
   unresumable,
   ended,
+  liveCloseFailed,
+  endedCloseFailed,
   opened,
   alreadyLive,
 }

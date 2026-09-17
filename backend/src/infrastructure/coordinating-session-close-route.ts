@@ -11,6 +11,8 @@ import {
   SessionClosureNotRecorded,
   SessionClosureNotUnderstood,
   SessionNotTerminated,
+  SessionOwnershipUnverifiable,
+  SessionTerminationPermissionDenied,
   SessionTerminationUnconfirmed,
 } from '../domain/exceptions.ts'
 import type { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
@@ -170,6 +172,12 @@ export class CoordinatingSessionCloseRoute {
     }
     if (cause instanceof SessionClosureNotUnderstood) {
       return new Refusal({ status: 400, code: 'session-closure-not-understood', detail: cause.message })
+    }
+    if (cause instanceof SessionOwnershipUnverifiable) {
+      return new Refusal({ status: 400, code: 'session-ownership-unverifiable', detail: cause.message })
+    }
+    if (cause instanceof SessionTerminationPermissionDenied) {
+      return new Refusal({ status: 400, code: 'session-termination-permission-denied', detail: cause.message })
     }
     if (cause instanceof SessionNotTerminated) {
       return new Refusal({ status: 400, code: 'session-not-terminated', detail: cause.message })

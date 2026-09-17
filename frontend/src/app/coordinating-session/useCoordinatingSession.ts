@@ -46,6 +46,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
   const [opening, setOpening] = useState<OpeningState>('idle')
   const [closing, setClosing] = useState(false)
   const [closeError, setCloseError] = useState<string | null>(null)
+  const explicitCloseErrorRef = useRef(false)
   const [closedSessionIds, setClosedSessionIds] = useState<readonly string[]>([])
   const mountedRef = useRef(false)
   const readRef = useRef<CoordinatingSessionRead>(CONNECTING)
@@ -92,6 +93,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
           setClosedSessionIds((current) => current.includes(terminalId) ? current : [...current, terminalId])
         }
         updateHeld(null)
+        explicitCloseErrorRef.current = false
         setCloseError(null)
         updateOpening('idle')
       }
@@ -105,7 +107,8 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     const snapshot = { outcome, terminal }
     updateHeld(snapshot)
     updateRead({ phase: 'read', ...outcome })
-    if (outcome.closureError !== null) {
+    if (previous?.outcome.target !== outcome.target) explicitCloseErrorRef.current = false
+    if (outcome.closureError !== null && !explicitCloseErrorRef.current) {
       setCloseError(productError(outcome.closureError.code, outcome.closureError.detail))
     } else if (previous?.outcome.target !== outcome.target) {
       setCloseError(null)
@@ -190,6 +193,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     updateHeld({ outcome, terminal: opened.session })
     updateRead({ phase: 'read', ...outcome })
     updateOpening('idle')
+    explicitCloseErrorRef.current = false
     setCloseError(null)
   }, [updateHeld, updateOpening, updateRead])
 
@@ -229,6 +233,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     pendingCloseRef.current = pending
     beginMutation()
     updateClosing(true)
+    explicitCloseErrorRef.current = false
     setCloseError(null)
     let outcome: CloseOutcome
     try {
@@ -243,16 +248,19 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
         }
         if (heldRef.current?.outcome.target === pending.target) updateHeld(null)
         updateRead({ phase: 'read', kind: 'none', operation: 'idle' })
+        explicitCloseErrorRef.current = false
         setCloseError(null)
       } else {
         const error = outcome.kind === 'refused'
           ? productError(outcome.code, outcome.error)
           : 'No se pudo confirmar el cierre de la sesión. Puedes volver a intentarlo.'
+        explicitCloseErrorRef.current = true
         setCloseError(error)
       }
       return outcome
     } catch {
       outcome = { kind: 'backend-unreachable' }
+      explicitCloseErrorRef.current = true
       setCloseError('No se pudo confirmar el cierre de la sesión. Puedes volver a intentarlo.')
       return outcome
     } finally {
@@ -269,7 +277,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
   const idleWithoutHeld = held === null && read.phase === 'read' && read.kind === 'none' && read.operation === 'idle'
   const blocksOpening = opening !== 'idle' || closing || heldBlocksOpening || (held === null && !idleWithoutHeld)
   const operationBusy = opening !== 'idle' || closing || operation === 'recovering' || operation === 'opening' ||
-    operation === 'closing' || operation === 'close-failed'
+    operation === 'closing'
   const opened = held?.outcome.kind === 'live' && held.terminal !== null
     ? {
         target: held.outcome.target,

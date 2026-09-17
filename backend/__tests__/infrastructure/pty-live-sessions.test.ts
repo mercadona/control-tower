@@ -5,13 +5,17 @@ import { SessionProgram } from '../../src/domain/value-objects/session-program.t
 import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { SessionNotTerminated, SessionTerminationUnconfirmed } from '../../src/domain/exceptions.ts'
+import {
+  SessionNotTerminated, SessionOwnershipUnverifiable, SessionTerminationPermissionDenied,
+  SessionTerminationUnconfirmed,
+} from '../../src/domain/exceptions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import {
   CloseCoordinatingSession,
   CloseCoordinatingSessionParams,
 } from '../../src/application/actions/close-coordinating-session.ts'
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
+import { SessionProcessOwnership } from '../../src/domain/value-objects/session-process-ownership.ts'
 
 const childProcessDouble = vi.hoisted(() => ({ execFile: vi.fn() }))
 vi.mock('node:child_process', () => ({ execFile: childProcessDouble.execFile }))
@@ -67,6 +71,7 @@ class TerminalDouble implements Terminal {
   readonly pid: number
   readonly written: string[] = []
   readonly resized: ResizedTo[] = []
+  writeFailure: Error | null = null
   resizeFailure: Error | null = null
   #onData: ((bytes: string) => void) | null = null
   #onExit: (() => void) | null = null
@@ -85,6 +90,7 @@ class TerminalDouble implements Terminal {
   }
 
   write(text: string): void {
+    if (this.writeFailure !== null) throw this.writeFailure
     this.written.push(text)
   }
 
@@ -298,6 +304,10 @@ class TerminationMother {
       session,
     })
   }
+
+  static async prepared(sessions: PtyLiveSessions, session: LiveSession): Promise<SessionClosure> {
+    return sessions.prepareTermination(TerminationMother.evidence(sessions, session))
+  }
 }
 
 class ControlledProcesses {
@@ -333,15 +343,28 @@ class ClosureRecords extends ConversationRecords {
   failCompletion = false
   requestStarted: Deferred | null = null
   requestRelease: Deferred | null = null
+  checkpointStarted: Deferred | null = null
+  checkpointRelease: Deferred | null = null
+  requestCount = 0
 
   async recallClosure(): Promise<SessionClosure | null> {
     return this.closure
   }
 
   async requestClosure(closure: SessionClosure): Promise<void> {
-    this.closure = closure
-    this.requestStarted?.resolve()
+    this.requestCount += 1
+    if (this.requestCount === 1) {
+      this.closure = closure
+      this.requestStarted?.resolve()
+      await this.requestRelease?.promise
+      return
+    }
+    if (this.requestCount === 2) {
+      this.checkpointStarted?.resolve()
+      await this.checkpointRelease?.promise
+    }
     await this.requestRelease?.promise
+    this.closure = closure
   }
 
   async completeClosure(closure: SessionClosure): Promise<void> {
@@ -630,7 +653,8 @@ describe('PtyLiveSessions', () => {
       if (signal === 'SIGKILL') processes.alive.delete(terminal.pid)
     }
 
-    const evidence = TerminationMother.evidence(sessions, session)
+    await Inspections.settle()
+    const evidence = await TerminationMother.prepared(sessions, session)
     const closing = sessions.terminate(evidence)
     await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
     expect(processes.signals).toContainEqual({ pid: -terminal.pid, signal: 'SIGKILL' })
@@ -698,8 +722,9 @@ describe('PtyLiveSessions', () => {
       }
     }
 
-    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
-      .rejects.toBeInstanceOf(SessionNotTerminated)
+    await Inspections.settle()
+    const closing = sessions.terminate(await TerminationMother.prepared(sessions, session))
+    await expect(closing).resolves.toBeUndefined()
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
     expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
   })
@@ -730,8 +755,9 @@ describe('PtyLiveSessions', () => {
     const session = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
 
-    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
-      .rejects.toBeInstanceOf(SessionNotTerminated)
+    await Inspections.settle()
+    const evidence = await TerminationMother.prepared(sessions, session)
+    await expect(sessions.terminate(evidence)).rejects.toBeInstanceOf(SessionNotTerminated)
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
     expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
   })
@@ -760,13 +786,13 @@ describe('PtyLiveSessions', () => {
     const session = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
 
-    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
-      .rejects.toBeInstanceOf(SessionNotTerminated)
+    await Inspections.settle()
+    await expect(sessions.terminate(await TerminationMother.prepared(sessions, session))).resolves.toBeUndefined()
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
     expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
   })
 
-  it('validates the original identities before retrying TERM after root exit', async () => {
+  it('a replaced leader confirms only the old group without signalling its replacement', async () => {
     const processes = new ControlledProcesses()
     const spawn = SpawnDouble.recording()
     let identity = new Map([[4101, '4101:original'], [4200, '4200:original-child']])
@@ -803,9 +829,257 @@ describe('PtyLiveSessions', () => {
     identity = new Map([[4101, '4101:replacement']])
     processes.signals.length = 0
 
-    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
     expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
-    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+
+    const replacementSignals: { pid: number, signal: NodeJS.Signals | 0 }[] = []
+    const restarted = Cabin.opening({
+      inspectProcessTable: async () => ProcessTables.group(9999, new Map([[4101, '4101:replacement']])),
+      signal: (pid, signal) => { replacementSignals.push({ pid, signal }) },
+    })
+    const durable = new SessionClosure({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session: 'session-1',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+      ownership: new SessionProcessOwnership({
+        rootIdentity: '4101:Thu Sep 17 22:29:08 2026',
+        members: [{ pid: 4101, identity: '4101:Thu Sep 17 22:29:08 2026' }],
+      }),
+    })
+    await expect(restarted.terminate(durable)).resolves.toBeUndefined()
+    expect(replacementSignals.filter(({ signal }) => signal !== 0)).toEqual([])
+    await expect(restarted.terminate(durable)).resolves.toBeUndefined()
+    expect(replacementSignals.filter(({ signal }) => signal !== 0)).toEqual([])
+  })
+
+  it('latches background leader replacement across the whole process table', async () => {
+    vi.useFakeTimers()
+    const inspection = new ControlledInspection(Date.now)
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.withPids(4101, 4102)
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: inspection.inspect,
+      inspectionNow: Date.now,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const sameGroup = sessions.open(LoginProgram.default())
+    const movedGroup = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    processes.alive.add(4102)
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.succeeds(0, ProcessTables.groups(new Map([
+      [4101, new Map([[4101, '4101:original']])],
+      [4102, new Map([[4102, '4102:original']])],
+    ])))
+    await AsyncTurns.run()
+    const sameReceipt = TerminationMother.evidence(sessions, sameGroup)
+    const movedReceipt = TerminationMother.evidence(sessions, movedGroup)
+
+    await Inspections.until(() => inspection.calls.length === 2, 'replacement background scan did not start')
+    inspection.succeeds(1, ProcessTables.groups(new Map([
+      [4101, new Map([[4101, '4101:replacement']])],
+      [9999, new Map([[4102, '4102:replacement']])],
+    ])))
+    await AsyncTurns.run()
+    expect(sessions.find(sameGroup.id)).toBeNull()
+    expect(sessions.find(movedGroup.id)).toBeNull()
+
+    await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_INTERVAL_MS * 2)
+    expect(inspection.calls).toHaveLength(2)
+    await expect(sessions.terminate(sameReceipt)).resolves.toBeUndefined()
+    await expect(sessions.terminate(movedReceipt)).resolves.toBeUndefined()
+    await expect(sessions.terminate(sameReceipt)).resolves.toBeUndefined()
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+  })
+
+  it('replacement proof finalizes a previously unusable terminal exactly once', async () => {
+    const spawn = SpawnDouble.withPids(4101, 4102)
+    let table = ProcessTables.groups(new Map([
+      [4101, new Map([[4101, '4101:original']])],
+      [4102, new Map([[4102, '4102:original']])],
+    ]))
+    const signals: { pid: number, signal: NodeJS.Signals | 0 }[] = []
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: async () => table,
+      signal: (pid, signal) => { signals.push({ pid, signal }) },
+    })
+    const brokenWrite = sessions.open(LoginProgram.default())
+    const brokenResize = sessions.open(LoginProgram.default())
+    await Inspections.settle()
+    const writeReceipt = TerminationMother.evidence(sessions, brokenWrite)
+    const resizeReceipt = TerminationMother.evidence(sessions, brokenResize)
+    let writeEnded = 0
+    let resizeEnded = 0
+    let lateBytes = ''
+    sessions.watch({ session: brokenWrite, onBytes: (bytes) => { lateBytes += bytes }, onEnded: () => { writeEnded += 1 } })
+    sessions.watch({ session: brokenResize, onBytes: (bytes) => { lateBytes += bytes }, onEnded: () => { resizeEnded += 1 } })
+    spawn.terminals[0].writeFailure = new Error('EBADF')
+    spawn.terminals[1].resizeFailure = new Error('EBADF')
+    expect(() => sessions.write({ session: brokenWrite, text: 'broken' })).toThrow(LiveSessionNotLive)
+    expect(() => sessions.resize({ session: brokenResize, cols: 100, rows: 40 })).toThrow(LiveSessionNotLive)
+
+    table = ProcessTables.groups(new Map([
+      [4101, new Map([[4101, '4101:replacement']])],
+      [9999, new Map([[4102, '4102:replacement']])],
+    ]))
+    const [preparedWrite, preparedResize] = await Promise.all([
+      sessions.prepareTermination(writeReceipt),
+      sessions.prepareTermination(resizeReceipt),
+    ])
+    await Promise.all([sessions.terminate(preparedWrite), sessions.terminate(preparedResize)])
+    expect(writeEnded).toBe(1)
+    expect(resizeEnded).toBe(1)
+    spawn.terminals[0].prints('late write output')
+    spawn.terminals[1].prints('late resize output')
+    table = ProcessTables.row(9998, 9998, ProcessTables.ORIGINAL)
+    await Promise.all([sessions.terminate(preparedWrite), sessions.terminate(preparedResize)])
+    spawn.terminals[0].exits()
+    spawn.terminals[1].exits()
+    expect(writeEnded).toBe(1)
+    expect(resizeEnded).toBe(1)
+    expect(lateBytes).toBe('')
+    expect(signals.filter(({ signal }) => signal !== 0)).toEqual([])
+  })
+
+  it('rejects incompatible recovered and confirmed ownership checkpoints before reuse', async () => {
+    const root = '4101:Thu Sep 17 22:29:08 2026'
+    const child = '5000:Thu Sep 17 22:29:09 2026'
+    const closure = (ownership: SessionProcessOwnership | null, target = TerminationMother.TARGET) => new SessionClosure({
+      conversation: TerminationMother.CONVERSATION,
+      target,
+      session: 'saved-session',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+      ownership,
+    })
+    const original = closure(new SessionProcessOwnership({
+      rootIdentity: root,
+      members: [{ pid: 4101, identity: root }, { pid: 5000, identity: child }],
+    }))
+    const changedRoot = closure(new SessionProcessOwnership({
+      rootIdentity: '4101:Thu Sep 17 22:29:10 2026',
+      members: [{ pid: 4101, identity: '4101:Thu Sep 17 22:29:10 2026' }],
+    }))
+    const changedMember = closure(new SessionProcessOwnership({
+      rootIdentity: root,
+      members: [
+        { pid: 4101, identity: root },
+        { pid: 5000, identity: '5000:Thu Sep 17 22:29:10 2026' },
+      ],
+    }))
+    let table = ProcessTables.group(4101, new Map([[4101, '4101:original'], [5000, '5000:original-child']]))
+    let scans = 0
+    const sessions = Cabin.opening({
+      inspectProcessTable: async () => { scans += 1; return table },
+      signal: () => {},
+    })
+    await expect(sessions.confirmTermination(original)).rejects.toBeInstanceOf(SessionTerminationUnconfirmed)
+    const scansAfterOriginal = scans
+    await expect(sessions.confirmTermination(changedRoot)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    await expect(sessions.confirmTermination(changedMember)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    await expect(sessions.confirmTermination(closure(null))).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    expect(scans).toBe(scansAfterOriginal)
+
+    table = ProcessTables.group(9999, new Map([[4101, '4101:replacement']]))
+    await expect(sessions.confirmTermination(original)).resolves.toBeUndefined()
+    await expect(sessions.confirmTermination(changedRoot)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    await expect(sessions.terminate(changedMember)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+
+    const retainedSpawn = SpawnDouble.recording()
+    const retained = Cabin.opening({ spawn: retainedSpawn })
+    const live = retained.open(LoginProgram.default())
+    await Inspections.settle()
+    const retainedReceipt = TerminationMother.evidence(retained, live)
+    const otherTarget = new SessionClosure({
+      conversation: retainedReceipt.conversation,
+      target: 'f910a470-13f7-4956-b750-bef89f55dd6d',
+      session: retainedReceipt.session,
+      processGroup: retainedReceipt.processGroup,
+      status: ClosureStatus.REQUESTED,
+      ownership: retainedReceipt.ownership,
+    })
+    await expect(retained.prepareTermination(otherTarget)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    await expect(retained.prepareTermination(retainedReceipt)).resolves.toMatchObject({ target: retainedReceipt.target })
+    retainedSpawn.terminals[0].exits()
+  })
+
+  it('preserves permission diagnostics while independent replacement proof and bounded grace remain available', async () => {
+    const root = '4101:Thu Sep 17 22:29:08 2026'
+    const receipt = new SessionClosure({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session: 'saved-session',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+      ownership: new SessionProcessOwnership({ rootIdentity: root, members: [{ pid: 4101, identity: root }] }),
+    })
+    let replacementScans = 0
+    const replacement = Cabin.opening({
+      signal: () => { throw Object.assign(new Error('denied'), { code: 'EPERM' }) },
+      inspectProcessTable: async () => {
+        replacementScans += 1
+        return ProcessTables.group(9999, new Map([[4101, '4101:replacement']]))
+      },
+    })
+    await expect(replacement.confirmTermination(receipt)).resolves.toBeUndefined()
+    expect(replacementScans).toBe(1)
+
+    const denied = Cabin.opening({
+      signal: () => { throw Object.assign(new Error('denied'), { code: 'EPERM' }) },
+      inspectProcessTable: async () => ProcessTables.group(4101, new Map([[4101, '4101:original']])),
+    })
+    await expect(denied.confirmTermination(receipt)).rejects.toMatchObject({
+      constructor: SessionTerminationPermissionDenied,
+      message: expect.stringContaining(TerminationMother.TARGET),
+    })
+
+    let transientProbe = true
+    const transientSignals: (NodeJS.Signals | 0)[] = []
+    const transient = Cabin.opening({
+      inspectProcessTable: async () => ProcessTables.group(4101, new Map([[4101, '4101:original']])),
+      signal: (_pid, signal) => {
+        transientSignals.push(signal)
+        if (signal === 'SIGTERM') return
+        if (signal === 0 && transientProbe) {
+          transientProbe = false
+          throw Object.assign(new Error('reaping'), { code: 'EPERM' })
+        }
+        if (signal === 0) throw Object.assign(new Error('gone'), { code: 'ESRCH' })
+      },
+      sleep: async () => {},
+      now: (() => { let now = 0; return () => now++ })(),
+      termGraceMs: 3,
+    })
+    await expect(transient.terminate(receipt)).resolves.toBeUndefined()
+    expect(transientSignals).toContain('SIGTERM')
+    expect(transientSignals).not.toContain('SIGKILL')
+
+    for (const code of ['EPERM', 'EACCES']) {
+      let now = 0
+      const persistentSignals: (NodeJS.Signals | 0)[] = []
+      const persistent = Cabin.opening({
+        inspectProcessTable: async () => ProcessTables.group(4101, new Map([[4101, '4101:original']])),
+        signal: (_pid, signal) => {
+          persistentSignals.push(signal)
+          if (signal === 0) throw Object.assign(new Error(code), { code })
+        },
+        sleep: async (milliseconds) => { now += milliseconds },
+        now: () => now,
+        termGraceMs: 2,
+        pollMs: 1,
+      })
+      await expect(persistent.terminate(receipt)).rejects.toBeInstanceOf(SessionTerminationPermissionDenied)
+      expect(persistentSignals.filter((signal) => signal === 'SIGTERM')).toHaveLength(1)
+      expect(persistentSignals).not.toContain('SIGKILL')
+      expect(now).toBe(2)
+    }
   })
 
   it('terminates a verified original child after the root exited before close', async () => {
@@ -1080,7 +1354,8 @@ describe('PtyLiveSessions', () => {
       }
     }
 
-    const evidence = TerminationMother.evidence(sessions, first)
+    await Inspections.settle()
+    const evidence = await TerminationMother.prepared(sessions, first)
     await Promise.all([sessions.terminate(evidence), sessions.terminate(evidence)])
 
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
@@ -1101,7 +1376,8 @@ describe('PtyLiveSessions', () => {
         brokenTerminal.exits()
       }
     }
-    await expect(sessions.terminate(TerminationMother.evidence(sessions, broken))).resolves.toBeUndefined()
+    await Inspections.settle()
+    await expect(sessions.terminate(await TerminationMother.prepared(sessions, broken))).resolves.toBeUndefined()
 
     const guardedSignals: { pid: number, signal: NodeJS.Signals | 0 }[] = []
     const guardedSpawn = SpawnDouble.recording()
@@ -1122,7 +1398,8 @@ describe('PtyLiveSessions', () => {
       pollMs: 1,
     })
     const guardedSession = guarded.open(LoginProgram.default())
-    const guardedEvidence = TerminationMother.evidence(guarded, guardedSession)
+    await Inspections.settle()
+    const guardedEvidence = await TerminationMother.prepared(guarded, guardedSession)
 
     await expect(guarded.terminate(guardedEvidence)).rejects.toBeInstanceOf(SessionNotTerminated)
     expect(guardedSignals).toContainEqual({ pid: -guardedSpawn.terminals[0].pid, signal: 'SIGTERM' })
@@ -1325,19 +1602,126 @@ describe('PtyLiveSessions', () => {
     expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
     await Inspections.until(() => inspection.calls.length === 3, 'post-request fresh inspection did not start')
     expect(inspection.calls).toHaveLength(3)
+    inspection.succeeds(2, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await AsyncTurns.run()
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+    await Inspections.until(() => inspection.calls.length === 4, 'post-checkpoint TERM inspection did not start')
     processes.onSignal = (_pid, signal) => {
       if (signal === 'SIGTERM') {
         processes.alive.delete(4101)
         spawn.terminals[0].exits()
       }
     }
-    inspection.succeeds(2, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    inspection.succeeds(3, ProcessTables.group(4101, new Map([[4101, 'original']])))
     await AsyncTurns.run()
     await vi.advanceTimersByTimeAsync(0)
     await Promise.all([first, duplicate])
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toEqual([
       { pid: -4101, signal: 'SIGTERM' },
     ])
+  })
+
+  it('a child learned while the checkpoint write is pending requires an enriched explicit retry', async () => {
+    vi.useFakeTimers()
+    const inspection = new ControlledInspection(Date.now)
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.recording()
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: inspection.inspect,
+      inspectionNow: Date.now,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.succeeds(0, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await AsyncTurns.run()
+    const records = new ClosureRecords()
+    records.checkpointStarted = new Deferred()
+    records.checkpointRelease = new Deferred()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session,
+    })
+
+    const first = close.execute(params)
+    await Inspections.until(() => inspection.calls.length === 2, 'checkpoint preparation inspection did not start')
+    inspection.succeeds(1, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await records.checkpointStarted.promise
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_INTERVAL_MS)
+    await Inspections.until(() => inspection.calls.length === 3, 'member-learning background inspection did not start')
+    inspection.succeeds(2, ProcessTables.group(4101, new Map([
+      [4101, 'original'],
+      [5001, '5001:learned-child-during-write'],
+    ])))
+    await AsyncTurns.run()
+    expect(records.requestCount).toBe(2)
+    expect(TerminationMother.evidence(sessions, session).ownership?.members).toEqual([
+      { pid: 4101, identity: `4101:${ProcessTables.ORIGINAL}` },
+      { pid: 5001, identity: `5001:${ProcessTables.CHILD}` },
+    ])
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    records.checkpointRelease.resolve()
+    await Inspections.until(() => inspection.calls.length === 4, 'fresh TERM inspection did not start')
+    inspection.succeeds(3, ProcessTables.group(4101, new Map([
+      [4101, 'original'],
+      [5001, '5001:learned-child-during-write'],
+    ])))
+
+    await expect(first).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    expect(records.closure?.ownership?.members).toEqual([{
+      pid: 4101,
+      identity: `4101:${ProcessTables.ORIGINAL}`,
+    }])
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    const retry = close.execute(params)
+    await Inspections.until(() => inspection.calls.length === 5, 'retry confirmation inspection did not start')
+    inspection.succeeds(4, ProcessTables.group(4101, new Map([
+      [4101, 'original'],
+      [5001, '5001:learned-child-during-write'],
+    ])))
+    await Inspections.until(() => inspection.calls.length === 6, 'retry checkpoint inspection did not start')
+    inspection.succeeds(5, ProcessTables.group(4101, new Map([
+      [4101, 'original'],
+      [5001, '5001:learned-child-during-write'],
+    ])))
+    await Inspections.until(() => inspection.calls.length === 7, 'retry TERM inspection did not start')
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') {
+        expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+        expect(records.closure?.ownership?.members).toEqual([
+          { pid: 4101, identity: `4101:${ProcessTables.ORIGINAL}` },
+          { pid: 5001, identity: `5001:${ProcessTables.CHILD}` },
+        ])
+        processes.alive.delete(4101)
+        spawn.terminals[0].exits()
+      }
+    }
+    inspection.succeeds(6, ProcessTables.group(4101, new Map([
+      [4101, 'original'],
+      [5001, '5001:learned-child-during-write'],
+    ])))
+    await retry
+
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+    expect(records.closure?.ownership?.members).toEqual([
+      { pid: 4101, identity: `4101:${ProcessTables.ORIGINAL}` },
+      { pid: 5001, identity: `5001:${ProcessTables.CHILD}` },
+    ])
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toEqual([
+      { pid: -4101, signal: 'SIGTERM' },
+    ])
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
   })
 
   it('pending inspection results cannot adopt exited or retired ownership', async () => {
@@ -1380,8 +1764,11 @@ describe('PtyLiveSessions', () => {
     spawn.terminals[0].exits()
     inspection.succeeds(0, ProcessTables.group(4101, new Map([[4101, 'original']])))
 
-    await expect(sessions.terminate(TerminationMother.evidence(sessions, session)))
-      .rejects.toBeInstanceOf(SessionNotTerminated)
+    const closing = sessions.terminate(TerminationMother.evidence(sessions, session))
+    await AsyncTurns.run()
+    await Inspections.until(() => inspection.calls.length === 2, 'unanchored close inspection did not start')
+    inspection.succeeds(1, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
     expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
   })
 
@@ -1471,7 +1858,6 @@ describe('PtyLiveSessions', () => {
   })
 
   it.each([
-    { change: 'root before TERM', fresh: new Map([[4101, '4101:replacement']]), exit: false },
     { change: 'child identity under the same PID', fresh: new Map([[4101, '4101:original'], [5000, '5000:replacement-child']]), exit: false },
     { change: 'unknown member after root exit', fresh: new Map([[5001, '5001:original-child']]), exit: true },
   ])('refuses $change during fresh TERM validation', async ({ fresh, exit }) => {
@@ -1529,7 +1915,6 @@ describe('PtyLiveSessions', () => {
     await AsyncTurns.run()
     const evidence = TerminationMother.evidence(sessions, session)
     const closing = sessions.terminate(evidence)
-    const refused = expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
     inspectionTime = 100
     await vi.advanceTimersByTimeAsync(100)
     inspection.succeeds(1, ProcessTables.group(4101, new Map([[4101, 'original']])))
@@ -1541,12 +1926,11 @@ describe('PtyLiveSessions', () => {
     inspection.succeeds(2, ProcessTables.group(4101, new Map([[4101, 'replacement']])))
     await vi.runAllTimersAsync()
 
-    await refused
+    await expect(closing).resolves.toBeUndefined()
     expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
   })
 
   it('inspection failures bound closure without signalling unverified processes', async () => {
-    vi.useFakeTimers()
     const coded = (code: string): NodeJS.ErrnoException => {
       const failure = new Error(code) as NodeJS.ErrnoException
       failure.code = code
@@ -1587,12 +1971,16 @@ describe('PtyLiveSessions', () => {
         session,
       }))
       const refused = expect(closing, failure.name).rejects.toBeInstanceOf(SessionNotTerminated)
-      await vi.advanceTimersByTimeAsync(1_500)
+      const startedAt = Date.now()
       await refused
+      expect(Date.now() - startedAt, failure.name).toBeLessThanOrEqual(
+        5 * PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS
+      )
       expect(records.closure?.status, failure.name).toBe(ClosureStatus.REQUESTED)
       expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
     }
 
+    vi.useFakeTimers()
     const processes = new ControlledProcesses()
     const spawn = SpawnDouble.recording()
     const inspection = new ControlledInspection(Date.now)
@@ -1616,6 +2004,9 @@ describe('PtyLiveSessions', () => {
     }))
     await vi.advanceTimersByTimeAsync(100)
     inspection.succeeds(1, ProcessTables.group(9999, new Map([[9999, 'original']])))
+    await AsyncTurns.run()
+    await Inspections.until(() => inspection.calls.length === 3, 'post-checkpoint disagreement inspection did not start')
+    inspection.succeeds(2, ProcessTables.group(9999, new Map([[9999, 'original']])))
 
     await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
     expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
@@ -1665,7 +2056,10 @@ describe('PtyLiveSessions', () => {
       }
     }
     const retry = close.execute(params)
-    await vi.advanceTimersByTimeAsync(100)
+    for (let step = 0; step < 4; step += 1) {
+      await vi.advanceTimersByTimeAsync(100)
+      await AsyncTurns.run()
+    }
     await expect(retry).resolves.toMatchObject({ target: TerminationMother.TARGET })
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
     expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
@@ -1757,11 +2151,14 @@ describe('PtyLiveSessions', () => {
       session,
     }))
     const refused = expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
-    await Inspections.until(() => inspection.calls.length === 2, 'fresh TERM inspection did not start')
+    await Inspections.until(() => inspection.calls.length === 2, 'preparation inspection did not start')
+    inspection.succeeds(1, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await AsyncTurns.run()
+    await Inspections.until(() => inspection.calls.length === 3, 'fresh TERM inspection did not start')
     await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_TIMEOUT_MS - 1)
-    expect(inspection.calls[1].signal.aborted).toBe(false)
+    expect(inspection.calls[2].signal.aborted).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
-    expect(inspection.calls[1].signal.aborted).toBe(true)
+    expect(inspection.calls[2].signal.aborted).toBe(true)
     await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS)
     await refused
 
@@ -1796,14 +2193,17 @@ describe('PtyLiveSessions', () => {
       session,
     }))
     const refused = expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
-    await Inspections.until(() => inspection.calls.length === 2, 'fresh TERM inspection did not start')
+    await Inspections.until(() => inspection.calls.length === 2, 'preparation inspection did not start')
     inspection.succeeds(1, ProcessTables.group(4101, new Map([[4101, 'original']])))
     await AsyncTurns.run()
-    await Inspections.until(() => inspection.calls.length === 3, 'fresh KILL inspection did not start')
+    await Inspections.until(() => inspection.calls.length === 3, 'fresh TERM inspection did not start')
+    inspection.succeeds(2, ProcessTables.group(4101, new Map([[4101, 'original']])))
+    await AsyncTurns.run()
+    await Inspections.until(() => inspection.calls.length === 4, 'fresh KILL inspection did not start')
     await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_TIMEOUT_MS - 1)
-    expect(inspection.calls[2].signal.aborted).toBe(false)
+    expect(inspection.calls[3].signal.aborted).toBe(false)
     await vi.advanceTimersByTimeAsync(1)
-    expect(inspection.calls[2].signal.aborted).toBe(true)
+    expect(inspection.calls[3].signal.aborted).toBe(true)
     await vi.advanceTimersByTimeAsync(PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS)
     await refused
 
@@ -1907,36 +2307,47 @@ describe('PtyLiveSessions', () => {
     expect(processNow).toBe(termGraceMs + killGraceMs)
   })
 
-  it('a foreground absence probe denied with EPERM fails close without signalling', async () => {
-    vi.useFakeTimers()
-    const inspection = new ControlledInspection(Date.now)
-    const destructive: { pid: number, signal: NodeJS.Signals }[] = []
-    const sessions = Cabin.opening({
-      inspectProcessTable: inspection.inspect,
-      inspectionNow: Date.now,
-      signal: (pid, signal) => {
-        if (signal === 0) throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
-        destructive.push({ pid, signal })
-      },
-    })
-    const session = sessions.open(LoginProgram.default())
-    await vi.advanceTimersByTimeAsync(0)
-    inspection.succeeds(0, ProcessTables.group(4101, new Map([[4101, 'original']])))
-    await AsyncTurns.run()
-    const records = new ClosureRecords()
-    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
-    const closing = close.execute(new CloseCoordinatingSessionParams({
-      conversation: TerminationMother.CONVERSATION,
-      target: TerminationMother.TARGET,
-      session,
-    }))
-    await Inspections.until(() => inspection.calls.length === 2, 'fresh foreground inspection did not start')
-    inspection.succeeds(1, ProcessTables.group(9999, new Map([[9999, 'other']])))
+  it.each(['EPERM', 'EACCES'] as const)(
+    'a foreground absence probe denied with %s keeps contextual refusal without signalling',
+    async (code) => {
+      vi.useFakeTimers()
+      const inspection = new ControlledInspection(Date.now)
+      const destructive: { pid: number, signal: NodeJS.Signals }[] = []
+      const sessions = Cabin.opening({
+        inspectProcessTable: inspection.inspect,
+        inspectionNow: Date.now,
+        signal: (pid, signal) => {
+          if (signal === 0) throw Object.assign(new Error(`probe refused with ${code}`), { code })
+          destructive.push({ pid, signal })
+        },
+      })
+      const session = sessions.open(LoginProgram.default())
+      await vi.advanceTimersByTimeAsync(0)
+      inspection.succeeds(0, ProcessTables.group(4101, new Map([[4101, 'original']])))
+      await AsyncTurns.run()
+      const records = new ClosureRecords()
+      const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+      const closing = close.execute(new CloseCoordinatingSessionParams({
+        conversation: TerminationMother.CONVERSATION,
+        target: TerminationMother.TARGET,
+        session,
+      }))
+      await Inspections.until(() => inspection.calls.length === 2, 'fresh foreground inspection did not start')
+      inspection.succeeds(1, ProcessTables.group(9999, new Map([[9999, 'other']])))
+      await AsyncTurns.run()
+      await Inspections.until(() => inspection.calls.length === 3, 'post-checkpoint foreground inspection did not start')
+      inspection.succeeds(2, ProcessTables.group(9999, new Map([[9999, 'other']])))
 
-    await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
-    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
-    expect(destructive).toEqual([])
-  })
+      const failure = await closing.catch((cause: unknown) => cause)
+      expect(failure).toBeInstanceOf(SessionTerminationPermissionDenied)
+      expect((failure as Error).message).toContain(`target ${TerminationMother.TARGET}`)
+      expect((failure as Error).message).toContain(`session ${session.id}`)
+      expect((failure as Error).message).toContain('process group 4101')
+      expect((failure as Error).message).toContain(`probe refused with ${code}`)
+      expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+      expect(destructive).toEqual([])
+    },
+  )
 
   it('an unreaped inspection holds the physical slot while requests expire and later work restarts', async () => {
     vi.useFakeTimers()
@@ -1963,11 +2374,11 @@ describe('PtyLiveSessions', () => {
     const refused = expect(bounded).rejects.toBeInstanceOf(SessionNotTerminated)
     let settledAt: number | null = null
     void bounded.catch(() => { settledAt = Date.now() })
-    await vi.advanceTimersByTimeAsync(2_999)
+    await vi.advanceTimersByTimeAsync(1_499)
     expect(settledAt).toBeNull()
     await vi.advanceTimersByTimeAsync(1)
     await refused
-    expect(settledAt! - startedAt).toBe(2 * PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS)
+    expect(settledAt! - startedAt).toBe(PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS)
     expect(settledAt! - startedAt).toBeLessThanOrEqual(
       4 * PtyLiveSessions.INSPECTION_REQUEST_TIMEOUT_MS + 20
     )
@@ -2217,7 +2628,6 @@ describe('PtyLiveSessions', () => {
 
     expect(inspection.calls).toHaveLength(2)
     const thirdClose = sessions.terminate(TerminationMother.evidence(sessions, third))
-    const secondRefused = expect(secondClose).rejects.toBeInstanceOf(SessionNotTerminated)
     processes.onSignal = (pid, signal) => {
       if (signal !== 'SIGTERM') return
       processes.alive.delete(-pid)
@@ -2230,7 +2640,7 @@ describe('PtyLiveSessions', () => {
     ])))
     await AsyncTurns.run()
     await firstClose
-    await secondRefused
+    await expect(secondClose).resolves.toBeUndefined()
     expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toEqual([{ pid: -4101, signal: 'SIGTERM' }])
 
     await vi.advanceTimersByTimeAsync(100)
@@ -2285,15 +2695,105 @@ describe('PtyLiveSessions', () => {
     ])
   })
 
-  it('an identity-revoked close retry stays requested despite original-looking later data', async () => {
-    vi.useFakeTimers()
-    const inspection = new ControlledInspection(Date.now)
+  it('a failed inspection or exit probe does not poison a later owned close', async () => {
     const processes = new ControlledProcesses()
     const spawn = SpawnDouble.withPids(4101, 4102)
+    let firstTable = new Map([[4101, '4101:original'], [5000, '5000:original-child']])
+    let failInspection = false
+    let denyExitProbe = false
     const sessions = Cabin.opening({
       spawn,
-      inspectProcessTable: inspection.inspect,
-      inspectionNow: Date.now,
+      inspectProcessTable: async () => {
+        if (failInspection) {
+          failInspection = false
+          throw new Error('transient inspection failure')
+        }
+        return ProcessTables.groups(new Map([
+          [4101, firstTable],
+          [4102, new Map([[4102, '4102:original']])],
+        ]))
+      },
+      signal: (pid, signal) => {
+        if (signal === 0 && denyExitProbe) throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
+        processes.signal(pid, signal)
+      },
+      sleep: processes.sleep,
+      now: () => processes.now,
+      termGraceMs: 2,
+      killGraceMs: 2,
+      pollMs: 1,
+    })
+    const retried = sessions.open(LoginProgram.default())
+    const other = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    processes.alive.add(4102)
+    await Inspections.settle()
+    const records = new ClosureRecords()
+    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
+    const params = new CloseCoordinatingSessionParams({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session: retried,
+    })
+    failInspection = true
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    const checkpoint = await sessions.prepareTermination(records.closure!)
+    firstTable = new Map([
+      [4101, '4101:original'],
+      [5000, '5000:original-child'],
+      [5001, '5001:original-child'],
+    ])
+    const beforeRefusal = processes.now
+    await expect(sessions.terminate(checkpoint)).rejects.toBeInstanceOf(SessionNotTerminated)
+    expect(processes.now).toBe(beforeRefusal)
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+
+    firstTable = new Map([[4101, '4101:original'], [5000, '5000:original-child']])
+    denyExitProbe = true
+    spawn.terminals[0].exits()
+    firstTable = new Map([[5000, '5000:original-child']])
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') processes.alive.delete(4101)
+    }
+    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionTerminationPermissionDenied)
+    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
+    denyExitProbe = false
+    await expect(close.execute(params)).resolves.toMatchObject({ target: TerminationMother.TARGET })
+    expect(records.closure?.status).toBe(ClosureStatus.CLOSED)
+
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toEqual([
+      { pid: -4101, signal: 'SIGTERM' },
+    ])
+    sessions.write({ session: other, text: 'other remains usable' })
+    expect(spawn.terminals[1].written).toEqual(['other remains usable'])
+  })
+
+  it('restart closure retries use saved identities without a live terminal', async () => {
+    const processes = new ControlledProcesses()
+    processes.alive.add(4101)
+    const spawn = SpawnDouble.recording()
+    const ownership = new SessionProcessOwnership({
+      rootIdentity: '4101:Thu Sep 17 22:29:08 2026',
+      members: [
+        { pid: 4101, identity: '4101:Thu Sep 17 22:29:08 2026' },
+        { pid: 5000, identity: '5000:Thu Sep 17 22:29:09 2026' },
+      ],
+    })
+    const closure = new SessionClosure({
+      conversation: TerminationMother.CONVERSATION,
+      target: TerminationMother.TARGET,
+      session: 'terminal-before-restart',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+      ownership,
+    })
+    let table = new Map([[4101, '4101:original'], [5000, '5000:original-child']])
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: async () => ProcessTables.group(4101, table),
       signal: processes.signal,
       sleep: processes.sleep,
       now: () => processes.now,
@@ -2301,40 +2801,100 @@ describe('PtyLiveSessions', () => {
       killGraceMs: 2,
       pollMs: 1,
     })
-    const revoked = sessions.open(LoginProgram.default())
-    const other = sessions.open(LoginProgram.default())
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGKILL') processes.alive.delete(4101)
+    }
+
+    await Promise.all([sessions.terminate(closure), sessions.terminate(closure)])
+
+    expect(sessions.all()).toEqual([])
+    expect(spawn.calls).toEqual([])
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGTERM')).toEqual([
+      { pid: -4101, signal: 'SIGTERM' },
+    ])
+    expect(processes.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([
+      { pid: -4101, signal: 'SIGKILL' },
+    ])
+
+    const guardedProcesses = new ControlledProcesses()
+    guardedProcesses.alive.add(4101)
+    table = new Map([[4101, '4101:original'], [5001, '5001:original-child']])
+    const guarded = Cabin.opening({
+      inspectProcessTable: async () => ProcessTables.group(4101, table),
+      signal: guardedProcesses.signal,
+    })
+    await expect(guarded.terminate(closure)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    expect(guardedProcesses.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+    expect(guarded.all()).toEqual([])
+
+    const changedBeforeKill = new ControlledProcesses()
+    changedBeforeKill.alive.add(4101)
+    let killTable = new Map([[4101, '4101:original'], [5000, '5000:original-child']])
+    const guardedKill = Cabin.opening({
+      inspectProcessTable: async () => ProcessTables.group(4101, killTable),
+      signal: changedBeforeKill.signal,
+      sleep: async (milliseconds) => {
+        changedBeforeKill.now += milliseconds
+        killTable = new Map([[4101, '4101:original'], [5001, '5001:original-child']])
+      },
+      now: () => changedBeforeKill.now,
+      termGraceMs: 1,
+      killGraceMs: 1,
+      pollMs: 1,
+    })
+    await expect(guardedKill.terminate(closure)).rejects.toBeInstanceOf(SessionOwnershipUnverifiable)
+    expect(changedBeforeKill.signals.filter(({ signal }) => signal === 'SIGTERM')).toHaveLength(1)
+    expect(changedBeforeKill.signals.filter(({ signal }) => signal === 'SIGKILL')).toEqual([])
+  })
+
+  it('retained and recovered ownership requests share one physical fresh scan', async () => {
+    vi.useFakeTimers()
+    const inspection = new ControlledInspection(Date.now)
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.withPids(4102)
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: inspection.inspect,
+      inspectionNow: Date.now,
+      signal: (pid, signal) => {
+        if (pid === -4101 && signal === 'SIGTERM') processes.alive.delete(4101)
+        processes.signal(pid, signal)
+      },
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const retained = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
     processes.alive.add(4102)
     await vi.advanceTimersByTimeAsync(0)
-    inspection.succeeds(0, ProcessTables.rootGroups(2))
+    const both = ProcessTables.groups(new Map([
+      [4101, new Map([[4101, '4101:original']])],
+      [4102, new Map([[4102, '4102:original']])],
+    ]))
+    inspection.succeeds(0, both)
     await AsyncTurns.run()
-    const records = new ClosureRecords()
-    const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
-    const params = new CloseCoordinatingSessionParams({
+    const recovered = new SessionClosure({
       conversation: TerminationMother.CONVERSATION,
       target: TerminationMother.TARGET,
-      session: revoked,
+      session: 'saved-before-restart',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+      ownership: new SessionProcessOwnership({
+        rootIdentity: '4101:Thu Sep 17 22:29:08 2026',
+        members: [{ pid: 4101, identity: '4101:Thu Sep 17 22:29:08 2026' }],
+      }),
     })
-    const first = close.execute(params)
-    const firstRefused = expect(first).rejects.toBeInstanceOf(SessionNotTerminated)
-    await Inspections.until(() => inspection.calls.length === 2, 'identity-revoking fresh scan did not start')
-    inspection.succeeds(1, ProcessTables.groups(new Map([
-      [4101, new Map([[4101, 'replacement']])],
-      [4102, new Map([[4102, 'original']])],
-    ])))
-    await firstRefused
-    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
 
-    await Inspections.until(() => inspection.calls.length === 3, 'surviving root background scan did not start')
-    inspection.succeeds(2, ProcessTables.rootGroups(2))
-    await AsyncTurns.run()
-    processes.signals.length = 0
-    await expect(close.execute(params)).rejects.toBeInstanceOf(SessionNotTerminated)
-
-    expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
-    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
-    sessions.write({ session: other, text: 'other remains usable' })
-    expect(spawn.terminals[1].written).toEqual(['other remains usable'])
+    const preparing = sessions.prepareTermination(TerminationMother.evidence(sessions, retained))
+    const terminating = sessions.terminate(recovered)
+    await Inspections.until(() => inspection.calls.length === 2, 'mixed ownership scan did not start')
+    expect(inspection.maximumActive).toBe(1)
+    inspection.succeeds(1, both)
+    await expect(preparing).resolves.toMatchObject({ session: retained.id })
+    await expect(terminating).resolves.toBeUndefined()
+    expect(inspection.calls).toHaveLength(2)
+    expect(spawn.calls).toHaveLength(1)
+    spawn.terminals[0].exits()
   })
 
   it('confirmed absence prevents later inspection from reviving a reused group', async () => {

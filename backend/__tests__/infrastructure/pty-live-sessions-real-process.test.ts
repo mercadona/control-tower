@@ -289,6 +289,10 @@ class ClosureMother {
       session,
     })
   }
+
+  static checkpoint(sessions: PtyLiveSessions, session: LiveSession): Promise<SessionClosure> {
+    return sessions.prepareTermination(ClosureMother.evidence(sessions, session))
+  }
 }
 
 describe('PtyLiveSessions with real processes', () => {
@@ -349,7 +353,7 @@ describe('PtyLiveSessions with real processes', () => {
     const parent = Number(ready[1])
     const child = Number(ready[2])
 
-    await sessions.terminate(ClosureMother.evidence(sessions, closing))
+    await sessions.terminate(await ClosureMother.checkpoint(sessions, closing))
     await Promise.all([Processes.absent(parent), Processes.absent(child)])
 
     const token = `unrelated-${randomUUID()}`
@@ -367,12 +371,36 @@ describe('PtyLiveSessions with real processes', () => {
     const child = Number(ready[2])
 
     const started = Date.now()
-    await sessions.terminate(ClosureMother.evidence(sessions, session))
+    await sessions.terminate(await ClosureMother.checkpoint(sessions, session))
     const elapsed = Date.now() - started
     await Promise.all([Processes.absent(parent), Processes.absent(child)])
 
     expect(elapsed).toBeGreaterThanOrEqual(75)
     expect(elapsed).toBeLessThan(1_500)
+  })
+
+  it('saved ownership closes a surviving real group from a fresh adapter', async () => {
+    const first = RealCabin.opening(terminals, { termGraceMs: 100, killGraceMs: 500, pollMs: 10 })
+    const owned = first.open(Programs.node('restart-owned-tree', Programs.TERM_IGNORING_PARENT))
+    const other = first.open(Programs.echo())
+    const ready = await Printed.until(first, owned, /READY:(\d+):(\d+)/)
+    const parent = Number(ready[1])
+    const child = Number(ready[2])
+    const receipt = await first.prepareTermination(ClosureMother.evidence(first, owned))
+    expect(receipt.ownership?.members.map(({ pid }) => pid)).toEqual(expect.arrayContaining([parent, child]))
+    const openedBeforeRestart = terminals.opened.length
+    const restarted = RealCabin.opening(terminals, { termGraceMs: 100, killGraceMs: 500, pollMs: 10 })
+
+    await restarted.terminate(receipt)
+    await Promise.all([Processes.absent(parent), Processes.absent(child), Processes.groupAbsent(parent)])
+
+    expect(restarted.all()).toEqual([])
+    expect(terminals.opened).toHaveLength(openedBeforeRestart)
+    const token = `restart-unrelated-${randomUUID()}`
+    const echoed = Printed.until(first, other, new RegExp(token))
+    first.write({ session: other, text: token })
+    await echoed
+    expect(first.find(other.id)).toBe(other)
   })
 
   it('a closure already in progress still accounts for an owned child after its root exits', async () => {
@@ -381,7 +409,8 @@ describe('PtyLiveSessions with real processes', () => {
     const ready = await Printed.until(sessions, session, /READY:(\d+):(\d+)/)
     const parent = Number(ready[1])
     const child = Number(ready[2])
-    const closing = sessions.terminate(ClosureMother.evidence(sessions, session))
+    const checkpoint = await ClosureMother.checkpoint(sessions, session)
+    const closing = sessions.terminate(checkpoint)
     await Processes.absent(parent)
     await closing
     await Processes.absent(child)
@@ -395,11 +424,12 @@ describe('PtyLiveSessions with real processes', () => {
     const ready = await Printed.until(sessions, session, /READY:(\d+):(\d+)/)
     const parent = Number(ready[1])
     const child = Number(ready[2])
+    const checkpoint = await ClosureMother.checkpoint(sessions, session)
 
     await Processes.absent(parent)
     expect(Processes.exists(child)).toBe(true)
 
-    await sessions.terminate(ClosureMother.evidence(sessions, session))
+    await sessions.terminate(checkpoint)
     await Processes.absent(child)
     expect(sessions.find(session.id)).toBeNull()
   })

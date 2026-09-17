@@ -18,6 +18,10 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { CoordinatingSessionRecovery } from '../../src/infrastructure/coordinating-session-recovery.ts'
+import { CoordinatingSessionRecovered } from '../../src/application/actions/recover-coordinating-session.ts'
+import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
+import { SessionTerminationPermissionDenied } from '../../src/domain/exceptions.ts'
 
 class LiveSessionsDouble extends LiveSessions {
   readonly stopped: string[]
@@ -164,6 +168,34 @@ class Registry {
 }
 
 describe('CoordinatingSessions', () => {
+  it('projects a recovered permission failure with its specific diagnostic', () => {
+    const sessions = new CoordinatingSessions({
+      liveSessions: LiveSessionsDouble.holding(),
+      stderr: () => {},
+      newTarget: () => Mother.FIRST_TARGET,
+    })
+    const conversation = Mother.conversation('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
+    const closure = new SessionClosure({
+      conversation: conversation.id,
+      target: Mother.FIRST_TARGET,
+      session: 'saved-session',
+      processGroup: 4101,
+      status: ClosureStatus.REQUESTED,
+    })
+    const failure = new SessionTerminationPermissionDenied('saved group cannot be inspected')
+
+    CoordinatingSessionRecovery.remember(
+      CoordinatingSessionRecovered.interrupted(conversation, closure, failure),
+      sessions,
+      () => {},
+    )
+
+    expect(sessions.operation()).toBe(CoordinatingOperation.CLOSE_FAILED)
+    expect(sessions.closureError()).toEqual({
+      code: 'session-termination-permission-denied',
+      detail: failure.message,
+    })
+  })
   it('holds as ended the live session whose terminal exits', () => {
     const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
     const { held, said } = Registry.of(liveSessions)

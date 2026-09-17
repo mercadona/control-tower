@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
@@ -8,6 +8,10 @@ import {
   CloseCoordinatingSessionParams,
   CoordinatingSessionClosed,
 } from '../../src/application/actions/close-coordinating-session.ts'
+import {
+  CoordinatingSessionOpened,
+  OpenCoordinatingSession,
+} from '../../src/application/actions/open-coordinating-session.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -28,6 +32,8 @@ import {
   SessionClosureNotRecorded,
   SessionClosureNotUnderstood,
   SessionNotTerminated,
+  SessionOwnershipUnverifiable,
+  SessionTerminationPermissionDenied,
   SessionTerminationUnconfirmed,
 } from '../../src/domain/exceptions.ts'
 
@@ -121,12 +127,17 @@ class RunningCloseApi {
   static readonly #servers: ApiServer[] = []
   static readonly #NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
 
-  static async start(close: CloseCoordinatingSession, registry: CoordinatingSessions): Promise<number> {
+  static async start(
+    close: CloseCoordinatingSession,
+    registry: CoordinatingSessions,
+    openCoordinatingSession?: OpenCoordinatingSession,
+  ): Promise<number> {
     const server = new ApiServer({
       port: 0,
       frontendRoot: RunningCloseApi.#NO_FRONTEND,
       closeCoordinatingSession: close,
       coordinatingSessions: registry,
+      openCoordinatingSession,
     })
     const port = await server.start()
     RunningCloseApi.#servers.push(server)
@@ -142,6 +153,18 @@ class RunningCloseApi {
       method: 'POST',
       body,
       headers: { 'Content-Type': 'application/json', ...headers },
+    })
+  }
+
+  static open(port: number): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_comment: 'new work after confirmed closure',
+        repo: CloseMother.CONVERSATION.repository.text,
+        path: CloseMother.CONVERSATION.root.text,
+      }),
     })
   }
 }
@@ -181,6 +204,7 @@ describe('CoordinatingSessionCloseRoute', () => {
     const completed = new Deferred<CoordinatingSessionClosed>()
     close.executeAnswer = () => completed.promise
     const registry = CloseMother.registry()
+    const beginClose = vi.spyOn(registry, 'beginClose')
     const port = await RunningCloseApi.start(close, registry)
 
     const first = RunningCloseApi.post(port)
@@ -188,9 +212,11 @@ describe('CoordinatingSessionCloseRoute', () => {
     const second = RunningCloseApi.post(port)
     let secondSettled = false
     second.then(() => { secondSettled = true })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await expect.poll(() => beginClose.mock.calls).toHaveLength(2)
     expect(registry.operation()).toBe(CoordinatingOperation.CLOSING)
     expect(secondSettled).toBe(false)
+    const opening = await RunningCloseApi.open(port)
+    expect(opening.status).toBe(409)
     completed.pass(new CoordinatingSessionClosed(close.executed[0]))
 
     const answered = await Promise.all([first, second])
@@ -307,12 +333,14 @@ describe('CoordinatingSessionCloseRoute', () => {
     expect(registry.held()?.target).toBe(CloseMother.TARGET)
   })
 
-  it('failed closure remains visible and retryable through the API', async () => {
+  it('the close API can recover a failed null-terminal target and then admit a new plan', async () => {
     const failures = [
       [new SessionClosureNotRecorded('intent not written'), 'session-closure-not-recorded'],
       [new SessionClosureNotUnderstood('receipt corrupt'), 'session-closure-not-understood'],
       [new SessionNotTerminated('group still alive'), 'session-not-terminated'],
       [new SessionTerminationUnconfirmed('group ownership lost'), 'session-termination-unconfirmed'],
+      [new SessionOwnershipUnverifiable('original identity missing'), 'session-ownership-unverifiable'],
+      [new SessionTerminationPermissionDenied('permission denied'), 'session-termination-permission-denied'],
     ] as const
 
     for (const [failure, code] of failures) {
@@ -352,5 +380,32 @@ describe('CoordinatingSessionCloseRoute', () => {
       expect(retried.status).toBe(200)
       expect(registry.held()).toBeNull()
     }
+
+    const recoveredClose = new CloseSpy()
+    recoveredClose.executeAnswer = async () => { throw new SessionOwnershipUnverifiable('saved identity incomplete') }
+    const recovered = CloseMother.unresumable()
+    const open = {
+      execute: vi.fn(async () => new CoordinatingSessionOpened({
+        conversation: CloseMother.CONVERSATION,
+        session: CloseMother.SESSION,
+        timeline: [],
+      })),
+    } as unknown as OpenCoordinatingSession
+    const recoveredPort = await RunningCloseApi.start(recoveredClose, recovered, open)
+    const first = await RunningCloseApi.post(recoveredPort)
+    expect(first.status).toBe(400)
+    expect(await first.json()).toEqual({
+      code: 'session-ownership-unverifiable', detail: 'saved identity incomplete',
+    })
+    expect(recoveredClose.executed[0].session).toBeNull()
+    expect(recovered.reserve().outcome).toBe('live-held')
+
+    recoveredClose.executeAnswer = async (params) => new CoordinatingSessionClosed(params)
+    const retried = await RunningCloseApi.post(recoveredPort)
+    expect(retried.status).toBe(200)
+    expect(recovered.held()).toBeNull()
+    const admitted = await RunningCloseApi.open(recoveredPort)
+    expect(admitted.status).toBe(202)
+    expect(open.execute).toHaveBeenCalledTimes(1)
   })
 })

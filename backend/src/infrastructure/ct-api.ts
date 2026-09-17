@@ -33,12 +33,8 @@ import { ActivePlans } from './active-plans-route.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
-import {
-  CoordinatingClosureError,
-  CoordinatingSessions,
-  HeldCoordinatingSession,
-  CoordinatingSessionState,
-} from './coordinating-sessions.ts'
+import { CoordinatingSessions } from './coordinating-sessions.ts'
+import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
 import { GitEpicBranch } from './git-epic-branch.ts'
@@ -55,8 +51,7 @@ import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
-import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
-import { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
@@ -98,11 +93,9 @@ import { DispatchCheckClaims } from './dispatch-check-claims.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
 import type { UserStories } from '../domain/ports/user-stories.ts'
-import type { CoordinatingSessionRecovered } from '../application/actions/recover-coordinating-session.ts'
 import type { PlanAgents } from '../domain/ports/plan-agents.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
 import type { DispatchClaims } from '../domain/ports/dispatch-claims.ts'
-import { SessionClosureNotRecorded } from '../domain/exceptions.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -409,60 +402,6 @@ class CtApi {
     return failure instanceof Error ? failure.message : String(failure)
   }
 
-  static #rememberCoordinatingSession(
-    recovered: CoordinatingSessionRecovered,
-    coordinatingSessions: CoordinatingSessions,
-    stderr: (line: string) => void
-  ): void {
-    switch (recovered.outcome) {
-      case RecoveredConversation.NONE:
-        coordinatingSessions.finishRecoveryWithoutSession()
-        stderr('coordinating session: nothing recorded to recover\n')
-        return
-      case RecoveredConversation.UNRESUMABLE:
-        coordinatingSessions.remember(new HeldCoordinatingSession({
-          target: coordinatingSessions.mintTarget(),
-          state: CoordinatingSessionState.UNRESUMABLE,
-          conversation: recovered.conversation!,
-          session: null,
-          attention: null,
-        }), recovered.timeline)
-        stderr(`coordinating session ${recovered.conversation!.id.text}: claude code no longer holds it, nothing was resumed\n`)
-        return
-      case RecoveredConversation.INTERRUPTED:
-        coordinatingSessions.rememberFailedClosure(new HeldCoordinatingSession({
-          target: recovered.closure!.target,
-          state: CoordinatingSessionState.ENDED,
-          conversation: recovered.conversation!,
-          session: null,
-          attention: null,
-        }), new CoordinatingClosureError({
-          code: recovered.failure instanceof SessionClosureNotRecorded
-            ? 'session-closure-not-recorded'
-            : 'session-termination-unconfirmed',
-          detail: recovered.failure!.message,
-        }))
-        stderr(
-          `coordinating session ${recovered.conversation!.id.text}: cancellation was interrupted; recovery remains reserved and nothing was resumed\n`
-        )
-        return
-      case RecoveredConversation.LIVE:
-        coordinatingSessions.remember(new HeldCoordinatingSession({
-          target: coordinatingSessions.mintTarget(),
-          state: CoordinatingSessionState.LIVE,
-          conversation: recovered.conversation!,
-          session: recovered.session!,
-          attention: SessionAttention.working(),
-        }), recovered.timeline)
-        stderr(`coordinating session ${recovered.conversation!.id.text}: resumed\n`)
-        return
-      default: {
-        const exhaustive: never = recovered.outcome
-        throw new Error(`no coordinating session recovery declared for ${exhaustive}`)
-      }
-    }
-  }
-
   static async run(argv: string[], environment: NodeJS.ProcessEnv): Promise<void> {
     const asked = Invocation.from(argv, environment, homedir())
     if (asked.outcome !== InvocationOutcome.READY || asked.port === null || asked.stateRoot === null) {
@@ -730,7 +669,7 @@ class CtApi {
     }
     listeningPort = port
     process.stdout.write(`${JSON.stringify({ port })}\n`)
-    CtApi.#rememberCoordinatingSession(
+    CoordinatingSessionRecovery.remember(
       await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
     )
     await recovery.recover()

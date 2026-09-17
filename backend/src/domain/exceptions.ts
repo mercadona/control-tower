@@ -142,9 +142,13 @@ export class SessionClosureNotRecorded extends SessionClosureFailure {}
 
 export class SessionClosureNotUnderstood extends SessionClosureFailure {}
 
-export class SessionNotTerminated extends SessionClosureFailure {}
-
 export class SessionTerminationUnconfirmed extends SessionClosureFailure {}
+
+export class SessionNotTerminated extends SessionTerminationUnconfirmed {}
+
+export class SessionOwnershipUnverifiable extends SessionNotTerminated {}
+
+export class SessionTerminationPermissionDenied extends SessionNotTerminated {}
 
 export class CoordinatingSessionTargetChanged extends SessionClosureFailure {}
 

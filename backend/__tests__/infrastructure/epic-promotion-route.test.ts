@@ -121,6 +121,14 @@ class Mother {
     return held
   }
 
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
+    return held
+  }
+
   static none(): CoordinatingSessions {
     return new CoordinatingSessions({
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
@@ -296,6 +304,17 @@ describe('EpicPromotionRoute', () => {
       }],
       promoted: [1],
     })
+  })
+
+  it('a failed closure keeps the matching epic promotion action eligible', async () => {
+    const promote = PromoteEpicSpy.answering(Mother.promoted([Mother.readyIssue()], [1]))
+    const port = await RunningApi.listening(Mother.failedClose(), promote, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(200)
+    expect(promote.asked).toHaveLength(1)
+    expect(promote.asked[0].root).toEqual(Mother.ROOT)
   })
 
   it('an epic with no issues is refused as no-epic-issues', async () => {

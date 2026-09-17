@@ -13,7 +13,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
-import { SessionTerminationUnconfirmed } from '../../src/domain/exceptions.ts'
+import { SessionTerminationPermissionDenied, SessionTerminationUnconfirmed } from '../../src/domain/exceptions.ts'
 
 class ConversationsDouble extends Conversations {
   resumableAnswer: boolean
@@ -214,7 +214,7 @@ describe('RecoverCoordinatingSession', () => {
     expect(flow.sessionHooks.installed).toEqual([])
   })
 
-  it('recovers an interrupted closure as retryable without resuming or signalling a recorded pid', async () => {
+  it('restart closure retries use saved identities without a live terminal', async () => {
     const absent = new Flow()
     absent.records.closure = Mother.closure(ClosureStatus.REQUESTED)
 
@@ -237,6 +237,15 @@ describe('RecoverCoordinatingSession', () => {
     expect(present.records.completedClosures).toEqual([])
     expect(present.conversations.resumed).toEqual([])
     expect(present.sessionHooks.installed).toEqual([])
+
+    const denied = new Flow()
+    denied.records.closure = Mother.closure(ClosureStatus.REQUESTED)
+    const permission = new SessionTerminationPermissionDenied('saved group cannot be inspected')
+    denied.liveSessions.confirmationFailure = permission
+    const permissionInterrupted = await denied.run()
+    expect(permissionInterrupted.outcome).toBe(RecoveredConversation.INTERRUPTED)
+    expect(permissionInterrupted.failure).toBe(permission)
+    expect(denied.records.completedClosures).toEqual([])
   })
 
   it('appends a resumed event to the timeline it recalled and answers the whole history', async () => {

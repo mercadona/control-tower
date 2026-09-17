@@ -195,6 +195,14 @@ class Mother {
     return held
   }
 
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
+    return held
+  }
+
   static none(): CoordinatingSessions {
     return new CoordinatingSessions({
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
@@ -483,6 +491,17 @@ describe('EpicGroomRoute', () => {
       detail: 'gate 2 answers only a request carrying the key the page was given',
     })
     expect(groom.asked).toEqual([])
+  })
+
+  it('a failed closure keeps the matching epic groom action eligible', async () => {
+    const groom = GroomEpicSpy.answering(Mother.groomedOutcome([Mother.readyIssue()]))
+    const port = await RunningApi.listening(Mother.failedClose(), ReadEpicGroomSpy.neverAsked(), groom, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(200)
+    expect(groom.asked).toHaveLength(1)
+    expect(groom.asked[0].root).toEqual(Mother.ROOT)
   })
 
   it.each([

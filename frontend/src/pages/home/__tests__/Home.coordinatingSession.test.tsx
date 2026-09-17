@@ -169,13 +169,62 @@ describe('Home and the coordinating session', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('La sesión todavía no ha terminado. Puedes volver a intentarlo.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo inspeccionar o terminar la sesión. Vuelve a intentarlo; las sesiones nuevas seguirán bloqueadas hasta confirmar el cierre.'
+    )
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
     expect(screen.getAllByText('Trabajando')).not.toHaveLength(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
 
     await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  })
+
+  it('closure retry guidance remains usable until confirmation clears only the old target', async () => {
+    let attempts = 0
+    const ended = CoordinatingSessionMother.ended()
+    ended.body = JSON.stringify({
+      ...JSON.parse(ended.body),
+      operation: 'close-failed',
+      closureError: {
+        code: 'session-termination-permission-denied',
+        detail: 'permission denied for the saved process group',
+      },
+    })
+    backendHolding(ended, () => {
+      attempts += 1
+      return attempts === 1
+        ? {
+            status: 400,
+            body: JSON.stringify({
+              code: 'session-ownership-unverifiable',
+              detail: 'the original identity is unavailable',
+            }),
+          }
+        : {
+            status: 200,
+            body: JSON.stringify({
+              status: 'closed',
+              conversation: CoordinatingSessionMother.CONVERSATION,
+              target: CoordinatingSessionMother.TARGET,
+            }),
+          }
+    })
+    openHome()
+
+    expect(await screen.findByText(/El sistema no tiene permisos para verificar/)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    expect(screen.queryByRole('tab', { name: 'brainstorming' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    expect(await screen.findByText(/No hay identidad original suficiente para terminar/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
     expect(attempts).toBe(2)
   })
 

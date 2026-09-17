@@ -136,6 +136,14 @@ class Mother {
 
     return held
   }
+
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
+    return held
+  }
 }
 
 class RunningApi {
@@ -207,6 +215,19 @@ describe('SpecReslicingRoute', () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ status: 'published', pullRequest: Mother.PULL_REQUEST })
+    expect(publish.asked).toEqual([new PublishReslicingParams({
+      root: Mother.ROOT, repository: Mother.REPOSITORY,
+    })])
+  })
+
+  it('a failed closure keeps the matching spec reslicing action eligible', async () => {
+    const publish = PublishReslicingSpy.publishing()
+
+    const response = await RunningApi.press(
+      Mother.failedClose(), publish, { [GateKey.HEADER]: Keys.MINTED }
+    )
+
+    expect(response.status).toBe(200)
     expect(publish.asked).toEqual([new PublishReslicingParams({
       root: Mother.ROOT, repository: Mother.REPOSITORY,
     })])

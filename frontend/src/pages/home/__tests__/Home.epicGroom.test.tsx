@@ -74,15 +74,19 @@ const stubGroomableBackendWithASession = () => {
   return fetching
 }
 
-const stubBackend = (activePlans: Answer) => {
+const stubBackend = (
+  activePlans: Answer,
+  coordinatingSession = CoordinatingSessionMother.working(),
+  epicGroom = EpicGroomMother.groomable(),
+) => {
   const fetching = vi.fn(async (input: string | URL | Request) => {
     const path = String(input)
     if (path === '/spec-freeze') return responseFor(SpecFreezeMother.none())
-    if (path === '/epic-groom') return responseFor(EpicGroomMother.groomable())
+    if (path === '/epic-groom') return responseFor(epicGroom)
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.working())
+    if (path === '/coordinating-session') return responseFor(coordinatingSession)
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -126,6 +130,29 @@ describe('Home and gate 2', () => {
     expect(session).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(0)
+  })
+
+  it.each([
+    ['live groom', CoordinatingSessionMother.liveCloseFailed, EpicGroomMother.groomable, 'Ejecutar el groom'],
+    ['recovered-ended groom', CoordinatingSessionMother.endedCloseFailed, EpicGroomMother.groomable, 'Ejecutar el groom'],
+    ['live promotion', CoordinatingSessionMother.liveCloseFailed, EpicGroomMother.groomed, 'Autorizar el trabajo'],
+    ['recovered-ended promotion', CoordinatingSessionMother.endedCloseFailed, EpicGroomMother.groomed, 'Autorizar el trabajo'],
+    ['live reslicing', CoordinatingSessionMother.liveCloseFailed, EpicGroomMother.resliced, 'Publicar el nuevo slicing'],
+    ['recovered-ended reslicing', CoordinatingSessionMother.endedCloseFailed, EpicGroomMother.resliced, 'Publicar el nuevo slicing'],
+  ])('keeps %s usable while the failed closure reserves session opening', async (
+    _scenario,
+    failed,
+    gate,
+    action,
+  ) => {
+    stubBackend(NO_ACTIVE_PLANS, failed(), gate())
+    openHome()
+
+    expect(await screen.findByRole('button', { name: action }, A_LOADED_SUITE)).toBeEnabled()
+    if (action === 'Ejecutar el groom') {
+      expect(screen.getByRole('button', { name: REVIEW_THE_SLICING })).toBeDisabled()
+    }
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
   })
 
   it('opens and selects a groom conversation over an idle ended coordinator', async () => {

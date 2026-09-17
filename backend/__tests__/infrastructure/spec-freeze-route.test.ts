@@ -413,7 +413,6 @@ describe('SpecFreezeRoute', () => {
     CoordinatingOperation.OPENING,
     CoordinatingOperation.RECOVERING,
     CoordinatingOperation.CLOSING,
-    CoordinatingOperation.CLOSE_FAILED,
   ])('a gate mutation is refused while the coordinating session is %s', async (operation) => {
     const freeze = FreezeSpecSpy.neverAsked()
     const port = await RunningApi.listening(
@@ -428,6 +427,23 @@ describe('SpecFreezeRoute', () => {
       detail: `the coordinating session is ${operation}: wait for it to settle before acting`,
     })
     expect(freeze.asked).toEqual([])
+  })
+
+  it('failed closure preserves current-work gate eligibility without opening another session', async () => {
+    const held = Mother.occupied(CoordinatingOperation.CLOSE_FAILED)
+    const freeze = FreezeSpecSpy.answering(Mother.frozenOutcome())
+    const port = await RunningApi.listening(held, ReadSpecFreezeSpy.neverAsked(), freeze, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(200)
+    expect(freeze.asked).toHaveLength(1)
+    expect(freeze.asked[0].root).toEqual(Mother.ROOT)
+    expect(held.reserve().outcome).toBe('live-held')
+
+    const stale = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED }, Mother.NEXT_TARGET)
+    expect(stale.status).toBe(400)
+    expect(freeze.asked).toHaveLength(1)
   })
 
   it('a delayed read cannot issue gate authority after its coordinating target is replaced', async () => {

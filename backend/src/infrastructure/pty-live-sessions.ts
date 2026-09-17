@@ -4,7 +4,13 @@ import { LiveSessions, LiveSessionNotLive } from '../domain/ports/live-sessions.
 import { LiveSession } from '../domain/value-objects/live-session.ts'
 import { SessionProgram } from '../domain/value-objects/session-program.ts'
 import { ClosureStatus, SessionClosure } from '../domain/value-objects/session-closure.ts'
-import { SessionNotTerminated, SessionTerminationUnconfirmed } from '../domain/exceptions.ts'
+import { SessionProcessOwnership } from '../domain/value-objects/session-process-ownership.ts'
+import {
+  SessionNotTerminated,
+  SessionOwnershipUnverifiable,
+  SessionTerminationPermissionDenied,
+  SessionTerminationUnconfirmed,
+} from '../domain/exceptions.ts'
 import type { LiveSessionStream } from '../domain/ports/live-sessions.ts'
 import type { ConversationId } from '../domain/value-objects/conversation-id.ts'
 
@@ -26,35 +32,45 @@ type Sleep = (milliseconds: number) => Promise<void>
 type InspectProcessTable = (signal: AbortSignal) => Promise<string>
 type InspectionGroups = ReadonlyMap<number, ReadonlyMap<number, string>>
 
-type OpenTerminal = {
-  session: LiveSession,
-  terminal: Terminal,
+type OwnershipContext = {
+  readonly key: string,
+  readonly sessionId: string,
+  readonly processGroup: number,
+  readonly retained: boolean,
+  terminal: Terminal | null,
   scrollback: string,
   watchers: Set<Watcher>,
   ended: boolean,
   rootExited: boolean,
-  signalAuthority: boolean,
-  groupAbsenceConfirmed: boolean,
+  originalGroupGone: boolean,
   rootIdentity: string | null,
   originalIdentities: Map<number, string>,
   bootstrap: Promise<void>,
   termination: Promise<void> | null,
+  closureIdentity: string | null,
+}
+
+type OpenTerminal = OwnershipContext & { readonly session: LiveSession, readonly terminal: Terminal }
+type ProcessSnapshot = {
+  readonly group: ReadonlyMap<number, string>,
+  readonly leaderIdentity: string | null,
+  readonly leaderProcessGroup: number | null,
 }
 
 type SnapshotWaiter = {
-  resolve: (group: ReadonlyMap<number, string>) => void,
+  resolve: (snapshot: ProcessSnapshot) => void,
   reject: (cause: unknown) => void,
   timer: ReturnType<typeof setTimeout>,
 }
 
 type PendingInspection = {
-  opened: OpenTerminal,
+  opened: OwnershipContext,
   waiters: Set<SnapshotWaiter>,
   background: boolean,
 }
 
 type StartedInspection = {
-  opened: OpenTerminal,
+  opened: OwnershipContext,
   anchored: boolean,
   rootWasLive: boolean,
   waiters: Set<SnapshotWaiter>,
@@ -93,7 +109,8 @@ export class PtyLiveSessions extends LiveSessions {
   readonly #open: Map<string, OpenTerminal>
   readonly #owned: Map<string, OpenTerminal>
   readonly #confirmed: Map<string, SessionClosure>
-  readonly #pending: Map<OpenTerminal, PendingInspection>
+  readonly #recovered: Map<string, OwnershipContext>
+  readonly #pending: Map<OwnershipContext, PendingInspection>
   #active: ActiveInspection | null
   #startTimer: ReturnType<typeof setTimeout> | null
   #backgroundTimer: ReturnType<typeof setTimeout> | null
@@ -130,6 +147,7 @@ export class PtyLiveSessions extends LiveSessions {
     this.#open = new Map()
     this.#owned = new Map()
     this.#confirmed = new Map()
+    this.#recovered = new Map()
     this.#pending = new Map()
     this.#active = null
     this.#startTimer = null
@@ -162,25 +180,29 @@ export class PtyLiveSessions extends LiveSessions {
       throw new Error(`a terminal pid must be a positive safe integer, got ${JSON.stringify(terminal.pid)}`)
     }
     const opened: OpenTerminal = {
+      key: session.id,
+      sessionId: session.id,
+      processGroup: terminal.pid,
+      retained: true,
       session,
       terminal,
       scrollback: '',
       watchers: new Set(),
       ended: false,
       rootExited: false,
-      signalAuthority: true,
-      groupAbsenceConfirmed: false,
+      originalGroupGone: false,
       rootIdentity: null,
       originalIdentities: new Map(),
       bootstrap: Promise.resolve(),
       termination: null,
+      closureIdentity: null,
     }
     this.#open.set(session.id, opened)
     this.#owned.set(session.id, opened)
     terminal.onData((bytes) => this.#received(opened, bytes))
     terminal.onExit(() => this.#exited(opened, program.name))
-    opened.bootstrap = this.#requestSnapshot(opened).then((group) => {
-      this.#applyBootstrap(opened, group)
+    opened.bootstrap = this.#requestSnapshot(opened).then((snapshot) => {
+      this.#applyBootstrap(opened, snapshot.group)
     })
     opened.bootstrap.catch(() => {})
     this.stderr(`live session ${session.id} (${program.name}) opened\n`)
@@ -240,58 +262,65 @@ export class PtyLiveSessions extends LiveSessions {
       throw new SessionNotTerminated(`session ${session.id} has no retained process ownership`)
     }
 
-    return new SessionClosure({
+    const closure = new SessionClosure({
       conversation,
       target,
       session: session.id,
       processGroup: owned.terminal.pid,
       status: ClosureStatus.REQUESTED,
+      ownership: this.#ownershipOf(owned),
     })
+    this.#bind(owned, closure)
+    return closure
+  }
+
+  async prepareTermination(closure: SessionClosure): Promise<SessionClosure> {
+    if (closure.session === null || closure.processGroup === null) return closure
+    const owned = this.#owned.get(closure.session)
+    if (owned === undefined) return closure
+    this.#requireMatchingContext(owned, closure)
+    await owned.bootstrap.catch(() => {})
+    if (owned.rootIdentity === null && !owned.rootExited && !owned.originalGroupGone) {
+      const bootstrap = await this.#freshSnapshot(owned, closure.processGroup)
+      this.#applyBootstrap(owned, bootstrap.group)
+    }
+    if (owned.rootIdentity !== null && !owned.originalGroupGone) {
+      const snapshot = await this.#freshSnapshot(owned, closure.processGroup)
+      this.#applyPreparation(owned, snapshot)
+    }
+    const ownership = this.#ownershipOf(owned)
+    return ownership === null ? closure : closure.withOwnership(ownership)
   }
 
   async terminate(closure: SessionClosure): Promise<void> {
     if (closure.session === null || closure.processGroup === null) return
     if (this.#isConfirmed(closure)) return
-    const owned = this.#owned.get(closure.session)
-    if (owned === undefined || owned.terminal.pid !== closure.processGroup) {
-      throw new SessionNotTerminated(
-        `session ${closure.session} process group ${closure.processGroup} is not owned by this backend`
-      )
-    }
+    const owned = this.#contextFor(closure)
     if (owned.termination !== null) return owned.termination
 
-    const termination = Promise.resolve().then(() => this.#terminateOwned(owned, closure.processGroup!))
+    const termination = Promise.resolve().then(() => this.#terminateOwned(owned, closure))
     owned.termination = termination
     try {
       await termination
       this.#retire(owned, closure)
     } finally {
-      if (this.#owned.get(owned.session.id) === owned) owned.termination = null
+      if (this.#isCurrent(owned)) owned.termination = null
     }
   }
 
   async confirmTermination(closure: SessionClosure): Promise<void> {
     if (closure.processGroup === null) return
     if (this.#isConfirmed(closure)) return
-    const owned = closure.session === null ? undefined : this.#owned.get(closure.session)
-    if (owned !== undefined && owned.terminal.pid === closure.processGroup) {
+    const owned = closure.session === null ? undefined : this.#matchingContext(closure)
+    if (owned !== undefined) {
       if (owned.termination !== null) await owned.termination
-      await this.#confirmOwned(owned, closure.processGroup)
+      await this.#confirmOwned(owned, closure)
       this.#retire(owned, closure)
       return
     }
-    try {
-      if (!this.#groupAbsent(closure.processGroup)) {
-        throw new SessionTerminationUnconfirmed(
-          `process group ${closure.processGroup} still exists after backend ownership was lost`
-        )
-      }
-    } catch (cause) {
-      if (cause instanceof SessionTerminationUnconfirmed) throw cause
-      throw new SessionTerminationUnconfirmed(
-        `process group ${closure.processGroup} could not be confirmed absent: ${String(cause)}`
-      )
-    }
+    const context = this.#recoveryContext(closure)
+    await this.#confirmOwned(context, closure)
+    this.#retire(context, closure)
   }
 
   #terminalFor(session: LiveSession): OpenTerminal {
@@ -316,14 +345,12 @@ export class PtyLiveSessions extends LiveSessions {
   #exited(opened: OpenTerminal, program: string): void {
     if (opened.rootExited) return
     opened.rootExited = true
-    if (!opened.groupAbsenceConfirmed) {
+    if (!opened.originalGroupGone) {
       try {
         if (this.#groupAbsent(opened.terminal.pid)) {
-          opened.groupAbsenceConfirmed = true
-          opened.signalAuthority = false
+          opened.originalGroupGone = true
         }
       } catch {
-        opened.signalAuthority = false
       }
     }
     opened.ended = true
@@ -335,53 +362,40 @@ export class PtyLiveSessions extends LiveSessions {
     this.stderr(`live session ${opened.session.id} (${program}) exited\n`)
   }
 
-  async #terminateOwned(opened: OpenTerminal, processGroup: number): Promise<void> {
-    if (opened.rootExited && opened.groupAbsenceConfirmed) return
-    await opened.bootstrap.catch(() => {})
-    if (opened.rootIdentity === null && !opened.rootExited && !opened.groupAbsenceConfirmed) {
-      const bootstrap = await this.#freshSnapshot(opened, processGroup)
-      this.#applyBootstrap(opened, bootstrap)
+  async #terminateOwned(opened: OwnershipContext, closure: SessionClosure): Promise<void> {
+    const processGroup = closure.processGroup!
+    this.#requireMatchingContext(opened, closure)
+    if (opened.originalGroupGone) {
+      if (!opened.retained || opened.rootExited) return
+      this.#refuseUnverified(opened, closure, 'unverifiable until the retained PTY exit is observed')
     }
-    if (opened.rootIdentity === null) {
-      if (opened.rootExited && opened.groupAbsenceConfirmed) return
-      throw new SessionNotTerminated(
-        `session ${opened.session.id} has no established root identity for process group ${processGroup}`
-      )
-    }
-    if (!opened.signalAuthority) {
-      if (await this.#terminatedWithin(opened, processGroup, this.termGraceMs + this.killGraceMs)) return
-      throw new SessionNotTerminated(
-        `session ${opened.session.id} no longer has verified authority over process group ${processGroup}`
-      )
-    }
-
     const beforeTerm = await this.#freshSnapshot(opened, processGroup)
-    if (!this.#applyFreshSnapshot(opened, beforeTerm)) {
-      if (await this.#terminatedWithin(opened, processGroup, this.termGraceMs + this.killGraceMs)) return
-      throw new SessionNotTerminated(
-        `session ${opened.session.id} no longer has a present original process group ${processGroup}`
-      )
+    const termDecision = this.#signalDecision(opened, closure, beforeTerm)
+    if (termDecision === 'gone') return
+    if (termDecision !== 'verified') this.#refuseUnverified(opened, closure, termDecision)
+    if (!this.#isCurrent(opened) || opened.originalGroupGone) {
+      throw new SessionNotTerminated(`session ${opened.sessionId} lost ownership before SIGTERM`)
     }
-    if (this.#owned.get(opened.session.id) !== opened || !opened.signalAuthority || opened.groupAbsenceConfirmed) {
-      throw new SessionNotTerminated(`session ${opened.session.id} lost signal authority before SIGTERM`)
-    }
-    this.#send(processGroup, 'SIGTERM')
-    if (await this.#terminatedWithin(opened, processGroup, this.termGraceMs)) return
+    this.#send(closure, 'SIGTERM')
+    if (await this.#terminatedWithin(opened, closure, this.termGraceMs)) return
 
     const beforeKill = await this.#freshSnapshot(opened, processGroup)
-    if (this.#applyFreshSnapshot(opened, beforeKill) &&
-      this.#owned.get(opened.session.id) === opened && opened.signalAuthority && !opened.groupAbsenceConfirmed) {
-      this.#send(processGroup, 'SIGKILL')
+    const killDecision = this.#signalDecision(opened, closure, beforeKill)
+    if (killDecision === 'gone') return
+    if (killDecision !== 'verified') this.#refuseUnverified(opened, closure, killDecision)
+    if (!this.#isCurrent(opened) || opened.originalGroupGone) {
+      throw new SessionNotTerminated(`session ${opened.sessionId} lost ownership before SIGKILL`)
     }
-    if (await this.#terminatedWithin(opened, processGroup, this.killGraceMs)) return
+    this.#send(closure, 'SIGKILL')
+    if (await this.#terminatedWithin(opened, closure, this.killGraceMs)) return
 
     throw new SessionNotTerminated(
-      `session ${opened.session.id} did not exit with process group ${processGroup} within ` +
+      `session ${opened.sessionId} did not exit with process group ${processGroup} within ` +
       `${this.termGraceMs + this.killGraceMs}ms`
     )
   }
 
-  async #freshSnapshot(opened: OpenTerminal, processGroup: number): Promise<ReadonlyMap<number, string>> {
+  async #freshSnapshot(opened: OwnershipContext, processGroup: number): Promise<ProcessSnapshot> {
     try {
       return await this.#requestSnapshot(opened)
     } catch (cause) {
@@ -391,83 +405,123 @@ export class PtyLiveSessions extends LiveSessions {
     }
   }
 
-  async #terminatedWithin(opened: OpenTerminal, processGroup: number, budgetMs: number): Promise<boolean> {
+  async #terminatedWithin(opened: OwnershipContext, closure: SessionClosure, budgetMs: number): Promise<boolean> {
+    const processGroup = closure.processGroup!
     const deadline = this.now() + budgetMs
+    let probeFailure: unknown = null
     while (this.now() < deadline) {
-      if (this.#terminationConfirmed(opened, processGroup)) return true
+      try {
+        if (this.#terminationConfirmed(opened, processGroup)) return true
+        probeFailure = null
+      } catch (cause) {
+        probeFailure = cause
+      }
       await this.sleep(Math.min(this.pollMs, deadline - this.now()))
     }
 
-    return this.#terminationConfirmed(opened, processGroup)
+    try {
+      return this.#terminationConfirmed(opened, processGroup)
+    } catch (cause) {
+      this.#throwProbeFailure(closure, probeFailure ?? cause)
+    }
   }
 
-  #terminationConfirmed(opened: OpenTerminal, processGroup: number): boolean {
-    if (!opened.groupAbsenceConfirmed) {
+  #terminationConfirmed(opened: OwnershipContext, processGroup: number): boolean {
+    if (!opened.originalGroupGone) {
       try {
         if (this.#groupAbsent(processGroup)) {
-          opened.groupAbsenceConfirmed = true
-          opened.signalAuthority = false
+          opened.originalGroupGone = true
           this.#removeBackgroundInterest(opened)
         }
       } catch (cause) {
-        if (!opened.signalAuthority) throw cause
+        throw cause
       }
     }
 
-    return opened.rootExited && opened.groupAbsenceConfirmed
+    return opened.originalGroupGone && (!opened.retained || opened.rootExited)
   }
 
-  async #confirmOwned(opened: OpenTerminal, processGroup: number): Promise<void> {
+  async #confirmOwned(opened: OwnershipContext, closure: SessionClosure): Promise<void> {
+    const processGroup = closure.processGroup!
+    let probeFailure: unknown = null
     try {
       if (this.#terminationConfirmed(opened, processGroup)) return
     } catch (cause) {
-      throw new SessionTerminationUnconfirmed(
-        `owned process group ${processGroup} could not be confirmed terminated: ${String(cause)}`
+      probeFailure = cause
+    }
+    if (closure.ownership !== null) {
+      let snapshot: ProcessSnapshot
+      try {
+        snapshot = await this.#freshSnapshot(opened, processGroup)
+      } catch (cause) {
+        if (probeFailure !== null) this.#throwProbeFailure(closure, probeFailure)
+        throw new SessionTerminationUnconfirmed(
+          `target ${closure.target} session ${closure.session} owned process group ${processGroup} ` +
+          `could not be confirmed terminated: ${String(cause)}`
+        )
+      }
+      if (this.#leaderReplaced(opened, snapshot)) {
+        opened.originalGroupGone = true
+        this.#endRetained(opened)
+        return
+      }
+    }
+    if (probeFailure !== null) this.#throwProbeFailure(closure, probeFailure)
+    if (closure.ownership === null) {
+      throw new SessionOwnershipUnverifiable(
+        `target ${closure.target} session ${closure.session} process group ${processGroup} has no durable original identity; ` +
+        'automatic termination is unavailable until absence can be verified'
       )
     }
     throw new SessionTerminationUnconfirmed(
-      `session ${opened.session.id} still lacks PTY exit and process-group absence confirmation`
+      `target ${closure.target} session ${opened.sessionId} process group ${processGroup} ` +
+      'still lacks process-group extinction confirmation'
     )
   }
 
-  #retire(opened: OpenTerminal, closure: SessionClosure): void {
-    opened.signalAuthority = false
-    opened.groupAbsenceConfirmed = true
-    this.#confirmed.set(opened.session.id, closure)
-    this.#open.delete(opened.session.id)
-    this.#owned.delete(opened.session.id)
+  #retire(opened: OwnershipContext, closure: SessionClosure): void {
+    opened.originalGroupGone = true
+    this.#confirmed.set(PtyLiveSessions.#closureIdentity(closure), closure)
+    this.#endRetained(opened)
+    this.#owned.delete(opened.sessionId)
+    this.#recovered.delete(opened.key)
     this.#cancelInterest(opened)
   }
 
   #isConfirmed(closure: SessionClosure): boolean {
-    if (closure.session === null) return false
-    const confirmed = this.#confirmed.get(closure.session)
-
-    return confirmed !== undefined && confirmed.conversation.text === closure.conversation.text &&
-      confirmed.target === closure.target && confirmed.processGroup === closure.processGroup
+    const confirmed = this.#confirmed.get(PtyLiveSessions.#closureIdentity(closure))
+    if (confirmed === undefined) return false
+    this.#requireExactCheckpoint(confirmed, closure, 'confirmed closure')
+    return true
   }
 
-  #applyBootstrap(opened: OpenTerminal, group: ReadonlyMap<number, string>): void {
-    if (this.#owned.get(opened.session.id) !== opened || opened.rootExited ||
-      opened.groupAbsenceConfirmed || !opened.signalAuthority || opened.rootIdentity !== null) return
-    const rootIdentity = group.get(opened.terminal.pid)
+  #applyBootstrap(opened: OwnershipContext, group: ReadonlyMap<number, string>): void {
+    if (!opened.retained || !this.#isCurrent(opened) || opened.rootExited ||
+      opened.originalGroupGone || opened.rootIdentity !== null) return
+    const rootIdentity = group.get(opened.processGroup)
     if (rootIdentity === undefined) return
     opened.rootIdentity = rootIdentity
     opened.originalIdentities = new Map(group)
   }
 
-  #applyObservation(target: StartedInspection, group: ReadonlyMap<number, string>): void {
+  #applyObservation(target: StartedInspection, snapshot: ProcessSnapshot): void {
     const opened = target.opened
-    if (this.#owned.get(opened.session.id) !== opened || opened.groupAbsenceConfirmed || !opened.signalAuthority) return
+    if (!this.#isCurrent(opened) || opened.originalGroupGone || !opened.retained) return
+    const group = snapshot.group
     if (!target.anchored) {
       this.#applyBootstrap(opened, group)
       return
     }
+    if (this.#leaderReplaced(opened, snapshot)) {
+      opened.originalGroupGone = true
+      this.#endRetained(opened)
+      this.#removeBackgroundInterest(opened)
+      return
+    }
     if (group.size === 0) {
       try {
-        if (this.#groupAbsent(opened.terminal.pid)) {
-          opened.groupAbsenceConfirmed = true
-          opened.signalAuthority = false
+        if (this.#groupAbsent(opened.processGroup)) {
+          opened.originalGroupGone = true
           this.#removeBackgroundInterest(opened)
         }
       } catch {
@@ -475,46 +529,14 @@ export class PtyLiveSessions extends LiveSessions {
       return
     }
     const rootIdentity = opened.rootIdentity
-    const currentRoot = group.get(opened.terminal.pid)
+    const currentRoot = group.get(opened.processGroup)
     if (rootIdentity !== null && currentRoot === rootIdentity && target.rootWasLive) {
-      if (!this.#learnMembers(opened, group)) opened.signalAuthority = false
+      this.#learnMembers(opened, group)
       return
     }
-    if (currentRoot !== undefined || !this.#membersMatch(opened, group)) opened.signalAuthority = false
   }
 
-  #applyFreshSnapshot(opened: OpenTerminal, group: ReadonlyMap<number, string>): boolean {
-    if (this.#owned.get(opened.session.id) !== opened || !opened.signalAuthority || opened.groupAbsenceConfirmed) {
-      return false
-    }
-    if (group.size === 0) {
-      if (this.#groupAbsent(opened.terminal.pid)) {
-        opened.groupAbsenceConfirmed = true
-        opened.signalAuthority = false
-        this.#removeBackgroundInterest(opened)
-        return false
-      }
-      throw new SessionNotTerminated(
-        `process group ${opened.terminal.pid} is absent from the process table but still exists`
-      )
-    }
-    const currentRoot = group.get(opened.terminal.pid)
-    if (currentRoot === opened.rootIdentity && !opened.rootExited) {
-      if (!this.#learnMembers(opened, group)) {
-        opened.signalAuthority = false
-        throw new SessionNotTerminated(
-          `session ${opened.session.id} cannot verify the original members of process group ${opened.terminal.pid}`
-        )
-      }
-    }
-    if (this.#membersMatch(opened, group)) return true
-    opened.signalAuthority = false
-    throw new SessionNotTerminated(
-      `session ${opened.session.id} cannot verify the original members of process group ${opened.terminal.pid}`
-    )
-  }
-
-  #membersMatch(opened: OpenTerminal, current: ReadonlyMap<number, string>): boolean {
+  #membersMatch(opened: OwnershipContext, current: ReadonlyMap<number, string>): boolean {
     for (const [pid, identity] of current) {
       if (opened.originalIdentities.get(pid) !== identity) return false
     }
@@ -522,7 +544,7 @@ export class PtyLiveSessions extends LiveSessions {
     return true
   }
 
-  #learnMembers(opened: OpenTerminal, current: ReadonlyMap<number, string>): boolean {
+  #learnMembers(opened: OwnershipContext, current: ReadonlyMap<number, string>): boolean {
     for (const [pid, identity] of current) {
       const original = opened.originalIdentities.get(pid)
       if (original !== undefined && original !== identity) return false
@@ -534,7 +556,238 @@ export class PtyLiveSessions extends LiveSessions {
     return true
   }
 
-  #requestSnapshot(opened: OpenTerminal): Promise<ReadonlyMap<number, string>> {
+  #applyPreparation(opened: OwnershipContext, snapshot: ProcessSnapshot): void {
+    if (!opened.retained || !this.#isCurrent(opened) || opened.originalGroupGone) return
+    if (this.#leaderReplaced(opened, snapshot)) {
+      opened.originalGroupGone = true
+      this.#endRetained(opened)
+      return
+    }
+    if (!opened.rootExited && snapshot.group.get(opened.processGroup) === opened.rootIdentity) {
+      this.#learnMembers(opened, snapshot.group)
+    }
+  }
+
+  #signalDecision(
+    opened: OwnershipContext,
+    closure: SessionClosure,
+    snapshot: ProcessSnapshot,
+  ): 'verified' | 'gone' | 'unverifiable' {
+    if (!this.#isCurrent(opened)) return 'gone'
+    if (opened.originalGroupGone) return !opened.retained || opened.rootExited ? 'gone' : 'unverifiable'
+    if (this.#leaderReplaced(opened, snapshot)) {
+      opened.originalGroupGone = true
+      this.#endRetained(opened)
+      return 'gone'
+    }
+    if (snapshot.group.size === 0) {
+      let absent: boolean
+      try {
+        absent = this.#groupAbsent(opened.processGroup)
+      } catch (cause) {
+        this.#throwProbeFailure(closure, cause)
+      }
+      if (absent) {
+        opened.originalGroupGone = true
+        this.#removeBackgroundInterest(opened)
+        return !opened.retained || opened.rootExited ? 'gone' : 'unverifiable'
+      }
+      return 'unverifiable'
+    }
+    if (opened.rootIdentity === null || closure.ownership === null) return 'unverifiable'
+    if (snapshot.leaderIdentity === opened.rootIdentity && snapshot.leaderProcessGroup !== opened.processGroup) {
+      return 'unverifiable'
+    }
+    const checkpoint = new Map(closure.ownership.members.map(({ pid, identity }) => [pid, identity]))
+    for (const [pid, identity] of snapshot.group) {
+      if (opened.originalIdentities.get(pid) !== identity || checkpoint.get(pid) !== identity) return 'unverifiable'
+    }
+    return 'verified'
+  }
+
+  #leaderReplaced(opened: OwnershipContext, snapshot: ProcessSnapshot): boolean {
+    return opened.rootIdentity !== null && snapshot.leaderIdentity !== null &&
+      snapshot.leaderIdentity !== opened.rootIdentity
+  }
+
+  #refuseUnverified(opened: OwnershipContext, closure: SessionClosure, decision: string): never {
+    throw new SessionOwnershipUnverifiable(
+      `target ${closure.target} session ${opened.sessionId} process group ${closure.processGroup} is ${decision}; ` +
+      'automatic termination requires every current member in the durable original checkpoint'
+    )
+  }
+
+  #ownershipOf(opened: OwnershipContext): SessionProcessOwnership | null {
+    if (opened.rootIdentity === null) return null
+    return new SessionProcessOwnership({
+      rootIdentity: opened.rootIdentity,
+      members: [...opened.originalIdentities].map(([pid, identity]) => ({ pid, identity })),
+    })
+  }
+
+  #contextFor(closure: SessionClosure): OwnershipContext {
+    const retained = this.#owned.get(closure.session!)
+    if (retained !== undefined) {
+      this.#requireMatchingContext(retained, closure)
+      return retained
+    }
+    return this.#recoveryContext(closure)
+  }
+
+  #matchingContext(closure: SessionClosure): OwnershipContext | undefined {
+    const retained = this.#owned.get(closure.session!)
+    if (retained !== undefined) {
+      this.#requireMatchingContext(retained, closure)
+      return retained
+    }
+    const recovered = this.#recovered.get(PtyLiveSessions.#closureIdentity(closure))
+    if (recovered !== undefined) this.#requireMatchingContext(recovered, closure)
+    return recovered
+  }
+
+  #recoveryContext(closure: SessionClosure): OwnershipContext {
+    const identity = PtyLiveSessions.#closureIdentity(closure)
+    const existing = this.#recovered.get(identity)
+    if (existing !== undefined) {
+      this.#requireMatchingContext(existing, closure)
+      return existing
+    }
+    for (const retained of this.#owned.values()) {
+      if (retained.sessionId === closure.session || retained.processGroup === closure.processGroup) {
+        throw new SessionOwnershipUnverifiable(
+          `target ${closure.target} cannot borrow retained session ${retained.sessionId} process group ${retained.processGroup}`
+        )
+      }
+    }
+    const ownership = closure.ownership
+    const recovered: OwnershipContext = {
+      key: identity,
+      sessionId: closure.session!,
+      processGroup: closure.processGroup!,
+      retained: false,
+      terminal: null,
+      scrollback: '',
+      watchers: new Set(),
+      ended: true,
+      rootExited: true,
+      originalGroupGone: false,
+      rootIdentity: ownership?.rootIdentity ?? null,
+      originalIdentities: new Map(ownership?.members.map(({ pid, identity: memberIdentity }) => [pid, memberIdentity])),
+      bootstrap: Promise.resolve(),
+      termination: null,
+      closureIdentity: identity,
+    }
+    this.#recovered.set(identity, recovered)
+    return recovered
+  }
+
+  #bind(opened: OwnershipContext, closure: SessionClosure): void {
+    const identity = PtyLiveSessions.#closureIdentity(closure)
+    if (opened.closureIdentity !== null && opened.closureIdentity !== identity) {
+      throw new SessionOwnershipUnverifiable(
+        `session ${opened.sessionId} process group ${opened.processGroup} is bound to another closure target`
+      )
+    }
+    opened.closureIdentity = identity
+  }
+
+  #requireMatchingContext(opened: OwnershipContext, closure: SessionClosure): void {
+    if (opened.sessionId !== closure.session || opened.processGroup !== closure.processGroup) {
+      throw new SessionOwnershipUnverifiable(
+        `session ${closure.session} process group ${closure.processGroup} does not match retained ownership`
+      )
+    }
+    const identity = PtyLiveSessions.#closureIdentity(closure)
+    if (opened.closureIdentity !== null && opened.closureIdentity !== identity) {
+      throw new SessionOwnershipUnverifiable(
+        `target ${closure.target} session ${closure.session} process group ${closure.processGroup} ` +
+        'is bound to another closure target'
+      )
+    }
+    if (!opened.retained) {
+      this.#requireContextCheckpoint(opened, closure)
+    } else if (closure.ownership !== null && !this.#compatibleRetainedCheckpoint(opened, closure.ownership)) {
+      throw new SessionOwnershipUnverifiable(
+        `target ${closure.target} session ${closure.session} durable checkpoint conflicts with retained ownership`
+      )
+    }
+    this.#bind(opened, closure)
+  }
+
+  #requireContextCheckpoint(opened: OwnershipContext, closure: SessionClosure): void {
+    const ownership = closure.ownership
+    if (ownership === null) {
+      if (opened.rootIdentity === null && opened.originalIdentities.size === 0) return
+    } else if (opened.rootIdentity === ownership.rootIdentity &&
+      PtyLiveSessions.#membersEqual(opened.originalIdentities, ownership.members)) {
+      return
+    }
+    throw new SessionOwnershipUnverifiable(
+      `target ${closure.target} session ${closure.session} process group ${closure.processGroup} ` +
+      'checkpoint conflicts with recovered ownership'
+    )
+  }
+
+  #compatibleRetainedCheckpoint(opened: OwnershipContext, ownership: SessionProcessOwnership): boolean {
+    if (opened.rootIdentity !== ownership.rootIdentity) return false
+    return ownership.members.every(({ pid, identity }) => opened.originalIdentities.get(pid) === identity)
+  }
+
+  #requireExactCheckpoint(recorded: SessionClosure, offered: SessionClosure, source: string): void {
+    const left = recorded.ownership
+    const right = offered.ownership
+    const matches = left === null || right === null
+      ? left === right
+      : left.rootIdentity === right.rootIdentity &&
+        PtyLiveSessions.#membersEqual(new Map(left.members.map(({ pid, identity }) => [pid, identity])), right.members)
+    if (matches) return
+    throw new SessionOwnershipUnverifiable(
+      `target ${offered.target} session ${offered.session} process group ${offered.processGroup} ` +
+      `checkpoint conflicts with ${source}`
+    )
+  }
+
+  static #membersEqual(
+    recorded: ReadonlyMap<number, string>,
+    offered: readonly { readonly pid: number, readonly identity: string }[],
+  ): boolean {
+    return recorded.size === offered.length &&
+      offered.every(({ pid, identity }) => recorded.get(pid) === identity)
+  }
+
+  #isCurrent(opened: OwnershipContext): boolean {
+    return opened.retained
+      ? this.#owned.get(opened.sessionId) === opened
+      : this.#recovered.get(opened.key) === opened
+  }
+
+  #endRetained(opened: OwnershipContext): void {
+    if (!opened.retained) return
+    opened.rootExited = true
+    opened.ended = true
+    this.#open.delete(opened.sessionId)
+    for (const watcher of opened.watchers) watcher.onEnded()
+    opened.watchers.clear()
+  }
+
+  #throwProbeFailure(closure: SessionClosure, cause: unknown): never {
+    const code = PtyLiveSessions.#codeOf(cause)
+    if (cause instanceof SessionTerminationPermissionDenied || code === 'EPERM' || code === 'EACCES') {
+      throw new SessionTerminationPermissionDenied(
+        `target ${closure.target} session ${closure.session} process group ${closure.processGroup} ` +
+        `cannot be inspected with current OS permissions: ${String(cause)}`
+      )
+    }
+    throw new SessionTerminationUnconfirmed(
+      `process group ${closure.processGroup} could not be confirmed absent: ${String(cause)}`
+    )
+  }
+
+  static #closureIdentity(closure: SessionClosure): string {
+    return `${closure.conversation.text}\u0000${closure.target}\u0000${closure.session ?? ''}\u0000${closure.processGroup ?? ''}`
+  }
+
+  #requestSnapshot(opened: OwnershipContext): Promise<ProcessSnapshot> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         const pending = this.#pending.get(opened)
@@ -569,7 +822,7 @@ export class PtyLiveSessions extends LiveSessions {
   #queueBackgroundInspections(): void {
     this.#backgroundTimer = null
     for (const opened of this.#owned.values()) {
-      if (opened.rootExited || opened.groupAbsenceConfirmed || !opened.signalAuthority) continue
+      if (opened.rootExited || opened.originalGroupGone) continue
       const pending = this.#pending.get(opened)
       if (pending === undefined) {
         this.#pending.set(opened, { opened, waiters: new Set(), background: true })
@@ -629,14 +882,25 @@ export class PtyLiveSessions extends LiveSessions {
       return
     }
     for (const target of active.targets) {
-      const group = groups.get(target.opened.terminal.pid) ?? new Map<number, string>()
+      const group = groups.get(target.opened.processGroup) ?? new Map<number, string>()
+      let leaderIdentity: string | null = null
+      let leaderProcessGroup: number | null = null
+      for (const [processGroup, members] of groups) {
+        const identity = members.get(target.opened.processGroup)
+        if (identity !== undefined) {
+          leaderIdentity = identity
+          leaderProcessGroup = processGroup
+          break
+        }
+      }
+      const snapshot: ProcessSnapshot = { group, leaderIdentity, leaderProcessGroup }
       try {
-        this.#applyObservation(target, group)
+        this.#applyObservation(target, snapshot)
       } catch {
       }
       for (const waiter of target.waiters) {
         clearTimeout(waiter.timer)
-        waiter.resolve(new Map(group))
+        waiter.resolve({ ...snapshot, group: new Map(group) })
       }
       target.waiters.clear()
     }
@@ -663,13 +927,13 @@ export class PtyLiveSessions extends LiveSessions {
 
   #hasEligibleRoots(): boolean {
     for (const opened of this.#owned.values()) {
-      if (!opened.rootExited && !opened.groupAbsenceConfirmed && opened.signalAuthority) return true
+      if (!opened.rootExited && !opened.originalGroupGone) return true
     }
 
     return false
   }
 
-  #removeBackgroundInterest(opened: OpenTerminal): void {
+  #removeBackgroundInterest(opened: OwnershipContext): void {
     const pending = this.#pending.get(opened)
     if (pending !== undefined) {
       pending.background = false
@@ -706,13 +970,13 @@ export class PtyLiveSessions extends LiveSessions {
     }
   }
 
-  #cancelInterest(opened: OpenTerminal): void {
+  #cancelInterest(opened: OwnershipContext): void {
     const pending = this.#pending.get(opened)
     if (pending !== undefined) {
       this.#pending.delete(opened)
       for (const waiter of pending.waiters) {
         clearTimeout(waiter.timer)
-        waiter.reject(new Error(`session ${opened.session.id} was retired during process-table inspection`))
+        waiter.reject(new Error(`session ${opened.sessionId} was retired during process-table inspection`))
       }
       this.#clearUnusedStartTimer()
     }
@@ -720,7 +984,7 @@ export class PtyLiveSessions extends LiveSessions {
     if (active !== undefined) {
       for (const waiter of active.waiters) {
         clearTimeout(waiter.timer)
-        waiter.reject(new Error(`session ${opened.session.id} was retired during process-table inspection`))
+        waiter.reject(new Error(`session ${opened.sessionId} was retired during process-table inspection`))
       }
       active.waiters.clear()
       active.background = false
@@ -738,18 +1002,26 @@ export class PtyLiveSessions extends LiveSessions {
     const active = this.#active
     if (active === null) return
     const interested = active.targets.some((target) =>
-      target.waiters.size > 0 || (target.background && this.#owned.get(target.opened.session.id) === target.opened)
+      target.waiters.size > 0 || (target.background && this.#isCurrent(target.opened))
     )
     if (!interested) active.controller.abort()
   }
 
-  #send(processGroup: number, signal: NodeJS.Signals): void {
+  #send(closure: SessionClosure, signal: NodeJS.Signals): void {
+    const processGroup = closure.processGroup!
     try {
       this.signal(-processGroup, signal)
     } catch (cause) {
       if (PtyLiveSessions.#codeOf(cause) === 'ESRCH') return
+      if (PtyLiveSessions.#codeOf(cause) === 'EPERM' || PtyLiveSessions.#codeOf(cause) === 'EACCES') {
+        throw new SessionTerminationPermissionDenied(
+          `target ${closure.target} session ${closure.session} ${signal} permission denied for ` +
+          `process group ${processGroup}: ${String(cause)}`
+        )
+      }
       throw new SessionNotTerminated(
-        `${signal} could not be sent to process group ${processGroup}: ${String(cause)}`
+        `target ${closure.target} session ${closure.session} ${signal} could not be sent to ` +
+        `process group ${processGroup}: ${String(cause)}`
       )
     }
   }
@@ -760,6 +1032,11 @@ export class PtyLiveSessions extends LiveSessions {
       return false
     } catch (cause) {
       if (PtyLiveSessions.#codeOf(cause) === 'ESRCH') return true
+      if (PtyLiveSessions.#codeOf(cause) === 'EPERM' || PtyLiveSessions.#codeOf(cause) === 'EACCES') {
+        throw new SessionTerminationPermissionDenied(
+          `process group ${processGroup} inspection permission denied: ${String(cause)}`
+        )
+      }
       throw new SessionNotTerminated(`process group ${processGroup} could not be inspected: ${String(cause)}`)
     }
   }

@@ -1,4 +1,5 @@
 import { ConversationId } from './conversation-id.ts'
+import { SessionProcessOwnership } from './session-process-ownership.ts'
 
 export const ClosureStatus = Object.freeze({
   REQUESTED: 'requested',
@@ -13,13 +14,15 @@ export class SessionClosure {
   readonly session: string | null
   readonly processGroup: number | null
   readonly status: ClosureStatusValue
+  readonly ownership: SessionProcessOwnership | null
 
-  constructor({ conversation, target, session, processGroup, status }: {
+  constructor({ conversation, target, session, processGroup, status, ownership = null }: {
     conversation: ConversationId,
     target: unknown,
     session: unknown,
     processGroup: unknown,
     status: unknown,
+    ownership?: SessionProcessOwnership | null,
   }) {
     if (!ConversationId.isWellFormed(target)) {
       throw new Error(`a session closure target must be a UUID, got ${JSON.stringify(target)}`)
@@ -38,11 +41,21 @@ export class SessionClosure {
     if ((session === null) !== (processGroup === null)) {
       throw new Error('a session closure terminal and process group must both be present or both be null')
     }
+    if (ownership !== null && !(ownership instanceof SessionProcessOwnership)) {
+      throw new Error('session closure ownership must be SessionProcessOwnership or null')
+    }
+    if (ownership !== null && (session === null || processGroup === null)) {
+      throw new Error('session closure ownership requires a terminal and process group')
+    }
+    if (ownership !== null && SessionProcessOwnership.pidOf(ownership.rootIdentity) !== processGroup) {
+      throw new Error('session closure ownership root pid must match its process group')
+    }
     this.conversation = conversation
     this.target = target
     this.session = session
     this.processGroup = processGroup
     this.status = status
+    this.ownership = ownership
     Object.freeze(this)
   }
 
@@ -53,6 +66,18 @@ export class SessionClosure {
       session: this.session,
       processGroup: this.processGroup,
       status: ClosureStatus.CLOSED,
+      ownership: this.ownership,
+    })
+  }
+
+  withOwnership(ownership: SessionProcessOwnership): SessionClosure {
+    return new SessionClosure({
+      conversation: this.conversation,
+      target: this.target,
+      session: this.session,
+      processGroup: this.processGroup,
+      status: this.status,
+      ownership,
     })
   }
 

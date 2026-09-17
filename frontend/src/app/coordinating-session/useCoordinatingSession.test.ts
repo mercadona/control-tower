@@ -64,7 +64,7 @@ describe('useCoordinatingSession', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['opening', 'recovering', 'closing', 'close-failed'] as const)(
+  it.each(['opening', 'recovering', 'closing'] as const)(
     'treats the authoritative %s operation as busy and blocks both opening handlers',
     async (operation) => {
       const answer = CoordinatingSessionMother.working()
@@ -82,6 +82,23 @@ describe('useCoordinatingSession', () => {
       expect(fetching).toHaveBeenCalledTimes(1)
     },
   )
+
+  it('failed closure keeps opening reserved while current-work operations remain eligible', async () => {
+    const answer = CoordinatingSessionMother.working()
+    answer.body = JSON.stringify({
+      ...JSON.parse(answer.body),
+      operation: 'close-failed',
+      closureError: { code: 'session-ownership-unverifiable', detail: 'missing anchor' },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => response(answer)))
+    const { result } = renderHook(() => useCoordinatingSession())
+
+    await waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
+
+    expect(result.current.blocksOpening).toBe(true)
+    expect(result.current.operationBusy).toBe(false)
+    expect(result.current.closeError).toContain('No hay identidad original suficiente')
+  })
 
   it('admits one groom replacement over an idle ended conversation and blocks competitors while it opens', async () => {
     const opening = new Deferred<Response>()
@@ -223,7 +240,9 @@ describe('useCoordinatingSession', () => {
 
     expect(result.current.read).toMatchObject({ kind: 'live', target: CoordinatingSessionMother.TARGET })
     await act(async () => { await result.current.close() })
-    expect(result.current.closeError).toBe('La sesión todavía no ha terminado. Puedes volver a intentarlo.')
+    expect(result.current.closeError).toBe(
+      'No se pudo inspeccionar o terminar la sesión. Vuelve a intentarlo; las sesiones nuevas seguirán bloqueadas hasta confirmar el cierre.'
+    )
   })
 
   it('retires an externally closed live target when a fresh read authoritatively returns idle', async () => {
@@ -329,6 +348,64 @@ describe('useCoordinatingSession', () => {
 
     expect(result.current.target).toBeNull()
     expect(result.current.blocksOpening).toBe(false)
+  })
+
+  it('a stale poll and persisted diagnostic cannot replace the explicit close refusal', async () => {
+    vi.useFakeTimers()
+    const stale = new Deferred<Response>()
+    const refusal = new Deferred<Response>()
+    const persisted = CoordinatingSessionMother.endedCloseFailed()
+    let reads = 0
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      if (input === '/coordinating-session/close') return refusal.promise
+      reads += 1
+      return reads === 2 ? stale.promise : Promise.resolve(response(persisted))
+    }))
+    const { result } = renderHook(() => useCoordinatingSession())
+    await vi.waitFor(() => expect(result.current.closeError).toContain('El sistema no tiene permisos para verificar'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+
+    let closing!: Promise<unknown>
+    act(() => { closing = result.current.close() })
+    await act(async () => {
+      refusal.resolve(new Response(JSON.stringify({
+        code: 'session-ownership-unverifiable',
+        detail: 'the original identity is unavailable',
+      }), { status: 400 }))
+      await closing
+    })
+    await act(async () => stale.resolve(response(persisted)))
+
+    expect(result.current.closeError).toContain('No hay identidad original suficiente para terminar')
+    expect(result.current.target).toBe(CoordinatingSessionMother.TARGET)
+    expect(result.current.blocksOpening).toBe(true)
+  })
+
+  it('a close reply for a newer target cannot clear that target or its diagnostic', async () => {
+    const newer = CoordinatingSessionMother.endedCloseFailed()
+    newer.body = newer.body
+      .replace(CoordinatingSessionMother.TARGET, EpicGroomMother.GROOM_TARGET)
+      .replace(CoordinatingSessionMother.CONVERSATION, EpicGroomMother.GROOM_CONVERSATION)
+    let reads = 0
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      if (input === '/coordinating-session/close') {
+        return Promise.resolve(new Response(JSON.stringify({
+          status: 'closed',
+          conversation: EpicGroomMother.GROOM_CONVERSATION,
+          target: EpicGroomMother.GROOM_TARGET,
+        })))
+      }
+      reads += 1
+      return Promise.resolve(response(reads === 1 ? CoordinatingSessionMother.working() : newer))
+    }))
+    const { result } = renderHook(() => useCoordinatingSession())
+    await waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
+
+    await act(async () => { await result.current.close() })
+    await waitFor(() => expect(result.current.target).toBe(EpicGroomMother.GROOM_TARGET))
+
+    expect(result.current.closeError).toContain('El sistema no tiene permisos para verificar')
+    expect(result.current.blocksOpening).toBe(true)
   })
 
   it('a none read before close acknowledgement cannot strand cancellation', async () => {

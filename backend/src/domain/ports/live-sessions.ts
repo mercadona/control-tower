@@ -46,6 +46,10 @@ export class LiveSessions {
     throw new Error(`${this.constructor.name} must implement terminate(), asked for ${closure.target}`)
   }
 
+  async prepareTermination(closure: SessionClosure): Promise<SessionClosure> {
+    throw new Error(`${this.constructor.name} must implement prepareTermination(), asked for ${closure.target}`)
+  }
+
   async confirmTermination(closure: SessionClosure): Promise<void> {
     throw new Error(`${this.constructor.name} must implement confirmTermination(), asked for ${closure.target}`)
   }

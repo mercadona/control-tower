@@ -53,18 +53,20 @@ export class CloseCoordinatingSession {
     }
     if (recorded?.status === ClosureStatus.CLOSED) return new CoordinatingSessionClosed(params)
 
-    const requested = recorded ?? this.liveSessions.terminationEvidence(params)
+    let requested = recorded ?? this.liveSessions.terminationEvidence(params)
     if (recorded === null) await this.records.requestClosure(requested)
-    if (recorded === null) {
-      await this.liveSessions.terminate(requested)
-    } else {
+    if (recorded !== null) {
       try {
         await this.liveSessions.confirmTermination(requested)
+        await this.records.completeClosure(requested.closed())
+        return new CoordinatingSessionClosed(params)
       } catch (cause) {
-        if (!(cause instanceof SessionTerminationUnconfirmed) || params.session === null) throw cause
-        await this.liveSessions.terminate(requested)
+        if (!(cause instanceof SessionTerminationUnconfirmed)) throw cause
       }
     }
+    requested = await this.liveSessions.prepareTermination(requested)
+    await this.records.requestClosure(requested)
+    await this.liveSessions.terminate(requested)
     await this.records.completeClosure(requested.closed())
 
     return new CoordinatingSessionClosed(params)

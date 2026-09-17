@@ -135,6 +135,14 @@ class Mother {
 
     return held
   }
+
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
+    return held
+  }
 }
 
 class RunningApi {
@@ -269,6 +277,18 @@ describe('GroomSessionRoute', () => {
       code: GroomSessionOutcome.ALREADY_LIVE,
       detail: 'a coordinating conversation is already live: it has to end before the groom conversation opens',
     })
+    expect(open.asked).toEqual([])
+  })
+
+  it('a failed closure still refuses opening a groom terminal', async () => {
+    const open = OpenGroomSessionSpy.opening()
+
+    const response = await RunningApi.posting(
+      Mother.failedClose(), open, { [GateKey.HEADER]: Keys.MINTED }
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: GroomSessionOutcome.ALREADY_LIVE })
     expect(open.asked).toEqual([])
   })
 

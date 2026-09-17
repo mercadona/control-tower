@@ -41,7 +41,8 @@ export class CoordinatingSessionTarget {
       )
       return null
     }
-    if (registry.operation() !== CoordinatingOperation.IDLE) {
+    if (registry.operation() !== CoordinatingOperation.IDLE &&
+      registry.operation() !== CoordinatingOperation.CLOSE_FAILED) {
       Answer.refuse(
         response,
         400,

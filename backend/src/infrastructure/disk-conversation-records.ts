@@ -13,6 +13,7 @@ import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../domain/value-objects/session-timeline-event.ts'
 import type { PhasePrompt } from '../domain/value-objects/phase-prompt.ts'
 import { ClosureStatus, SessionClosure } from '../domain/value-objects/session-closure.ts'
+import { SessionProcessOwnership } from '../domain/value-objects/session-process-ownership.ts'
 
 type ReadText = (path: string) => Promise<string | null>
 type WriteText = (path: string, text: string) => Promise<void>
@@ -24,7 +25,7 @@ export class DiskConversationRecords extends ConversationRecords {
   static readonly PROMPT = 'phase-prompt.md'
   static readonly TIMELINE = 'timeline.json'
   static readonly CLOSURE = 'closure.json'
-  static readonly CLOSURE_VERSION = 1
+  static readonly CLOSURE_VERSION = 2
 
   readonly read: ReadText
   readonly write: WriteText
@@ -115,6 +116,10 @@ export class DiskConversationRecords extends ConversationRecords {
       session: closure.session,
       processGroup: closure.processGroup,
       status: closure.status,
+      ownership: closure.ownership === null ? null : {
+        rootIdentity: closure.ownership.rootIdentity,
+        members: closure.ownership.members.map(({ pid, identity }) => ({ pid, identity })),
+      },
     }
   }
 
@@ -123,13 +128,12 @@ export class DiskConversationRecords extends ConversationRecords {
     if (!DiskConversationRecords.#isRecord(parsed)) {
       throw new Error(`expected a JSON object for closure evidence, got ${JSON.stringify(parsed)}`)
     }
-    const expected = ['conversation', 'processGroup', 'session', 'status', 'target', 'version']
+    const expectedV1 = ['conversation', 'processGroup', 'session', 'status', 'target', 'version']
+    const expectedV2 = ['conversation', 'ownership', 'processGroup', 'session', 'status', 'target', 'version']
     const keys = Object.keys(parsed).sort()
-    if (JSON.stringify(keys) !== JSON.stringify(expected)) {
-      throw new Error(`expected closure evidence keys ${JSON.stringify(expected)}, got ${JSON.stringify(keys)}`)
-    }
-    if (parsed.version !== DiskConversationRecords.CLOSURE_VERSION) {
-      throw new Error(`expected closure evidence version 1, got ${JSON.stringify(parsed.version)}`)
+    const expected = parsed.version === 1 ? expectedV1 : parsed.version === 2 ? expectedV2 : null
+    if (expected === null || JSON.stringify(keys) !== JSON.stringify(expected)) {
+      throw new Error(`expected exact closure evidence version 1 or 2, got version ${JSON.stringify(parsed.version)} keys ${JSON.stringify(keys)}`)
     }
     if (parsed.status !== ClosureStatus.REQUESTED && parsed.status !== ClosureStatus.CLOSED) {
       throw new Error(`expected closure status requested or closed, got ${JSON.stringify(parsed.status)}`)
@@ -141,7 +145,21 @@ export class DiskConversationRecords extends ConversationRecords {
       session: parsed.session,
       processGroup: parsed.processGroup,
       status: parsed.status,
+      ownership: parsed.version === 1 || parsed.ownership === null
+        ? null
+        : DiskConversationRecords.#ownershipFrom(parsed.ownership),
     })
+  }
+
+  static #ownershipFrom(raw: unknown): SessionProcessOwnership {
+    if (!DiskConversationRecords.#isRecord(raw)) {
+      throw new Error(`expected closure ownership object or null, got ${JSON.stringify(raw)}`)
+    }
+    const keys = Object.keys(raw).sort()
+    if (JSON.stringify(keys) !== JSON.stringify(['members', 'rootIdentity'])) {
+      throw new Error(`expected closure ownership keys ["members","rootIdentity"], got ${JSON.stringify(keys)}`)
+    }
+    return new SessionProcessOwnership({ rootIdentity: raw.rootIdentity, members: raw.members })
   }
 
   static #sameEvidence(left: SessionClosure, right: SessionClosure): boolean {
@@ -149,6 +167,22 @@ export class DiskConversationRecords extends ConversationRecords {
       && left.target === right.target
       && left.session === right.session
       && left.processGroup === right.processGroup
+      && DiskConversationRecords.#sameOwnership(left.ownership, right.ownership)
+  }
+
+  static #sameOwnership(left: SessionProcessOwnership | null, right: SessionProcessOwnership | null): boolean {
+    if (left === null || right === null) return left === right
+    return left.rootIdentity === right.rootIdentity && JSON.stringify(left.members) === JSON.stringify(right.members)
+  }
+
+  static #enriches(recorded: SessionClosure, requested: SessionClosure): boolean {
+    if (recorded.conversation.text !== requested.conversation.text || recorded.target !== requested.target ||
+      recorded.session !== requested.session || recorded.processGroup !== requested.processGroup ||
+      recorded.status !== ClosureStatus.REQUESTED || requested.status !== ClosureStatus.REQUESTED) return false
+    if (recorded.ownership === null) return requested.ownership !== null
+    if (requested.ownership === null || recorded.ownership.rootIdentity !== requested.ownership.rootIdentity) return false
+    const requestedMembers = new Map(requested.ownership.members.map(({ pid, identity }) => [pid, identity]))
+    return recorded.ownership.members.every(({ pid, identity }) => requestedMembers.get(pid) === identity)
   }
 
   async #writeClosure(closure: SessionClosure): Promise<void> {
@@ -246,11 +280,18 @@ export class DiskConversationRecords extends ConversationRecords {
     }
     const recorded = await this.recallClosure(closure.conversation)
     if (recorded !== null) {
-      if (!DiskConversationRecords.#sameEvidence(recorded, closure)) {
+      if (recorded.status === ClosureStatus.CLOSED) {
+        throw new SessionClosureNotUnderstood(
+          `conversation ${closure.conversation.text} closure is already complete`
+        )
+      }
+      if (DiskConversationRecords.#sameEvidence(recorded, closure)) return
+      if (!DiskConversationRecords.#enriches(recorded, closure)) {
         throw new SessionClosureNotUnderstood(
           `conversation ${closure.conversation.text} already has different closure evidence`
         )
       }
+      await this.#writeClosure(closure)
       return
     }
     await this.#writeClosure(closure)
