@@ -4,6 +4,7 @@ import { Conversations } from '../domain/ports/conversations.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import { SessionProgram } from '../domain/value-objects/session-program.ts'
 import { PtyLiveSessions } from './pty-live-sessions.ts'
+import { Invocation } from './invocation.ts'
 import type { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
 import type { LiveSession } from '../domain/value-objects/live-session.ts'
 
@@ -95,6 +96,7 @@ export class ClaudeConversations extends Conversations {
       cwd: conversation.root.text,
       env: {
         ...ClaudeConversations.#definedEntriesOf(this.env),
+        [Invocation.CONFIG_VARIABLE]: this.claudeDirectory,
         [ClaudeConversations.HOOKS_URL_VARIABLE]: this.hooksUrl(),
         ...extra,
       },

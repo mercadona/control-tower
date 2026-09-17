@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
 import { ClaudeConversations } from '../../src/infrastructure/claude-conversations.ts'
+import { Invocation } from '../../src/infrastructure/invocation.ts'
 import { ConversationNotStarted } from '../../src/domain/exceptions.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
@@ -93,6 +94,18 @@ class Adapter {
 }
 
 describe('ClaudeConversations', () => {
+  it('hands the session the resolved claude directory, so an empty one in its own environment does not reach it', () => {
+    const { conversations, spawn } = Adapter.readyToOpen({
+      env: { PATH: '/usr/bin', [Invocation.CONFIG_VARIABLE]: '' },
+      claudeDirectory: Governed.CLAUDE_DIRECTORY,
+    })
+
+    conversations.start({ conversation: Governed.conversation(), promptPath: Governed.PROMPT_PATH })
+
+    const [call] = spawn.calls
+    expect(call.options.env[Invocation.CONFIG_VARIABLE]).toBe(Governed.CLAUDE_DIRECTORY)
+  })
+
   it('leaves the prompt path in the environment and never in the command', () => {
     const { conversations, spawn } = Adapter.readyToOpen({ newId: () => Governed.ID.text })
     const id = conversations.mint()
