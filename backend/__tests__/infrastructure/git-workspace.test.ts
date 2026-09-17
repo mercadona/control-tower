@@ -19,6 +19,7 @@ import {
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -285,8 +286,8 @@ class GitDouble {
     return GitDouble.printing('')
   }
 
-  static located(): WorkspaceLocation {
-    return new WorkspaceLocation({ root: GitDouble.ROOT, path: GitDouble.WORKTREE, branch: 'feat/42' })
+  static located(): RootedWorkspaceLocation {
+    return new RootedWorkspaceLocation({ root: GitDouble.ROOT, path: GitDouble.WORKTREE, branch: 'feat/42' })
   }
 
   static stillVisible(): ProcessOutput {
@@ -844,7 +845,9 @@ describe('GitWorkspace', () => {
 
   it('undoing_a_location_runs_both_orders_against_the_root_the_location_carries_and_never_against_the_process_directory', async () => {
     const git = new GitDouble()
-    const located = new WorkspaceLocation({ root: '/elsewhere/clone', path: '/elsewhere/clone/.worktrees/42', branch: 'feat/42' })
+    const located = new RootedWorkspaceLocation({
+      root: '/elsewhere/clone', path: '/elsewhere/clone/.worktrees/42', branch: 'feat/42',
+    })
 
     await git.workspace().undo(located)
 
@@ -852,6 +855,29 @@ describe('GitWorkspace', () => {
       ['-C', '/elsewhere/clone', 'worktree', 'remove', '--force', '/elsewhere/clone/.worktrees/42'],
       ['-C', '/elsewhere/clone', 'branch', '-D', 'feat/42'],
     ])
+  })
+})
+
+type RootlessLocation = { readonly root: undefined, readonly path: string, readonly branch: string }
+type UndoTarget = Parameters<GitWorkspace['undo']>[0]
+type RootlessRefused = RootlessLocation extends UndoTarget ? false : true
+
+class UndoTargetContract {
+  static readonly ROOTLESS_LOCATION_IS_REFUSED: RootlessRefused = true
+}
+
+describe('GitWorkspace.undo can only be reached with a location that carries a root', () => {
+  it('a_location_whose_root_is_undefined_is_not_a_location_undo_accepts', () => {
+    expect(UndoTargetContract.ROOTLESS_LOCATION_IS_REFUSED).toBe(true)
+  })
+
+  it('the_location_prepare_hands_back_is_the_rooted_kind_undo_asks_for', async () => {
+    const git = new GitDouble()
+
+    const { located } = await git.prepared()
+
+    expect(located).toBeInstanceOf(RootedWorkspaceLocation)
+    expect(located.root).toBe(GitDouble.ROOT)
   })
 })
 

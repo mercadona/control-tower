@@ -13,6 +13,7 @@ import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
+import { RootedWorkspaceLocation } from '../domain/value-objects/rooted-workspace-location.ts'
 import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
 import { UnusedWorkspace } from '../domain/value-objects/unused-workspace.ts'
 import {
@@ -587,7 +588,7 @@ export class GitWorkspace extends Workspace {
     const path = GitWorkspace.pathFor(root.text, issue)
     const branch = GitWorkspace.branchFor(issue)
     await this.#cut(root.text, issue, base)
-    const located = new WorkspaceLocation({ root: root.text, path, branch })
+    const located = new RootedWorkspaceLocation({ root: root.text, path, branch })
     try {
       return new SownWorkspace({ located, baseline: await this.#seed(located, slice, base, cut) })
     } catch (failure) {
@@ -650,15 +651,14 @@ export class GitWorkspace extends Workspace {
     return declared
   }
 
-  async undo(located: WorkspaceLocation): Promise<void> {
-    const root = located.root as string
-    const removed = await this.run(GitWorkspace.removeArgvFor(root, located.path))
+  async undo(located: RootedWorkspaceLocation): Promise<void> {
+    const removed = await this.run(GitWorkspace.removeArgvFor(located.root, located.path))
     if (removed.failed) {
       throw new WorkspaceNotCleaned(
         `the worktree ${located.path} remains and branch cleanup was not attempted: ${GitWorkspace.#output(removed)}`
       )
     }
-    const deleted = await this.run(GitWorkspace.deleteBranchArgvFor(root, located.branch))
+    const deleted = await this.run(GitWorkspace.deleteBranchArgvFor(located.root, located.branch))
     if (deleted.failed) {
       throw new WorkspaceNotCleaned(
         `the worktree ${located.path} was removed but branch ${located.branch} remains: ${GitWorkspace.#output(deleted)}`
