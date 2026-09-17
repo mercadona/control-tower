@@ -198,6 +198,20 @@ describe('EpicGroomPanel', () => {
     expect(fetching).not.toHaveBeenCalledWith('/epic-groom', expect.anything())
   })
 
+  it('offers the review of the slicing before the groom, in the order the work happens', async () => {
+    const reading = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', reading)
+
+    renderPanel()
+
+    await screen.findByRole('button', GROOM_BUTTON)
+    const gateButtons = screen
+      .getAllByRole('button')
+      .map((button) => button.textContent)
+      .filter((name) => name === SESSION_BUTTON.name || name === GROOM_BUTTON.name)
+    expect(gateButtons).toEqual([SESSION_BUTTON.name, GROOM_BUTTON.name])
+  })
+
   it('the automatic press happens once, however many times the page renders after it', async () => {
     const fetching = vi
       .fn()

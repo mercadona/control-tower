@@ -191,11 +191,11 @@ const EpicGroomPanel = ({ onSessionOpened }: EpicGroomPanelProps) => {
             </a>
           </>
         )}
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing}>
-          {presses.pressed === 'groom' ? GROOMING : GROOM}
-        </Button>
         <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'session' ? OPENING_SESSION : OPEN_SESSION}
+        </Button>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {sessionNotice}
         {gateNotice}
