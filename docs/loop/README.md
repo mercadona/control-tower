@@ -93,7 +93,7 @@ second-hand description:
   into `AGENTS.md` — `docs/superpowers/SLICES-CONTRACT.md` on a fresh repo,
   or the legacy `docs/superpowers/CONTRATO-SLICES.md`, kept in place, on one
   that already carried it, since #188);
-- `skills/state-template/STATE.template.md`;
+- `templates/STATE.template.md`;
 - `hooks/hooks.json`;
 - `templates/_TEMPLATE-execution-spec.md` — the execution spec template.
   It already travels with the plugin: `ct-init` seeds it into

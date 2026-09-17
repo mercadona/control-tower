@@ -297,7 +297,7 @@ And one level further up, in the repo and **outside** what is distributed (the m
 
 ### The superpowers fork
 
-The skills under `skills/` (except `state-template`, our own) are a fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see [`skills/LICENSE-superpowers`](skills/LICENSE-superpowers)), invocable as `control-tower-loop:<name>`. The 11 that were really used were forked, measured over 2,704 transcripts.
+The skills under `skills/` are a fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see [`skills/LICENSE-superpowers`](skills/LICENSE-superpowers)), invocable as `control-tower-loop:<name>`. The 11 that were really used were forked, measured over 2,704 transcripts.
 
 **Three seams are rewritten and are not trampled in a cherry-pick** (`__tests__/skills-fork.test.js` watches over them):
 

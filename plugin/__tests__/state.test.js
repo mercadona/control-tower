@@ -597,7 +597,7 @@ describe('composeHydration: the frontmatter comments do not travel', () => {
     expect(out).toContain('voy por T7')
   })
   it('the empty template hydrates in less than 1,000 bytes', () => {
-    const tpl = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'state-template', 'STATE.template.md'), 'utf8')
+    const tpl = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'STATE.template.md'), 'utf8')
     expect(Buffer.byteLength(tpl, 'utf8')).toBeGreaterThan(1000)
     expect(Buffer.byteLength(composeHydration(tpl, ''), 'utf8')).toBeLessThan(1000)
   })

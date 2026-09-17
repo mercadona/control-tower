@@ -1,7 +1,7 @@
 # Fork of superpowers — origin and seams
 
-The skills in this directory (except `state-template` and
-`writing-plans-prescriptive`, which are our own) are a
+The skills in this directory (except `writing-plans-prescriptive`,
+which is our own) are a
 fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see
 [LICENSE-superpowers](./LICENSE-superpowers)), taken from the local cache
 `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/` on
