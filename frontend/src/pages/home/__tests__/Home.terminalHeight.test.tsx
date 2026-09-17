@@ -43,7 +43,12 @@ const stubFetch = () => {
   return fetching
 }
 
-const openExpanded = () => openHome()
+const openExpandedOnceTheTerminalStreamIsOpen = async () => {
+  const opened = openHome()
+  await waitFor(() => expect(FakeEventSource.opened.length).toBeGreaterThan(0))
+
+  return opened
+}
 
 describe('Home · session terminal height', () => {
   beforeEach(() => {
@@ -59,7 +64,7 @@ describe('Home · session terminal height', () => {
 
   it('renders the terminal pane before the timeline pane inside the drawer', async () => {
     stubFetch()
-    openExpanded()
+    await openExpandedOnceTheTerminalStreamIsOpen()
 
     await screen.findByRole('tab', { name: 'zsh' })
     const panel = document.querySelector('.home__session-panel') as HTMLElement
@@ -71,7 +76,7 @@ describe('Home · session terminal height', () => {
     localStorage.setItem(STORAGE_KEY, '400')
     stubFetch()
     mockPanelHeight(800)
-    openExpanded()
+    await openExpandedOnceTheTerminalStreamIsOpen()
 
     await screen.findByRole('tab', { name: 'zsh' })
     const pane = document.querySelector('.home__terminal-pane') as HTMLElement
@@ -81,7 +86,7 @@ describe('Home · session terminal height', () => {
   it('dragging the handle stores the new height', async () => {
     stubFetch()
     mockPanelHeight(800, 100)
-    openExpanded()
+    await openExpandedOnceTheTerminalStreamIsOpen()
 
     await screen.findByRole('tab', { name: 'zsh' })
     const separator = screen.getByRole('separator', { name: LABEL })
@@ -98,7 +103,7 @@ describe('Home · session terminal height', () => {
     localStorage.setItem(STORAGE_KEY, '400')
     stubFetch()
     mockPanelHeight(800)
-    openExpanded()
+    await openExpandedOnceTheTerminalStreamIsOpen()
 
     await screen.findByRole('tab', { name: 'zsh' })
     const separator = screen.getByRole('separator', { name: LABEL })
@@ -112,7 +117,7 @@ describe('Home · session terminal height', () => {
   it('the maximum leaves the timeline pane its reserve', async () => {
     stubFetch()
     mockPanelHeight(500)
-    openExpanded()
+    await openExpandedOnceTheTerminalStreamIsOpen()
 
     await screen.findByRole('tab', { name: 'zsh' })
     await waitFor(() => expect(screen.getByRole('separator', { name: LABEL })).toHaveAttribute('aria-valuemax', '340'))
