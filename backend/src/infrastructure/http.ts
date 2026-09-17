@@ -86,8 +86,8 @@ export class JsonBody {
   static readonly MAX_BYTES = 8 * 1024
   static readonly #OVERFLOW = 'entity.too.large'
 
-  static isOverflow(cause: { type?: unknown }): boolean {
-    return cause.type === JsonBody.#OVERFLOW
+  static isOverflow(cause: unknown): boolean {
+    return cause !== null && typeof cause === 'object' && 'type' in cause && cause.type === JsonBody.#OVERFLOW
   }
 
   static overflowRefusal(): Refusal {
