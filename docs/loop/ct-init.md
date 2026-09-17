@@ -134,6 +134,40 @@ yourself: the decision is the user's, you tell them the way out exists.
 
 Lastly, if the repository is not registered in `control-tower/tower/workspaces.*.yaml`, say so; do not register it yourself.
 
+## What is contract in the texts `/ct-init` seeds
+
+A later round moves the texts below out of `ct-init.sh` and into template
+files, and translates their prose to English (CLAUDE.md's rule for new
+modules). Some strings inside them are anchors: code outside `ct-init.sh`
+locates a section, or asserts a governed repository, by matching them
+literally. **Those do not move in a translation.** Same doctrine as CLAUDE.md's
+table of ten parsed headings: renaming one of these is a coordinated change of
+every reader and every seeded repository at once, not a wording choice.
+
+| Anchor | Read by | Pinned by |
+|---|---|---|
+| `## Build, test & lint` | `plugin/scripts/baseline.js:88` | `baseline.test.js:19`, `ct-next-baseline.test.js:54`, `baseline-real-process.test.js:16` |
+| `## Cómo se atraviesa este repo (e2e)` | `plugin/scripts/gates.js:118`, `plugin/scripts/ct-step.mjs:682`, `plugin/scripts/dispatch-check.mjs:1104` | `e2e-agents-md.test.js:46,64,75` |
+| `ninguna declarada todavía` (no backticks in this seed line, on purpose — see `declaredIn` in `repo-yardstick.js`) | the yardstick sweep (`plugin/scripts/detect-yardstick.mjs`, via `declaredIn`) | `yardstick-candidates.test.js:335,348`, `ct-init-conventions-seed.test.js:51` |
+| `Rules to obey` | not read by production code — `declaredIn` matches any backtick path in the file regardless of heading. Kept as its own row because a test fixture reproduces it literally | `yardstick-candidates.test.js:351` |
+| `## Slices table format (contract with /ct-groom)`, and its two closed-set legacy spellings `## Formato de la tabla §9 (contrato con /ct-groom)` and `## Formato de la tabla de slices (contrato con /ct-groom)` | `ct-init.sh` itself (`SLICES_HEADING`, `SLICES_HEADING_LEGACY`, `SLICES_HEADING_LEGACY_ES`, `plugin/scripts/ct-init.sh:362,380,385`), to tell a partial migration remnant from a fully-migrated `AGENTS.md` | `ct-init.test.js:891,922,934,946,958,1215` |
+| the three `<!-- ct-init:... -->` marker pairs (`slices-contract`, `loop`, `e2e-howto`) | `plugin/scripts/repo-yardstick.js`'s `withoutCtInitBlocks`/`looksLikeSkeleton` (all three, to discount them when judging a freshly seeded `AGENTS.md`); `plugin/scripts/governed-repo.js`'s `probeGovernedRepo` (the first two only — `CONTRACT_MARKER` and `LOOP_MARKER`, its `GOVERNED_MARKERS`), consumed by `plugin/hooks/commit-keyword-guard.js` to decide whether the closing-keyword gate applies at all | `f27-closing-keywords.test.js:460-465`, `yardstick-candidates.test.js:206` |
+
+**A correction against an earlier draft of this table:** the marker pairs are
+not read by `plugin/scripts/scope.js` — that script does not import
+`governed-repo.js` at all. The real second reader is
+`plugin/hooks/commit-keyword-guard.js`, which calls `probeGovernedRepo` to
+decide whether a commit needs a closing keyword in the first place.
+
+The plan's own sections (`## 7. Tasks`, `## 8. Global verification`,
+`**Objective:**`, `**Files:**`, `**TDD:**`, `**Tests:**`, `**Verification:**`)
+and the ten headings CLAUDE.md already tracks (`## Contexto del epic` /
+`## Contexto del milestone`, `## Contexto heredado`, `## Decisiones
+congeladas`, `## Dependencias`, `## Acceptance criteria (EARS, 1:1 con
+tests)`, `## Descripción`, `## Hipótesis`, `## Señal de observabilidad`, the
+judge's telemetry heading, `## Current State`) are not affected by this table:
+they are contract already, tracked there.
+
 ## `.claude/settings.json` — why the repository declares the plugin
 
 Until #376 the plugin was only ever enabled on the machine of whoever ran
