@@ -267,6 +267,10 @@ export class RunPlanAgents extends PlanAgents {
     )
   }
 
+  owns(watch: PlanWatch): boolean {
+    return this.reservations.has(watch.agent)
+  }
+
   async #completeFix(call: StartedPlanCall): Promise<void> {
     const completed = await this.calls.wait(call)
     await this.measurements.capture(call)
