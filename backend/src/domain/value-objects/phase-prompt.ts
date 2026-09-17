@@ -18,6 +18,13 @@ export class PhasePrompt {
     'When the slicing has to change, edit the table of §9 and stop there: leave the state line and the '
     + 'freeze date as they are, commit nothing and push nothing. Gate 2 publishes your edit as a pull request, '
     + 'and the issues are created when that pull request merges.'
+  static readonly RECOVERY_CAPABILITIES =
+    'For recovery of already-authorized work, use the origin of $CT_SESSION_HOOKS_URL as the backend URL. '
+    + 'Read GET /active-plans and preserve each returned repo, issue number and agent identity. '
+    + 'For observe or continue, POST /recover-plan with exactly {repo, issue, agent} as JSON; '
+    + 'for cleanup, POST /cleanup-plan with the same identity. Read GET /active-plans again after an answer. '
+    + 'Inspect means read the diagnostic and refresh only; never force cleanup or launch replacement work. '
+    + 'Recovery acceptance is not completion. Respect refusals; gates 1 and 2 and merge remain human-owned.'
 
   readonly text: string
 
@@ -37,6 +44,7 @@ export class PhasePrompt {
       PhasePrompt.#roleOf({ repository, root }),
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       ...PhasePrompt.#idea({ story, comment }),
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
 
@@ -52,6 +60,7 @@ export class PhasePrompt {
       PhasePrompt.ISSUES_ARE_NOT_YOURS,
       PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       `The milestone is "${milestone}" and its frozen execution spec is ${spec.path}.`,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
 

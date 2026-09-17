@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 14,
+  "task_name": "Unroute manual implementation and finish its test retirement",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The runtime import and both implementation-route registrations are removed. Ordinary POST and GET fall through to the existing 404 handler. Inherited controls: .agent/run-331/task-14-controls-1.log records both commands exiting 0 and 84 passing tests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test sends ordinary JSON, asserts POST and GET status 404 with the exact not-found body, and asserts zero calls to the rejecting implementPlan spy. Restoring the old registrations produces POST 400 for the absent session and GET 405, failing these assertions.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The specified all-method registration is removed alongside POST and the runtime import. Optional constructor collaborators remain, and the generic 404 code/detail contract is preserved.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Retiring the manual HTTP entrance accords with D-3 and D-8/D-15; D-14's distributed protocol remains untouched. No other closed decision is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The TypeScript HTTP test uses the existing server fixture and checks literal boundary responses, consistent with testing.md and backend HTTP conventions. defects.md: closed vocabulary—no classification added; raw map as the return value of logic—none added; two fields that have to agree—none added; an error named for where it happens—none introduced, and the spy diagnostic names the forbidden effect.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "All 17 removed tests, including collapse projections and implementation transitions, are explicitly named for removal in the brief. Deleting their remaining file and scaffolding is expressly required.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production route removal causes the real server's generic not-found response. Neither fetch nor the response is mocked; the rejecting collaborator only detects forbidden execution.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every hunk serves endpoint unrouting, the named regression test, or explicitly authorized test retirement. Runtime collaborator replacement and legacy action retirement remain deferred as required.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new test checks real HTTP status and body and fails if routing is restored. It owns a fresh spy and server on an ephemeral loopback port; afterEach stops the server. No external service, clock assertion, randomness-dependent expectation, or sleep is involved.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "d3dd379315743a1a1fba80215b25dc170814ec65ff6b756a8f4a89ea47c99bfe"
+  }
+}

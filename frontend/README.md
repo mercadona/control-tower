@@ -10,12 +10,16 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the implementation).
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
-the ticket key and the repository, a button that calls `POST /start-plan`, the
-plan's progress arriving over `GET /plan-events/:issue` (Server-Sent Events), a
-button that calls `POST /implement-plan` once the plan is ready, the panels of
-gates 1 and 2, and the live terminals of the sessions the backend owns. Each
-one has its own directory under `src/app/`, and the endpoint each directory
-consumes is named in the sections below.
+the ticket or free-text request and repository open a coordinating session,
+plan progress arrives over `GET /plan-events/:issue` (Server-Sent Events), and
+the page shows implementation progress, the panels of gates 1 and 2, and the
+live terminals of the sessions the backend owns. `POST /start-plan` accepts the
+retained loose request or a milestone-only command. The milestone path selects
+and starts the next eligible slice; after the committed plan is published, the
+backend resumes the same headless conversation automatically. `POST
+/implement-plan` is not routed, so the page offers no implementation button.
+Each area has its own directory under `src/app/`, and the endpoint it consumes
+is named in the sections below.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
@@ -103,16 +107,43 @@ label in the brand colour and every earlier one muted. It declares no
 `min-width`, so it renders correctly at the panel's narrowest width.
 
 `Home` lays out a right column (`home__side`), a sibling of `main` rather than
-an overlay, that always holds a `Panel` heading **Sesión coordinadora** with
-`CoordinatingSessionStatus` and `SessionsPanel` inside it — on the page in
-every phase, never hidden and never disabled by which stage is showing. Once
-an implementation is running, `ImplementHistory` stacks under that panel in
-the same column. Above 1280 px the column sits beside `main` at
-`clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a fixed
-680px, because the 280 px navigation rail already takes its own share of a
-1440 px viewport and a fixed column left the work area too narrow for its own
-flow bar; below 1280 px the column stacks under the work area with no
-overlay.
+an overlay, that holds a `Drawer` titled **Sesión coordinadora** with
+`CoordinatingSessionStatus`, `SessionsPanel` and, while implementation runs,
+`ImplementHistory` inside it. The drawer starts collapsed to a 48 px rail and
+persists the person's choice under `ct.sessions-column-collapsed`; its toggle is
+available in every phase. Collapsing applies the native `hidden` attribute to
+the content instead of unmounting it, so the terminal keeps its xterm scrollback
+and SSE subscription. `useLiveSessions` polls `GET /sessions` every three
+seconds, so the list discovers a session opened outside the page without
+requiring the drawer to be open. Above 1280 px the open column sits beside
+`main` at `clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a
+fixed 680px, because the 280 px navigation rail already takes its own share of
+a 1440 px viewport and a fixed column left the work area too narrow for its own
+flow bar; below 1280 px the column stacks under the work area with no overlay.
+
+The coordinating session remains available and recoverable while a headless
+plan conversation plans and implements. They have different roles: expanding
+the drawer exposes the coordinating session as the interactive entrance in its
+PTY, while durable headless call records drive the selected slice without
+replacing that entrance.
+
+`app/active-plans` reads `GET /active-plans` on load and while following work.
+An uncertain entry carries a diagnostic, its original repo/issue/agent identity
+and one recovery action. `observe` and `continue` render **Recuperar trabajo**;
+`cleanup` renders **Limpiar arranque fallido**. A press sends the exact identity
+to `POST /recover-plan` or `POST /cleanup-plan` and then reads active plans
+again; it never calls `/start-plan`. The button is disabled while that request
+is pending, and late replies cannot replace a newer workflow or coordinating
+conversation. `inspect` stays read-only and offers **Reintentar recuperación**,
+which only repeats the GET. **Descartar estado** clears this page's local state
+and does not mutate backend work. The coordinating drawer and its live session
+remain mounted throughout recovery.
+
+The mutation owns the active-plan read barrier from the click until its fresh
+GET completes. It first drains a GET that predates the click; timer and manual
+polls that wake while POST is pending start no read. After an accepted or
+refused answer, the mutation alone bypasses its barrier for exactly one new GET,
+so pre-operation state cannot stand in for post-operation reconciliation.
 
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
@@ -130,7 +161,8 @@ Spanish) instead of breaking mid-word.
 clamp and persists the chosen width per browser in `localStorage` under
 `ct.sessions-column-width` — a convenience for that browser alone, restored
 on mount and re-clamped to the viewport; it is never sent to the backend and
-the handle is hidden below 1280 px, where the column is already full width.
+the handle is disabled while the drawer is collapsed and hidden below 1280 px,
+where the column is already full width.
 
 `app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
 the workspace, outside every `currentStage` branch) is gate 1's panel.
@@ -216,7 +248,7 @@ worst move available when nobody can tell what was created.
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
   CORS and no preflight.
 - **The client is `fetch` with no wrapper** (`src/app/start-plan/client.ts`,
-  `src/app/implement-plan/client.ts`) and native `EventSource` for the event
+  `src/app/active-plans/client.ts`) and native `EventSource` for the event
   stream (`src/app/plan-events/client.ts`).
   The in-house libraries are waiting for CI to have access to the private
   registry.
@@ -275,7 +307,8 @@ make test-frontend
 Or inside `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
 
 `vite.config.ts`'s proxy forwards every API path the page calls — the list is
-`API_PATHS` in that file, sixteen of them today — and strips the `Origin` header
+`API_PATHS` in that file, sixteen of them today, including `/recover-plan` and
+`/cleanup-plan` — and strips the `Origin` header
 from what it forwards: without it the backend refuses the call as a foreign
 origin. **A new endpoint has to be added to `API_PATHS`**, or the dev server
 answers the page's own HTML instead of the API. Stripping `Origin` is a
@@ -283,6 +316,10 @@ development exception with one cost worth knowing: no gate key is ever minted
 for a request that arrives without an origin, so the gate buttons cannot be
 pressed under `make dev-frontend`. In production the page comes out of the
 backend itself.
+
+The backend wire contract, refusal codes and recovery limits are documented in
+[`backend/API.md`](../backend/API.md). This repair made no live Claude call, so
+the real permission smoke remains explicitly unverified.
 
 ## Conventions
 

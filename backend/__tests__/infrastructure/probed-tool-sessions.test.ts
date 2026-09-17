@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ProbedToolSessions } from '../../src/infrastructure/probed-tool-sessions.ts'
-import type { CmuxAnswers, ToolLookUp } from '../../src/infrastructure/probed-tool-sessions.ts'
+import type { ToolLookUp } from '../../src/infrastructure/probed-tool-sessions.ts'
 import { SessionState } from '../../src/domain/value-objects/tool-session.ts'
 import type { ToolSession } from '../../src/domain/value-objects/tool-session.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
@@ -60,12 +60,10 @@ class ClientsDouble {
 
   answers: Record<string, ProcessOutput>
   readonly calls: RecordedCall[]
-  cmux: CmuxAnswers
 
   constructor(answers: Record<string, ProcessOutput> = {}) {
     this.answers = answers
     this.calls = []
-    this.cmux = () => true
   }
 
   static allHappy() {
@@ -105,14 +103,8 @@ class ClientsDouble {
     })
   }
 
-  whoseCmuxAnswers(cmuxAnswers: CmuxAnswers) {
-    this.cmux = cmuxAnswers
-
-    return this
-  }
-
   sessions(lookUp: ToolLookUp = LookUpDouble.installedEverywhere()) {
-    return new ProbedToolSessions({ clients: this.clients(), lookUp, cmuxAnswers: () => this.cmux() })
+    return new ProbedToolSessions({ clients: this.clients(), lookUp })
   }
 }
 
@@ -164,7 +156,7 @@ describe('ProbedToolSessions', () => {
 
     await ClientsDouble.allHappy().sessions(lookUp).all()
 
-    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'ssh', 'bq', 'gcloud', 'cmux'])
+    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'ssh', 'bq', 'gcloud'])
   })
 
   it('git_is_unknown_when_the_ssh_it_probes_with_is_not_installed', async () => {
@@ -313,38 +305,12 @@ describe('ProbedToolSessions', () => {
     expect(git.fix).toBe('add an SSH key to your GitHub account')
   })
 
-  it('cmux_is_ready_when_it_answers_and_carries_no_fix', async () => {
-    const sessions = await ClientsDouble.allHappy().sessions().all()
+  it('the external tool list no longer asks a window service', async () => {
+    const lookUp = LookUpDouble.installedEverywhere()
 
-    const cmux = Surveyed.of(sessions).about('cmux')
+    const sessions = await ClientsDouble.allHappy().sessions(lookUp).all()
 
-    expect(cmux.state).toBe(SessionState.READY)
-    expect(cmux.fix).toBeNull()
-  })
-
-  it('a_cmux_that_cannot_be_asked_is_missing_and_says_it_has_to_be_updated_and_run_from_inside', async () => {
-    const clients = ClientsDouble.allHappy().whoseCmuxAnswers(() => false)
-
-    const sessions = await clients.sessions().all()
-
-    const cmux = Surveyed.of(sessions).about('cmux')
-    expect(cmux.state).toBe(SessionState.MISSING)
-    expect(cmux.fix).toBe('update cmux and restart the app, then start this backend from a terminal inside cmux')
-  })
-
-  it('a_cmux_that_is_not_installed_is_missing_without_being_asked', async () => {
-    const asked: string[] = []
-    const clients = ClientsDouble.allHappy().whoseCmuxAnswers(() => {
-      asked.push('cmux')
-
-      return true
-    })
-
-    const sessions = await clients.sessions(LookUpDouble.missing('cmux')).all()
-
-    const cmux = Surveyed.of(sessions).about('cmux')
-    expect(cmux.installed).toBe(false)
-    expect(cmux.state).toBe(SessionState.MISSING)
-    expect(asked).toEqual([])
+    expect(sessions.map((session) => session.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(lookUp.calls).not.toContain('cmux')
   })
 })

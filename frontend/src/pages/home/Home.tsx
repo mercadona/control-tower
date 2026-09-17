@@ -7,7 +7,6 @@ import { useCoordinatingSession } from 'app/coordinating-session/useCoordinating
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
-import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
@@ -30,6 +29,7 @@ import './Home.css'
 
 const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
 const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
+const ACTIVE_PLANS_POLL_INTERVAL_MS = 2000
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
@@ -47,6 +47,10 @@ const isSameWorkflow = (workflow: WorkflowSnapshot, active: ActivePlan) =>
   workflow.plan.repo === active.plan.repo &&
   workflow.plan.issue.number === active.plan.issue.number &&
   workflow.plan.agent === active.plan.agent
+
+const activePlanIdentity = (active: ActivePlan) => `${active.plan.repo}:${active.plan.issue.number}:${active.plan.agent}`
+
+const workflowIdentity = (workflow: WorkflowSnapshot) => `${workflow.plan.repo}:${workflow.plan.issue.number}:${workflow.plan.agent}`
 
 const Home = () => {
   const [workflow, setWorkflow] = useState<WorkflowSnapshot | null>(() => WorkflowSnapshotStorage.load())
@@ -66,13 +70,32 @@ const Home = () => {
   const recoveryStartedRef = useRef(false)
   const retryingRef = useRef(false)
   const recoveryTokenRef = useRef<symbol | null>(null)
+  const recoveryGenerationRef = useRef(0)
+  const recoveryInFlightRef = useRef<Promise<void> | null>(null)
+  const recoveryMutationRef = useRef<symbol | null>(null)
+  const [recoveryMutationPending, setRecoveryMutationPending] = useState(false)
+  const [recoveryFailure, setRecoveryFailure] = useState<string | null>(null)
+  const discardedPlansRef = useRef(new Set<string>())
+  const uncertainActiveRef = useRef<ActivePlan | null>(null)
   const mountedRef = useRef(false)
   const coordinatingSession = useCoordinatingSession()
   const isCoordinatingSessionLive = coordinatingSession.phase === 'read' && coordinatingSession.kind === 'live'
+  const coordinatingConversation = isCoordinatingSessionLive ? coordinatingSession.conversation : null
+  const coordinatingConversationRef = useRef(coordinatingConversation)
+
+  useEffect(() => {
+    if (coordinatingConversationRef.current === coordinatingConversation) return
+    recoveryGenerationRef.current += 1
+    recoveryTokenRef.current = null
+    coordinatingConversationRef.current = coordinatingConversation
+  }, [coordinatingConversation])
 
   const selectWorkflow = useCallback((selected: WorkflowSnapshot, restored = true) => {
+    recoveryGenerationRef.current += 1
     workflowRef.current = selected
     restoredRef.current = restored
+    uncertainActiveRef.current = null
+    setRecoveryFailure(null)
     setWorkflow(selected)
     setReconciliation(restored ? 'confirmed' : 'not-required')
     setCandidates([])
@@ -83,8 +106,11 @@ const Home = () => {
 
   const selectActivePlan = useCallback((active: ActivePlan) => {
     if (active.phase === 'uncertain') {
+      recoveryGenerationRef.current += 1
       workflowRef.current = null
       restoredRef.current = false
+      uncertainActiveRef.current = active
+      setRecoveryFailure(null)
       setWorkflow(null)
       setUncertainRequest(active.request)
       setCandidates([])
@@ -95,58 +121,89 @@ const Home = () => {
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
 
-  const reconcile = useCallback(async () => {
+  const reconcile = useCallback((afterMutation = false): Promise<void> => {
+    if (recoveryMutationRef.current !== null && !afterMutation) return Promise.resolve()
+    if (recoveryInFlightRef.current !== null) return recoveryInFlightRef.current
+
     const token = Symbol('recovery')
+    const generation = recoveryGenerationRef.current
+    const expectedCoordinator = coordinatingConversationRef.current
+    const expectedWorkflow = workflowRef.current
     recoveryTokenRef.current = token
-    const outcome = await ActivePlansClient.get()
-    if (!mountedRef.current || recoveryTokenRef.current !== token) return
+    const request = (async () => {
+      const outcome = await ActivePlansClient.get()
+      if (
+        !mountedRef.current ||
+        recoveryTokenRef.current !== token ||
+        recoveryGenerationRef.current !== generation ||
+        coordinatingConversationRef.current !== expectedCoordinator ||
+        workflowRef.current !== expectedWorkflow
+      ) return
 
-    const current = workflowRef.current
-    if (current !== null && restoredRef.current) {
-      if (outcome.kind === 'unavailable') {
-        setReconciliation('unavailable')
-        return
-      }
-      if (outcome.kind === 'inconclusive') {
-        setReconciliation('inconclusive')
-        return
-      }
-
-      const active = outcome.plans.find((candidate) => isSameWorkflow(current, candidate))
-      if (active === undefined) {
-        setReconciliation('stale')
+      if (outcome.kind !== 'loaded') {
+        setReconciliation(outcome.kind)
         return
       }
 
-      if (active.phase === 'uncertain') {
-        setReconciliation('uncertain')
+      const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
+      const current = workflowRef.current
+      if (current !== null) {
+        const active = plans.find((candidate) => isSameWorkflow(current, candidate))
+        if (active === undefined) {
+          setReconciliation('stale')
+          return
+        }
+        if (active.phase === 'uncertain') {
+          uncertainActiveRef.current = active
+          setReconciliation('uncertain')
+          return
+        }
+
+        uncertainActiveRef.current = null
+        const reconciled: WorkflowSnapshot = {
+          ...current,
+          phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
+        }
+        workflowRef.current = reconciled
+        setWorkflow(reconciled)
+        if (reconciled.phase !== current.phase) setExpandedSummary(null)
+        setReconciliation('confirmed')
+        WorkflowSnapshotStorage.save(reconciled)
         return
       }
 
-      const reconciled: WorkflowSnapshot = {
-        ...current,
-        phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
+      const uncertain = uncertainActiveRef.current
+      if (uncertain !== null) {
+        const active = plans.find((candidate) => activePlanIdentity(candidate) === activePlanIdentity(uncertain))
+        if (active === undefined) {
+          setCandidates([])
+          setReconciliation('stale')
+          return
+        }
+        if (active.phase === 'uncertain') {
+          uncertainActiveRef.current = active
+          setUncertainRequest(active.request)
+          setReconciliation('uncertain')
+          return
+        }
+        selectActivePlan(active)
+        return
       }
-      workflowRef.current = reconciled
-      setWorkflow(reconciled)
-      setExpandedSummary(null)
-      setReconciliation('confirmed')
-      WorkflowSnapshotStorage.save(reconciled)
-      return
-    }
 
-    if (current !== null) return
-    if (outcome.kind !== 'loaded') {
-      setReconciliation(outcome.kind)
-      return
-    }
-    if (outcome.plans.length === 1) {
-      selectActivePlan(outcome.plans[0])
-    } else if (outcome.plans.length > 1) {
-      setCandidates(outcome.plans)
-    } else {
-      setReconciliation('not-required')
-    }
+      if (plans.length === 1) {
+        selectActivePlan(plans[0])
+      } else if (plans.length > 1) {
+        setCandidates(plans)
+      } else {
+        setCandidates([])
+        setReconciliation('not-required')
+      }
+    })()
+    recoveryInFlightRef.current = request
+    void request.finally(() => {
+      if (recoveryInFlightRef.current === request) recoveryInFlightRef.current = null
+    })
+    return request
   }, [selectActivePlan])
 
   useEffect(() => {
@@ -161,7 +218,28 @@ const Home = () => {
     }
   }, [reconcile])
 
+  const keepsFollowingActivePlans =
+    workflow !== null || candidates.length > 0 || uncertainRequest !== null || (workflow === null && isCoordinatingSessionLive)
+
+  useEffect(() => {
+    if (!keepsFollowingActivePlans) return
+    let cancelled = false
+    let timer: number | undefined
+
+    const poll = async () => {
+      await reconcile()
+      if (!cancelled) timer = window.setTimeout(poll, ACTIVE_PLANS_POLL_INTERVAL_MS)
+    }
+
+    timer = window.setTimeout(poll, ACTIVE_PLANS_POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [keepsFollowingActivePlans, reconcile])
+
   const formInteracted = useCallback(() => {
+    recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
     setCandidates([])
     setBrainstormingUnreachable(false)
@@ -172,6 +250,10 @@ const Home = () => {
   }
 
   const sessionOpened = useCallback((opened: OpenedCoordinatingSession) => {
+    recoveryGenerationRef.current += 1
+    recoveryTokenRef.current = null
+    coordinatingConversationRef.current = opened.conversation
+    setCandidates([])
     setBrainstormingUnreachable(false)
     setOpenedSession(opened.session)
     sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
@@ -190,19 +272,19 @@ const Home = () => {
     WorkflowSnapshotStorage.save(ready)
   }, [])
 
-  const implementationStarted = useCallback(() => {
-    const current = workflowRef.current
-    if (current === null) return
-    const implementing: WorkflowSnapshot = { ...current, phase: 'implementing' }
-    workflowRef.current = implementing
-    setWorkflow(implementing)
-    WorkflowSnapshotStorage.save(implementing)
-  }, [])
-
   const discardWorkflow = () => {
+    const current = workflowRef.current
+    const uncertain = uncertainActiveRef.current
+    if (current !== null) discardedPlansRef.current.add(workflowIdentity(current))
+    if (uncertain !== null) discardedPlansRef.current.add(activePlanIdentity(uncertain))
+    recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
     workflowRef.current = null
     restoredRef.current = false
+    uncertainActiveRef.current = null
+    recoveryMutationRef.current = null
+    setRecoveryMutationPending(false)
+    setRecoveryFailure(null)
     setWorkflow(null)
     setReconciliation('not-required')
     setCandidates([])
@@ -223,9 +305,49 @@ const Home = () => {
     void reconcile()
   }
 
+  const runRecoveryAction = async () => {
+    const active = uncertainActiveRef.current
+    if (active === null || active.phase !== 'uncertain' || active.recovery.action === 'inspect'
+      || recoveryMutationRef.current !== null) return
+    const mutation = Symbol('recovery-mutation')
+    const generation = recoveryGenerationRef.current
+    const expectedCoordinator = coordinatingConversationRef.current
+    const identity = activePlanIdentity(active)
+    recoveryMutationRef.current = mutation
+    setRecoveryMutationPending(true)
+    setRecoveryFailure(null)
+    try {
+      await recoveryInFlightRef.current
+      const current = uncertainActiveRef.current
+      if (!mountedRef.current || generation !== recoveryGenerationRef.current
+        || expectedCoordinator !== coordinatingConversationRef.current
+        || current === null || current.phase !== 'uncertain'
+        || current.recovery.action === 'inspect'
+        || activePlanIdentity(current) !== identity) return
+      const outcome = current.recovery.action === 'cleanup'
+        ? await ActivePlansClient.cleanup(current)
+        : await ActivePlansClient.recover(current)
+      if (!mountedRef.current || generation !== recoveryGenerationRef.current
+        || expectedCoordinator !== coordinatingConversationRef.current
+        || uncertainActiveRef.current === null
+        || activePlanIdentity(uncertainActiveRef.current) !== identity) return
+      if (outcome.kind === 'unavailable') {
+        setRecoveryFailure('No se pudo contactar con el backend para ejecutar la recuperación.')
+      }
+      if (outcome.kind === 'refused') setRecoveryFailure(outcome.detail)
+      setReconciliation('checking')
+      await reconcile(true)
+    } finally {
+      if (recoveryMutationRef.current === mutation) {
+        recoveryMutationRef.current = null
+        setRecoveryMutationPending(false)
+      }
+    }
+  }
+
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
-  const restoredNeedsRecovery = restoredRef.current && (reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain')
-  const restoredIsConfirmed = !restoredRef.current || reconciliation === 'confirmed'
+  const restoredNeedsRecovery = reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain'
+  const restoredIsConfirmed = reconciliation === 'confirmed' || reconciliation === 'not-required'
   const showRestoredDiscard = restoredRef.current && workflow?.phase !== 'implementing' && !restoredNeedsRecovery
 
   const currentStage: WorkflowStageName = workflow === null
@@ -241,7 +363,9 @@ const Home = () => {
     ? 'Estamos comprobando el estado del plan guardado.'
     : workflow?.phase === 'planning'
       ? 'Seguimos el estado del plan. Aún no necesitas hacer nada.'
-      : 'El plan está listo. Revísalo antes de decidir si quieres implementarlo.'
+      : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
+  const activePlan = uncertainActiveRef.current
+  const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
 
   const recovery = (
     <>
@@ -258,8 +382,10 @@ const Home = () => {
           <Banner
             type="warning"
             role="alert"
-            title="El plan guardado ya no está activo"
-            description="El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva."
+            title={uncertainRequest === null ? 'El plan guardado ya no está activo' : 'El trabajo incierto ya no figura como activo'}
+            description={uncertainRequest === null
+              ? 'El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva.'
+              : 'El backend ya no informa de este trabajo. Descarta el estado para crear una solicitud nueva.'}
           />
           <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>
         </div>
@@ -302,10 +428,25 @@ const Home = () => {
             type="warning"
             role="alert"
             title="No se puede confirmar el estado de implementación"
-            description="No se abrirán eventos ni se podrá implementar hasta que el backend confirme el estado."
+            description={uncertainActive === null ? undefined : (
+              <>
+                {recoveryFailure ?? uncertainActive.diagnostic} {' '}
+                <code>{uncertainActive.plan.repo}#{uncertainActive.plan.issue.number}</code>
+                {' · '}<code>{uncertainActive.plan.agent}</code>
+              </>
+            )}
           />
           <div className="home__recovery-actions">
-            <Button onClick={retryReconciliation}>Reintentar recuperación</Button>
+            {uncertainActive?.recovery.action === 'inspect' && (
+              <Button onClick={retryReconciliation}>Reintentar recuperación</Button>
+            )}
+            {(uncertainActive?.recovery.action === 'observe'
+              || uncertainActive?.recovery.action === 'continue') && (
+              <Button disabled={recoveryMutationPending} onClick={() => void runRecoveryAction()}>Recuperar trabajo</Button>
+            )}
+            {uncertainActive?.recovery.action === 'cleanup' && (
+              <Button disabled={recoveryMutationPending} onClick={() => void runRecoveryAction()}>Limpiar arranque fallido</Button>
+            )}
             <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
           </div>
         </div>
@@ -439,10 +580,6 @@ const Home = () => {
                   <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
                     Abrir el plan en GitHub
                   </a>
-                  <ImplementPlanAction
-                    plan={workflow.plan}
-                    onImplementationStarted={implementationStarted}
-                  />
                 </div>
               )}
               {showRestoredDiscard && workflow.phase === 'planning' && (
@@ -465,10 +602,10 @@ const Home = () => {
             >
               {recovery}
               {restoredIsConfirmed && (
-                <ImplementPlanAction
-                  plan={workflow.plan}
-                  onImplementationStarted={implementationStarted}
-                  isImplementationStarted
+                <Banner
+                  type="informative"
+                  title="Implementación iniciada automáticamente"
+                  description={<>El backend ha registrado al agente <code>{workflow.plan.agent}</code>.</>}
                 />
               )}
               {restoredIsConfirmed && (

@@ -177,6 +177,7 @@ describe('ReviewWatch', () => {
       issue: WatchDouble.NUMBER,
       repository: WatchDouble.REPOSITORY,
       changes: WatchDouble.A_CHANGE.text,
+      requestId: WatchDouble.A_CHANGE.id,
     }])
   })
 
@@ -382,6 +383,98 @@ describe('ReviewWatch', () => {
     expect(slept).toBe(0)
     expect(reviewed).toBe(0)
     expect(watch.live.size).toBe(0)
+  })
+
+  it('an old wake after stop and restart cannot poll deliver or delete the new watcher', async () => {
+    let wakeOld!: () => void
+    let wakeNew!: () => void
+    const sleeps = [
+      new Promise<void>((resolve) => { wakeOld = resolve }),
+      new Promise<void>((resolve) => { wakeNew = resolve }),
+    ]
+    let slept = 0
+    let asked = 0
+    const watch = new ReviewWatch({
+      asked: async () => { asked += 1; return { changes: [] } },
+      review: async () => {},
+      sleep: () => sleeps[slept++],
+      stderr: () => {},
+      label: WatchDouble.LABEL,
+      log: new MemoryReviewLog(),
+    })
+
+    const old = watch.start(WatchDouble.SUBJECT)
+    watch.stop(WatchDouble.STOPPING)
+    const replacement = watch.start(WatchDouble.SUBJECT)
+    const registration = watch.live.get(`${WatchDouble.REPOSITORY.text}#${WatchDouble.NUMBER}`)
+    wakeOld()
+    await old
+
+    expect(asked).toBe(0)
+    expect(watch.live.get(`${WatchDouble.REPOSITORY.text}#${WatchDouble.NUMBER}`)).toBe(registration)
+    watch.stop(WatchDouble.STOPPING)
+    wakeNew()
+    await replacement
+  })
+
+  it('stale baseline read and delivery completions cannot affect a replacement watcher', async () => {
+    let finishBaseline!: (read: ChangesAsked) => void
+    const baseline = new Promise<ChangesAsked>((resolve) => { finishBaseline = resolve })
+    let read = 0
+    const log = new MemoryReviewLog()
+    const watch = new ReviewWatch({
+      asked: () => {
+        read += 1
+        if (read === 1) return baseline
+        return Promise.resolve({ changes: [] })
+      },
+      review: async () => {},
+      sleep: async () => { watch.stop(WatchDouble.STOPPING) },
+      stderr: () => {},
+      label: WatchDouble.LABEL,
+      log,
+    })
+
+    const stale = watch.startRecovered(WatchDouble.SUBJECT)
+    watch.stop(WatchDouble.STOPPING)
+    const replacement = watch.startRecovered(WatchDouble.SUBJECT)
+    finishBaseline({ changes: [WatchDouble.A_CHANGE] })
+    await Promise.all([stale, replacement])
+
+    expect(log.lastAskedAt(WatchDouble.STOPPING)).toBeNull()
+    expect(watch.live.size).toBe(0)
+
+    let finishDelivery!: () => void
+    const delivery = new Promise<void>((resolve) => { finishDelivery = resolve })
+    let wakeReplacement!: () => void
+    const replacementSleep = new Promise<void>((resolve) => { wakeReplacement = resolve })
+    let deliveryRead = 0
+    let deliverySleeps = 0
+    const deliveryWatch = new ReviewWatch({
+      asked: async () => {
+        deliveryRead += 1
+        return deliveryRead === 1 ? { changes: [WatchDouble.A_CHANGE] } : { changes: [] }
+      },
+      review: () => delivery,
+      sleep: () => {
+        deliverySleeps += 1
+        return deliverySleeps === 1 ? Promise.resolve() : replacementSleep
+      },
+      stderr: () => {},
+      label: WatchDouble.LABEL,
+      log: new MemoryReviewLog(),
+    })
+    const oldDelivery = deliveryWatch.start(WatchDouble.SUBJECT)
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    deliveryWatch.stop(WatchDouble.STOPPING)
+    const newDelivery = deliveryWatch.start(WatchDouble.SUBJECT)
+    finishDelivery()
+    await oldDelivery
+
+    expect(deliveryWatch.live.size).toBe(1)
+    deliveryWatch.stop(WatchDouble.STOPPING)
+    wakeReplacement()
+    await newDelivery
   })
 })
 

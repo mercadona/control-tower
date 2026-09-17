@@ -1,0 +1,66 @@
+{
+  "issue": 331,
+  "task": 23,
+  "task_name": "Rehearse accepted continuation and document the delivery boundary",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Attempt 2 resolves the four prior findings by source inspection. (1) The actual workspace write emits seed-slice, and the first planner spawn reads .agent/SLICE.md and asserts branch, base, cut, issue and baseline before accepting the worker. (2) GitHub/git/node doubles now compare full argv, including publication target and committed-plan path, and node checks the correct cwd; mismatches throw. (3) Response status is asserted before a bounded continuation wait; early first-spawn failure no longer waits for a nonexistent supervisor, and nested finally blocks stop the server and remove the root. Accepted continuation is finalized with unavailable completion and its supervised diagnostic is drained with a bound. (4) API.md now lists all durable call files and documents reopen-before-original-conversation fixes, matching RequestFixes and HeadlessPlanAgents. The remaining dossier wording nit is recorded below. Controls-2 green is inherited as supplied; only the path .agent/run-331/task-23-controls-2.log was checked, not its contents. Dossier revision, command results and execution counts remain reported evidence, not execution independently performed by this judge.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact prescribed test remains present and asserts the real bridge trace ['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'], final 202 identity, both invocation argv, planner measurements, complete publication body, unchanged attempt-file bytes after dispatch and recovery, and uncertain same-UUID recovery without another spawn. Its assertions match the brief's bridge-through-acceptance and unchanged-attempt requirements.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "This task declares no new production signatures, exported symbols or error contracts to compare. The required dossier opening is present; its mechanical final-text check is inherited. The documented record layout and fix ordering were compared with the actual source under objetivo.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The current diff respects the closed delivery boundary: TypeScript rehearsal, plugin-owned selection/claim authority, no manual GO, same-conversation continuation, records-only uncertain recovery without replay, no attempt-row writer, no new model calls and no fabricated resume-success result. Implementation completion remains absent until cleanup writes an explicitly unavailable result. Initial reported total and CLI duration are retained separately from supplied wall duration; resumed attribution remains unverified and attributable cost null. #332 retains per-step execution/attribution ownership. The coordinator remains interactive and visible, the legacy distributed protocol remains distinct, and apply remains HUMAN / OPEN.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the exact CT rubric and all eight package-listed conventions already read in the preceding review, with the package's rule-by-rule precedence, local backend conventions, acknowledgement and glossary. The new test uses injected external boundaries and real production collaborators; the documentation states repository-specific vocabulary and ownership. The previously missing active-plan-recovery.ts exemplar remains a comparison limitation; actual RecordedPlanRecovery supplies the inspected implementation. Defects rule-by-rule: closed vocabulary — boundary tools use a literal union; external scripted requests are explicitly matched and rejected rather than silently accepted. Raw map as the return value of logic — maps construct wire fixtures or callback data, with no new production decision-bearing map return. Two fields that have to agree — no new redundant domain state or absence sentinel; the local Deferred release marker observes its encapsulated release operation and unavailable completion measurements remain null. Errors named for where they happen — no new exception family; fixture failures describe unmatched requests or an unsettled supervised wait. No production dependency or delivery-pattern change is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The task's staged diff creates a new test file and modifies documentation; it removes or relaxes no pre-existing test. Relative to the previous review, seed and external-request checks were strengthened, and cleanup was repaired without dropping the required bridge, telemetry or recovery assertions.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised outer ordering remains production-owned. ContinuePlan waits for successful planning, publishes, then starts implementation through ClaudePlanCalls and ClaudeCalls; HeadlessPlanAgents supervises that promise. The test does not invoke those phases through a fake driver. Production GitWorkspace writes the seed, now inspected before spawn, and real record/publication/recovery adapters produce the asserted files and effects. Scripted git, GitHub, eligibility, resumability, baseline and worker boundaries establish an isolated rehearsal, not a real claim, real contract-valid committed plan, live Claude execution or successful resumed implementation. These limits are authorized by Task 23. Planner success comes from the committed initial fixture; unavailable cleanup completion is not represented as a successful resume. The pre-existing attempt bytes are independently seeded and remain unchanged through dispatch and recovery.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The same five declared files remain in scope. Seed observations, exact scripted requests, cleanup guards and API additions directly address the task and prior findings. The direct rejection checks exercise the rehearsal's command guard, not extra HTTP refusal scenarios. No plan amendment, production edit, protected plugin change, historical-spec translation, telemetry rewrite, new PR authority or apply-gate closure appears in the diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new test uses fixed identities/timestamps, committed fixtures, a fresh temporary root, port 0 and promise synchronization. Timeout timers bound waits rather than acting as sleeps for ordering, and BoundedDrain clears them. The original concrete isolation failure is repaired: a first-spawn assertion failure produces a non-202 response, reaches finally immediately and skips diagnostic waiting because implementation was never accepted. On the accepted path, cleanup writes unavailable completion, releases polling, waits for the production supervisor's rejection and then closes/removes resources; nested finally blocks retain resource cleanup if draining rejects. Assertions cover observable production response, written seed, emitted descriptors/publication and recovery. Additional direct guard checks do not substitute for these production assertions. No shell, tests, agents or model calls were run during rejudgment.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "Narrow the dossier's timeout wording to the continuation-acceptance and supervised-diagnostic waits. Those use BoundedDrain, but the HTTP fetch itself has neither an explicit abort signal nor a BoundedDrain wrapper. Checking its status before waiting fixes the reported early-failure hang; it does not establish an explicit HTTP wait bound. This is a documentation precision nit, not a remaining failure of the four requested fixes.",
+        "path": "docs/superpowers/evidence/issue-331-apply.md",
+        "line": 61,
+        "evidence": "The dossier says: 'The HTTP status and worker acceptance waits are bounded.' The test instead performs 'const response = await fetch(...)', then 'expect(response.status).toBe(202)', then 'await BoundedDrain.wait(implementationAccepted.promise, 1_000)' at headless-dispatch-dry-run.test.ts:552-558. The fetch options contain method, headers and body only."
+      }
+    ],
+    "review_token": "18914c34ce687ebea0136c1019282fc9a296fbd31403d60848ad693bcc14b173"
+  }
+}

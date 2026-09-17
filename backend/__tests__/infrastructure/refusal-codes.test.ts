@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
+import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
@@ -15,6 +15,8 @@ import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts
 import { SpecReslicingOutcome } from '../../src/infrastructure/spec-reslicing-route.ts'
 import { EpicGroomOutcome } from '../../src/infrastructure/epic-groom-route.ts'
 import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-route.ts'
+import { RecoverPlanOutcome } from '../../src/infrastructure/recover-plan-route.ts'
+import { CleanupPlanOutcome } from '../../src/infrastructure/cleanup-plan-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -22,6 +24,7 @@ class RequestVocabularies {
   static codes(): string[] {
     return [
       ...Object.values(PlanRequestOutcome),
+      ...Object.values(MilestonePlanOutcome),
       ...Object.values(ImplementRequestOutcome),
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
@@ -36,6 +39,8 @@ class RequestVocabularies {
       ...Object.values(SpecReslicingOutcome),
       ...Object.values(EpicGroomOutcome),
       ...Object.values(EpicPromotionOutcome),
+      ...Object.values(RecoverPlanOutcome),
+      ...Object.values(CleanupPlanOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }

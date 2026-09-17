@@ -143,7 +143,7 @@ describe('Home · navigation shell', () => {
     unmount()
 
     openRestored({ phase: 'implementing' })
-    await screen.findByText('Agente asignado')
+    await screen.findByText('Implementación iniciada automáticamente')
     fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })

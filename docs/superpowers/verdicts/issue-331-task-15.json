@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 15,
+  "task_name": "Wire headless execution and safe loose-start compensation",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The current diff implements recorded runtime composition and safe loose-start compensation. Both entrances share records, agents, claims, workspace and checkouts; continuation shares planCalls and recovery shares the underlying ClaudeCalls. The injected existence check returns false only for ENOENT, preserving inconclusive failures. StartPlan preserves recorded work, undoes before checked requeue only after confirmed absence, and retains both diagnostics on failed cleanup or compensation. The corrected runtime test now observes absence at the actual configured go path. Controls attempt 5 is inherited as green; log path only: .agent/run-331/task-15-controls-5.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test drives both HTTP entrances through the actual listening CtApi process. Independent child captures contain actual argv and CT_CALL_PROMPT. For each response, launchFor requires one issue-matched launch and compares its --session-id with the response agent, dispatch-directory identity and persisted call conversation. It also checks plan purpose, descriptor argv and immutable prompt path. A deliberately altered captured UUID is rejected. The former separate-graph and unobserved-launch-identity findings remain resolved.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "StartPlan requires records: PlanRecords and claims: DispatchClaims without defaults, and all named callers supply them. The RequestFixes workbench/planAgents construction is preserved. Production bounds are 7200000, 5000, 10000 and 250 milliseconds; the worker derives from import.meta.url and PluginTree.root reaches ClaudePlanCalls. Environment filtering removes undefined entries and the three specified inherited identity variables while preserving ordinary controls and authentication. Issue creation, hydration and response objects retain their contracts.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The shared Gh launch uses budgeted runWholeOutput for paginated reads; the production milestone entrance consumes a fixture issue body exceeding two megabytes. Coordinator PTY/recovery, freeze, publication-before-groom, revision comparison and re-slicing wiring remain. ReviewWatch is retained in recorded recovery, with RequestFixes awaiting reopen before production recorded-conversation delivery. ActivePlans and the server registry wrapper share sessions and exclude implementing/uncertain watches from planning registration. No new go, gate, model selector, second run machine, metrics writer or implementation-PR writer is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the CT370 yardstick and repository rules read in this session, using the current package's rule-by-rule precedence and existing-host calibration. Production retains constructor-injected ports and infrastructure-owned process/filesystem bindings. Closed vocabulary: no new public loose classification; the compensation predicate answers cleanup permission and deliberately preserves both recorded and inconclusive work. Raw map as the return value of logic: Node environment data follows its external contract, with no new production domain-result map. Two fields that have to agree: no new production redundant flag or absence sentinel; agent/watch is the preserved response contract. An error named for where it happens: compensation uses the existing event-named WorkspaceNotCleaned and PlanIssueNotClaimed families. The local absence assertion adds no production boundary or policy.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Required-port caller edits retain assertions. Claim/requeue expectations move to DispatchClaims and add root identity; cleanup order and dual diagnostics remain. Removed window-query and window-recovery expectations correspond to the required runtime replacement. PR coverage observes the real RequestFixes port request and retains issue, repository, change, request identity, reopen and errand checks. The latest correction preserves all POST/GET status and body assertions and strengthens the no-go check. No unrelated pre-existing assertion weakening is established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production constructs and executes the recorded-call graph. The integration fixture prepares external repository/spec/coordinator state and local executable doubles rather than reconstructing the application graph. Actual child arguments are independently captured and correlated with production-written dispatch records, call descriptors and prompts. The no-go check first examines the running backend's filesystem before the test creates any go directory; the later deliberate directory creation validates the assertion itself and does not supply the production result. The runtime behavior is not confined to scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The plan amendment adds the omitted milestone-route StartPlan caller and verification coverage without dropping paths, test names, TDD obligations or assertions. Production changes serve recorded composition, compensation, whole-output reads and window/go retirement. The isolated repository and child capture serve the required launch proof. The latest test-only correction checks the exact configured go location and verifies that the absence assertion rejects its presence, directly addressing the final finding. Protected plugin production files, the excluded issue-183 plan and backend per-task orchestration remain outside this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The final no-go finding is resolved in current source at ct-api-real-process.test.ts:744-767: go is join(state, 'control-tower', 'go'); requireGoAbsent returns only on ENOENT, propagates other stat failures and throws if the path exists. After the real POST/GET assertions it checks absence, creates that exact directory, requires rejection, removes it and checks absence again. The fixture independently initializes a temporary repository and main branch, avoiding host-branch assumptions. Launch comparisons use actual child evidence, waits are bounded polling of observable files, and child cleanup is retained in finally and afterEach. Application cases observe production failures and port effects. No remaining blocking test-instrument defect or additional finding is established.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "9873a629ef9cde979175844664469e0c637d521e8a9bb8e9d75ef9b0c3f49641"
+  }
+}

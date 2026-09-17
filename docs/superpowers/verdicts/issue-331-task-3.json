@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 3,
+  "task_name": "Separate execution from reported and attributable measurements",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Attempt 2's scoped diff preserves the captured initial and resumed reported totals, assigns the required attribution, and returns CompletedPlanCall, whose attributableCostUsd excludes resumed totals. It does not subtract totals or price usage. Controls are accepted as passed; log reference only: .agent/run-331/task-3-controls-2.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test loads both captured fixtures and asserts resumed total 1.051838, unverified-resume, null attributable cost and error despite the default exit zero; it also asserts initial total 0.4208795 and successful execution.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The exported read signature, parameter names and return type match. Session matching, identical-result deduplication, unterminated-tail parsing, malformed-tail rejection, independent numeric validation and immutable completion values are implemented. The prior high finding is resolved: the nonboolean is_error check now precedes subtype dispatch, producing unavailable execution while preserving readable telemetry. Known errors with boolean false remain errors; success still requires boolean false and exit zero. Added synthetic cases assert the corrected error-subtype behaviour for a string and an omitted is_error.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The relevant closed decisions are preserved: TypeScript, execution separate from measurement, exact reported totals, unverified resumed attribution and independent wall duration. Provenance distinguishes supplied command fragments from complete commands and explicitly disclaims successful-resume evidence and an enforced spending ceiling. The accepted attribution limitation is not a defect and requires no additional Claude invocation.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Assessed against the named repository rules, all eight CT conventions, CT planning references, and relevant infrastructure exemplars and domain source read in this review. Infrastructure owns CLI parsing and returns a domain value; English identifiers, TypeScript and class-owned helpers follow the yardstick. Closed vocabulary: result, execution and measurement alternatives are typed unions with exhaustive internal dispatch; the subtype default handles unknown external input. Raw map as the return value of logic: intermediate answers have declared discriminated shapes and the public result is CompletedPlanCall, not an untyped map. Two fields that have to agree: the prior medium finding is resolved by one frozen MeasuredNumberOutcome, constructed privately through validating factories; value and diagnostic are derived getters, so inconsistent stored pairs are no longer representable. Valid zeroes remain distinct from absence. Errors named for where they happen: no new exception family is introduced; diagnostics describe the event or unreadable field.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "All scoped files are additions. No pre-existing assertion, case or test is removed or weakened.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Tests exercise the real ClaudeCallResult reader and real domain values. Fixture mothers supply literal captured results or explicitly synthetic inputs; parsing, validation, attribution and execution classification reside in production code rather than test scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The six added files serve Task 3's parser, named tests, captured fixtures and provenance requirements. No plan amendment, plugin production change, process launcher, attempt metrics writer or unrelated feature appears in the scoped diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The nine new tests use fixed input, fixed timestamps, checked-in read-only fixtures and per-call state. They make no network or process calls and assert observable production completion values. They are deterministic, isolated and sensitive to production parsing behaviour. The added string/omitted is_error cases assert unavailable execution and retained reported cost through the real reader; reverting the boolean-check fix would fail those execution assertions.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "d74ee476f11463748bb4f1c8c8de9d927d13647c552cd3d0d449a6887aa22fec"
+  }
+}

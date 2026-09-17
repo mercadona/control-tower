@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 10,
+  "task_name": "Seed both entrances from the actual issue",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Production preparation reads the actual issue through the injected Gh client, validates it, maps it with mapGhIssue and renders it with buildStateSeed. It fetches and verifies the remote base before creating the worktree, measures one baseline and preserves exclusion and hidden-state verification. Cleanup checks both operations, stops before branch deletion when removal fails, distinguishes an already removed worktree from a remaining branch and retains both preparation or launch and cleanup diagnostics. StartPlan preserves the claim on WorkspaceNotCleaned. Controls are inherited as green; reference only: .agent/run-331/task-10-controls-2.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test parses SliceSeed.textFor output with parseStateSafe, compares it with the plugin seed for the mapped issue and measured baseline, and independently asserts apply present, plan absent, the literal issue signal and the measured baseline field. This matches the written input and assertion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "GitWorkspace requires gh: Gh and ct-api constructs and injects the shared client first. The issue-view argv, safeToRepeat: true, number and consumed-field validation, milestone fallback, SeedSlice alias and required SliceSeed.textFor parameters match the task. PLAN_GATE, GATES and renderState are removed while the three exclusion constants remain. Failed issue reads, malformed issue data and unsuccessful cleanup use the specified error families. Explicit plan remains visible through mapGhIssue even alongside gate:none and is refused before git preparation.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The relevant decisions remain closed: D-10/D-11 reuse plugin readers and renderers in TypeScript; D-14 preserves declared gates without inventing a default plan gate; D-26 retains loose-entry preparation. Claim compensation follows the task's explicit interim StartPlan contract. No run-machine, headless-call, publication, recovery or gate-authority redesign is introduced by this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The changes extend the existing workspace adapter and StartPlan orchestration, keep dependencies injected at ct-api, validate external data before mapping and preserve typed process diagnostics. The travelling precedence and local TypeScript and language rules were applied. Closed vocabulary: the gate names and mapped gate collection are the existing plugin contract, with no new competing vocabulary or catch-all dispatch. Raw map as the return value of logic: the plan expressly requires SeedSlice to be ReturnType<typeof mapGhIssue> plus epic and requires passing it to buildStateSeed; that prescribed representation conflicts with the general no-map rule where preparation inspects gates. This is a plan-contract tension, not an implementer finding; boundary projections otherwise stay within the issue reader. Two fields that have to agree: no new independently maintained duplicate state is introduced; the same measured baseline and cut feed the existing seed contract. An error named for where it happens: the reused WorkspaceNotRead, WorkspaceNotUnderstood, WorkspaceNotPrepared and WorkspaceNotCleaned describe distinct failures rather than a new module-named error. Local CT TDD and its testing-anti-patterns reference were read; execution history is inherited, not reconstructed.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The three old warning-only cleanup cases are explicitly replaced by checked-cleanup cases in the pre-existing task text. Removing invented-plan-gate expectations and the backend-only in_progress seed expectation follows the explicit removal of PLAN_GATE/GATES/renderState and delegation to buildStateSeed. The old post-cut HEAD failure cases are superseded by the required pre-cut remote-base verification case, which also asserts that no worktree was created. Successful undo command order and silence remain covered, as do exclusion preservation, hidden-state checks, baseline identity, quoted-branch parsing, issue identity and plugin reader compatibility. No unrelated assertion was weakened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised effects have production implementations: issue reading and validation, plugin mapping and rendering, fetch and verification ordering, exclusion and seed writes, checked cleanup and claim retention. Doubles stop at external commands or application ports. Assertions inspect production-emitted argv, parsed seed content and returned failures; they do not substitute fixture-only seeding or compensation for production behavior. The application cleanup fixture is paired with infrastructure coverage that actually constructs the combined failure.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The implementation hunks serve the actual-issue seed and checked-compensation contract, including the expressly requested interim StartPlan handling and shared Gh wiring. The plan amendment changes only the removal marker from 'Replace old assertions named' to 'removed on purpose:' and reflows its closing sentence. The same three test names, replacement intent, successful-undo requirement, TDD assertion and verification commands remain. It neither broadens removal authority nor disarms an assertion. Protected plugin production files and other out-of-scope surfaces are untouched by this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The added cases use fresh per-test doubles and fixed issue/process data, with no network, real clock, sleep or uncontrolled filesystem dependency. They exercise production seed rendering, request ordering, pre-creation refusal, cleanup failure diagnostics and claim retention. The named seed test includes literal gate and signal assertions in addition to its authoritative renderer comparison. Reverting the relevant production behavior would break these assertions. Existing temporary-file reader tests retain cleanup. No deterministic, isolation or real-behavior defect was found in the added tests.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "2d6c35526827949ee6635b4d4566beec35aca3fbca352ffaae66be72efb1f787"
+  }
+}

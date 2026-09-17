@@ -1,6 +1,7 @@
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { ActivePlansClient } from 'app/active-plans/client'
+import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 
 const activePlan = (): ActivePlan => ({
   phase: 'planning',
@@ -32,6 +33,13 @@ const activePlanWithoutStory = (): ActivePlan => ({
   },
 })
 
+const uncertainPlan = (): ActivePlan => ({
+  ...activePlan(),
+  phase: 'uncertain',
+  diagnostic: 'the recorded call needs inspection',
+  recovery: { action: 'inspect', detail: 'refresh evidence only' },
+})
+
 describe('ActivePlansClient', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -50,10 +58,68 @@ describe('ActivePlansClient', () => {
   })
 
   it('should load an uncertain active plan', async () => {
-    const plan = { ...activePlan(), phase: 'uncertain' }
-    answerWith(plan as ActivePlan)
+    const plan = uncertainPlan()
+    answerWith(plan)
 
     expect(await ActivePlansClient.get()).toEqual({ kind: 'loaded', plans: [plan] })
+  })
+
+  it.each([
+    ['missing recovery metadata', (plan: Record<string, unknown>) => { delete plan.recovery }],
+    ['unknown recovery action', (plan: Record<string, unknown>) => {
+      plan.recovery = { action: 'restart', detail: 'not allowed' }
+    }],
+    ['non-string recovery detail', (plan: Record<string, unknown>) => {
+      plan.recovery = { action: 'inspect', detail: 12 }
+    }],
+  ])('malformed recovery metadata is refused: %s', async (_name, mutate) => {
+    const plan = uncertainPlan() as unknown as Record<string, unknown>
+    mutate(plan)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ plans: [plan] }), { status: 200 })))
+
+    expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
+  })
+
+  it('recover sends exact identity and validates acceptance', async () => {
+    const plan = { ...uncertainPlan(), recovery: { action: 'continue' as const, detail: 'continue planner' } }
+    const fetching = vi.fn(async () => new Response(JSON.stringify({ agent: plan.plan.agent }), { status: 202 }))
+    vi.stubGlobal('fetch', fetching)
+
+    expect(await ActivePlansClient.recover(plan)).toEqual({ kind: 'accepted', agent: plan.plan.agent })
+    expect(fetching).toHaveBeenCalledWith('/recover-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: plan.plan.repo, issue: plan.plan.issue.number, agent: plan.plan.agent }),
+    })
+  })
+
+  it('cleanup preserves a typed refusal', async () => {
+    const plan = { ...uncertainPlan(), recovery: { action: 'cleanup' as const, detail: 'cleanup available' } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      '{"code":"cleanup-plan-conflict","detail":"workspace changed"}', { status: 400 },
+    )))
+
+    expect(await ActivePlansClient.cleanup(plan)).toEqual({
+      kind: 'refused', code: 'cleanup-plan-conflict', detail: 'workspace changed',
+    })
+  })
+
+  it('malformed recovery replies are unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"agent":"another-agent"}', { status: 202 })))
+
+    expect(await ActivePlansClient.recover(uncertainPlan())).toEqual({ kind: 'unavailable' })
+  })
+
+  it('uncertain scenarios satisfy the recovery wire contract', async () => {
+    for (const answer of [
+      HeadlessPlanMother.uncertain(),
+      HeadlessPlanMother.awaitingObservation(),
+      HeadlessPlanMother.awaitingContinuation(),
+      HeadlessPlanMother.unlaunched(),
+    ]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(answer.body, { status: answer.status })))
+      expect(await ActivePlansClient.get()).toEqual(expect.objectContaining({ kind: 'loaded' }))
+    }
   })
 
   it.each([

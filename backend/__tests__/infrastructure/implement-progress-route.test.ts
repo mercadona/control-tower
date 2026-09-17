@@ -81,13 +81,10 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementPlan: null,
       implementProgress: spy,
-      pullRequestReviews: null,
       sessions: new PlanSessions(),
       activePlans: null,
       externalTools: null,
-      implementationStarts: null,
       stderr: null,
       planEvents: RunningApi.NO_EVENTS,
       frontendRoot: RunningApi.NO_FRONTEND,

@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 11,
+  "task_name": "Recover recorded work without live-session discovery",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Attempt 2 recovers recorded work without replay. Records are enumerated first, all call histories are read before cached watches change, and unreadable evidence returns a refusal. Production code derives planning, implementing and uncertain projections, preserves the original conversation, refreshes later completions, removes harvested watches and manages review registrations. No recovery path launches or resumes a call. Runtime composition is explicitly assigned to Task 15, whose text was read in the 331 worktree; it is not missing Task 11 behavior. The inherited task-11-controls-2.log records exit 0 for typecheck and eleven passing recovery cases.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named restart test constructs dispatch and call inputs directly on disk, begins with empty active/session/checkout registries, invokes the real recovery projector and asserts the original conversation UUID in activePlans.known().plan.agent. Process launch, ID generation and polling collaborators throw if used. This matches the task's input and expected identity assertion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "RecordedPlanRecovery has the five named constructor dependencies and recover(): Promise<string | null>. RecordedCall is separately exported, readonly and frozen with the specified fields. ClaudeCalls.history returns frozen RecordedCall collections, owns consults the accepted-call map, and history, completed and wait share the descriptor/completion reader. ActivePlans adds watches, rememberPlanning and forget across its three registries. Concurrent recovery is coalesced and later requests refresh. Newest-call selection handles incompatible timestamp ties as uncertainty; successful implementation/fix does not depend on attributable cost. The real ReviewWatch lifecycle test releases an old deferred sleep after uncertain-to-implementing replacement and checks no extra poll, delivery or registration cleanup.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The affected decisions hold: display phases are derived rather than persisted; discovery starts from state-root records and filters harvested work through worktree existence; ownership is process-local acceptance rather than PID probing; unowned incomplete calls and completed planning without continuation remain uncertain. Recovery never repeats the publication/continuation bridge, changes billing, adds machine-step policy or restores a human gate. Other closed decisions are not changed by this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the eight named CT370 convention documents and the task's repository rules, with the package's precedence. Constructor injection, English TypeScript, immutable reader values and record-first recovery follow the relevant existing recovery and disk-reader exemplars. Closed vocabulary: the prior finding is resolved. Both #ownedLive and #successful explicitly switch over plan, implementation and fix, with no default or fallback. Their non-optional RecoveredPlan return types and the backend's strict TypeScript configuration make a newly unhandled purpose fail typechecking. Live planning remains planning while completed planning remains uncertain. Raw map as the return value of logic: history and the new projector return RecordedCall and RecoveredPlan instances; ActivePlans retains its pre-existing typed lookup and wire-projection shapes rather than introducing a separate raw-JSON reader contract. Two fields that have to agree: no new mutable flag duplicates value presence, and absence uses null rather than an empty-string or zero sentinel; the shared reader constructs completion identity from the same call. An error named for where it happens: no new exception type is introduced; call-read failures reuse PlanAgentNotLaunched and PlanAgentNotNamed with concrete diagnostics. Task 15 explicitly owns composition, so the staged projector's lack of runtime construction is not treated as fixture-only behavior or an unsolicited public API.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing test, case or assertion is removed or weakened. The only test-file diff creates the recovery suite.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "DiskPlanRecords, ClaudeCalls, RecordedPlanRecovery and ActivePlans produce the asserted discovery and phase changes. Fixtures write literal on-disk inputs rather than calculating recovery answers. Watch-start/stop doubles observe the projector's interactions, and the replacement-loop case additionally exercises real ReviewWatch registration identity. The promised projector behavior exists in production modules even though Task 15 will compose them into the runtime graph.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All changed contents serve Task 11: recovery projection, shared history reading and accepted-call ownership, active-registry operations and diagnostics, and their recovery/lifecycle tests. Attempt 2's private exhaustive projection methods correct the prior convention finding within the existing recovery module. The parameterized live-call cases directly check all three purposes promised by the ownership contract; the fixture argv mapping supplies their corresponding invocation inputs. There is no plan amendment, plugin production change, runtime rewiring, per-step conductor, metrics rewrite or unrelated refactor.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The eleven added cases use temporary directories with afterEach cleanup, fixed identities and timestamps, local process doubles and explicitly released promises. The three owned-live cases declare their expected phases independently and assert the real recovery output for plan, implementation and fix; completed-purpose behavior remains covered by the existing planner, implementation and fix cases. Tests also assert preserved record bytes, refusal diagnostics and watcher lifecycle effects. Reverting the projector or its relevant transitions would invalidate those assertions. No real network or process is required. The accepted-child message is delivered by a microtask rather than a sleep. No blocking determinism, isolation or real-behavior defect was found; no finer test-style finding is asserted.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "feb34ffb0dad2d81ad01b1955b081a96615d1d4e2a201629a887336cceea9bfa"
+  }
+}

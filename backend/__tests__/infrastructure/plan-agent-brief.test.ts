@@ -15,81 +15,90 @@ describe('PlanAgentBrief', () => {
     repository: new RepositoryName('owner/name'),
   })
 
-  it('it_points_at_the_baseline_already_measured_in_the_state_file_instead_of_ordering_one', () => {
+  it('points at the baseline already measured in the state file instead of ordering one', () => {
     expect(errand()).toMatch(/baseline/)
-    expect(errand()).toContain(`campo \`baseline:\` de ${SLICE_REL_PATH}`)
+    expect(errand()).toContain(`\`baseline:\` field in ${SLICE_REL_PATH}`)
   })
 
-  it('it_no_longer_orders_the_ground_checked_because_the_program_cut_and_measured_the_worktree_itself', () => {
+  it('does not order the ground checked because the program cut and measured the worktree itself', () => {
     expect(errand()).not.toMatch(/pwd/)
     expect(errand()).not.toMatch(/baseline en verde ANTES/)
   })
 
-  it('it_names_the_skill_that_writes_the_plan_instead_of_describing_the_shape_of_one', () => {
+  it('names the skill that writes the plan instead of describing the shape of one', () => {
     expect(errand()).toContain('control-tower-loop:writing-plans-prescriptive')
   })
 
-  it('it_interpolates_the_absolute_path_of_dispatch_check_because_the_plugin_token_stays_literal_in_plain_text', () => {
+  it('interpolates the absolute path of dispatch check because the plugin token stays literal in plain text', () => {
     expect(errand()).toContain('node /plugin/scripts/dispatch-check.mjs 42 --repo owner/name --check-plan')
     expect(errand()).not.toContain('CLAUDE_PLUGIN_ROOT')
   })
 
-  it('it_says_where_the_plan_file_goes_so_the_contract_can_find_it_by_name', () => {
+  it('says where the plan file goes so the contract can find it by name', () => {
     expect(errand()).toContain('docs/superpowers/plans/YYYY-MM-DD-issue-42-<slug>.md')
   })
 
-  it('it_orders_the_plan_published_on_the_issue_because_that_is_where_a_human_reads_it_to_ask_for_changes', () => {
-    expect(errand()).toContain('gh issue comment 42 --repo owner/name')
-    expect(errand()).toMatch(/publ/i)
+  it('publication is backend owned and implementation never claims a plan approval', () => {
+    expect(errand()).toContain('The backend owns publication and continuation')
+    expect(errand()).not.toContain('gh issue comment')
+    expect(errand()).not.toMatch(/wait.*approval|poll.*approval|nonce/i)
+    expect(new PlanAgentBrief({
+      dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+      conventions: '/plugin/conventions',
+      ctStep: '/plugin/scripts/ct-step.mjs',
+    }).implementationErrandFor({
+      issueNumber: 42,
+      repository: new RepositoryName('owner/name'),
+    })).not.toMatch(/human.*closed.*plan|plan.*approv/i)
   })
 
-  it('it_orders_the_session_to_stop_after_committing_instead_of_starting_the_work', () => {
-    expect(errand()).toMatch(/PARA/)
-    expect(errand()).toMatch(/no implementes/i)
+  it('orders the session to stop after committing instead of starting the work', () => {
+    expect(errand()).toMatch(/STOP/)
+    expect(errand()).toMatch(/do not implement/i)
   })
 
-  it('it_carries_the_order_of_precedence_verbatim_from_the_plugin_instead_of_wording_it_again', () => {
+  it('carries the order of precedence verbatim from the plugin instead of wording it again', () => {
     expect(errand()).toContain('/plugin/conventions')
     expect(errand()).toContain(PluginYardstick.precedenceHeader())
   })
 
-  it('the_precedence_it_carries_cannot_be_read_the_other_way_round', () => {
+  it('the precedence it carries cannot be read the other way round', () => {
     expect(errand()).not.toMatch(/convenciones de este repo tienen PREFERENCIA/)
     expect(errand()).not.toMatch(/las convenciones de este repo ganan/i)
   })
 
-  it('it_does_not_override_the_scope_the_architecture_document_declares_for_itself', () => {
+  it('does not override the scope the architecture document declares for itself', () => {
     expect(errand()).not.toMatch(/la vara de arquitectura se aplica SIEMPRE/)
     expect(errand()).not.toMatch(/la única regla de la vara que este encargo cambia/i)
   })
 
-  it('it_does_not_order_the_five_documents_read_before_planning', () => {
+  it('does not order the five documents read before planning', () => {
     expect(errand()).not.toMatch(/Lee la vara de Control Tower/)
     expect(errand()).not.toContain(PluginYardstick.FILES.join(', '))
   })
 
-  it('it_names_the_sections_that_carry_what_the_acceptance_criteria_cannot', () => {
+  it('names the sections that carry what the acceptance criteria cannot', () => {
     expect(errand()).toContain(PlanAgentBrief.MILESTONE_CONTEXT)
     expect(errand()).toContain('Contexto heredado')
-    expect(errand()).toMatch(/no lo busques fuera del issue/)
+    expect(errand()).toMatch(/do not look outside the issue/)
   })
 
-  it('it_does_not_send_the_agent_to_a_section_the_body_never_writes', () => {
+  it('does not send the agent to a section the body never writes', () => {
     expect(errand()).not.toMatch(/decisiones congeladas/i)
   })
 
-  it('it_never_promises_a_permission_nobody_mints', () => {
+  it('never promises a permission nobody mints', () => {
     expect(errand()).not.toContain('-OK')
     expect(errand()).not.toContain('nonce')
   })
 
-  it('it_sends_the_agent_to_the_section_where_a_person_wrote_by_hand_what_they_want_planned', () => {
+  it('sends the agent to the section where a person wrote by hand what they want planned', () => {
     expect(errand()).toContain('Comentario de quien pide el plan')
-    expect(errand()).toContain('entrada del plan')
+    expect(errand()).toContain('planning input')
   })
 
-  it('it_says_the_criteria_are_the_agents_to_propose_when_the_issue_declares_none_instead_of_leaving_it_stuck', () => {
-    expect(errand()).toContain('no hay spec de donde rellenarlos')
+  it('says the criteria are the agents to propose when the issue declares none instead of leaving it stuck', () => {
+    expect(errand()).toContain('there is no spec from which to fill them')
   })
 })
 
@@ -100,28 +109,28 @@ describe('PlanAgentBrief resuming the agent', () => {
     ctStep: '/plugin/scripts/ct-step.mjs',
   }).implementationErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name') })
 
-  it('it_is_one_single_line_because_a_newline_would_run_the_order_half_written', () => {
+  it('is one single line because a newline would run the order half written', () => {
     expect(errand()).not.toContain('\n')
   })
 
-  it('it_hands_the_driving_to_ct_step_by_absolute_path_instead_of_describing_the_sequence', () => {
+  it('implementation still follows the ct-step oracle without a backend step table', () => {
     expect(errand()).toContain('node /plugin/scripts/ct-step.mjs next --plan')
     expect(errand()).toContain('--issue 42')
     expect(errand()).not.toContain('CLAUDE_PLUGIN_ROOT')
   })
 
-  it('it_translates_ct_step_to_node_by_absolute_path_because_ct_step_is_not_a_command', () => {
-    expect(errand()).toContain('donde diga `ct-step`, es `node /plugin/scripts/ct-step.mjs`')
+  it('translates ct-step to node by absolute path because ct-step is not a command', () => {
+    expect(errand()).toContain('where it says `ct-step`, use `node /plugin/scripts/ct-step.mjs`')
   })
 
-  it('it_orders_rewriting_slice_md_role_task_and_next_action_before_asking_for_the_first_step', () => {
+  it('orders rewriting slice md role task and next action before asking for the first step', () => {
     const composed = errand()
     expect(composed).toContain('.agent/SLICE.md')
-    expect(composed).toContain('role, task y next_action')
-    expect(composed.indexOf('.agent/SLICE.md')).toBeLessThan(composed.indexOf('Pregunta el paso'))
+    expect(composed).toContain('role, task and next_action')
+    expect(composed.indexOf('.agent/SLICE.md')).toBeLessThan(composed.indexOf('Ask for the step'))
   })
 
-  it('it_orders_the_release_that_moves_the_issue_to_review_instead_of_forbidding_it', () => {
+  it('orders the release that moves the issue to review instead of forbidding it', () => {
     expect(errand()).toContain(
       'node /plugin/scripts/dispatch-check.mjs 42 --repo owner/name --release'
     )
@@ -129,13 +138,13 @@ describe('PlanAgentBrief resuming the agent', () => {
     expect(errand()).not.toContain('saldría por 9')
   })
 
-  it('the_release_it_orders_waives_the_merge_watcher_because_this_flow_has_no_coordinator_to_notify', () => {
+  it('the release it orders waives the merge watcher because this flow has no coordinator to notify', () => {
     expect(errand()).toContain('--release --no-watch-merge')
   })
 
-  it('it_still_stops_before_the_merge_because_that_is_the_second_human_decision', () => {
-    expect(errand()).toMatch(/no la mergees/i)
-    expect(errand()).toMatch(/PARA/)
+  it('still stops before the merge because that is the second human decision', () => {
+    expect(errand()).toMatch(/do not merge/i)
+    expect(errand()).toMatch(/STOP/)
   })
 })
 
@@ -153,9 +162,10 @@ describe('PlanAgentBrief asking the agent to fix its pull request', () => {
     expect(errand()).toContain('varias cosas src/foo.js:42: revienta con []')
   })
 
-  it('the_errand_orders_correcting_over_the_branch_and_the_pull_request_that_already_exist', () => {
-    expect(errand()).toContain('sin rehacer el plan')
-    expect(errand()).toContain('sin abrir otra pull request')
+  it('fix errands retain the requested anchors and existing pull request', () => {
+    expect(errand()).toContain('src/foo.js:42')
+    expect(errand()).toContain('without rewriting the plan')
+    expect(errand()).toContain('without opening another pull request')
     expect(errand()).toContain(PlanAgentBrief.NO_NEW_WORKTREES)
   })
 
@@ -166,7 +176,7 @@ describe('PlanAgentBrief asking the agent to fix its pull request', () => {
     )
   })
 
-  it('the_errand_forbids_merging_because_that_gate_stays_human', () => {
-    expect(errand()).toMatch(/no la mergees/i)
+  it('the errand forbids merging because that gate stays human', () => {
+    expect(errand()).toMatch(/do not merge/i)
   })
 })

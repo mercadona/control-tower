@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -8,13 +10,16 @@ import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
 import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
 import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
-import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { Baseline, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
-  PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
+  PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed,
+  WorkspaceNotPrepared,
   PlanProgressNotRead,
+  PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
+  PlanIssueNotClaimed, PlanStatusNotRead, PlanStatusNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
@@ -22,11 +27,10 @@ import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
-import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
+import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
-import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
@@ -34,10 +38,14 @@ import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
-import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
-import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
+import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
-import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
+import { ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
+import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import type { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
+import { PlanRecovery } from '../../src/domain/policies/plan-recovery.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
@@ -53,6 +61,18 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
+import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
+import { CleanupPlan } from '../../src/application/actions/cleanup-plan.ts'
+import { PlanOperationRequest } from '../../src/infrastructure/plan-operation-request.ts'
+import { GitWorkspace } from '../../src/infrastructure/git-workspace.ts'
+import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
+import { Gh } from '../../src/infrastructure/gh.ts'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
+import { PlanIssueStatus, type PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
 class StartPlanSpy extends StartPlan {
   static readonly AGENT = 'workspace:4'
@@ -79,6 +99,8 @@ class StartPlanSpy extends StartPlan {
       workspace: new Workspace(),
       planAgents: new PlanAgents(),
       checkouts: new CheckoutRegistry(),
+      records: new PlanRecords(),
+      claims: new DispatchClaims(),
     })
     this.asked = []
     this.repositories = []
@@ -179,20 +201,6 @@ class ExternalToolsSpy extends SurveyExternalTools {
   }
 }
 
-class PlansRefusing extends WorktreePlans {
-  constructor(reason: string) {
-    super({
-      checkouts: new CheckoutRegistry(),
-      survey: () => { throw new Error('a plans double never surveys a checkout') },
-      sessions: () => { throw new Error('a plans double never asks cmux') },
-      story: () => { throw new Error('a plans double never reads a user story') },
-      realpathOf: () => null,
-      stderr: () => undefined,
-    })
-    this.inFlight = async () => PlansInFlight.refused(reason)
-  }
-}
-
 class NeverWatching extends ReviewWatch {
   constructor(label: string) {
     super({
@@ -206,30 +214,85 @@ class NeverWatching extends ReviewWatch {
   }
 }
 
+class RecoveryRecords extends PlanRecords {
+  readonly found: PlansInFlight
+
+  constructor(found: PlansInFlight) {
+    super()
+    this.found = found
+  }
+
+  async inFlight(): Promise<PlansInFlight> {
+    return this.found
+  }
+}
+
+class RecoveryCalls extends ClaudeCalls {
+  readonly recorded: readonly RecordedCall[]
+
+  constructor(recorded: readonly RecordedCall[]) {
+    super({
+      files: new HeadlessFiles({ root: '/state', fs, newId: () => 'unused' }),
+      binary: 'claude',
+      worker: 'worker',
+      spawn,
+      env: {},
+      newId: () => { throw new Error('a recovery double never mints a call') },
+      now: () => { throw new Error('a recovery double never asks for the current time') },
+      budgetMs: 1,
+      killGraceMs: 1,
+      acceptanceMs: 1,
+      pollMs: 1,
+      sleep: () => { throw new Error('a recovery double never sleeps') },
+    })
+    this.recorded = recorded
+  }
+
+  async history(): Promise<readonly RecordedCall[]> {
+    return this.recorded
+  }
+}
+
+class RecoveryDecisions extends PlanCalls {
+  readonly recorded: readonly RecordedCall[]
+
+  constructor(recorded: readonly RecordedCall[]) {
+    super()
+    this.recorded = recorded
+  }
+
+  override async recoveryFor(): Promise<PlanRecovery> {
+    return PlanRecovery.from({
+      calls: this.recorded.map((recorded) => ({
+        call: recorded.call,
+        purpose: recorded.purpose,
+        startedAt: recorded.startedAt,
+        deadlineMs: Date.parse(recorded.startedAt) + 7_205_000,
+        completion: recorded.completion,
+      })),
+      proof: null,
+      cleanup: null,
+      nowMs: Date.parse('2026-09-16T10:00:00.000Z'),
+    })
+  }
+}
+
 class RecoveryFixture {
-  static readonly #STATE_ROOT = '/state'
+  static refusingWith(reason: string): RecordedPlanRecovery {
+    return RecoveryFixture.with(PlansInFlight.refused(reason), [])
+  }
 
-  static refusingWith(reason: string): ActivePlanRecovery {
+  static with(records: PlansInFlight, calls: readonly RecordedCall[]): RecordedPlanRecovery {
     const sessions = new PlanSessions()
+    const ownership = new RecoveryCalls(calls)
 
-    return new ActivePlanRecovery({
-      plans: new PlansRefusing(reason),
+    return new RecordedPlanRecovery({
+      records: new RecoveryRecords(records),
+      calls: new RecoveryDecisions(calls),
+      ownership,
       checkouts: new CheckoutRegistry(),
-      implementationStarts: new DiskImplementationStartRegistry({
-        read: () => { throw new Error('a recovery double never reads an implementation marker') },
-        stat: () => { throw new Error('a recovery double never stats an implementation marker') },
-        write: () => { throw new Error('a recovery double never writes an implementation marker') },
-        root: RecoveryFixture.#STATE_ROOT,
-      }),
-      goRegistry: new DiskGoRegistry({
-        random: () => { throw new Error('a recovery double never mints a go nonce') },
-        write: () => { throw new Error('a recovery double never writes a go record') },
-        root: RecoveryFixture.#STATE_ROOT,
-      }),
-      implementationProgress: new ImplementationProgress(),
-      sessions,
-      pullRequestReviews: new NeverWatching('pull request review watch double'),
       activePlans: new ActivePlans({ sessions }),
+      reviews: new NeverWatching('pull request review watch double'),
     })
   }
 }
@@ -270,7 +333,6 @@ class RunningApi {
     return new ApiServer({
       port: 0,
       startPlan: RunningApi.spy,
-      implementPlan: null,
       planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
@@ -472,6 +534,38 @@ describe('ApiServer', () => {
     }
   })
 
+  it('loose start exposes definite non-launch', async () => {
+    const proof = new PlanNonLaunch({
+      conversation: '11111111-1111-4111-8111-111111111111',
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'headless worker spawn was refused',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+    const spy = new StartPlanSpy()
+    spy.execute = async () => new StartPlanResult({
+      started: [],
+      failed: [new PlanNotStarted({
+        repository: new RepositoryName(RunningApi.REPO),
+        cause: new PlanAgentNeverLaunched(proof),
+      })],
+    })
+    const server = RunningApi.server({ startPlan: spy })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        code: 'plan-agent-never-launched',
+        detail: 'headless worker spawn was refused',
+      })
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('a_story_an_issue_or_a_worktree_the_tool_refuses_are_all_answered_as_a_400_naming_the_specific_code', async () => {
     const causes = [
       { cause: new UserStoryNotRead('acli is not authenticated'), code: 'user-story-not-read' },
@@ -569,6 +663,469 @@ describe('ApiServer', () => {
     }
   })
 
+  it('both plan operation routes enforce the shared body matrix', async () => {
+    const recover = vi.fn(async () => {})
+    const cleanup = vi.fn(async () => {})
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      recoverPlan: { execute: recover } as unknown as RecoverPlan,
+      cleanupPlan: { execute: cleanup } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const validAgent = '11111111-1111-4111-8111-111111111111'
+    const invalidBodies = [
+      '{',
+      'null',
+      '[]',
+      '7',
+      '{}',
+      '{"repo":"owner/name"}',
+      `{"issue":331,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","agent":"${validAgent}"}`,
+      '{"repo":"owner/name","issue":331}',
+      `{"repo":"owner/name","issue":331,"agent":"${validAgent}","extra":true}`,
+      `{"repo":"name","issue":331,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":0,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":-1,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":1.5,"agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":"331","agent":"${validAgent}"}`,
+      `{"repo":"owner/name","issue":9007199254740992,"agent":"${validAgent}"}`,
+      '{"repo":"owner/name","issue":331,"agent":""}',
+      '{"repo":"owner/name","issue":331,"agent":"not-a-uuid"}',
+    ]
+
+    for (const path of ['/recover-plan', '/cleanup-plan']) {
+      for (const body of invalidBodies) {
+        const response = await RunningApi.post(port, path, body)
+        expect(response.status, `${path} ${body}`).toBe(400)
+        expect(await response.json(), `${path} ${body}`).toMatchObject({ code: `${path.slice(1)}-invalid-request` })
+      }
+    }
+    expect(recover).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+    expect(projection.recover).not.toHaveBeenCalled()
+  })
+
+  it('both plan operation routes preserve parser bugs', async () => {
+    const recover = vi.fn(async () => {})
+    const cleanup = vi.fn(async () => {})
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      recoverPlan: { execute: recover } as unknown as RecoverPlan,
+      cleanupPlan: { execute: cleanup } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const parser = vi.spyOn(PlanOperationRequest, 'from').mockImplementation(() => {
+      throw new TypeError('sentinel parser defect')
+    })
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const body = '{"repo":"owner/name","issue":331,"agent":"11111111-1111-4111-8111-111111111111"}'
+
+    try {
+      for (const path of ['/recover-plan', '/cleanup-plan']) {
+        const response = await RunningApi.post(port, path, body)
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+      }
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('sentinel parser defect')
+      expect(recover).not.toHaveBeenCalled()
+      expect(cleanup).not.toHaveBeenCalled()
+      expect(projection.recover).not.toHaveBeenCalled()
+    } finally {
+      parser.mockRestore()
+      complaining.mockRestore()
+    }
+  })
+
+  it('actual cleanup producers retain their exact HTTP refusal and release the reservation', async () => {
+    const agent = '11111111-1111-4111-8111-111111111111'
+    const repository = new RepositoryName('owner/name')
+    const watch = new PlanWatch({
+      story: null,
+      issue: new PlanIssue({ number: 331, url: 'https://github.com/owner/name/issues/331' }),
+      located: new WorkspaceLocation({
+        root: '/repo/checkout', path: '/repo/checkout/.worktrees/331', branch: 'feat/331',
+      }),
+      repository,
+      agent,
+    })
+    const body = `{"repo":"owner/name","issue":331,"agent":"${agent}"}`
+    const output = (stdout = '') => new ProcessOutput({ code: 0, stdout, stderr: '' })
+    const listing = [
+      `worktree ${watch.located.root}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/main',
+      '',
+      `worktree ${watch.located.path}`,
+      `HEAD ${'a'.repeat(40)}`,
+      'branch refs/heads/feat/331',
+      '',
+    ].join('\n')
+    const workspace = (read: (path: string) => Promise<string | null>) => new GitWorkspace({
+      baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
+      stderr: () => {},
+      write: async () => {},
+      read,
+      run: async (argv) => {
+        if (argv.includes('get-url')) return output('https://github.com/owner/name.git\n')
+        if (argv.includes('--show-toplevel')) return output(`${watch.located.root}\n`)
+        if (argv.includes('worktree') && argv.includes('list')) return output(listing)
+        throw new Error(`unlisted git request: ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async (argv) => { throw new Error(`unlisted gh request: ${argv.join(' ')}`) },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    type ProducerEffects = {
+      laterEffects: number,
+      archiveAttempts: number,
+      successfulRetirements: number,
+      activeBytesPreserved: boolean | null,
+    }
+    type DiskFailure =
+      | 'snapshot-read'
+      | 'malformed-record'
+      | 'proof-listing'
+      | 'immutable-readback'
+      | 'archive-mkdir'
+      | 'archive-stat'
+      | 'archive-rename'
+    const diskFailure = async (kind: DiskFailure, effects: ProducerEffects): Promise<never> => {
+      const root = await fs.mkdtemp(join(tmpdir(), `ct-api-cleanup-${kind}-`))
+      try {
+        const active = join(root, DiskPlanRecords.DIRECTORY, agent)
+        const destinationRoot = join(root, DiskPlanRecords.RETIRED_DIRECTORY)
+        const destination = join(destinationRoot, agent)
+        if (kind === 'malformed-record') {
+          const path = join(active, 'dispatch.json')
+          await fs.mkdir(active, { recursive: true })
+          await fs.writeFile(path, '{not json', 'utf8')
+          const malformedBytes = await fs.readFile(path, 'utf8')
+          try {
+            await new DiskPlanRecords({
+              files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+              newId: () => agent,
+              now: () => '2026-09-16T10:00:00.000Z',
+              exists: async () => true,
+            }).recorded(agent)
+          } catch (cause) {
+            effects.activeBytesPreserved = await fs.readFile(path, 'utf8') === malformedBytes
+            throw cause
+          }
+          throw new Error('malformed record unexpectedly succeeded')
+        }
+        const original = new DiskPlanRecords({
+          files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+          newId: () => agent,
+          now: () => '2026-09-16T10:00:00.000Z',
+          exists: async () => true,
+        })
+        const recorded = await original.prepare(new PlanBriefing({
+          story: null, issue: watch.issue, repository, located: watch.located,
+        }))
+        const proof = new PlanNonLaunch({
+          conversation: agent,
+          callId: null,
+          source: 'before-worker',
+          diagnostic: 'worker did not start',
+          observedAt: '2026-09-16T10:00:00.000Z',
+        })
+        if (kind !== 'snapshot-read') await original.recordNonLaunch(recorded, proof)
+        if (kind.startsWith('archive-')) {
+          await original.recordCleanupEvidence(new UnusedWorkspace({
+            watch: recorded, baseSha: 'a'.repeat(40), checkedAt: '2026-09-16T10:01:00.000Z',
+          }))
+        }
+        const snapshotPath = join(root, 'harness', agent, DiskPlanRecords.CLEANUP_EVIDENCE)
+        const proofPath = join(active, DiskPlanRecords.NON_LAUNCH)
+        const callsPath = join(active, 'calls')
+        const names = await fs.readdir(active)
+        const originalBytes = new Map(await Promise.all(names.map(async (name) => [
+          name, await fs.readFile(join(active, name), 'utf8'),
+        ] as const)))
+        const failure = Object.assign(new Error(`${kind} input/output error`), { code: 'EIO' })
+        const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+          read: async (path: string) => {
+            if (kind === 'snapshot-read' && path === snapshotPath) throw failure
+            if (kind === 'immutable-readback' && path === proofPath) throw failure
+            return new HeadlessFiles({ root, fs, newId: () => 'unused' }).read(path)
+          },
+          list: async (path: string) => {
+            if (kind === 'proof-listing' && path === callsPath) throw failure
+            return new HeadlessFiles({ root, fs, newId: () => 'unused' }).list(path)
+          },
+        })
+        const faultedFs = {
+          ...fs,
+          mkdir: (async (path: Parameters<typeof fs.mkdir>[0], options?: Parameters<typeof fs.mkdir>[1]) => {
+            if (kind === 'archive-mkdir' && String(path) === destinationRoot) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.mkdir(path, options)
+          }) as typeof fs.mkdir,
+          stat: (async (path: Parameters<typeof fs.stat>[0], options?: Parameters<typeof fs.stat>[1]) => {
+            if (kind === 'archive-stat' && String(path) === destination) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.stat(path, options)
+          }) as typeof fs.stat,
+          rename: async (source: Parameters<typeof fs.rename>[0], target: Parameters<typeof fs.rename>[1]) => {
+            if (kind === 'archive-rename' && String(source) === active && String(target) === destination) {
+              effects.archiveAttempts += 1
+              throw failure
+            }
+            return fs.rename(source, target)
+          },
+        }
+        const records = new DiskPlanRecords({
+          files: kind.startsWith('archive-')
+            ? new HeadlessFiles({ root, fs: faultedFs, newId: () => 'temporary-record' })
+            : files,
+          newId: () => agent,
+          now: () => '2026-09-16T10:00:00.000Z',
+          exists: async () => true,
+        })
+        try {
+          if (kind === 'snapshot-read') await records.cleanupEvidence(recorded)
+          else if (kind === 'proof-listing') await records.nonLaunch(recorded)
+          else if (kind === 'immutable-readback') await records.recordNonLaunch(recorded, proof)
+          else await records.archive(recorded)
+        } catch (cause) {
+          effects.activeBytesPreserved = (await Promise.all([...originalBytes].map(async ([name, bytes]) => (
+            await fs.readFile(join(active, name), 'utf8') === bytes
+          )))).every(Boolean)
+          effects.successfulRetirements = await fs.stat(destination).then(() => 1, () => 0)
+          throw cause
+        }
+        throw new Error(`${kind} unexpectedly succeeded`)
+      } finally {
+        await fs.rm(root, { recursive: true, force: true })
+      }
+    }
+    const lostRequeueFailure = async (statusFailure: Error, effects: ProducerEffects): Promise<never> => {
+      let status: PlanIssueStatusValue = PlanIssueStatus.IN_PROGRESS
+      let reads = 0
+      class Records extends PlanRecords {
+        override async recorded(): Promise<PlanWatch | null> { return watch }
+        override async retired(): Promise<PlanWatch | null> { return null }
+        override async nonLaunch(): Promise<PlanNonLaunch> {
+          return new PlanNonLaunch({
+            conversation: agent,
+            callId: null,
+            source: 'before-worker',
+            diagnostic: 'worker did not start',
+            observedAt: '2026-09-16T10:00:00.000Z',
+          })
+        }
+        override async cleanupEvidence(): Promise<UnusedWorkspace | null> { return null }
+        override async recordCleanupEvidence(): Promise<void> {}
+        override async archive(): Promise<void> { effects.successfulRetirements += 1 }
+      }
+      class CleanupWorkspace extends Workspace {
+        override async inspectUnlaunched(): Promise<UnusedWorkspace> {
+          return new UnusedWorkspace({ watch, baseSha: 'a'.repeat(40), checkedAt: '2026-09-16T10:01:00.000Z' })
+        }
+        override async undoUnlaunched(): Promise<void> {}
+        override async confirmAbsent(): Promise<void> {}
+      }
+      class Issues extends PlanIssues {
+        override async statusOf(): Promise<PlanIssueStatusValue> {
+          reads += 1
+          if (reads === 3) throw statusFailure
+          return status
+        }
+      }
+      class Claims extends DispatchClaims {
+        override async requeue(): Promise<void> {
+          status = PlanIssueStatus.READY
+          throw new PlanIssueNotClaimed('checked requeue answer was lost')
+        }
+      }
+      await new CleanupPlan({
+        records: new Records(), workspace: new CleanupWorkspace(), claims: new Claims(), planIssues: new Issues(),
+      }).execute({ agent, issue: 331, repository } as never)
+      throw new Error('lost requeue unexpectedly succeeded')
+    }
+    type Producer = (effects: ProducerEffects) => Promise<never>
+    const cases: readonly [
+      string, Producer, new (...args: never[]) => Error, string, number, boolean | null,
+    ][] = [
+      [
+        'remaining registration',
+        async () => workspace(async () => null).confirmAbsent(watch) as Promise<never>,
+        PlanCleanupConflict,
+        'cleanup-plan-conflict',
+        0,
+        null,
+      ],
+      [
+        'seed errno',
+        async () => workspace(async () => {
+          throw Object.assign(new Error('seed permission denied'), { code: 'EACCES' })
+        }).inspectUnlaunched(watch, null) as Promise<never>,
+        PlanCleanupNotRead,
+        'cleanup-plan-failed',
+        0,
+        null,
+      ],
+      [
+        'malformed seed',
+        async () => workspace(async () => 'not a state document').inspectUnlaunched(watch, null) as Promise<never>,
+        PlanCleanupNotUnderstood,
+        'cleanup-plan-unreadable',
+        0,
+        null,
+      ],
+      ['record snapshot errno', (effects) => diskFailure('snapshot-read', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record proof listing errno', (effects) => diskFailure('proof-listing', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record immutable readback errno', (effects) => diskFailure('immutable-readback', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 0, true],
+      ['record archive mkdir errno', (effects) => diskFailure('archive-mkdir', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['record archive stat errno', (effects) => diskFailure('archive-stat', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['record archive rename errno', (effects) => diskFailure('archive-rename', effects), PlanAgentNotLaunched, 'cleanup-plan-failed', 1, true],
+      ['malformed record', (effects) => diskFailure('malformed-record', effects), PlanAgentNotNamed, 'cleanup-plan-unreadable', 0, true],
+      [
+        'lost requeue status read',
+        (effects) => lostRequeueFailure(new PlanStatusNotRead('status command failed'), effects),
+        PlanCleanupNotRead,
+        'cleanup-plan-failed',
+        0,
+        null,
+      ],
+      [
+        'lost requeue malformed status',
+        (effects) => lostRequeueFailure(new PlanStatusNotUnderstood('status labels malformed'), effects),
+        PlanCleanupNotUnderstood,
+        'cleanup-plan-unreadable',
+        0,
+        null,
+      ],
+    ]
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      for (const [name, produce, constructor, code, archiveAttempts, activeBytesPreserved] of cases) {
+        const effects: ProducerEffects = {
+          laterEffects: 0,
+          archiveAttempts: 0,
+          successfulRetirements: 0,
+          activeBytesPreserved: null,
+        }
+        const causes: Error[] = []
+        let first = true
+        const execute = vi.fn(async () => {
+          if (!first) return
+          first = false
+          try {
+            await produce(effects)
+          } catch (cause) {
+            causes.push(cause as Error)
+            throw cause
+          }
+          effects.laterEffects += 1
+        })
+        const projection = { recover: vi.fn(async () => null) }
+        const port = await RunningApi.listening({
+          cleanupPlan: { execute } as unknown as CleanupPlan,
+          recovery: projection,
+        })
+
+        const refused = await RunningApi.post(port, '/cleanup-plan', body)
+        expect(refused.status, name).toBe(400)
+        expect(causes[0], name).toBeInstanceOf(constructor)
+        expect(await refused.json(), name).toEqual({ code, detail: causes[0]!.message })
+        expect(effects.laterEffects, name).toBe(0)
+        expect(effects.archiveAttempts, name).toBe(archiveAttempts)
+        expect(effects.successfulRetirements, name).toBe(0)
+        expect(effects.activeBytesPreserved, name).toBe(activeBytesPreserved)
+        expect(projection.recover, name).not.toHaveBeenCalled()
+
+        const retried = await RunningApi.post(port, '/cleanup-plan', body)
+        expect(retried.status, name).toBe(200)
+        expect(await retried.json(), name).toEqual({ agent })
+        expect(execute, name).toHaveBeenCalledTimes(2)
+        expect(projection.recover, name).toHaveBeenCalledTimes(1)
+      }
+      expect(complaining.mock.calls).toEqual([])
+    } finally {
+      complaining.mockRestore()
+    }
+  })
+
+  it('an actual cleanup adapter bug keeps identity through the shared fallback and releases the reservation', async () => {
+    const agent = '11111111-1111-4111-8111-111111111111'
+    const watch = new PlanWatch({
+      story: null,
+      issue: new PlanIssue({ number: 331, url: 'https://github.com/owner/name/issues/331' }),
+      located: new WorkspaceLocation({
+        root: '/repo/checkout', path: '/repo/checkout/.worktrees/331', branch: 'feat/331',
+      }),
+      repository: new RepositoryName('owner/name'),
+      agent,
+    })
+    const defect = new TypeError('seed reader sentinel defect')
+    const output = (stdout = '') => new ProcessOutput({ code: 0, stdout, stderr: '' })
+    const adapter = new GitWorkspace({
+      baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
+      stderr: () => {},
+      write: async () => {},
+      read: async () => { throw defect },
+      run: async (argv) => {
+        if (argv.includes('get-url')) return output('https://github.com/owner/name.git\n')
+        if (argv.includes('--show-toplevel')) return output(`${watch.located.root}\n`)
+        if (argv.includes('worktree') && argv.includes('list')) {
+          return output(
+            `worktree ${watch.located.root}\nHEAD ${'a'.repeat(40)}\nbranch refs/heads/main\n\n`
+            + `worktree ${watch.located.path}\nHEAD ${'a'.repeat(40)}\nbranch refs/heads/feat/331\n`
+          )
+        }
+        throw new Error(`unlisted git request: ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async () => { throw new Error('GitHub must not be reached') },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    const causes: unknown[] = []
+    let first = true
+    const execute = vi.fn(async () => {
+      if (!first) return
+      first = false
+      try {
+        await adapter.inspectUnlaunched(watch, null)
+      } catch (cause) {
+        causes.push(cause)
+        throw cause
+      }
+    })
+    const projection = { recover: vi.fn(async () => null) }
+    const port = await RunningApi.listening({
+      cleanupPlan: { execute } as unknown as CleanupPlan,
+      recovery: projection,
+    })
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    const body = `{"repo":"owner/name","issue":331,"agent":"${agent}"}`
+    try {
+      const refused = await RunningApi.post(port, '/cleanup-plan', body)
+      expect(refused.status).toBe(400)
+      expect(await refused.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+      expect(causes).toHaveLength(1)
+      expect(causes[0]).toBe(defect)
+      expect(projection.recover).not.toHaveBeenCalled()
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('seed reader sentinel defect')
+
+      const retried = await RunningApi.post(port, '/cleanup-plan', body)
+      expect(retried.status).toBe(200)
+      expect(execute).toHaveBeenCalledTimes(2)
+      expect(projection.recover).toHaveBeenCalledTimes(1)
+    } finally {
+      complaining.mockRestore()
+    }
+  })
+
   it('a_bug_of_ours_leaves_a_trace_on_the_error_channel_instead_of_vanishing_behind_that_400', async () => {
     const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
     const port = await server.start()
@@ -658,6 +1215,22 @@ describe('ApiServer', () => {
 
     expect(response.status).toBe(404)
     expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
+  })
+
+  it('the retired implementation endpoint is not found', async () => {
+    const port = await RunningApi.listening()
+
+    const posted = await RunningApi.post(
+      port,
+      '/implement-plan',
+      '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
+    )
+    const read = await fetch(`http://127.0.0.1:${port}/implement-plan`)
+
+    expect(posted.status).toBe(404)
+    expect(await posted.json()).toEqual({ code: 'not-found', detail: 'not found' })
+    expect(read.status).toBe(404)
+    expect(await read.json()).toEqual({ code: 'not-found', detail: 'not found' })
   })
 
   it('a_request_from_a_foreign_page_is_refused_because_any_site_can_post_to_localhost', async () => {
@@ -1277,7 +1850,7 @@ describe('ApiServer', () => {
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {
-    const recovery = { recover: vi.fn().mockReturnValueOnce('cmux said no').mockReturnValueOnce(null) }
+    const recovery = { recover: vi.fn().mockReturnValueOnce('records could not be listed').mockReturnValueOnce(null) }
     const port = await RunningApi.listening({ recovery })
 
     const unknown = await fetch(`http://127.0.0.1:${port}/active-plans`)
@@ -1286,15 +1859,15 @@ describe('ApiServer', () => {
     expect(unknown.status).toBe(400)
     expect(await unknown.json()).toEqual({
       code: 'active-plans-recovery-inconclusive',
-      detail: 'cmux said no',
+      detail: 'records could not be listed',
     })
     expect(recovered.status).toBe(200)
     expect(await recovered.json()).toEqual({ plans: [] })
     expect(recovery.recover).toHaveBeenCalledTimes(2)
   })
 
-  it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
-    const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
+  it('the_detail_of_an_inconclusive_recovery_carries_what_the_records_answered_and_not_a_fixed_sentence', async () => {
+    const answered = 'the state root could not be read'
     const recovery = RecoveryFixture.refusingWith(answered)
     const port = await RunningApi.listening({ recovery })
 

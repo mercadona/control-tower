@@ -1,15 +1,13 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
-import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
+import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshot, WORKFLOW_SNAPSHOT_KEY, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import {
-  backendAnswering,
   backendRecovering,
   openHome,
   openRestored,
@@ -25,6 +23,10 @@ type RecoveredPhase = 'planning' | 'implementing' | 'uncertain'
 
 const activePlan = (phase: RecoveredPhase = 'planning', repo = StartPlanMother.REPO, issue = StartPlanMother.ISSUE.number) => ({
   phase,
+  ...(phase === 'uncertain' ? {
+    diagnostic: 'The recorded call needs inspection',
+    recovery: { action: 'inspect', detail: 'Refresh evidence only' },
+  } : {}),
   request: { id: StartPlanMother.TICKET, repo, path: StartPlanMother.PATH },
   plan: {
     id: StartPlanMother.TICKET,
@@ -55,6 +57,9 @@ const withReadyTools = <T extends (input: string | URL | Request, init?: Request
     if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(NO_COORDINATING_SESSION))
     if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
     if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
+    if (String(input).startsWith('/implement-progress/')) {
+      return Promise.resolve(new Response('{"code":"implementation-progress-not-read","detail":"not started"}', { status: 400 }))
+    }
     return init === undefined ? fetching(input) : fetching(input, init)
   }))
 
@@ -77,6 +82,163 @@ const startPlanning = async () => {
 describe('Home · restore workflow', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('an initially empty held coordinator discovers a later dispatched plan', async () => {
+    vi.useFakeTimers()
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(new Response(HeadlessPlanMother.empty().body))
+      .mockResolvedValueOnce(new Response(HeadlessPlanMother.planning().body))
+    withReadyTools(fetching)
+    const coordinating = CoordinatingSessionMother.working()
+    const currentFetch = vi.mocked(fetch)
+    currentFetch.mockImplementation((input, init) => {
+      if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(coordinating.body))
+      if (input === '/active-plans') return fetching(input)
+      if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
+      if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
+      if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
+      if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(fetching).toHaveBeenCalledTimes(1)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByText('Plan arrancado')).toBeInTheDocument()
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['fresh and restored implementing work both become uncertain and block launch', 'fresh'],
+    ['restored implementing work becomes uncertain and blocks launch', 'restored'],
+  ] as const)('%s', async (_name, origin) => {
+    vi.useFakeTimers()
+    if (origin === 'restored') storeWorkflow('implementing')
+    const changes = HeadlessPlanMother.deferredChanges()
+    withReadyTools(changes.read)
+    openHome()
+    expect(changes.activeReadCount()).toBe(1)
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
+    expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
+
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(changes.activeReadCount()).toBe(2)
+    await act(async () => changes.answerWith(HeadlessPlanMother.uncertain()))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('No se puede confirmar el estado de implementación')
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
+  })
+
+  it('late discovery cannot replace a newer workflow or coordinator', async () => {
+    vi.useFakeTimers()
+    const changes = HeadlessPlanMother.deferredChanges()
+    const coordinating = CoordinatingSessionMother.working()
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      if (input === '/active-plans') return changes.read(input)
+      if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(coordinating.body))
+      if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
+      if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
+      if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
+      if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    }))
+    openHome()
+    expect(changes.activeReadCount()).toBe(1)
+
+    fireEvent.change(screen.getByLabelText('Ticket'), { target: { value: StartPlanMother.TICKET } })
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
+
+    expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
+    expect(screen.queryByText('Plan arrancado')).toBeNull()
+  })
+
+  it('polling stops on unmount and cannot readopt a discarded plan', async () => {
+    vi.useFakeTimers()
+    const changes = HeadlessPlanMother.deferredChanges()
+    withReadyTools(changes.read)
+    const { unmount } = openHome()
+    expect(changes.activeReadCount()).toBe(1)
+    await act(async () => changes.answerWith(HeadlessPlanMother.uncertain()))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(changes.activeReadCount()).toBe(2)
+    screen.getByRole('button', { name: 'Descartar estado' }).click()
+    await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.queryByText('Plan arrancado')).toBeNull()
+
+    unmount()
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(changes.activeReadCount()).toBe(2)
+  })
+
+  it('only allows another repository after backend implementation and resets the old workflow', async () => {
+    vi.useFakeTimers()
+    storeWorkflow('ready')
+    const changes = HeadlessPlanMother.deferredChanges()
+    const fetching = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      if (input === '/active-plans') return changes.read(input)
+      if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(NO_COORDINATING_SESSION))
+      if (input === '/coordinating-session') return Promise.resolve(new Response(CoordinatingSessionMother.opened().body, { status: 202 }))
+      if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
+      if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
+      if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
+      if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
+      if (String(input).startsWith('/implement-progress/') || String(input).startsWith('/implement-history/')) {
+        return Promise.resolve(new Response('{}', { status: 400 }))
+      }
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    vi.stubGlobal('fetch', fetching)
+    openHome()
+    await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(FakeEventSource.opened).toHaveLength(1)
+    const oldStream = FakeEventSource.last()
+
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
+    fireEvent.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
+
+    expect(oldStream.closes).toBe(1)
+    expect(localStorage).toHaveLength(0)
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
+    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
+    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Ticket'), { target: { value: StartPlanMother.TICKET } })
+    fireEvent.change(screen.getByLabelText(/Repositorio/), { target: { value: StartPlanMother.ANOTHER_REPO } })
+    fireEvent.change(screen.getByLabelText(/Ruta local/), { target: { value: StartPlanMother.PATH } })
+    fireEvent.click(screen.getByRole('button', { name: 'Arrancar brainstorming' }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    const opening = fetching.mock.calls.find(([input, init]) => input === '/coordinating-session' && init !== undefined)
+    expect(opening?.[1]?.body).toContain(StartPlanMother.ANOTHER_REPO)
+  })
+
+  it('does not readopt the implementing plan it just left when the backend still reports it', async () => {
+    vi.useFakeTimers()
+    storeWorkflow('implementing')
+    const changes = HeadlessPlanMother.deferredChanges()
+    withReadyTools(changes.read)
+    openHome()
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
+
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(changes.activeReadCount()).toBe(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
+    expect(screen.queryByText('Implementación iniciada automáticamente')).toBeNull()
   })
 
   it('should restore planning after the page unmounts without starting the plan twice', async () => {
@@ -102,44 +264,59 @@ describe('Home · restore workflow', () => {
     backendRecovering(activePlansAnswer(activePlan()))
     openHome()
 
-    expect(await screen.findByRole('button', { name: 'Implementar plan' })).toBeEnabled()
+    expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
-    expect(screen.getByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeInTheDocument()
+    expect(screen.getByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
   it('should restore implementing without sending another implementation request', async () => {
-    const { user, unmount } = await startPlanning()
-    await streamFrame(PlanEventsMother.ready())
-    const implementing = backendAnswering(ImplementPlanMother.implementing())
-    await user.click(screen.getByRole('button', { name: 'Implementar plan' }))
-    await screen.findByText('Agente asignado')
-
-    unmount()
-    backendRecovering(activePlansAnswer(activePlan('implementing')))
+    storeWorkflow('implementing')
+    const fetching = backendRecovering(activePlansAnswer(activePlan('implementing')))
     openHome()
 
-    expect(await screen.findByText('Agente asignado')).toBeInTheDocument()
+    expect(await screen.findByText('Implementación iniciada automáticamente')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Arrancar otro plan' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
-    expect(implementing).toHaveBeenCalledTimes(1)
+    expect(fetching.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
-  it('keeps restored plan facts expandable during implementation without reopening SSE', async () => {
+  it('keeps implementation current when reopening the completed review summary with the keyboard', async () => {
     backendRecovering(activePlansAnswer(activePlan('implementing')))
+    const { user } = openHome()
+
+    await screen.findByText('Implementación iniciada automáticamente')
+    const reviewSummary = screen.getByRole('button', { name: /Revisar plan.*Completado/ })
+    reviewSummary.focus()
+    await user.keyboard('{Enter}')
+
+    expect(reviewSummary).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Implementación')
+    expect(FakeEventSource.opened).toHaveLength(0)
+  })
+
+  it('a same-phase poll keeps the completed review summary expanded', async () => {
+    vi.useFakeTimers()
+    storeWorkflow('implementing')
+    const changes = HeadlessPlanMother.deferredChanges()
+    withReadyTools(changes.read)
     openHome()
 
-    await screen.findByText('Agente asignado')
-    await screen.findByRole('button', { name: /Revisar plan.*Completado/ })
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
+    const reviewSummary = screen.getByRole('button', { name: /Revisar plan.*Completado/ })
     expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
       'aria-hidden',
       'true',
     )
 
-    await userEvent.setup().click(screen.getByRole('button', { name: /Revisar plan.*Completado/ }))
+    fireEvent.click(reviewSummary)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
 
+    expect(reviewSummary).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
       'aria-hidden',
       'false',
@@ -202,7 +379,7 @@ describe('Home · restore workflow', () => {
 
     expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
-    expect(screen.queryByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeNull()
+    expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
 
     unmount()
@@ -221,7 +398,7 @@ describe('Home · restore workflow', () => {
 
     await screen.findByRole('alert')
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
-    expect(screen.queryByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeNull()
+    expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
@@ -233,7 +410,7 @@ describe('Home · restore workflow', () => {
 
     await screen.findByRole('alert')
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
-    expect(screen.queryByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeNull()
+    expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     expect(fetching).toHaveBeenCalledTimes(1)
@@ -250,12 +427,13 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo comprobar el plan guardado')
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
-    expect(screen.queryByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeNull()
+    expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(await screen.findByRole('button', { name: 'Implementar plan' })).toBeEnabled()
+    expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(fetching).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
@@ -268,7 +446,7 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se puede confirmar el estado de implementación')
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
-    expect(screen.queryByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeNull()
+    expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     expect(WorkflowSnapshotStorage.load()?.phase).toBe('ready')
@@ -292,6 +470,203 @@ describe('Home · restore workflow', () => {
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
 
+  it('uncertain recovery invokes the action without starting another plan', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(HeadlessPlanMother.awaitingContinuation().body)
+      }
+      if (input === '/recover-plan') {
+        expect(init?.body).toBe(JSON.stringify({
+          repo: StartPlanMother.REPO,
+          issue: StartPlanMother.ISSUE.number,
+          agent: StartPlanMother.AGENT,
+        }))
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 })
+      }
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.planning().body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+    expect(await screen.findByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Recuperar trabajo' }))
+
+    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
+    expect(calls).not.toContain('POST /start-plan')
+  })
+
+  it('finishes an earlier observation before recovering and then reads fresh state', async () => {
+    vi.useFakeTimers()
+    let answerObservation: (response: Response) => void = () => {}
+    const observation = new Promise<Response>((resolve) => { answerObservation = resolve })
+    const calls: string[] = []
+    let reads = 0
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans') {
+        reads += 1
+        if (reads === 1) return new Response(HeadlessPlanMother.awaitingContinuation().body)
+        if (reads === 2) return observation
+        return new Response(HeadlessPlanMother.planning().body)
+      }
+      if (input === '/recover-plan') {
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 })
+      }
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    openHome()
+    await act(async () => Promise.resolve())
+    const recover = screen.getByRole('button', { name: 'Recuperar trabajo' })
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    fireEvent.click(recover)
+    await act(async () => Promise.resolve())
+    expect(calls).toEqual(['GET /active-plans', 'GET /active-plans'])
+
+    await act(async () => {
+      answerObservation(new Response(HeadlessPlanMother.awaitingContinuation().body))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('Plan arrancado')).toBeInTheDocument()
+    expect(calls).toEqual([
+      'GET /active-plans',
+      'GET /active-plans',
+      'POST /recover-plan',
+      'GET /active-plans',
+    ])
+  })
+
+  it.each([
+    ['recover', HeadlessPlanMother.awaitingContinuation(), '/recover-plan', 'Recuperar trabajo', HeadlessPlanMother.planning()],
+    ['cleanup', HeadlessPlanMother.unlaunched(), '/cleanup-plan', 'Limpiar arranque fallido', HeadlessPlanMother.empty()],
+  ] as const)('polling during %s cannot replace the fresh read', async (_name, initial, endpoint, action, fresh) => {
+    vi.useFakeTimers()
+    let answerMutation: (response: Response) => void = () => {}
+    const mutation = new Promise<Response>((resolve) => { answerMutation = resolve })
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(initial.body)
+      }
+      if (input === endpoint) return mutation
+      if (input === '/active-plans') return new Response(fresh.body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    openHome()
+    await act(async () => Promise.resolve())
+
+    fireEvent.click(screen.getByRole('button', { name: action }))
+    await act(async () => Promise.resolve())
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(calls).toEqual(['GET /active-plans', `POST ${endpoint}`])
+
+    await act(async () => {
+      answerMutation(new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), {
+        status: endpoint === '/recover-plan' ? 202 : 200,
+      }))
+      await mutation
+      await Promise.resolve()
+    })
+
+    expect(calls).toEqual(['GET /active-plans', `POST ${endpoint}`, 'GET /active-plans'])
+  })
+
+  it('an unavailable recovery keeps its diagnostic and performs a fresh read', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.awaitingContinuation().body)
+      if (input === '/recover-plan') throw new TypeError('Failed to fetch')
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: 'Recuperar trabajo' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo contactar con el backend para ejecutar la recuperación.',
+    )
+    expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
+  })
+
+  it('proven non-launch exposes checked cleanup', async () => {
+    const calls: string[] = []
+    const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (input === '/active-plans' && calls.filter((call) => call === 'GET /active-plans').length === 1) {
+        return new Response(HeadlessPlanMother.unlaunched().body)
+      }
+      if (input === '/cleanup-plan') {
+        return new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 200 })
+      }
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.empty().body)
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: 'Limpiar arranque fallido' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
+    expect(calls).toEqual(['GET /active-plans', 'POST /cleanup-plan', 'GET /active-plans'])
+    expect(calls).not.toContain('POST /start-plan')
+  })
+
+  it('late recovery cannot replace the selected workflow', async () => {
+    let answerRecovery: (response: Response) => void = () => {}
+    const pendingRecovery = new Promise<Response>((resolve) => { answerRecovery = resolve })
+    const fetching = vi.fn(async (input: string | URL | Request) => {
+      if (input === '/active-plans') return new Response(HeadlessPlanMother.awaitingObservation().body)
+      if (input === '/recover-plan') return pendingRecovery
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    withReadyTools(fetching)
+    const { user } = openHome()
+    const recover = await screen.findByRole('button', { name: 'Recuperar trabajo' })
+
+    await user.click(recover)
+    expect(recover).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
+    answerRecovery(new Response(JSON.stringify({ agent: StartPlanMother.AGENT }), { status: 202 }))
+    await act(async () => pendingRecovery)
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.queryByText('Plan arrancado')).toBeNull()
+    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(1)
+  })
+
+  it.each([
+    ['an empty discovery', HeadlessPlanMother.empty()],
+    ['an unrelated plan', activePlansAnswer(activePlan('planning', StartPlanMother.ANOTHER_REPO, 9))],
+  ])('keeps uncertain plan identity when followed by %s', async (_name, nextAnswer) => {
+    vi.useFakeTimers()
+    const changes = HeadlessPlanMother.deferredChanges()
+    withReadyTools(changes.read)
+    openHome()
+    await act(async () => changes.answerWith(HeadlessPlanMother.uncertain()))
+
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => changes.answerWith(nextAnswer))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
+    expect(screen.getByText(StartPlanMother.TICKET)).toBeInTheDocument()
+    expect(screen.getByText(StartPlanMother.REPO)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
+    expect(screen.queryByText(StartPlanMother.ANOTHER_REPO)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Descartar estado' })).toBeEnabled()
+  })
+
   it('should discard an uncertain candidate and unlock a fresh request even if the backend still reports it', async () => {
     const fetching = backendRecovering(activePlansAnswer(activePlan('uncertain')))
     const { user } = openHome()
@@ -311,7 +686,8 @@ describe('Home · restore workflow', () => {
     openHome()
 
     if (phase === 'ready') {
-      expect(await screen.findByRole('button', { name: 'Implementar plan' })).toBeEnabled()
+      expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     } else {
       expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
@@ -327,7 +703,7 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(await screen.findByText('Agente asignado')).toBeInTheDocument()
+    expect(await screen.findByText('Implementación iniciada automáticamente')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Arrancar otro plan' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
@@ -402,7 +778,7 @@ describe('Home · restore workflow', () => {
     expect(choices[1]).toHaveAccessibleName(/ABC-123, owner\/other-name, issue #9/)
     await user.click(choices[1])
 
-    expect(screen.getByText('Agente asignado')).toBeInTheDocument()
+    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Arrancar otro plan' })).toBeEnabled()
     expect(FakeEventSource.opened).toHaveLength(0)
   })
@@ -426,6 +802,36 @@ describe('Home · restore workflow', () => {
 
     await waitFor(() => expect(fetching.mock.calls.filter(([input]) => input === '/coordinating-session')).toHaveLength(1))
     expect(screen.queryByRole('button', { name: /Continuar plan/ })).toBeNull()
+  })
+
+  it('a coordinator opened by gate 2 invalidates discovery from the previous conversation', async () => {
+    vi.useFakeTimers()
+    const changes = HeadlessPlanMother.deferredChanges()
+    const coordinating = CoordinatingSessionMother.working()
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      if (input === '/active-plans') return changes.read(input)
+      if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(coordinating.body))
+      if (input === '/groom-session') return Promise.resolve(new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 }))
+      if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
+      if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
+      if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
+      if (input === '/epic-groom') return Promise.resolve(new Response(EpicGroomMother.groomable().body))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    }))
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getAllByText('Trabajando')).not.toHaveLength(0)
+    expect(changes.activeReadCount()).toBe(1)
+    await act(async () => changes.answerWith(HeadlessPlanMother.empty()))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(changes.activeReadCount()).toBe(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar el slicing con la sesión' }))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.queryByText('Plan arrancado')).toBeNull()
   })
 
   it('should show it cannot tell what is running, and offer a retry, when the backend cannot be reached', async () => {

@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 21,
+  "task_name": "Follow automatic progress without a go button",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Rejudged the current scoped diff and actual Home against the current brief. Original finding 1 is resolved: same-phase reconciliation preserves expandedSummary, and a regression case resolves another implementing poll while the summary remains expanded. Original finding 2 is resolved: sessionOpened synchronously advances the generation, invalidates the request token and records opened.conversation; the GateSequence race test opens gate 2's conversation before resolving the prior discovery. Original finding 3 is resolved: selected uncertain work is matched by repo/issue/agent before unselected discovery; empty or unrelated results produce stale recovery with an enabled discard action, rather than silently adopting another plan or hiding recovery. Both cases have assertions. Polling remains active for selected planning, ready, implementing and uncertain work, candidates, and a live coordinator without selection. Reads and retries share one in-flight promise; response guards reject changed generations, workflow or coordinator identity and unmounted responses. Discards invalidate pending reads and filter every later loaded result through mount-local tombstones. Backend evidence alone implements, ready snapshots stay readable, fresh/restored uncertainty blocks launch, and coordinator/GateSequence surfaces remain connected. No remaining concrete scoped behavior gap established. Controls 2 are inherited as green; log path only: .agent/run-331/task-21-controls-2.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named ready-plan test retains the required assertion: resolve planning for a ready snapshot, advance the polling timer, resolve implementing, assert the implementation heading and preserved agent identity, and assert no /implement-plan or POST request.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The Current state ImplementPlanAction import, renders and implementationStarted callback are removed. The polling interval is 2000 ms. HeadlessPlanMother provides the named empty/planning/implementing/uncertain wire responses and deferred changes. The task prescribes no additional exact signature, error or Final text block; behavioral requirements are assessed under objetivo.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Affected closed decisions remain honored: no human implementation gate or mutation request, backend evidence controls progress, the interactive coordinator and session surfaces remain available, and freeze/groom/promotion stay page-authorized through GateSequence. No flag, backend automaton, subsequent-issue dispatch, merge authority or distributed-go retirement is introduced. Remaining decisions concern untouched backend behavior.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the eight CT conventions and repository/frontend rules read in the first review, with the package's rule-by-rule precedence and existing-module style exemption. The changes extend Home's existing reconciliation responsibility; the mother uses named scenarios and typed responses. Backend exemplars have no newly implemented backend counterpart in this frontend task. frontend-engineering was unavailable on the first review and remains an unreceived yardstick, not a finding. Closed vocabulary: phase and reconciliation classifications use literal unions; no newly introduced loose classification identified. Raw map as the return value of logic: the mother returns declared Answer values containing serialized wire bodies, not an untyped logic map. Two fields that have to agree: reviewed uncertainActiveRef/uncertainRequest updates and clearing paths; the previously demonstrated inconsistent empty-result transition is repaired, and no additional concrete inconsistency or absence sentinel is introduced by this revision. Error named for where it happens: no new error hierarchy; the deferred fixture error describes the missing pending read. No new boundary or delivery-pattern violation established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Original finding 4 is resolved. Home.restoreWorkflow now preserves keyboard opening/current-stage assertions, hidden/visible agent facts without reopening SSE, and same-phase expansion across a poll. The backend-driven new-repository case restores old-stream closure, empty storage, cleared form fields, disabled incomplete submission and the next repository's coordinating-session payload. The departed implementing-plan case again asserts that a reported old plan cannot replace the fresh form, now with an explicitly pending response. Home.layout asserts implementation history belongs to the right-side panel and the columns container. These preserve the unaffected guarantees while replacing the retired manual launch setup. The nine explicitly retired manual-implementation tests and related button/copy expectations remain authorized removals; no outstanding unauthorized loss of preservation assertions established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The real Home and ActivePlansClient produce polling, phase transitions, response invalidation, selected-uncertain identity reconciliation, tombstone filtering and recovery rendering. Fixtures supply external responses rather than implementing those effects. The gate-2 regression uses the real rendered gate action and callback path. Coordinator coverage asserts its production panel remains visible and not aria-disabled; actual terminal input transport is not newly exercised by that case, and the production session wiring remains intact.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All five changed files serve Task 21. The revision repairs scoped reconciliation behavior and restores preservation coverage. There are no plan amendments, plugin/backend production changes or unrelated features. The previously reported stale-button/copy assertions in later cleanup suites are not used as evidence for or against this diff; Task 22 cleanup does not substitute for this scoped judgment.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "New asynchronous regression cases use fake timers and explicitly resolved responses, with per-test fixtures, restored globals/timers and shared storage cleanup. Assertions observe rendered state, expansion, recovery actions, stream closure, storage and outbound requests. The same-phase, gate-opening and uncertain-identity regressions would detect the corresponding previous defects. Preservation tests legitimately measure behavior that already existed. The departed-plan and unmount cases exercise pending-response invalidation; the later-discovery tombstone filter was additionally checked in production code rather than inferred from those cases. No determinism, isolation or scaffolding-only high defect established, and no finer test-quality finding is issued.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "e6f709a83a5d1996b2ba49a13a3e6049329aee20ddd076c01937e5b39a09d49a"
+  }
+}

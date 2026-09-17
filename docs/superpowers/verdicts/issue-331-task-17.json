@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 17,
+  "task_name": "Retire window-launch identity and sentinel scenarios",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The 175 deleted lines remove exactly the 17 named obsolete window-transport cases. Headless identity, immutable preparation and spawn-acceptance coverage remain in disk-plan-records.test.ts and claude-calls.test.ts. Inherited green controls: .agent/run-331/task-17-controls-1.log (typecheck and 34 tests, both exit 0).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The brief explicitly declares No TDD for this scoped scenario retirement.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "No signature, type, error, constant or exported contract is changed; the Current state block identifies a test to remove.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "All closed decisions remain intact. This test-only retirement changes neither runtime ownership nor coordinator, recovery, publication, gate or distributed go behaviour.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Scoped deletion conforms to the supplied conventions; no new implementation needs an exemplar comparison and no boundary or delivery pattern changes. defects.md: closed vocabulary has no new subject; raw map as the return value of logic has no new subject; two fields that have to agree, including absence sentinels, have no new subject; an error named for where it happens has no new subject. Existing helpers are preserved as required by the retirement scope.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Compared every removed case name and body with Tests: all 17 removals are expressly authorised, with none missing or extra. The 17 surviving cases and their assertions, imports, fixtures and helpers are unchanged, including launch budget, sentinel failures, policy exhaustiveness, resume and fix coverage.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised effect is the explicit removal of obsolete scenarios, which the diff performs directly. No mock, fixture or fabricated expectation substitutes for new production behaviour.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The single deletion hunk serves only the named retirement list in cmux-plan-agents.test.ts. Remaining cases stay for the next retirement task; no helper cleanup, production edit, protected plugin change or plan amendment appears.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The diff adds no tests or assertions.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "1cce0b2b2b19559b2103fe106d2aade380372099e7220c59ef362adabe9b39b0"
+  }
+}

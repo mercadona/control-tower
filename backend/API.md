@@ -3,8 +3,8 @@
 What `backend/` answers, endpoint by endpoint. This is the contract the frontend
 codes against.
 
-Every shape below was read from a running server, not from the source alone. The
-`curl` lines reproduce it.
+The contract below follows the current route, boundary model and projection
+code. The `curl` lines exercise those public shapes.
 
 ## Reaching it
 
@@ -14,7 +14,8 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 21 (`POST` 11, `GET` 10) |
+| Endpoint authority | `backend/src/infrastructure/api-server.ts` |
+| Endpoints | 20 (`POST` 10, `GET` 10) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -60,13 +61,22 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 
 ## `POST /start-plan`
 
-Starts a plan: cuts a worktree, opens the plan issue, launches the agent. It is
-slow — it runs the target repository's baseline test suite before answering, and
-that can take minutes. There is no progress signal while it waits.
+Starts a headless plan agent. The original loose request remains available; a
+milestone request instead selects the next eligible ready issue with the plugin's
+ordering, dependency, cap and token rules, claims it through `dispatch-check`,
+prepares its worktree and starts planning in a newly minted conversation.
 
-**It names one target**: a repository and the path of its local clone. The
+The loose body names one target: a repository and the path of its local clone. The
 `repo_list` field, which once named several at once, is retired — a body
 carrying it is refused by name rather than parsed.
+
+```json
+{"milestone":"Headless delivery"}
+```
+
+The milestone body contains exactly that one field. It uses the repository and
+checkout held by the coordinating session. The held milestone must match and
+gate 2 must already have left the work groomed or authorised.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
@@ -83,14 +93,16 @@ not send `null`, which is a malformed value.
 ```json
 {"status":"started","id":"ABC-123","repo":"owner/name",
  "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
- "agent":"workspace:4","branch":"feat/7",
+ "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
  "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
  "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}
 ```
 
-`agent` is the handle `POST /implement-plan` demands later. `root` is git's
-canonical path for the checkout, which may differ from the `path` that was sent;
-keep the answered one.
+For a milestone body, `id` is `null`. `agent` is the durable Claude conversation
+UUID. Planning runs with `--session-id <agent>`; after a successful committed
+plan is published to the issue, implementation is accepted automatically with
+`--resume <agent>`. `root` is git's canonical checkout path, which may differ
+from a loose request's `path`.
 
 `baseline` is what the target repository's suite answered in the worktree that
 was just cut, **the same measurement that is sown into `.agent/SLICE.md`** for
@@ -141,15 +153,21 @@ From a tool refusing:
 | `plan-issue-not-created` | `gh issue create` refused |
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
-| `plan-agent-not-launched` | cmux refused |
-| `plan-agent-not-named` | cmux launched but gave no handle |
+| `dispatch-not-available` | the plugin found no eligible ready slice, or the selected slice still declares a plan gate |
+| `dispatch-not-read` | the complete open/closed GitHub issue table could not be read |
+| `dispatch-not-understood` | the issue table or plugin dispatch result was ambiguous |
+| `plan-agent-never-launched` | definite pre-worker or worker-spawn failure; this start refusal alone does not authorize cleanup |
+| `plan-agent-not-launched` | durable call preparation, worker acceptance or execution failed |
+| `plan-agent-not-named` | durable call evidence was malformed or conflicted with immutable evidence |
 | `workspace-not-prepared` | the worktree could not be cut |
+| `workspace-not-cleaned` | compensation could not remove a workspace safely |
 | `workspace-not-read` | git refused when surveying |
 | `workspace-not-understood` | git answered something unreadable |
 
-All ten answer 400 and carry the tool's own message in `detail`. They are one
-failure family split by cause, so the UI can treat them as one class and show
-`detail`.
+Milestone requests can also answer `start-milestone-malformed`,
+`start-milestone-no-session`, `start-milestone-mismatch`,
+`start-milestone-not-dispatchable`, or `start-plan-in-progress`. Application
+refusals answer 400 and carry their diagnostic in `detail`.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -203,48 +221,15 @@ curl -N 'http://127.0.0.1:8787/plan-events/7?repo=owner/name'
 
 ## `POST /implement-plan`
 
-Answers the human gate: records the GO and tells the agent to implement.
-
-**Request**
-
-| Field | Type | Shape |
-|---|---|---|
-| `agent` | string | the handle `/start-plan` answered, no whitespace |
-| `issue` | number | whole, from 1 |
-| `repo` | string | `owner/name` |
-
-**202 Accepted**
-
-```json
-{"status":"implementing","agent":"workspace:20","issue":33}
-```
-
-**It is idempotent.** A second call for a plan already implementing answers the
-same 202 without touching anything, and concurrent calls for the same plan are
-serialised.
-
-**Refusals**
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
-| `unknown-field` | 400 | `detail` names the fields, sorted |
-| `malformed-agent` | 400 | `agent` is empty or holds whitespace |
-| `malformed-issue` | 400 | `issue` is not a whole number from 1 |
-| `malformed-repo` | 400 | `repo` is not `owner/name` |
-| `no-live-planning-session` | 400 | no active plan matches that issue **or** its agent handle differs |
-| `implementation-phase-uncertain` | 400 | the backend cannot tell whether implementation already began; a person must look before retrying |
-| `go-not-recorded` | 400 | the GO marker could not be written |
-| `plan-go-not-answered` | 400 | the GO comment on the issue failed |
-| `plan-agent-not-resumed` | 400 | cmux would not take the line |
-
-`no-live-planning-session` is the one to expect after a backend restart: send the
-`agent` from `/active-plans`, not one the page remembered from an older run.
+This path is not mounted. A request receives the shared 404 `not-found`
+response. There is no manual GO endpoint in the current API: gate 2 authorises
+milestone work, and successful plan publication is followed by automatic
+same-conversation continuation.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/implement-plan \
-  -d '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
+  -d '{"agent":"11111111-1111-4111-8111-111111111111","issue":33,"repo":"owner/name"}'
 ```
 
 ---
@@ -390,44 +375,83 @@ recover a session it lost — a reload, or a backend restart.
   "request":{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"},
   "plan":{"id":"ABC-123","repo":"owner/name",
     "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
-    "agent":"workspace:4","branch":"feat/7",
+    "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
     "worktree":"/repo/checkout/.worktrees/7"}}]}
 ```
 
-`plans` is empty when nothing is running. Each entry carries `request` — what a
-person would have typed — and `plan` — what starting it produced.
+An `uncertain` entry also carries mandatory recovery metadata:
+
+```json
+{"phase":"uncertain","diagnostic":"planner call is incomplete within its recorded deadline",
+ "recovery":{"action":"observe","detail":"observe the recorded planner call"},
+ "request":{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"},
+ "plan":{"id":"ABC-123","repo":"owner/name","issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
+   "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7","worktree":"/repo/checkout/.worktrees/7"}}
+```
+
+The action is `observe`, `continue`, `cleanup` or `inspect`. Partial checked
+cleanup remains listed even after its worktree has gone, because the durable
+identity and cleanup receipt still need retirement. Planning and implementing
+entries do not carry recovery metadata.
+
+`plans` is empty when no recoverable durable dispatch record exists. Each entry
+carries `request` — what started it — and `plan` — the durable identity and
+workspace.
 
 | `phase` | Meaning | What the UI can do |
 |---|---|---|
-| `planning` | the plan is being written | watch `/plan-events`, offer the GO |
-| `implementing` | the GO was given | poll `/implement-progress` |
-| `uncertain` | the GO was given, but the backend cannot tell whether the work began | show it, refuse the GO; `/implement-plan` answers `implementation-phase-uncertain` |
+| `planning` | this API owns a live planning call | watch `/plan-events` |
+| `implementing` | this API owns implementation/fix, or durable completion proves it began | poll `/implement-progress` |
+| `uncertain` | durable evidence cannot prove whether publication, continuation or an incomplete call finished | show it for human investigation; never replay it automatically |
 
 **Refusal**
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `active-plans-recovery-inconclusive` | **400** | cmux could not be asked, so the list would be a lie; `detail` carries what cmux answered |
+| `active-plans-recovery-inconclusive` | **400** | dispatch/call records are unreadable, corrupt or ambiguous, so an empty list would be a lie |
 
-It is the common failure on a fresh machine: recovery reads the live cmux
-workspaces, and without cmux it refuses **every** call and never settles. The
-page must show *I cannot tell what is running* rather than *nothing is
-running*, and it must not treat this as an empty list.
+Recovery enumerates `<state root>/harness/<conversation>/dispatch.json` before
+reading call records and never consults a process registry or the network.
+The durable layout is:
 
-`detail` carries the reason itself, not a fixed sentence — the same rule the ten
-refusals of `POST /start-plan` follow. It is the one place a person sees why
-without reaching the terminal running the backend, and it was measured to
-matter: during the in-store run the reason lived only in a cmux tab nobody was
-looking at, while the page said *no pudo preguntar a cmux* and nothing else.
+```text
+harness/<conversation>/dispatch.json
+harness/<conversation>/non-launch.json
+harness/<conversation>/cleanup-evidence.json
+harness/<conversation>/calls/<call>/call.json
+harness/<conversation>/calls/<call>/prompt.md
+harness/<conversation>/calls/<call>/stream.ndjson
+harness/<conversation>/calls/<call>/stderr.log
+harness/<conversation>/calls/<call>/completion.json
+retired-harness/<conversation>/...
+```
 
-When cmux answers with a schema this backend does not read, the reason names
-the fields that **did** arrive. That one line is what tells a stale cmux apart
-from a broken one: the machine this was measured on answered with `title` and no
-`custom_title`, which is the shape of an older build still serving the socket.
+`dispatch.json`, `call.json`, `prompt.md` and `completion.json` are immutable
+records; stream and stderr files are process output. Identity comes from the
+enclosing conversation and call directories. A descriptor records the
+conversation, purpose, nullable request identity, cwd, binary, argv, start time,
+call budget and kill grace, but no process id or environment dump.
 
-The same reason also goes to the backend's error channel, prefixed
-`plans in flight:`, and `GET /external-tools` answers the same question ahead of
-time in its `cmux` row.
+An initial OS child-spawn failure writes a typed `child-spawn-failed` terminal
+before its matching non-launch receipt. The terminal has no exit code, signal or
+CLI measurement because no Claude process ran. Cleanup accepts that pair only
+when its conversation, call, diagnostic and timestamp agree and the stream is
+byte-empty. A generic failed completion, successful completion, output bytes or
+foreign call directory contradicts non-launch proof. A `before-worker` receipt
+may legitimately have no call directory or only an empty prompt-only directory;
+it does not need a descriptor that failed before publication.
+
+Missing state means no plans. A successful plan with no implementation
+descriptor is uncertain because publication/continuation may still be pending;
+an incomplete call not owned by this API process is uncertain even when other
+run evidence exists. Recovery preserves the same conversation UUID and never
+spawns or replays an uncertain call automatically.
+
+When a person requests changes on an implementation pull request, the review
+path first runs `dispatch-check --reopen` to move the issue back to the
+workbench. Only after that succeeds does it start a `fix` call by resuming the
+original conversation recorded for that issue and worktree. It neither creates
+a replacement conversation nor opens another pull request.
 
 ```
 curl -s http://127.0.0.1:8787/active-plans
@@ -435,18 +459,87 @@ curl -s http://127.0.0.1:8787/active-plans
 
 ---
 
+## `POST /recover-plan`
+
+Requests supervision of the original recorded call. It never creates a new
+conversation. The body has exactly these fields:
+
+```json
+{"repo":"owner/name","issue":7,"agent":"11111111-1111-4111-8111-111111111111"}
+```
+
+**202 Accepted** answers `{"agent":"11111111-1111-4111-8111-111111111111"}`.
+Acceptance means supervision was registered, not that recovery completed. The
+caller starts a new `GET /active-plans` only after the POST answers. `observe` waits only inside the
+immutable recorded deadline; `continue` resumes publication and implementation
+from the successful planner. Completed implementation/fix calls are never
+replayed. Legacy, expired, failed, corrupt or conflicting evidence remains
+inspect-only.
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `recover-plan-invalid-request` | 400 | body is not exactly the recorded identity shape |
+| `recover-plan-in-progress` | 400 | this API is already starting, recovering or cleaning work in the repository |
+| `recover-plan-not-found` | 400 | no active record has that identity |
+| `recover-plan-conflict` | 400 | identity or evidence is ineligible for mutation |
+| `recover-plan-failed` | 400 | an operational record/call read failed |
+| `recover-plan-unreadable` | 400 | durable evidence is malformed or contradictory |
+
+## `POST /cleanup-plan`
+
+Uses the same exact request body. It answers **200 OK** with the same `agent`
+shape only after checked workspace removal, checked issue requeue and durable
+retirement finish. Cleanup requires an immutable definite non-launch receipt;
+an absent worktree or `plan-agent-never-launched` response alone is not proof.
+Retries reuse cleanup evidence and never force-remove a worktree or branch.
+Before changing the issue and again before retirement, cleanup freshly confirms
+the canonical repository, complete worktree registration, absent local branch,
+absent filesystem path, absent remote branch and absent pull request. Only an
+`ENOENT` filesystem result and Git's quiet missing-ref result establish local
+absence; malformed or inconclusive evidence preserves the active record.
+Remaining registration, branch or path is `cleanup-plan-conflict`. Errno-shaped
+seed, path or status reads are `cleanup-plan-failed`; malformed seed, listing or
+status evidence is `cleanup-plan-unreadable`. Unexpected implementation defects
+are not converted into those categories and use the API's shared HTTP 400
+`request-failed` response while retaining their diagnostic on backend stderr.
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `cleanup-plan-invalid-request` | 400 | body is not exactly the recorded identity shape |
+| `cleanup-plan-in-progress` | 400 | this API is already starting, recovering or cleaning work in the repository |
+| `cleanup-plan-not-found` | 400 | no active or retired record has that identity |
+| `cleanup-plan-conflict` | 400 | proof, status, workspace or identity prevents cleanup |
+| `cleanup-plan-failed` | 400 | an operational record, status, git or claim call failed |
+| `cleanup-plan-unreadable` | 400 | durable or collaborator evidence is malformed |
+
+Both POSTs share the single-API repository reservation used by `/start-plan`.
+They require `Content-Type: application/json`, reject foreign origins, refuse
+oversized bodies, and expose only `POST` through the ordinary protocol codes.
+They need no gate key. The coordinating prompt discovers these endpoints from
+the origin of `CT_SESSION_HOOKS_URL` and preserves the returned repo, issue and
+agent identity. A missing Claude transcript is a refusal, never permission to
+open a replacement conversation.
+
+Only coordinating sessions opened after this capability was installed receive
+the recovery instruction in their prompt. An already-running or resumed
+coordinator must receive the same bounded instruction through its existing
+terminal; opening code does not retroactively change its prompt.
+
+The no-live-Claude restriction remains in force for this repair. The fixture
+rehearsal verifies the production graph; a real permission smoke remains
+unverified.
+
+---
+
 ## `GET /external-tools`
 
-Whether the six external tools this backend drives can be used right now, and
+Whether the five external tools this backend drives can be used right now, and
 whether a merged slice's metrics have anywhere to go. No parameters. It exists
 to be asked **before** starting work: until now each of these failed at the
 moment it was used, mid-flow, in the tool's own words.
 
-Five of them are asked about a credential. `cmux` is asked about something else
-— whether it answers the query this backend recovers plans with — because that
-is what fails first on a machine whose cmux is too old or that is running this
-backend from outside cmux, and it fails as `GET /active-plans` refusing
-forever.
+Four are asked about a credential. Claude's login remains unobservable from
+this process, so its session is `unknown` when the binary is installed.
 
 **200 OK**
 
@@ -457,13 +550,12 @@ forever.
   {"tool":"claude","installed":true,"session":"unknown",
     "fix":"claude, then /login \u2014 not observable from this process"},
   {"tool":"git","installed":true,"session":"ready","fix":null},
-  {"tool":"bq","installed":true,"session":"ready","fix":null},
-  {"tool":"cmux","installed":true,"session":"ready","fix":null}],
+   {"tool":"bq","installed":true,"session":"ready","fix":null}],
  "metricsDelivery":{"enabled":true,"variable":"CT_HARVEST_BQ_TABLE",
   "destination":"my-project:control_tower.harvest"}}
 ```
 
-Six rows, always, in that order. `ready` is the whole verdict: `true` when no
+Five rows, always, in that order. `ready` is the whole verdict: `true` when no
 tool that is **required right now** blocks. A tool blocks when it is not
 installed or its session is `missing` — `unknown` never blocks, or `claude`
 would pin the verdict to `false` forever.
@@ -541,15 +633,6 @@ How each one is asked:
 | `claude` | nothing | never: its login is not observable from another process |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
-| `cmux` | the workspace query `GET /active-plans` recovers with | it answered it conclusively |
-
-The `cmux` row is the one that catches a failure no version number reveals: the
-app serves its socket from the process that is **running**, so a cmux updated on
-disk but not restarted keeps answering with the schema of the build it was
-started from, while `cmux --version` already reports the new one. Measured on
-2026-09-09: same binary, byte for byte, on two machines — one answering
-`custom_title`, the other only the older `title`, and the recovery refusing to
-guess.
 
 **Refusals**
 

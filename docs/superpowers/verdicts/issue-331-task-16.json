@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 16,
+  "task_name": "Remove the retired server dependency surface",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "All three retired collaborators, their fields, constructor arguments, assignments and unused aliases/imports are removed. Named factories follow suit; the recovery mother now constructs RecordedPlanRecovery from record/call inputs.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The task explicitly declares No TDD for constructor cleanup.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "ApiCollaborators no longer accepts implementPlan, implementationStarts or pullRequestReviews. PlanWatch remains required by EntrypointPlanSessionRegistry. GET/POST implementation-start 404 bodies and active-plan response contracts are retained.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "ReviewWatch remains wired by ct-api into RecordedPlanRecovery. Surviving progress/history, live-session, coordinator and gate routes retain their collaborators and protocol/origin handling. No go protocol retirement, replay mechanism or new authority is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Constructor injection, TypeScript and named recovery scenarios match the applicable conventions. Closed vocabulary: no new classification or catch-all. Raw map as the return value of logic: none introduced; doubles return PlansInFlight and RecordedCall values. Two fields that have to agree: none introduced; unused constructor placeholders do not encode absence. Errors named for where they happen: no new error types. Existing-module exemptions apply under the package precedence.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The only removed assertion is the obsolete implementPlan spy check, expressly authorized by the brief. Both literal 404 assertions remain; the existing runtime test checks go-directory absence. Recovery diagnostic substitutions preserve exact status/body assertions. Other touched suites lose constructor arguments only.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production ApiServer removes the dependency surface and retains the actual unrouted endpoint. The recovery fixture supplies real PlansInFlight.refused data to real RecordedPlanRecovery; its early refusal reaches the HTTP response before calls, checkout registration or reviews. Separate fixture/server ActivePlans instances therefore do not mask this refusal case. ClaudeCalls and HeadlessFiles constructors perform no IO; the injected spawn and filesystem are not reached. No successful recovery or disk persistence is claimed by this fixture.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every hunk serves the specified constructor cleanup, authorized spy removal or recovery-mother conversion. Supplied controls1 green is treated as path-only evidence; this verdict is based on reading, without executing verification.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "No new test is added; existing tests receive construction and diagnostic updates.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "02dff431df48e25f8835b8c49fe04dfeb26729b24e7cd315e6c829705420f80a"
+  }
+}

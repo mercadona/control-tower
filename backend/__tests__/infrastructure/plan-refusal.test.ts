@@ -5,6 +5,7 @@ import {
 import { ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
+import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 
 describe('PlanRefusal', () => {
   it('every_refusable_outcome_has_an_answer_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
@@ -43,7 +44,7 @@ describe('PlanCollapse', () => {
     'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
-    'EpicIssuesFailure',
+    'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -58,7 +59,9 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationHistoryFailure) &&
-    !(thrown.prototype instanceof exceptions.WorkbenchFailure)
+    !(thrown.prototype instanceof exceptions.WorkbenchFailure) &&
+    !(thrown.prototype instanceof exceptions.PlanRecoveryFailure) &&
+    !(thrown.prototype instanceof exceptions.PlanCleanupFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)
@@ -111,8 +114,12 @@ describe('PlanCollapse', () => {
       new exceptions.UserStoryNotRead('acli is not authenticated'),
       new exceptions.PlanIssueNotCreated('nope'),
       new exceptions.PlanIssueNotClaimed('gh issue edit failed: nope'),
+      new exceptions.DispatchNotAvailable('no issue is eligible'),
+      new exceptions.DispatchNotRead('dispatch-check refused'),
+      new exceptions.DispatchNotUnderstood('dispatch-check changed'),
       new exceptions.PlanAgentNotLaunched('nope'),
       new exceptions.WorkspaceNotPrepared('branch is taken'),
+      new exceptions.WorkspaceNotCleaned('worktree removal failed'),
       new exceptions.WorkspaceNotRead('no such remote'),
       new exceptions.CheckoutNotConfirmed('owner/name: /repo holds someone/else'),
       new exceptions.UserStoryNotUnderstood('nope'),
@@ -147,6 +154,13 @@ describe('PlanCollapse', () => {
     expect(collapse.detail).toBe('gh issue edit failed: nope')
   })
 
+  it('dispatch_and_cleanup_failures_keep_distinct_boundary_codes', () => {
+    expect(PlanCollapse.of(new exceptions.DispatchNotAvailable('none')).code).toBe('dispatch-not-available')
+    expect(PlanCollapse.of(new exceptions.DispatchNotRead('refused')).code).toBe('dispatch-not-read')
+    expect(PlanCollapse.of(new exceptions.DispatchNotUnderstood('changed')).code).toBe('dispatch-not-understood')
+    expect(PlanCollapse.of(new exceptions.WorkspaceNotCleaned('not removed')).code).toBe('workspace-not-cleaned')
+  })
+
   it('a_tool_that_answered_something_we_cannot_read_has_its_own_code_too', () => {
     expect(PlanCollapse.of(new exceptions.UserStoryNotUnderstood('nope')).code).toBe('user-story-not-understood')
     expect(PlanCollapse.of(new exceptions.PlanIssueNotNamed('nope')).code).toBe('plan-issue-not-named')
@@ -156,5 +170,27 @@ describe('PlanCollapse', () => {
 
   it('a_family_is_not_a_way_of_collapsing_so_answering_one_raises_instead_of_guessing', () => {
     expect(() => PlanCollapse.of(new exceptions.PlanFailure('nope'))).toThrow(/no refusal declared/)
+  })
+
+  it('definite non-launch keeps its start refusal', () => {
+    const proof = new PlanNonLaunch({
+      conversation: '11111111-1111-4111-8111-111111111111',
+      callId: null,
+      source: 'before-worker',
+      diagnostic: 'worker spawn was refused',
+      observedAt: '2026-09-16T10:00:00.000Z',
+    })
+
+    expect(PlanCollapse.of(new exceptions.PlanAgentNeverLaunched(proof))).toEqual(new Refusal({
+      status: 400,
+      code: 'plan-agent-never-launched',
+      detail: 'worker spawn was refused',
+    }))
+  })
+
+  it('an unknown launch subtype has no inherited refusal', () => {
+    class UnknownLaunchFailure extends exceptions.PlanAgentNotLaunched {}
+
+    expect(() => PlanCollapse.of(new UnknownLaunchFailure('unknown'))).toThrow(/no refusal declared/)
   })
 })

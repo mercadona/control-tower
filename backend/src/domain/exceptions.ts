@@ -19,6 +19,14 @@ export class PlanIssueNotNamed extends PlanIssueFailure {}
 
 export class PlanIssueNotClaimed extends PlanIssueFailure {}
 
+export class DispatchFailure extends PlanFailure {}
+
+export class DispatchNotAvailable extends DispatchFailure {}
+
+export class DispatchNotRead extends DispatchFailure {}
+
+export class DispatchNotUnderstood extends DispatchFailure {}
+
 export class PlanStoryFailure extends PlanFailure {}
 
 export class PlanStoryNotRead extends PlanStoryFailure {}
@@ -31,13 +39,44 @@ export class PlanAgentFailure extends PlanFailure {}
 
 export class PlanAgentNotLaunched extends PlanAgentFailure {}
 
+export class PlanAgentNeverLaunched extends PlanAgentNotLaunched {
+  readonly proof: import('./value-objects/plan-non-launch.ts').PlanNonLaunch
+
+  constructor(proof: import('./value-objects/plan-non-launch.ts').PlanNonLaunch) {
+    super(proof.diagnostic)
+    this.proof = proof
+  }
+}
+
 export class PlanAgentNotNamed extends PlanAgentFailure {}
 
 export class PlanAgentNotResumed extends PlanAgentFailure {}
 
+export class PlanRecoveryFailure extends PlanFailure {}
+
+export class PlanRecoveryNotFound extends PlanRecoveryFailure {}
+
+export class PlanRecoveryConflict extends PlanRecoveryFailure {}
+
+export class PlanRecoveryNotRead extends PlanRecoveryFailure {}
+
+export class PlanRecoveryNotUnderstood extends PlanRecoveryFailure {}
+
+export class PlanCleanupFailure extends PlanFailure {}
+
+export class PlanCleanupNotFound extends PlanCleanupFailure {}
+
+export class PlanCleanupConflict extends PlanCleanupFailure {}
+
+export class PlanCleanupNotRead extends PlanCleanupFailure {}
+
+export class PlanCleanupNotUnderstood extends PlanCleanupFailure {}
+
 export class WorkspaceFailure extends PlanFailure {}
 
 export class WorkspaceNotPrepared extends WorkspaceFailure {}
+
+export class WorkspaceNotCleaned extends WorkspaceNotPrepared {}
 
 export class WorkspaceNotRead extends WorkspaceFailure {}
 

@@ -51,8 +51,8 @@ those imports resolve, and it is no longer a statement about this backend.
 |---|---|
 | **User story** | The work to plan, named either the way Jira calls a ticket, by its key (`ABC-123`), or by the url of the GitHub issue that describes it |
 | **Plan issue** | The GitHub issue that hosts a plan: the plan is posted there, the GO is answered there, the dispatcher reads its labels |
-| **Plan agent** | Whoever writes the plan for a story; today a Claude in a cmux tab |
-| **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
+| **Plan agent** | A headless Claude conversation the backend prepares, records and launches for planning, then resumes for implementation or fixes; its UUID is durable identity, not a window title |
+| **GO** | The legacy distributed protocol's human `-OK <nonce>` on an issue. The backend-driven milestone entrance does not mint or read one: gate 2 authorises the work and successful publication continues automatically |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |
 | **Registered checkout** | The pair `{repo, path}` this backend records once a checkout root has been confirmed to hold that repository: the registry of where each repository is checked out on this machine. It answers a question a bare path cannot — *where is `owner/name` checked out?* — which is what the plugin's dispatcher asks it before dispatching a slice of a milestone's target repository. A path registered before the pair was recorded keeps serving the harvest sweep and answers that question with *not registered*, because a path whose repository was never written down cannot say what it holds |
@@ -66,11 +66,13 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Plan issue status** | Which rung of the loop's ladder the issue stands at — `backlog`, `ready`, `in-progress`, `in-review` — or none, which is a status too and not an absence |
 | **Delivery state** | What that status means once a pull request is open: waiting for a person (`in-review`), fixing what was asked (`fixing`), or nobody on it (`unattended`) |
 | **Workbench** | Where a slice goes back to when a person asks for changes; the plugin's `dispatch-check --reopen` puts it there, and the backend only decides when |
-| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries the query plans are recovered with. Which six lives in `probed-tool-sessions.ts`, and so does what is asked of the five that carry a credential; the query `cmux` is asked arrives injected from `ct-api.ts` so that it is the very one plans are recovered with |
+| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git` and `bq`. Which five lives in `probed-tool-sessions.ts`; `gh`, `acli`, `git` (through `ssh`) and `bq` (through `gcloud`) are probed, while Claude authentication is not observable from this process |
 | **Tool session** | Whether what is asked of that tool works right now: `ready`, `missing`, or `unknown` — when the login is not observable from this process, or when the binary the row is probed with is absent and nothing was asked at all. `unknown` is not a failure, and the `fix` beside it repairs what was asked about: the credential when the row was asked, the absent probe when it could not be, and the login of a tool whose own binary is absent, which presupposes an installation `installed` says separately you do not have. The `fix` column is product copy that lives in this backend: `ToolsStatus` renders it to the screen untranslated, and the product's decision is to keep it English because it is mostly literal shell commands — which is why `plugin/conventions/style.md` does not reach it |
 | **Coordinating session** | The entrance conversation: an interactive `claude` this backend spawns in the governed checkout, no worktree cut and no branch created, and holds in memory for the rest of the backend's run. `POST /coordinating-session` opens it, `GET /coordinating-session` answers what this backend currently holds, and it is resumed rather than reopened across a backend restart |
 | **Phase prompt** | What the coordinating session is told to do, written once to a file under the state root and read by the session itself; its path travels in `CT_PHASE_PROMPT`, never its text, so the backend hands over a path and pastes nothing into a prompt |
 | **Conversation** | The identity of a coordinating session across a restart: an id minted once, a repository and a checkout root, recorded on disk so `records.recall()` can find it again; a conversation Claude Code no longer holds answers `unresumable` instead of being silently reopened as a different one |
+| **Headless call** | One immutable invocation record under `harness/<conversation>/calls/<call>/`: purpose, request identity, cwd, binary, argv and operational bounds are published before its detached worker is spawned; output and completion are separate evidence |
+| **Reported call total** | Claude CLI's `total_cost_usd` retained exactly as reported. It is attributable to an initial invocation, but a resumed total has `unverified-resume` attribution and contributes `null` attributable cost; totals are never differenced, summed as invocation spending or replaced by token-price estimates |
 | **Session attention** | Whether the coordinating session is `working` or `waiting`, with the live question while it waits; moved by `POST /session-hooks` from Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks, and dropped the moment the session works again |
 | **Execution spec** | The epic's central document in the governed checkout, `docs/superpowers/specs/*-execution.md`; gate 1 reads its state line to know whether the epic is frozen, and is what writes it |
 | **Gate 1** | The freeze as an act of this program: `analyzeSpecFreeze`'s findings on screen and a button that writes the state line and the date, commits both documents, pushes the epic's branch and opens its pull request. Only the page this backend serves can press it |
@@ -89,7 +91,25 @@ failed** (`*NotRead`, `*NotCreated`, `*NotLaunched`) and **it answered
 something we cannot read** (`*NotUnderstood`, `*NotNamed`). The boundary
 projects each cause to its own `code`.
 
-Jira, GitHub, cmux, acli and gh exist only in `infrastructure/`.
+The former boundary sentence, “Jira, GitHub, cmux, acli and gh exist only in
+`infrastructure/`,” remains historical context for the repository-specific
+rule. The current backend no longer uses cmux; Jira, GitHub, acli and gh remain
+infrastructure words.
+
+## Delivery boundary after headless continuation
+
+`ContinuePlan` owns the outer ordering: require successful planning, publish the
+committed contract-valid plan, then accept an implementation resume of the same
+conversation. Restart recovery reads durable records before any live-process
+knowledge and leaves unowned incomplete calls uncertain; it never creates a
+replacement conversation or automatically replays a call.
+
+Issue #331 records whole outer calls only. CLI `duration_ms` is retained apart
+from independently measured wall duration, and the raw reported total is
+retained apart from attributable cost. Issue #332 owns backend-driven machine
+steps and evidence-based attribution of call cost, turns and CLI duration to the
+existing per-step attempt rows. #331 neither appends a duplicate attempt nor
+derives resumed cost by subtraction or token pricing.
 
 ## The backend leans on the plugin, never the reverse
 

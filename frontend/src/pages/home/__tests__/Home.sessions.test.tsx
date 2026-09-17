@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
+import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
-import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openBrainstorming, openHome } from './helpers'
@@ -11,23 +11,7 @@ type ScrollableElement = { scrollIntoView?: (options?: ScrollIntoViewOptions) =>
 
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
 const SESSION_ID = 'a1'
-const IMPLEMENTING_ACTIVE_PLAN: Answer = {
-  status: 200,
-  body: JSON.stringify({
-    plans: [{
-      phase: 'implementing',
-      request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
-      plan: {
-        id: StartPlanMother.TICKET,
-        repo: StartPlanMother.REPO,
-        issue: StartPlanMother.ISSUE,
-        agent: StartPlanMother.AGENT,
-        branch: StartPlanMother.BRANCH,
-        worktree: StartPlanMother.WORKTREE,
-      },
-    }],
-  }),
-}
+const IMPLEMENTING_ACTIVE_PLAN: Answer = HeadlessPlanMother.implementing()
 const EXTERNAL_TOOLS_READY: Answer = {
   status: 200,
   body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}],"metricsDelivery":{"enabled":false,"variable":"CT_HARVEST_BQ_TABLE","destination":null}}',
@@ -116,7 +100,7 @@ describe('Home · sessions panel', () => {
     const fetching = stubFetch(IMPLEMENTING_ACTIVE_PLAN)
     openHome()
 
-    await screen.findByText('Agente asignado')
+    await screen.findByText('Implementación iniciada automáticamente')
     fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
     expect(screen.getByRole('region', { name: 'Terminal de la sesión' })).toBeInTheDocument()
 

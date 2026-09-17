@@ -41,7 +41,11 @@ export class ToolRunner {
         resolve(new ProcessOutput({
           code: ToolRunner.#codeOf(failure),
           stdout,
-          stderr: failure === null ? stderr : (stderr.trim() || failure.message),
+          stderr: failure === null || (
+            typeof failure.code === 'number' && !failure.killed && failure.signal == null
+          )
+            ? stderr
+            : (stderr.trim() || failure.message),
         }))
       })
     })

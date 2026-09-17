@@ -6,7 +6,7 @@ import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export class PlanAgentBrief {
-  static readonly NO_NEW_WORKTREES = 'no crees worktrees nuevos'
+  static readonly NO_NEW_WORKTREES = 'do not create new worktrees'
   static readonly WHITESPACE = /\s+/g
   static readonly MILESTONE_CONTEXT = MilestoneContextHeading.WRITTEN.replace(/^#+\s*/, '')
   static readonly INHERITED_CONTEXT = 'Contexto heredado'
@@ -32,20 +32,20 @@ export class PlanAgentBrief {
     const named = repository.text
 
     return [
-      `Escribes el PLAN del issue #${issue.number} del repo ${named}. No lo implementas.`,
-      `El baseline ya está medido: su resultado (verde, rojo o no-verificado), el comando y el resumen están en el campo \`baseline:\` de ${SLICE_REL_PATH}. Léelo ahí; no lo vuelvas a ejecutar para afirmarlo.`,
-      `Hidrátate del issue: \`gh issue view ${issue.number} --repo ${named}\`. Sus criterios de aceptación y su sección "## Out of scope / Protected" son la entrada del plan.`,
-      `Lee también sus secciones "${PlanAgentBrief.MILESTONE_CONTEXT}" y "${PlanAgentBrief.INHERITED_CONTEXT}": traen lo que condiciona este trabajo y no cabe en los criterios de aceptación. Si están vacías o no aparecen, no hay nada que heredar y no lo busques fuera del issue.`,
-      `Si el issue trae la sección "${PlanIssueBody.COMMENT_SECTION}", eso es lo que una persona pidió a mano y es entrada del plan igual que los criterios de aceptación. Y si el issue no declara ningún criterio de aceptación, esa sección es TODA la entrada: no hay spec de donde rellenarlos, así que los criterios los propones tú en el plan y no te pares a buscarlos fuera del issue.`,
-      `La vara de Control Tower vive en ${conventions} y el programa la lleva a cada tarea: al implementador pegada, al juez por ruta. Lo que tu plan selecciona es la vara del REPO, en el \`Rules to obey:\` de su §3; de ${conventions} abre el documento que necesites para decidir algo concreto, no los cinco por delante.`,
-      'Cómo se relacionan las dos cuando chocan lo dice la cabecera con la que esa vara viaja, y va aquí entera porque el `AGENTS.md` de este repo puede no traerla. Es el único sitio donde esa regla está escrita: aplícala tal cual, no la reinterpretes ni la reescribas en tu plan.',
+      `You write the PLAN for issue #${issue.number} in ${named}. Do not implement it.`,
+      `The baseline is already measured: its result, command and summary are in the \`baseline:\` field in ${SLICE_REL_PATH}. Read it there; do not rerun it to make a claim.`,
+      `Hydrate from the issue with \`gh issue view ${issue.number} --repo ${named}\`. Its acceptance criteria and "## Out of scope / Protected" section are the planning input.`,
+      `Also read its "${PlanAgentBrief.MILESTONE_CONTEXT}" and "${PlanAgentBrief.INHERITED_CONTEXT}" sections. They carry constraints that do not fit in the acceptance criteria. If they are empty or absent, there is nothing to inherit; do not look outside the issue.`,
+      `If the issue has a "${PlanIssueBody.COMMENT_SECTION}" section, the manually requested work is planning input just like the acceptance criteria. If the issue declares no acceptance criteria, that section is the entire input: there is no spec from which to fill them, so propose the criteria in the plan and do not look elsewhere.`,
+      `Control Tower's yardstick lives in ${conventions}, and the program carries it to every task: pasted for the implementer and provided by path to the judge. Your plan selects the repository yardstick in §3's \`Rules to obey:\`; open from ${conventions} only the document needed for a concrete decision, not all five in advance.`,
+      'The header carried with that yardstick states how the two relate when they conflict, and it is included here because this repository may not put it in `AGENTS.md`. It is the only wording of that rule: apply it verbatim rather than reinterpreting or rewriting it in the plan.',
       PluginYardstick.precedenceHeader(),
-      'Escribe el plan con control-tower-loop:writing-plans-prescriptive, usando el issue como spec.',
-      `Guárdalo como docs/superpowers/plans/YYYY-MM-DD-issue-${issue.number}-<slug>.md.`,
-      `Valídalo con \`node ${dispatchCheck} ${issue.number} --repo ${named} --check-plan\` hasta exit 0.`,
-      'Commitéalo: el plan viaja en el pull request, y sin commitear no cuenta como escrito.',
-      `Y publícalo como comentario del issue con \`gh issue comment ${issue.number} --repo ${named}\`: es donde una persona lo lee para darte el go o para pedirte cambios, así que sin publicarlo el plan no existe para nadie más que para ti.`,
-      `Y entonces PARA. No implementes nada, no abras pull request, no mergees, ${PlanAgentBrief.NO_NEW_WORKTREES}: ya estás en el que te prepararon.`,
+      'Write the plan with control-tower-loop:writing-plans-prescriptive, using the issue as its spec.',
+      `Save it as docs/superpowers/plans/YYYY-MM-DD-issue-${issue.number}-<slug>.md.`,
+      `Validate it with \`node ${dispatchCheck} ${issue.number} --repo ${named} --check-plan\` until it exits 0.`,
+      'Commit it: the plan travels in the pull request and does not count as written until committed.',
+      'The backend owns publication and continuation. Do not comment on the issue.',
+      `Then STOP. Do not implement anything, open a pull request or merge, and ${PlanAgentBrief.NO_NEW_WORKTREES}; you are already in the prepared worktree.`,
     ].join('\n')
   }
 
@@ -57,14 +57,14 @@ export class PlanAgentBrief {
     const dispatchCheck = this.dispatchCheck
 
     return [
-      `El gate \`plan\` del issue #${issueNumber} lo ha cerrado una persona:`,
-      'implementa AHORA el plan que commiteaste, sin reescribirlo.',
-      `Antes de pedir el primer paso, reescribe en ${SLICE_REL_PATH} los campos role, task y next_action para que digan que estás implementando el plan, no escribiéndolo.`,
-      `La secuencia no la conduces con subagent-driven-development ni con su ledger: la dicta la máquina. Pregunta el paso con \`node ${ctStep} next --plan <tu plan de docs/superpowers/plans/> --issue ${issueNumber}\``,
-      `y obedece literalmente lo que imprima, tarea a tarea (donde diga \`ct-step\`, es \`node ${ctStep}\`), volviendo a \`next\` tras cada paso hasta que diga "run delivered".`,
-      `Entonces abre la pull request con \`Closes #${issueNumber}\` en el cuerpo y libera con`,
-      `\`node ${dispatchCheck} ${issueNumber} --repo ${repository.text} --release --no-watch-merge\`, que mueve el issue a revisión.`,
-      `Y PARA ahí: no la mergees y ${PlanAgentBrief.NO_NEW_WORKTREES}.`,
+      `Milestone work for issue #${issueNumber} is already authorised by GATE 2:`,
+      'implement the committed plan NOW without rewriting it.',
+      `Before asking for the first step, rewrite the role, task and next_action fields in ${SLICE_REL_PATH} so they say you are implementing the plan rather than writing it.`,
+      `Do not conduct the sequence with subagent-driven-development or its ledger; the machine dictates it. Ask for the step with \`node ${ctStep} next --plan <your plan in docs/superpowers/plans/> --issue ${issueNumber}\``,
+      `and obey its output literally, task by task; where it says \`ct-step\`, use \`node ${ctStep}\`. Return to \`next\` after each step until it says "run delivered".`,
+      `Then open the pull request with \`Closes #${issueNumber}\` in its body and release with`,
+      `\`node ${dispatchCheck} ${issueNumber} --repo ${repository.text} --release --no-watch-merge\`, which moves the issue to review.`,
+      `STOP there: do not merge it, and ${PlanAgentBrief.NO_NEW_WORKTREES}.`,
     ].join(' ')
   }
 
@@ -77,13 +77,13 @@ export class PlanAgentBrief {
     const named = repository.text
 
     return [
-      `Un humano ha revisado la pull request del issue #${issueNumber} y pide estos cambios:`,
+      `A person reviewed the pull request for issue #${issueNumber} and requested these changes:`,
       `«${String(changes).replace(PlanAgentBrief.WHITESPACE, ' ').trim()}».`,
-      'Corrígelos sobre la rama y el worktree que ya tienes, sin rehacer el plan,',
-      `${PlanAgentBrief.NO_NEW_WORKTREES} y sin abrir otra pull request: la que hay sigue abierta y recoge lo que pushees.`,
-      'Cuando lo tengas en verde, vuelve a liberar con',
-      `\`node ${dispatchCheck} ${issueNumber} --repo ${named} --release --no-watch-merge\`, que devuelve el issue a revisión.`,
-      'Y entonces PARA: no la mergees.',
+      'Apply them on the existing branch and worktree without rewriting the plan,',
+      `${PlanAgentBrief.NO_NEW_WORKTREES}, and without opening another pull request: the existing one remains open and receives what you push.`,
+      'Once it is green, release again with',
+      `\`node ${dispatchCheck} ${issueNumber} --repo ${named} --release --no-watch-merge\`, which returns the issue to review.`,
+      'Then STOP: do not merge it.',
     ].join(' ')
   }
 }

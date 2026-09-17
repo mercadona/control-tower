@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 20,
+  "task_name": "Remove the disconnected window source and legacy recovery",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The exact review diff deletes all three disconnected source modules. The recursive census checks source paths and contents case-insensitively; read-only source searches found no remaining transport references.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The literal planned test asserts empty path and content matches over backend/src using /cmux/i. Its nested temporary offending file is detected by both assertions; restoring the deleted transport source would fail the real-source assertions.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "No replacement signature, error or constant contract is prescribed. The quoted WorktreePlans import disappears with its explicitly retired module.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Retirement preserves record-based recovery: ct-api still constructs RecordedPlanRecovery, whose surviving suite asserts restart discovery, uncertain incomplete calls without relaunch, pending continuation, projection refresh and review-watch recovery. Coordinator and conversation-record suites remain present; no closed decision is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "All eight CT yardsticks were considered. The existing SourceTree helper is extended in English TypeScript with class methods, real filesystem inputs and cleanup. defects.md: closed vocabulary introduces no classification defect; raw map return shape predates this diff and no new shape is introduced; two fields that have to agree or absence sentinels are not introduced; no new error is named for its location. No new production boundary, duplicated business decision or speculative abstraction is added.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The brief explicitly orders deletion of both obsolete suites and replacement of the old source census. This authorizes all removed cases, including the parameterized invalid-marker cases within the retired recovery suite. Surviving record-based recovery assertions are untouched.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Actual production modules are deleted. The guard reads the real source tree, and its temporary nested file is created independently with mkdirSync/writeFileSync rather than through SourceTree. Separate path and content predicates inspect actual filesystem evidence without mutating source.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All six changed files and their changes serve the explicit deletion-and-census task. Protected plugin files, plans, state and unrelated implementation are untouched. Controls 1 green is inherited; log reference only: .agent/run-331/task-20-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new guard is deterministic for a given source tree, sorts match lists, uses a unique temporary fixture and removes it in afterEach. Assertions inspect real source paths/content and would fail with the retired source restored; no clock, network, subprocess or mock outcome establishes success.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "f94152aae306a5b6b767465ced6fc43f8e06948404c551d72a5aaa741de469e1"
+  }
+}

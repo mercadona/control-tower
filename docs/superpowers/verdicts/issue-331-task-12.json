@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 12,
+  "task_name": "Admit milestone commands beside the loose entrance",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Attempt 2 exposes authorised milestone work beside the unchanged loose parser and preserves the started-response projection. It requires a held conversation, a dispatchable groom state and an exact milestone match. Both entrances reserve repository.text through the same WorkInFlight instance before awaiting their start flow, and the reservation owner releases in finally on success, refusal or exception. The entrypoint registry avoids remembering planning over an implementing or uncertain watch.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test uses a real ApiServer on an ephemeral loopback port and a doubled StartMilestonePlan. It posts the milestone-only body, asserts HTTP 202 and the literal full response text, and verifies the milestone, repository and checkout root delivered to the action and the context query.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The prior finding is resolved: after refusing every current state other than GROOMED and AUTHORISED, the route checks groomed.milestone !== asked.milestone and refuses null as well as a different title before dispatch. Unpublished context still receives not-dispatchable. The request model, route-local error, optional collaborator object, ApiServer wiring and five explicit 400 codes match the brief. MilestonePlanRequest rejects extra keys, nonstrings, empty strings and untrimmed strings. Both entrances emit status,id,repo,issue,agent,branch,worktree,root,baseline using the existing projection; the milestone action constructs a watch with null story. Origin filtering, declared JSON media type, bounded raw-body reading and method refusal remain in place. The shared reservation is acquired synchronously, a collision does not release its owner's reservation, and the owner releases in finally.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The affected closed decisions retain their specified values: starting ready work needs no browser gate key; the existing groom query remains the source of publication/context evidence; candidate readiness remains delegated to StartMilestonePlan and its candidate collaborator; loose input and repo_list retirement are preserved. The diff introduces no feature flag, promotion mutation, plugin decision copy, persistent lock, backend step machine or change to the distributed go protocol. Other closed decisions have no changed implementation in this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the package's rule-by-rule precedence using the eight CT370 convention documents already read, the brief's convention text and the repository-specific rules, acknowledgement and glossary. The route/request/refusal grouping follows the existing start-plan-route exemplar; reservations reuse WorkInFlight; the controller injects and invokes application actions and queries. Added code uses English, TypeScript and erasable syntax. Defects rules: closed vocabulary is explicit for entrances, refusals and phase/state dispatch, with every current state covered and no catch-all branch; raw map as the return value of logic introduces no new intermediate decision payload, with the existing response projection used immediately for serialization; two fields that have to agree introduces no new duplicated state flag or absence sentinel in production; an error named for where it happens is absent, since MalformedMilestonePlan names the rejected input condition. No convention finding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing assertion, case or test is removed or weakened. The refusal-code test change extends the vocabulary under its existing assertions, and the loose-request test file gains a preservation case.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Request validation, context selection, refusal projection, shared reservations, response serialization and registry-phase protection all live in production code. The doubles replace application collaborators as prescribed for controller tests. Seeding the implementing state in the doubled action models completion before the HTTP action returns; the production registry adapter is what prevents the subsequent planning registration.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All changed contents serve Task 12's declared entrance, compatibility, concurrency, refusal-code or registry-adapter requirements. Attempt 2 repairs the required milestone match and adds its regression test within the declared files. The diff changes only the five declared files and contains no plan amendment. Production composition in ct-api.ts is outside this task's file scope; later slice wiring is not required here. Controls 2 are accepted as the supplied green result without rerunning them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests exercise real parsing or real HTTP controller behavior with isolated collaborator instances, fixed data, ephemeral ports and afterEach server teardown. The concurrency test synchronizes on an explicit action-entry promise rather than a sleep. Assertions measure response bodies/statuses, dispatched parameters and registry effects, not solely stub return values or call counts. The added regression supplies null milestones in both GROOMED and AUTHORISED context, checks the explicit mismatch body and proves neither start action was called; reverting the corrected guard would make those assertions fail. The loose-parser preservation test covers existing production behavior required to remain compatible. No finding on determinism, isolation or real behavior, and no finer test-style finding.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "f7c0472181c2cd87298aceb9651e6704a1066cf19039529220c97584e76e94df"
+  }
+}

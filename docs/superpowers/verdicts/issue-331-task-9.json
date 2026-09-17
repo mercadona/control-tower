@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 9,
+  "task_name": "Reuse the plugin's selection and claim authorities",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Attempt 2 calls buildDispatchInput once and planDispatch with mergedIssues, depStates and cap 1. Ordering, dependency translation, area/touches conflicts and status precedence come from the actual plugin. collectTokenHolders receives repository-wide mapGhIssue results independently of order collisions. Claim and requeue invoke the checked executable and accept only exit zero. Controls 2 are inherited green; log reference only: .agent/run-331/task-9-controls-2.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The named test selects issue 500 at order 3 rather than issue 2 at order 4, after an unresolved dependency excludes order 1 and an outside-milestone in-review holder excludes order 2. Its inputs and assertion implement the prescribed TDD case.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Exports, constructors, methods, REST argv, safeToRepeat, closed state_reason normalization, explicit plan-gate refusal and claim/requeue diagnostics match. Both reads are awaited and either failed read refuses selection; whole-output transport remains the injected Gh launcher's responsibility. The previous high finding is resolved: html_url uses nonEmptyText, which raises DispatchNotUnderstood with the offending value before selection. The new regression asserts the error class, field and empty value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-2, D-4/D-5, D-10/D-11 and D-14 are respected: deterministic plugin selection, cap 1, in-review retaining tokens without consuming cap, TypeScript adapters importing plugin decisions and no restored default plan gate. Other closed decisions have no changed implementation here.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the CT370 conventions, applicable repository rules and previously read ToolRunner and DispatchCheckWorkbench exemplars. Dependencies are injected and failures retain diagnostic channels. Closed vocabulary: claim/requeue and open/closed use literal unions; the previous medium finding is resolved by importing collectTokenHolders instead of repeating its status partition. Raw map as the return value of logic: external projections have named readonly shapes, plugin result shapes remain its existing contract, and the public result is PlanIssue. Two fields that have to agree: no new redundant flag; null body becomes equivalent empty plugin parser text. An error named for where it happens: no new error class, and reused errors distinguish unavailable, unreadable and failed operations. No remaining finding in these four rules.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Both test files are new; no pre-existing assertion, case or test is removed or weakened.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Fixtures supply raw REST pages and process outputs, while the real adapter and imported plugin compute selection and refusals. Expected issue numbers are asserted independently. Claim tests inspect the executable argv/cwd produced by production code and its error translation; no promised behavior exists only in scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The four new files implement the task's two adapters and their tests. Attempt 2's URL guard and plugin-authority regression directly repair the prior findings within those files. No plugin production change, plan amendment or additional dispatch flow is introduced. Workspace-cleanup ordering belongs to the caller, not this claim adapter.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Tests are deterministic, isolated and exercise real adapter behavior at injected external seams. Existing prescribed cases remain intact. The new URL case fails with the former text-only validation. The authority regression adds a temporary plugin holder status, supplies colliding orders in another milestone and independently expects issue 12; the former hard-coded filter would select issue 11. The serial test restores the shared vocabulary in finally, including on assertion failure. No real clock, network, filesystem or subprocess is used. No test-desiderata finding.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "326dac2edf18a2bbba387fb0ab01702304fb2c0ee36d057170eb88095b03c5b0"
+  }
+}

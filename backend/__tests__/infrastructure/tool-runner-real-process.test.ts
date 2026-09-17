@@ -1,7 +1,23 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ChildProcess } from 'node:child_process'
+import { once } from 'node:events'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+
+const tracked = vi.hoisted(() => ({ children: new Set<ChildProcess>() }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const native = await importOriginal<typeof import('node:child_process')>()
+  return {
+    ...native,
+    execFile: vi.fn(((...args: unknown[]) => {
+      const child = (native.execFile as (...asked: unknown[]) => ChildProcess)(...args)
+      tracked.children.add(child)
+      return child
+    }) as typeof native.execFile),
+  }
+})
 
 class Node {
   static SLOW_MS = 5_000
@@ -34,8 +50,28 @@ class Node {
 }
 
 describe('ToolRunner', () => {
-  afterEach(() => {
-    Node.forgotten()
+  async function stopChildren(): Promise<void> {
+    const children = [...tracked.children]
+    tracked.children.clear()
+    await Promise.all(children.map(async (child) => {
+      if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return
+      const closed = once(child, 'close')
+      try {
+        child.kill('SIGKILL')
+      } catch (cause) {
+        if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause
+      }
+      await closed
+    }))
+  }
+
+  afterEach(async () => {
+    try {
+      await stopChildren()
+    } finally {
+      Node.forgotten()
+      vi.clearAllMocks()
+    }
   })
 
   it('what_the_tool_prints_comes_back_with_the_code_that_says_it_went_well', async () => {
@@ -52,7 +88,50 @@ describe('ToolRunner', () => {
     const output = await Node.running(250).run(Node.sleeping())
 
     expect(output.failed).toBe(true)
+    expect(output.stderr).not.toBe('')
     expect(Date.now() - started).toBeLessThan(Node.SLOW_MS)
+  })
+
+  it('runner teardown stops a live child independently of its timeout', async () => {
+    const started = Date.now()
+    const running = Node.running(30_000).run(['-e', [
+      'process.stdout.write("ready\\n")',
+      'setInterval(() => {}, 1_000)',
+    ].join(';')])
+    const child = [...tracked.children][0]
+    expect(child).toBeDefined()
+    await once(child.stdout!, 'data')
+    const sentinel = new Error('abort after child readiness')
+    let aborted: unknown
+    try {
+      throw sentinel
+    } catch (cause) {
+      aborted = cause
+    } finally {
+      await stopChildren()
+    }
+    const output = await running
+
+    expect(aborted).toBe(sentinel)
+    expect(output.failed).toBe(true)
+    expect(child.signalCode).toBe('SIGKILL')
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  it('timeout exits keep a diagnostic even when the child exits numerically', async () => {
+    const running = Node.running(5_000).run(['-e', [
+      'process.stdout.write("ready\\n")',
+      'process.on("SIGTERM", () => process.exit(1))',
+      'setInterval(() => {}, 1_000)',
+    ].join(';')])
+    const child = [...tracked.children][0]
+    expect(child).toBeDefined()
+    const output = await running
+
+    expect(output).toMatchObject({ code: 1, stdout: 'ready\n' })
+    expect(output.stderr).not.toBe('')
+    expect(child.exitCode).toBe(1)
+    expect(child.signalCode).toBeNull()
   })
 
   it('a_tool_that_refuses_is_a_code_and_a_reason_and_not_something_thrown_at_the_caller', async () => {
@@ -61,6 +140,12 @@ describe('ToolRunner', () => {
 
     expect(output.code).toBe(3)
     expect(output.stderr).toBe('no such work item')
+  })
+
+  it('a normal nonzero exit preserves an actually empty stderr channel', async () => {
+    const output = await Node.running(30_000).run(['-e', 'process.exit(1)'])
+
+    expect(output).toMatchObject({ code: 1, stdout: '', stderr: '' })
   })
 
   it('what_the_tool_printed_before_refusing_is_kept_because_the_adapter_may_have_to_read_it', async () => {

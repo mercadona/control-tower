@@ -18,10 +18,13 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PlanTarget } from '../../src/domain/value-objects/plan-target.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
+import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
+import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import type { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import {
   PlanAgentNotLaunched, PlanIssueNotClaimed, PlanIssueNotCreated, UserStoryNotRead,
-  WorkspaceNotPrepared,
+  WorkspaceNotCleaned, WorkspaceNotPrepared,
 } from '../../src/domain/exceptions.ts'
 
 class UserStoriesDouble extends UserStories {
@@ -117,6 +120,7 @@ class WorkspaceDouble extends Workspace {
   confirmFailure: WorkspaceNotPrepared | null
   confirmedRoot: CheckoutRoot | null
   confirmFailureRoot: CheckoutRoot | null
+  undoFailure: WorkspaceNotCleaned | null
   asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
   undone: WorkspaceLocation[]
   confirmed: { root: CheckoutRoot, repository: RepositoryName }[]
@@ -124,10 +128,11 @@ class WorkspaceDouble extends Workspace {
 
   constructor(
     answer: SownWorkspace | Error = WorkspaceDouble.SOWN,
-    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null }: {
+    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null, undoFailure = null }: {
       confirmFailure?: WorkspaceNotPrepared | null,
       confirmedRoot?: CheckoutRoot | null,
       confirmFailureRoot?: CheckoutRoot | null,
+      undoFailure?: WorkspaceNotCleaned | null,
     } = {}
   ) {
     super()
@@ -135,6 +140,7 @@ class WorkspaceDouble extends Workspace {
     this.confirmFailure = confirmFailure
     this.confirmedRoot = confirmedRoot
     this.confirmFailureRoot = confirmFailureRoot
+    this.undoFailure = undoFailure
     this.asked = []
     this.undone = []
     this.confirmed = []
@@ -160,6 +166,12 @@ class WorkspaceDouble extends Workspace {
     return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmedRoot })
   }
 
+  static refusingToUndo(said: string): WorkspaceDouble {
+    return new WorkspaceDouble(WorkspaceDouble.SOWN, {
+      undoFailure: new WorkspaceNotCleaned(said),
+    })
+  }
+
   async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     this.confirmed.push({ root, repository })
     this.steps.push('confirm')
@@ -182,6 +194,7 @@ class WorkspaceDouble extends Workspace {
   async undo(located: WorkspaceLocation): Promise<void> {
     this.undone.push(located)
     this.steps.push('undo')
+    if (this.undoFailure !== null) throw this.undoFailure
   }
 }
 
@@ -223,6 +236,59 @@ class PlanAgentsDouble extends PlanAgents {
   }
 }
 
+class DispatchClaimsDouble extends DispatchClaims {
+  readonly claimFailure: PlanIssueNotClaimed | null
+  readonly claimFailureRepository: RepositoryName | null
+  readonly requeueFailure: PlanIssueNotClaimed | null
+  readonly claimed: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
+  readonly requeued: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
+  steps: string[]
+
+  constructor({ claimFailure = null, claimFailureRepository = null, requeueFailure = null }: {
+    claimFailure?: PlanIssueNotClaimed | null,
+    claimFailureRepository?: RepositoryName | null,
+    requeueFailure?: PlanIssueNotClaimed | null,
+  } = {}) {
+    super()
+    this.claimFailure = claimFailure
+    this.claimFailureRepository = claimFailureRepository
+    this.requeueFailure = requeueFailure
+    this.claimed = []
+    this.requeued = []
+    this.steps = []
+  }
+
+  async claim(asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }): Promise<void> {
+    this.claimed.push(asked)
+    const targeted = this.claimFailureRepository === null || this.claimFailureRepository === asked.repository
+    if (this.claimFailure !== null && targeted) throw this.claimFailure
+  }
+
+  async requeue(asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }): Promise<void> {
+    this.requeued.push(asked)
+    this.steps.push('requeue')
+    if (this.requeueFailure !== null) throw this.requeueFailure
+  }
+}
+
+class PlanRecordsDouble extends PlanRecords {
+  readonly found: PlanWatch | null | Error
+
+  constructor(found: PlanWatch | null | Error = null) {
+    super()
+    this.found = found
+  }
+
+  async find(): Promise<PlanWatch | null> {
+    if (this.found instanceof Error) throw this.found
+    return this.found
+  }
+
+  async inFlight(): Promise<PlansInFlight> {
+    return PlansInFlight.listed([])
+  }
+}
+
 class Flow {
   static STORY = new UserStoryKey('MO_SHOP-42')
   static COMMENT = new PlanComment('añade un modo oscuro al panel')
@@ -238,23 +304,30 @@ class Flow {
   workspace: WorkspaceDouble
   planAgents: PlanAgentsDouble
   checkouts: CheckoutRegistryDouble
+  records: PlanRecordsDouble
+  claims: DispatchClaimsDouble
   steps: string[]
 
-  constructor({ userStories, planIssues, workspace, planAgents, checkouts }: {
+  constructor({ userStories, planIssues, workspace, planAgents, checkouts, records, claims }: {
     userStories?: UserStoriesDouble,
     planIssues?: PlanIssuesDouble,
     workspace?: WorkspaceDouble,
     planAgents?: PlanAgentsDouble,
     checkouts?: CheckoutRegistryDouble,
+    records?: PlanRecordsDouble,
+    claims?: DispatchClaimsDouble,
   } = {}) {
     this.userStories = userStories ?? UserStoriesDouble.reading('the summary of the story')
     this.planIssues = planIssues ?? new PlanIssuesDouble()
     this.workspace = workspace ?? new WorkspaceDouble()
     this.planAgents = planAgents ?? new PlanAgentsDouble()
     this.checkouts = checkouts ?? new CheckoutRegistryDouble()
+    this.records = records ?? new PlanRecordsDouble()
+    this.claims = claims ?? new DispatchClaimsDouble()
     this.steps = []
     this.planIssues.steps = this.steps
     this.workspace.steps = this.steps
+    this.claims.steps = this.steps
   }
 
   async run(story: UserStoryKey | UserStoryUrl | null = Flow.STORY, comment: PlanComment | null = null) {
@@ -507,12 +580,14 @@ describe('StartPlan claims the issue so no second dispatcher takes it', () => {
   it('the_issue_is_claimed_before_the_worktree_is_cut_so_a_second_dispatcher_cannot_take_it', async () => {
     const claiming = new Flow()
     await claiming.run()
-    const refused = new Flow({ planIssues: PlanIssuesDouble.refusingToClaim('gh issue edit failed: nope') })
+    const refused = new Flow({
+      claims: new DispatchClaimsDouble({ claimFailure: new PlanIssueNotClaimed('dispatch-check claim failed') }),
+    })
 
     const refusal = await refused.refusal()
 
-    expect(claiming.planIssues.claimed).toEqual([
-      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY },
+    expect(claiming.claims.claimed).toEqual([
+      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT },
     ])
     expect(refusal).toBeInstanceOf(PlanIssueNotClaimed)
     expect(refused.workspace.asked).toEqual([])
@@ -524,22 +599,101 @@ describe('StartPlan claims the issue so no second dispatcher takes it', () => {
     const refusal = await flow.refusal()
 
     expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
-    expect(flow.planIssues.requeued).toEqual([
-      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY },
+    expect(flow.claims.requeued).toEqual([
+      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT },
     ])
   })
 
-  it('an_agent_that_never_launched_puts_the_issue_back_in_the_queue_after_the_worktree_is_undone', async () => {
+  it('failed seed cleanup retains both causes and the loose claim', async () => {
+    const cleanup = new WorkspaceNotCleaned(
+      'seed failed: state stayed visible; cleanup failed: worktree removal exited 17'
+    )
+    const flow = new Flow({ workspace: new WorkspaceDouble(cleanup) })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBe(cleanup)
+    expect(refusal.message).toContain('state stayed visible')
+    expect(refusal.message).toContain('worktree removal exited 17')
+    expect(flow.claims.requeued).toEqual([])
+    expect(flow.planAgents.asked).toEqual([])
+  })
+
+  it('a loose unrecorded failure uses checked requeue after cleanup', async () => {
     const flow = new Flow({ planAgents: PlanAgentsDouble.refusing('cmux is not reachable') })
 
     const refusal = await flow.refusal()
 
     expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
     expect(flow.workspace.undone).toEqual([WorkspaceDouble.LOCATED])
-    expect(flow.planIssues.requeued).toEqual([
-      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY },
+    expect(flow.claims.requeued).toEqual([
+      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT },
     ])
     expect(flow.steps).toEqual(['confirm', 'undo', 'requeue'])
+  })
+
+  it('a loose failed undo preserves its claim and both diagnostics', async () => {
+    const flow = new Flow({
+      planAgents: PlanAgentsDouble.refusing('launch was refused'),
+      workspace: WorkspaceDouble.refusingToUndo('worktree removal failed'),
+    })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBeInstanceOf(WorkspaceNotCleaned)
+    expect(refusal.message).toContain('launch was refused')
+    expect(refusal.message).toContain('worktree removal failed')
+    expect(flow.claims.claimed).toEqual([
+      { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT },
+    ])
+    expect(flow.claims.requeued).toEqual([])
+  })
+
+  it('a loose start preserves recorded work after launch failure', async () => {
+    const recorded = new PlanWatch({
+      story: Flow.STORY,
+      issue: PlanIssuesDouble.OPENED,
+      located: WorkspaceDouble.LOCATED,
+      repository: Flow.REPOSITORY,
+      agent: '11111111-1111-4111-8111-111111111111',
+    })
+    const flow = new Flow({
+      planAgents: PlanAgentsDouble.refusing('launch acknowledgement was lost'),
+      records: new PlanRecordsDouble(recorded),
+    })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(flow.workspace.undone).toEqual([])
+    expect(flow.claims.requeued).toEqual([])
+  })
+
+  it('an inconclusive record read preserves loose work after launch failure', async () => {
+    const flow = new Flow({
+      planAgents: PlanAgentsDouble.refusing('launch acknowledgement was lost'),
+      records: new PlanRecordsDouble(new PlanAgentNotLaunched('dispatch record could not be read')),
+    })
+
+    await flow.refusal()
+
+    expect(flow.workspace.undone).toEqual([])
+    expect(flow.claims.requeued).toEqual([])
+  })
+
+  it('a loose failed requeue preserves its claim and both diagnostics', async () => {
+    const flow = new Flow({
+      planAgents: PlanAgentsDouble.refusing('launch was refused'),
+      claims: new DispatchClaimsDouble({
+        requeueFailure: new PlanIssueNotClaimed('dispatch-check requeue failed'),
+      }),
+    })
+
+    const refusal = await flow.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanIssueNotClaimed)
+    expect(refusal.message).toContain('launch was refused')
+    expect(refusal.message).toContain('dispatch-check requeue failed')
   })
 
   it('a_port_that_nobody_implemented_says_so_for_the_two_ends_of_the_claim_too', async () => {
@@ -608,8 +762,11 @@ describe('StartPlan plans for a list of targets', () => {
   it('a_repository_that_fails_while_starting_does_not_stop_the_ones_behind_it', async () => {
     const failing = Flow.OTHER_TARGET
     const target = new PlanTarget({ repository: Flow.REPOSITORY, root: Flow.ROOT })
-    const planIssues = PlanIssuesDouble.refusingToClaimFor(failing.repository, 'gh issue edit failed: nope')
-    const flow = new Flow({ planIssues })
+    const claims = new DispatchClaimsDouble({
+      claimFailure: new PlanIssueNotClaimed('dispatch-check claim failed'),
+      claimFailureRepository: failing.repository,
+    })
+    const flow = new Flow({ claims })
 
     const result = await flow.runAcross([failing, target])
 

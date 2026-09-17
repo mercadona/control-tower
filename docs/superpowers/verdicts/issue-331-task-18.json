@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 18,
+  "task_name": "Retire window resend and typed-resume scenarios",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The 571-line deletion finishes retiring the window adapter suite. All 17 remaining tests match the task's literal retirement list, and the suite wrappers, imports and private helpers leave with them. No dead helper is retained. Controls are inherited as green; log reference only: .agent/run-331/task-18-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The brief explicitly declares No TDD for removal of tests of the disconnected transport; there is no new runtime assertion to compare.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "No Contract or Final text block specifies a new signature, error or constant. The Current state marker identifies the first remaining test, which is removed as instructed; no production contract is changed.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Checked the closed decisions against the deletion: retiring window tests supports the owned headless-call transport and preserves the existing coordinating-session and fix-delivery surfaces. The diff changes no runtime policy, distributed go protocol, plugin authority, records, measurements or controls, and introduces no Claude invocation or replacement PTY resend mechanism.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Read all eight current CT370 convention documents and the backend repository conventions and conventions acknowledgement. Removing module-private scaffolding with its retired consumers is consistent with architecture.md's ownership rule and simplicity.md's requirement for an existing caller. No layer, boundary, business decision or production delivery pattern is added or changed. defects.md, rule by rule: closed vocabulary has no newly introduced subject; raw map as the return value of logic has no newly introduced subject; two fields that have to agree, including absence sentinels, has no newly introduced subject; an error named for where it happens has no newly introduced subject. The deletion introduces no style, language or TypeScript violation. Test-removal authorization is assessed under manipulacion-tests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Independently compared every removed it block with brief lines 195-212: exactly 17 authorized cases, comprising eight launch/sentinel/policy-dispatch cases, one no-resend budget case, four typed implementation-resume cases and four typed fix cases. No additional test or assertion is removed outside those bodies. BriefPaths, LaunchErrands, PolicyDouble, Untouched, CmuxDouble, ResumeErrands and ResumeDouble, including the nested Composing and Answering classes, are unexported scaffolding owned by this removed module; the remaining imports and four describe wrappers have no surviving purpose. Replacement coverage was read independently: claude-calls.test.ts:265-301 pins injected budgets in the durable descriptor, :323-382 pins explicit launch/acceptance/uncertainty failures, and :719-773 pins deadline/grace enforcement; claude-calls-real-process.test.ts:156-182 asserts termination using the supplied deadline. claude-plan-calls.test.ts:102-135 pins the exact resume UUID, cwd and argv and typed refusal without a launch. request-fixes.test.ts:89-130 pins delivery of issue, repository, changes, request identity and original agent, refusal propagation and withholding delivery after a failed reopen. headless-plan-agents.test.ts:169-255 covers background failure reporting and review-request reuse/separation. These retain the transport-independent guarantees; shell sentinel, symlink, Enter and PTY resend details are explicitly retired rather than requirements for new fixtures.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised change is actual removal of the disconnected test suite, visible directly in the deletion; no fixture is introduced to simulate a production feature. Replacement assertions exercise the existing ClaudeCalls, ClaudePlanCalls, HeadlessPlanAgents and RequestFixes implementations. Read ClaudePlanCalls.start and its prompt/mode dispatch, and HeadlessPlanAgents.launch/fix: conversation reuse and fix delivery exist in production rather than solely in test scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The only changed path is backend/__tests__/infrastructure/cmux-plan-agents.test.ts. Every deletion belongs to the named retired cases or their exclusively owned suite scaffolding. Deleting the whole file implements the explicit instruction to delete the now empty suite/helpers despite its Files entry being marked modify. No protected plugin file, other test, runtime module, plan or state is part of the reviewed diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The diff contains no added test or assertion; its only test change is the authorized retirement of existing cases.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "fa8c0b6e9dd41088a3c3711a4a4e404368a5e198755d06b13134056627602617"
+  }
+}

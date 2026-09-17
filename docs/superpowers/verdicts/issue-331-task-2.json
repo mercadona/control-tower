@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 2,
+  "task_name": "Record prepared plans without overwriting evidence",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The regenerated attempt-2 diff implements complete immutable dispatch descriptors as preparation/discovery authority. prepare publishes before returning, refuses an existing repository/issue record, and discovery reads disk records without process or checkout-registry collaborators. An unpublished UUID directory is now omitted rather than blocking discovery or preparation.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The named test prepares a plan, immediately finds it with no launch collaborator available, compares the returned watch and checks the descriptor bytes. This matches the stated launch-cut assertion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The PlanRecords and HeadlessFiles signatures and DiskPlanRecords constructor match. The adapter uses the prescribed domain constructors, validates exact dispatch and issue keys, derives conversation identity from a validated UUID directory, rejects duplicate repository/issue identities, translates malformed and filesystem failures into the prescribed error family, and filters worktrees only after enumeration. Publication syncs temporary content before linking, cleans temporary files in finally, and reads an existing descriptor on EEXIST. Missing descriptors return null; actual read errors and corrupt content still refuse, without returning a partial confident list.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The previous high finding against D-16/D-17 is resolved: #recordAt returns null for an absent dispatch.json and #descriptors excludes that absence. The independently created empty UUID directory in the revised test produces an empty discovered list; prepare shares the corrected enumeration path. Present malformed or unreadable records still refuse. D-10/D-11 and D-13 remain respected: TypeScript modules and no persisted phase, revision, lock or owner PID. Remaining closed decisions are untouched by this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the eight CT conventions, repository rules, CT planning material and relevant exemplars read in the initial review to the complete regenerated diff. Dependencies remain injected, the boundary model shares its adapter, imports stay inward, and new code is English TypeScript without prose or module-level free functions. Closed vocabulary: no new domain classification encoded as a loose string; filesystem codes remain external contract values. Raw map as the return value of logic: the previous finding is resolved by #requireObject, a runtime-checked assertion that returns no map; parsing returns DispatchRecord and the adapter returns domain values. Two fields that have to agree: no new redundant status/evidence pair or sentinel absence; existing PlansInFlight uses its prescribed factories. Error named for where it happens: no new exception type; prescribed failure-versus-unreadable exceptions are reused. Attempt-2 controls are inherited as passed, not used as proof of behavior; the controls log was not opened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The task diff still adds five new files and removes no pre-existing test or assertion. Relative to attempt 1, the recovery fixtures are independently seeded and the empty-directory case exercises the repaired absence behavior; the launch-cut, immutable-byte and refusal assertions remain.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The previous arrangement finding is resolved. The harvested-worktree scenario writes a literal descriptor using mkdir/writeFile and then asks a newly constructed adapter to discover it. The corrupt descriptor and unpublished directory are also independently seeded. Persistence, filtering and refusal behavior remain in production code. The prepare-then-find scenario implements the required TDD sequence, and the second-preparation scenario exercises the prescribed repeated-write behavior.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All additions serve Task 2's persistence port, adapter, file publication primitive and named tests. The assertion helper, absence handling and independent recovery fixtures directly repair the prior findings within the same scope. callDirectory is explicitly contracted. No plan amendment, plugin production change, process launch, registry implementation or later-task conductor behavior appears in the review diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "All five added tests are deterministic and isolated: fixed injected IDs/time, unique temporary directories cleaned in afterEach, and a scripted unreadable-directory failure. Assertions exercise production watches, refusal results, descriptor bytes and non-replacement. The new orphan-directory assertion would fail with the prior throwing #recordAt branch restored, and the harvested descriptor is literal independent input. No network, subprocess, sleep or real-clock assertion is required. No finding under the three blocking properties.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "b759db0b6f6d06a2c12841cc0e2c39859dd43456dfaad6321d5ab0be30cec5bd"
+  }
+}

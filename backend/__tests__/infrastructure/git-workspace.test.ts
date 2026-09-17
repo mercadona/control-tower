@@ -1,21 +1,28 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstat as realLstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseStateSafe } from '../../../plugin/scripts/state.js'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
+import { mapGhIssue, NO_MILESTONE_KEY } from '../../../plugin/scripts/gh-issue-map.js'
 import { resolveStatePath } from '../../../plugin/scripts/state-paths.js'
 import { Baseline, BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.ts'
+import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import {
-  WorkspaceFailure, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
+  WorkspaceFailure, WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood,
+  CheckoutNotConfirmed, PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 
 class BaselineDouble extends Baseline {
   readonly #result: BaselineResult
@@ -63,6 +70,18 @@ class GitDouble {
   static readonly COMMON_DIR = '/repo/checkout/.git'
   static readonly WORKTREE = '/repo/checkout/.worktrees/42'
   static readonly EXCLUDE_PATH = `${GitDouble.COMMON_DIR}/info/exclude`
+  static readonly ISSUE_BODY = [
+    '## Acceptance criteria (EARS, 1:1 con tests)',
+    '- preserves the issue contract',
+    '',
+    '## Señal de observabilidad',
+    'seed_written_total',
+    '',
+    '## E2E',
+    '- open the seeded workspace',
+    '',
+    '<!-- ct-order:3 -->',
+  ].join('\n')
 
   baseline: BaselineDouble
   answer: ProcessOutput
@@ -73,26 +92,32 @@ class GitDouble {
   existingExclude: string | null
   commonDir: string
   declared: ProcessOutput
+  fetch: ProcessOutput
   toplevel: ProcessOutput
   calls: string[][]
   written: [string, string][]
   reads: string[]
   stderr: string[]
+  ghCalls: string[][]
+  issueRead: ProcessOutput
 
   constructor({
-    answer, status, existingExclude = null, commonDir, declared, remote, toplevel, removal = null, deletion = null,
-    baseline,
+    answer, status, existingExclude = null, commonDir, declared, fetch, remote, toplevel,
+    removal = null, deletion = null,
+    baseline, issueRead,
   }: {
     answer?: ProcessOutput,
     status?: ProcessOutput,
     existingExclude?: string | null,
     commonDir?: string,
     declared?: ProcessOutput,
+    fetch?: ProcessOutput,
     remote?: ProcessOutput,
     toplevel?: ProcessOutput,
     removal?: ProcessOutput | null,
     deletion?: ProcessOutput | null,
     baseline?: BaselineDouble,
+    issueRead?: ProcessOutput,
   } = {}) {
     this.baseline = baseline ?? new BaselineDouble()
     this.answer = answer ?? GitDouble.ok()
@@ -103,16 +128,20 @@ class GitDouble {
     this.existingExclude = existingExclude
     this.commonDir = commonDir ?? GitDouble.COMMON_DIR
     this.declared = declared ?? GitDouble.declaring()
+    this.fetch = fetch ?? GitDouble.ok()
     this.toplevel = toplevel ?? GitDouble.canonical()
     this.calls = []
     this.written = []
     this.reads = []
     this.stderr = []
+    this.ghCalls = []
+    this.issueRead = issueRead ?? GitDouble.issueAnswer()
   }
 
   workspace(): GitWorkspace {
     return new GitWorkspace({
       baseline: this.baseline,
+      gh: this.gh(),
       read: (path) => {
         this.reads.push(path)
         return Promise.resolve(this.existingExclude)
@@ -131,10 +160,23 @@ class GitDouble {
     })
   }
 
+  gh(): Gh {
+    return new Gh({
+      launch: (argv) => {
+        this.ghCalls.push(argv)
+        return Promise.resolve(this.issueRead)
+      },
+      policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+      sleep: () => Promise.resolve(),
+    })
+  }
+
   answering(argv: string[]): ProcessOutput {
     if (argv.includes('get-url')) return this.remote
     if (argv.includes('--show-toplevel')) return this.toplevel
     if (argv.includes('symbolic-ref')) return this.declared
+    if (argv.includes('fetch')) return this.fetch
+    if (argv.includes('--verify')) return GitDouble.printing(`${GitDouble.CUT}\n`)
     if (argv.includes('--git-common-dir')) return GitDouble.printing(`${this.commonDir}\n`)
     if (argv.includes('HEAD')) return GitDouble.printing(`${GitDouble.CUT}\n`)
     if (argv.includes('status')) return this.status
@@ -168,6 +210,22 @@ class GitDouble {
     return new PlanIssue({ number, url: `https://github.com/${GitDouble.REPOSITORY.text}/issues/${number}` })
   }
 
+  static issueFields({
+    number = 42,
+    labels = [{ name: 'status:ready' }, { name: 'type:infra' }, { name: 'gate:apply' }],
+    milestone = { title: 'the milestone' },
+  }: {
+    number?: number,
+    labels?: { name: string }[],
+    milestone?: { title: string } | null,
+  } = {}) {
+    return { number, title: '#3 authoritative slice', body: GitDouble.ISSUE_BODY, labels, milestone }
+  }
+
+  static issueAnswer(fields: Record<string, unknown> = GitDouble.issueFields()): ProcessOutput {
+    return GitDouble.printing(JSON.stringify(fields))
+  }
+
   static printing(stdout: string): ProcessOutput {
     return new ProcessOutput({ code: 0, stdout, stderr: '' })
   }
@@ -190,6 +248,8 @@ class GitDouble {
 
   static declaringNothing(argv: string[]): ProcessOutput | null {
     if (argv.includes('get-url')) return GitDouble.naming(GitDouble.REMOTE_URL)
+    if (argv.includes('fetch')) return GitDouble.ok()
+    if (argv.includes('--verify')) return GitDouble.printing(`${GitDouble.CUT}\n`)
 
     return argv.includes('symbolic-ref') ? GitDouble.declaring() : null
   }
@@ -212,6 +272,53 @@ class GitDouble {
 }
 
 describe('GitWorkspace', () => {
+  it('the default branch is fetched before cutting the worktree', async () => {
+    const git = new GitDouble()
+
+    await git.prepared()
+
+    const fetch = git.calls.findIndex((argv) => argv.includes('fetch'))
+    const verify = git.calls.findIndex((argv) => argv.includes('--verify'))
+    const cut = git.calls.findIndex((argv) => argv.includes('worktree'))
+    expect(git.calls[fetch]).toEqual(['-C', GitDouble.ROOT, 'fetch', 'origin', GitDouble.BASE])
+    expect(git.calls[verify]).toEqual([
+      '-C', GitDouble.ROOT, 'rev-parse', '--verify', '--quiet', `origin/${GitDouble.BASE}^{commit}`,
+    ])
+    expect(fetch).toBeLessThan(verify)
+    expect(verify).toBeLessThan(cut)
+  })
+
+  it('an issue read or fetch failure creates no worktree', async () => {
+    const unread = new GitDouble({ issueRead: GitDouble.refused('gh is unavailable') })
+    const malformed = new GitDouble({ issueRead: GitDouble.issueAnswer({ number: 41 }) })
+    const unfetched = new GitDouble({ fetch: GitDouble.refused('origin is unavailable') })
+
+    const readFailure = await unread.prepared().catch((cause) => cause)
+    const malformedFailure = await malformed.prepared().catch((cause) => cause)
+    const fetchFailure = await unfetched.prepared().catch((cause) => cause)
+
+    expect(readFailure).toBeInstanceOf(WorkspaceNotRead)
+    expect(malformedFailure).toBeInstanceOf(WorkspaceNotUnderstood)
+    expect(fetchFailure).toBeInstanceOf(WorkspaceNotPrepared)
+    expect(unread.calls.some((argv) => argv.includes('worktree'))).toBe(false)
+    expect(malformed.calls.some((argv) => argv.includes('worktree'))).toBe(false)
+    expect(unfetched.calls.some((argv) => argv.includes('worktree'))).toBe(false)
+  })
+
+  it('an explicit plan gate is refused before preparation', async () => {
+    const issueRead = GitDouble.issueAnswer(GitDouble.issueFields({
+      labels: [{ name: 'status:ready' }, { name: 'gate:none' }, { name: 'gate:plan' }],
+    }))
+    const git = new GitDouble({ issueRead })
+
+    const refusal = await git.prepared().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
+    expect(refusal.message).toContain('plan')
+    expect(git.calls).toEqual([])
+    expect(git.written).toEqual([])
+  })
+
   it('it_cuts_the_branch_from_the_remote_base_so_the_session_starts_from_what_is_published', async () => {
     const git = new GitDouble()
 
@@ -437,7 +544,10 @@ describe('GitWorkspace', () => {
   })
 
   it('it_never_reuses_a_directory_it_did_not_create_because_git_is_the_one_that_refuses', async () => {
-    const git = new GitDouble({ answer: GitDouble.refused('fatal: destination path already exists') })
+    const git = new GitDouble({
+      answer: GitDouble.refused('fatal: destination path already exists'),
+      issueRead: GitDouble.issueAnswer(GitDouble.issueFields({ number: 7 })),
+    })
 
     await expect(git.prepared(GitDouble.issue(7))).rejects.toBeInstanceOf(WorkspaceNotPrepared)
   })
@@ -499,6 +609,7 @@ describe('GitWorkspace', () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
       baseline: git.baseline,
+      gh: git.gh(),
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
       stderr: (line) => { git.stderr.push(line) },
@@ -570,16 +681,6 @@ describe('GitWorkspace', () => {
     expect(git.baseline.measured).toEqual([])
   })
 
-  it('the_state_it_seeds_names_the_gate_that_holds_this_slice_because_the_skill_reads_it_from_there', async () => {
-    const git = new GitDouble()
-
-    await git.prepared()
-
-    const gates = parseStateSafe(git.written[1][1]).meta.gates
-    expect(gates).toContain('plan — GATE HUMANO pendiente')
-    expect(gates).toContain('lo cierra una persona desde la app')
-  })
-
   it('the_state_it_seeds_no_longer_invites_anyone_to_ask_for_changes_by_commenting_on_the_issue', async () => {
     const git = new GitDouble()
 
@@ -589,32 +690,24 @@ describe('GitWorkspace', () => {
     expect(gates).not.toContain('-REVIEW')
   })
 
-  it('the_gate_it_seeds_says_the_gates_section_of_the_issue_describes_another_flow', async () => {
-    const git = new GitDouble()
-
-    await git.prepared()
-
-    const gates = parseStateSafe(git.written[1][1]).meta.gates
-    expect(gates).toContain('la sección "## Gates" del issue describe el carril de /ct-next')
-    expect(gates).not.toMatch(/revisa (el PR|la pull request)/)
-    expect(gates).not.toMatch(/-OK/)
-  })
-
-  it('a_head_it_cannot_measure_stops_the_seeding_instead_of_writing_a_state_without_a_cut', async () => {
+  it('a_remote_base_it_cannot_verify_stops_before_writing_a_state_without_a_cut', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
       baseline: git.baseline,
+      gh: git.gh(),
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
       stderr: (line) => { git.stderr.push(line) },
-      run: (argv) => Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('HEAD')
-        ? GitDouble.refused('fatal: ambiguous argument HEAD')
-        : argv.includes('--git-common-dir')
-          ? GitDouble.printing(`${GitDouble.COMMON_DIR}\n`)
-          : GitDouble.ok()))
+      run: (argv) => {
+        git.calls.push(argv)
+        return Promise.resolve(argv.includes('--verify')
+          ? GitDouble.refused('fatal: ambiguous argument HEAD')
+          : GitDouble.declaringNothing(argv) ?? GitDouble.ok())
+      },
     })
 
     await expect(git.prepared()).rejects.toBeInstanceOf(WorkspaceNotPrepared)
+    expect(git.calls.some((argv) => argv.includes('worktree'))).toBe(false)
   })
 
   it('the_check_that_the_state_stays_hidden_asks_git_with_untracked_files_all_so_a_whole_untracked_directory_cannot_collapse_into_one_line', async () => {
@@ -669,6 +762,7 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
       baseline: git.baseline,
+      gh: git.gh(),
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
       stderr: (line) => { git.stderr.push(line) },
@@ -684,30 +778,6 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
 
     expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
     expect(refusal.message).toContain('could not resolve the common git directory')
-    expect(git.calls.slice(-2)).toEqual(undone)
-  })
-
-  it('a_head_git_cannot_measure_still_gets_the_worktree_and_branch_undone', async () => {
-    const git = new GitDouble()
-    git.workspace = () => new GitWorkspace({
-      baseline: git.baseline,
-      read: () => Promise.resolve(null),
-      write: () => Promise.resolve(),
-      stderr: (line) => { git.stderr.push(line) },
-      run: (argv) => {
-        git.calls.push(argv)
-        return Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('HEAD')
-          ? GitDouble.refused('fatal: ambiguous argument HEAD')
-          : argv.includes('--git-common-dir')
-            ? GitDouble.printing(`${GitDouble.COMMON_DIR}\n`)
-            : GitDouble.ok()))
-      },
-    })
-
-    const refusal = await git.prepared().catch((cause) => cause)
-
-    expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
-    expect(refusal.message).toContain('could not measure the commit')
     expect(git.calls.slice(-2)).toEqual(undone)
   })
 
@@ -730,8 +800,10 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
     expect(git.calls.slice(-2)).toEqual(undone)
   })
 
-  it('a_cleanup_that_also_fails_after_a_common_dir_refusal_does_not_replace_the_original_failure', async () => {
-    const removal = GitDouble.refused('fatal: worktree remove refused')
+  it('failed removal rejects without deleting the branch', async () => {
+    const removal = new ProcessOutput({
+      code: 17, stdout: 'worktree remains', stderr: 'fatal: worktree remove refused',
+    })
     const git = new GitDouble({ removal })
     git.answering = (argv) => {
       if (argv.includes('--git-common-dir')) return GitDouble.refused('not a git repository')
@@ -742,32 +814,29 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
 
     const refusal = await git.prepared().catch((cause) => cause)
 
-    expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
+    expect(refusal).toBeInstanceOf(WorkspaceNotCleaned)
     expect(refusal.message).toContain('could not resolve the common git directory')
-    expect(git.stderr.join('')).toContain('fatal: worktree remove refused')
+    expect(refusal.message).toContain('exit 17')
+    expect(refusal.message).toContain('worktree remains')
+    expect(refusal.message).toContain('fatal: worktree remove refused')
+    expect(git.calls.some((argv) => argv.includes('-D'))).toBe(false)
   })
 })
 
-describe('GitWorkspace tells its diagnostic writer what git refused to undo, because a refusal comes back as an exit code and not as a throw', () => {
-  it('a_worktree_git_refuses_to_remove_is_named_with_what_git_said_and_the_branch_is_still_deleted', async () => {
-    const git = new GitDouble({ removal: GitDouble.refused('fatal: cannot remove a locked working tree') })
+describe('GitWorkspace checks every cleanup operation', () => {
+  it('failed branch cleanup rejects with the remaining branch diagnostic', async () => {
+    const git = new GitDouble({
+      deletion: new ProcessOutput({
+        code: 23, stdout: 'branch remains', stderr: "error: branch 'feat/42' not found",
+      }),
+    })
 
-    await git.workspace().undo(GitDouble.located())
+    const refusal = await git.workspace().undo(GitDouble.located()).catch((cause) => cause)
 
-    const said = git.stderr.join('')
-    expect(said).toContain(GitDouble.WORKTREE)
-    expect(said).toContain('fatal: cannot remove a locked working tree')
-    expect(git.calls.at(-1)).toEqual(['-C', GitDouble.ROOT, 'branch', '-D', 'feat/42'])
-  })
-
-  it('a_branch_git_refuses_to_delete_is_named_with_what_git_said', async () => {
-    const git = new GitDouble({ deletion: GitDouble.refused("error: branch 'feat/42' not found") })
-
-    await git.workspace().undo(GitDouble.located())
-
-    const said = git.stderr.join('')
-    expect(said).toContain('feat/42')
-    expect(said).toContain("error: branch 'feat/42' not found")
+    expect(refusal).toBeInstanceOf(WorkspaceNotCleaned)
+    expect(refusal.message).toContain('exit 23')
+    expect(refusal.message).toContain('branch remains')
+    expect(refusal.message).toContain("error: branch 'feat/42' not found")
   })
 
   it('an_undo_git_carries_out_says_nothing', async () => {
@@ -779,14 +848,371 @@ describe('GitWorkspace tells its diagnostic writer what git refused to undo, bec
   })
 })
 
+class UnlaunchedWorkspaceDouble {
+  static readonly BASE = 'a'.repeat(40)
+  static readonly WATCH = new PlanWatch({
+    story: null,
+    issue: GitDouble.issue(331),
+    repository: GitDouble.REPOSITORY,
+    located: new WorkspaceLocation({
+      root: GitDouble.ROOT,
+      path: `${GitDouble.ROOT}/.worktrees/331`,
+      branch: 'feat/331',
+    }),
+    agent: '11111111-1111-4111-8111-111111111111',
+  })
+
+  readonly calls: string[][] = []
+  readonly ghCalls: string[][] = []
+  status = ''
+  remote = ''
+  worktreePresent = true
+  branchPresent = true
+  pathPresent = false
+  malformedListing = false
+  listing: string | null = null
+  remoteUrl = GitDouble.REMOTE_URL
+  canonicalRoot = GitDouble.ROOT
+  head = UnlaunchedWorkspaceDouble.BASE
+  branchTip = UnlaunchedWorkspaceDouble.BASE
+  seedBranch = 'feat/331'
+  seedIssue = 331
+  seedBase = UnlaunchedWorkspaceDouble.BASE
+  pulls = '[]'
+  removeFailure: ProcessOutput | null = null
+  deleteFailure: ProcessOutput | null = null
+  pathFailure: Error | null = null
+  seedFailure: Error | null = null
+  lstat: typeof realLstat | null = null
+
+  workspace(): GitWorkspace {
+    return new GitWorkspace({
+      baseline: new BaselineDouble(),
+      stderr: () => {},
+      write: async () => {},
+      read: async (path) => {
+        if (path.endsWith(SliceSeed.RELATIVE_PATH) && this.seedFailure !== null) throw this.seedFailure
+        return path.endsWith(SliceSeed.RELATIVE_PATH) ? buildStateSeed(
+          { name: 'unused', issue: `#${this.seedIssue}`, ac: ['unused workspace stays untouched'] },
+          { branch: this.seedBranch, base: 'main', baseSha: this.seedBase },
+        )
+          : null
+      },
+      lstat: this.lstat ?? (async () => {
+        if (this.pathFailure !== null) throw this.pathFailure
+        if (this.pathPresent) return {} as Awaited<ReturnType<typeof import('node:fs/promises').lstat>>
+        throw Object.assign(new Error('absent fixture path'), { code: 'ENOENT' })
+      }) as typeof import('node:fs/promises').lstat,
+      run: async (argv) => {
+        this.calls.push(argv)
+        if (argv.includes('get-url')) return GitDouble.naming(this.remoteUrl)
+        if (argv.includes('--show-toplevel')) return GitDouble.printing(`${this.canonicalRoot}\n`)
+        if (argv.includes('worktree') && argv.includes('list')) return GitDouble.printing(this.worktrees())
+        if (argv.includes('status')) return GitDouble.printing(this.status)
+        if (argv.includes('ls-remote')) return GitDouble.printing(this.remote)
+        if (argv.includes('rev-parse') && argv.includes('HEAD')) {
+          return GitDouble.printing(`${this.head}\n`)
+        }
+        if (argv.includes('rev-parse') && argv.includes('refs/heads/feat/331')) {
+          return this.branchPresent
+            ? GitDouble.printing(`${this.branchTip}\n`)
+            : new ProcessOutput({ code: 1, stdout: '', stderr: '' })
+        }
+        if (argv.includes('remove')) {
+          if (this.removeFailure !== null) return this.removeFailure
+          this.worktreePresent = false
+          return GitDouble.ok()
+        }
+        if (argv.includes('-d')) {
+          if (this.deleteFailure !== null) return this.deleteFailure
+          this.branchPresent = false
+          return GitDouble.ok()
+        }
+        throw new Error(`nobody wrote an answer for git ${argv.join(' ')}`)
+      },
+      gh: new Gh({
+        launch: async (argv) => {
+          this.ghCalls.push(argv)
+          return GitDouble.printing(this.pulls)
+        },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+  }
+
+  worktrees(): string {
+    if (this.listing !== null) return this.listing
+    if (this.malformedListing) return 'not porcelain\n'
+    const blocks = [
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main`,
+    ]
+    if (this.worktreePresent) {
+      blocks.push(
+        `worktree ${UnlaunchedWorkspaceDouble.WATCH.located.path}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/feat/331`,
+      )
+    }
+    return `${blocks.join('\n\n')}\n`
+  }
+}
+
+describe('GitWorkspace unused dispatch cleanup', () => {
+  it('an untouched unlaunched workspace is rechecked and removed without force', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    const workspace = fixture.workspace()
+    const evidence = await workspace.inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+
+    await workspace.undoUnlaunched(evidence)
+
+    expect(evidence.baseSha).toBe(UnlaunchedWorkspaceDouble.BASE)
+    expect(fixture.calls).toContainEqual([
+      '-C', GitDouble.ROOT, 'worktree', 'remove', UnlaunchedWorkspaceDouble.WATCH.located.path,
+    ])
+    expect(fixture.calls).toContainEqual(['-C', GitDouble.ROOT, 'branch', '-d', 'feat/331'])
+    expect(fixture.calls.flat()).not.toContain('--force')
+    expect(fixture.ghCalls).toContainEqual([
+      'pr', 'list', '--repo', 'owner/name', '--state', 'all', '--head', 'feat/331', '--json', 'number', '--limit', '1',
+    ])
+  })
+
+  it('changed or remote work prevents cleanup', async () => {
+    const changed = new UnlaunchedWorkspaceDouble()
+    changed.status = '?? local.txt\n'
+    await expect(changed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('not clean')
+
+    const remote = new UnlaunchedWorkspaceDouble()
+    remote.remote = `${UnlaunchedWorkspaceDouble.BASE}\trefs/heads/feat/331\n`
+    await expect(remote.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('remote branch')
+  })
+
+  it('changed base canonical identity and pull requests prevent cleanup', async () => {
+    const changedBase = new UnlaunchedWorkspaceDouble()
+    changedBase.head = 'b'.repeat(40)
+    await expect(changedBase.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('HEAD changed')
+
+    const repository = new UnlaunchedWorkspaceDouble()
+    repository.remoteUrl = 'https://github.com/another/repository.git'
+    await expect(repository.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('does not hold')
+
+    const root = new UnlaunchedWorkspaceDouble()
+    root.canonicalRoot = '/another/root'
+    await expect(root.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('canonical checkout root')
+
+    const pull = new UnlaunchedWorkspaceDouble()
+    pull.pulls = '[{"number":375}]'
+    await expect(pull.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toThrow('pull request')
+  })
+
+  it('worktree and branch removal failures stop cleanup without stronger commands', async () => {
+    const worktree = new UnlaunchedWorkspaceDouble()
+    worktree.removeFailure = new ProcessOutput({ code: 1, stdout: '', stderr: 'remove refused' })
+    const worktreeEvidence = await worktree.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+    await expect(worktree.workspace().undoUnlaunched(worktreeEvidence)).rejects.toThrow('remove refused')
+    expect(worktree.calls.some((argv) => argv.includes('-d'))).toBe(false)
+    expect(worktree.calls.flat()).not.toContain('--force')
+
+    const branch = new UnlaunchedWorkspaceDouble()
+    branch.deleteFailure = new ProcessOutput({ code: 1, stdout: '', stderr: 'delete refused' })
+    const branchEvidence = await branch.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null)
+    await expect(branch.workspace().undoUnlaunched(branchEvidence)).rejects.toThrow('delete refused')
+    expect(branch.calls.flat()).not.toContain('-D')
+  })
+
+  it('an absent worktree uses the immutable snapshot before branch deletion', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    fixture.worktreePresent = false
+    const evidence = new UnusedWorkspace({
+      watch: UnlaunchedWorkspaceDouble.WATCH,
+      baseSha: UnlaunchedWorkspaceDouble.BASE,
+      checkedAt: '2026-09-16T10:00:00.000Z',
+    })
+
+    await fixture.workspace().undoUnlaunched(evidence)
+
+    expect(fixture.calls.some((argv) => argv.includes('remove'))).toBe(false)
+    expect(fixture.calls).toContainEqual(['-C', GitDouble.ROOT, 'branch', '-d', 'feat/331'])
+  })
+
+  it('fresh absence refuses a remaining registration branch path and malformed listing', async () => {
+    const registration = new UnlaunchedWorkspaceDouble()
+    const registrationRefusal = await registration.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(registrationRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(registrationRefusal.message).toContain('registration')
+
+    const branch = new UnlaunchedWorkspaceDouble()
+    branch.worktreePresent = false
+    const branchRefusal = await branch.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(branchRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(branchRefusal.message).toContain('local branch')
+
+    const path = new UnlaunchedWorkspaceDouble()
+    path.worktreePresent = false
+    path.branchPresent = false
+    path.pathPresent = true
+    const pathRefusal = await path.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+      .catch((cause) => cause)
+    expect(pathRefusal).toBeInstanceOf(PlanCleanupConflict)
+    expect(pathRefusal.message).toContain('worktree path')
+
+    const malformed = new UnlaunchedWorkspaceDouble()
+    malformed.malformedListing = true
+    await expect(malformed.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBeInstanceOf(PlanCleanupNotUnderstood)
+
+    const unreadablePath = new UnlaunchedWorkspaceDouble()
+    unreadablePath.worktreePresent = false
+    unreadablePath.branchPresent = false
+    unreadablePath.pathFailure = Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    await expect(unreadablePath.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBeInstanceOf(PlanCleanupNotRead)
+  })
+
+  it('cleanup seed and path reads preserve errno and unexpected bugs', async () => {
+    const unreadableSeed = new UnlaunchedWorkspaceDouble()
+    unreadableSeed.seedFailure = Object.assign(new Error('seed permission denied'), { code: 'EACCES' })
+    await expect(unreadableSeed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toBeInstanceOf(PlanCleanupNotRead)
+
+    const seedDefect = new TypeError('seed reader defect')
+    const buggySeed = new UnlaunchedWorkspaceDouble()
+    buggySeed.seedFailure = seedDefect
+    await expect(buggySeed.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+      .rejects.toBe(seedDefect)
+
+    const pathDefect = new TypeError('lstat defect')
+    const buggyPath = new UnlaunchedWorkspaceDouble()
+    buggyPath.worktreePresent = false
+    buggyPath.branchPresent = false
+    buggyPath.pathFailure = pathDefect
+    await expect(buggyPath.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBe(pathDefect)
+  })
+
+  it('fresh absence uses the quiet missing-ref query exactly', async () => {
+    const fixture = new UnlaunchedWorkspaceDouble()
+    fixture.worktreePresent = false
+    fixture.branchPresent = false
+
+    await fixture.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)
+
+    expect(fixture.calls).toContainEqual([
+      '-C', GitDouble.ROOT, 'rev-parse', '--verify', '--quiet', 'refs/heads/feat/331',
+    ])
+  })
+
+  it('porcelain and seed identity cases retain cleanup safety', async () => {
+    const valid = new UnlaunchedWorkspaceDouble()
+    valid.worktreePresent = false
+    valid.branchPresent = false
+    valid.listing = [
+      `worktree ${GitDouble.ROOT}`,
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}`,
+      'branch refs/heads/main',
+      'locked maintenance',
+      'prunable stale metadata',
+      '',
+      'worktree /repo/detached',
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}`,
+      'detached',
+      '',
+      'worktree /repo/bare',
+      'bare',
+      '',
+    ].join('\n')
+    await expect(valid.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH)).resolves.toBeUndefined()
+
+    const malformedListings = [
+      `HEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree relative/path\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n\nworktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\ndetached\n`,
+      `worktree ${GitDouble.ROOT}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD invalid\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\ndetached\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\nbranch refs/heads/other\n`,
+      `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\n`,
+    ]
+    for (const listing of malformedListings) {
+      const fixture = new UnlaunchedWorkspaceDouble()
+      fixture.worktreePresent = false
+      fixture.branchPresent = false
+      fixture.listing = listing
+      await expect(fixture.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+        .rejects.toBeInstanceOf(PlanCleanupNotUnderstood)
+    }
+
+    const elsewhere = new UnlaunchedWorkspaceDouble()
+    elsewhere.worktreePresent = false
+    elsewhere.branchPresent = false
+    elsewhere.listing = `worktree ${GitDouble.ROOT}\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/main\n\n`
+      + `worktree /repo/other\nHEAD ${UnlaunchedWorkspaceDouble.BASE}\nbranch refs/heads/feat/331\n`
+    await expect(elsewhere.workspace().confirmAbsent(UnlaunchedWorkspaceDouble.WATCH))
+      .rejects.toBeInstanceOf(PlanCleanupConflict)
+
+    for (const change of ['branch', 'issue', 'base'] as const) {
+      const fixture = new UnlaunchedWorkspaceDouble()
+      if (change === 'branch') fixture.seedBranch = 'feat/332'
+      if (change === 'issue') fixture.seedIssue = 332
+      if (change === 'base') fixture.seedBase = 'b'.repeat(40)
+      await expect(fixture.workspace().inspectUnlaunched(UnlaunchedWorkspaceDouble.WATCH, null))
+        .rejects.toBeInstanceOf(change === 'base' ? PlanCleanupConflict : PlanCleanupNotUnderstood)
+    }
+
+    const changedTip = new UnlaunchedWorkspaceDouble()
+    changedTip.worktreePresent = false
+    changedTip.branchTip = 'b'.repeat(40)
+    await expect(changedTip.workspace().inspectUnlaunched(
+      UnlaunchedWorkspaceDouble.WATCH,
+      new UnusedWorkspace({
+        watch: UnlaunchedWorkspaceDouble.WATCH,
+        baseSha: UnlaunchedWorkspaceDouble.BASE,
+        checkedAt: '2026-09-16T10:00:00.000Z',
+      }),
+    )).rejects.toBeInstanceOf(PlanCleanupConflict)
+  })
+
+  it('dangling symlinks prevent retirement', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ct-dangling-worktree-'))
+    try {
+      const path = join(root, 'missing-target-link')
+      symlinkSync(join(root, 'absent-target'), path)
+      const watch = new PlanWatch({
+        ...UnlaunchedWorkspaceDouble.WATCH,
+        located: new WorkspaceLocation({ root: GitDouble.ROOT, path, branch: 'feat/331' }),
+      })
+      const fixture = new UnlaunchedWorkspaceDouble()
+      fixture.worktreePresent = false
+      fixture.branchPresent = false
+      fixture.lstat = realLstat
+
+      await expect(fixture.workspace().confirmAbsent(watch)).rejects.toBeInstanceOf(PlanCleanupConflict)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 class SeedFixture {
   static readonly CUT = 'a1b2c3d'
   static readonly #made: string[] = []
 
   static text(): string {
     return SliceSeed.textFor({
-      issue: { number: 42 }, branch: 'feat/42', base: 'main', cut: SeedFixture.CUT,
+      slice: SeedFixture.slice(), branch: 'feat/42', base: 'main', cut: SeedFixture.CUT,
+      baseline: BaselineDouble.green(),
     })
+  }
+
+  static slice() {
+    return Object.freeze({ ...mapGhIssue(GitDouble.issueFields()), epic: 'the milestone' })
   }
 
   static sownWorktree(): string {
@@ -807,6 +1233,43 @@ class SeedFixture {
 }
 
 describe('SliceSeed', () => {
+  it('the seed preserves the issue gates signal and measured baseline without inventing plan', () => {
+    const raw = GitDouble.issueFields()
+    const slice = Object.freeze({ ...mapGhIssue(raw), epic: raw.milestone?.title ?? NO_MILESTONE_KEY })
+    const baseline = BaselineDouble.red()
+    const actual = parseStateSafe(SliceSeed.textFor({
+      slice, branch: 'feat/42', base: 'main', cut: SeedFixture.CUT, baseline,
+    })).meta
+    const expected = parseStateSafe(buildStateSeed(slice, {
+      branch: 'feat/42', base: 'main', baseSha: SeedFixture.CUT, baseline,
+    })).meta
+
+    expect(actual).toEqual(expected)
+    expect(actual.gates).toContain('apply')
+    expect(actual.gates).not.toContain('plan')
+    expect(actual.senal).toBe('seed_written_total')
+    expect(actual.baseline).toEqual(baseline.seedField)
+  })
+
+  it('a loose issue uses the same authoritative seed', async () => {
+    const fields = GitDouble.issueFields({ milestone: null })
+    const baseline = BaselineDouble.green()
+    const git = new GitDouble({
+      issueRead: GitDouble.issueAnswer(fields), baseline: BaselineDouble.answering(baseline),
+    })
+
+    await git.prepared()
+
+    const seeded = parseStateSafe(git.written.at(-1)![1]).meta
+    const mapped = Object.freeze({ ...mapGhIssue(fields), epic: NO_MILESTONE_KEY })
+    expect(seeded).toEqual(parseStateSafe(buildStateSeed(mapped, {
+      branch: 'feat/42', base: 'main', baseSha: GitDouble.CUT, baseline,
+    })).meta)
+    expect(git.ghCalls).toEqual([[
+      'issue', 'view', '42', '--repo', 'owner/name', '--json', 'number,title,body,labels,milestone',
+    ]])
+  })
+
   it('it_says_the_agent_is_the_one_that_writes_the_plan_and_not_the_coordinator', () => {
     expect(parseStateSafe(SeedFixture.text()).meta.role).toMatch(/^slice-agent/)
   })
@@ -882,7 +1345,8 @@ describe('what the backend sows is read back by the plugin that has to read it',
 
   it('a_branch_carrying_a_quote_is_serialised_instead_of_breaking_the_yaml_the_plugin_has_to_parse', () => {
     const text = SliceSeed.textFor({
-      issue: { number: 42 }, branch: 'feat/42-"quoted"', base: 'main', cut: SeedFixture.CUT,
+      slice: SeedFixture.slice(), branch: 'feat/42-"quoted"', base: 'main', cut: SeedFixture.CUT,
+      baseline: BaselineDouble.green(),
     })
 
     const read = parseStateSafe(text)
@@ -895,14 +1359,6 @@ describe('what the backend sows is read back by the plugin that has to read it',
     const ours = Object.keys(parseStateSafe(SeedFixture.text()).meta)
 
     expect(PluginSeed.expectedOfUs().filter((key) => !ours.includes(key))).toEqual([])
-  })
-
-  it('the_plan_is_already_under_way_when_this_is_sown_so_it_says_so_where_the_plugin_seeds_not_started', () => {
-    expect(parseStateSafe(SeedFixture.text()).meta.status).toBe('in_progress')
-    expect(parseStateSafe(buildStateSeed(
-      { name: 'a slice', issue: '#42', ac: ['does the thing'] },
-      { branch: 'feat/42', base: 'main', baseSha: SeedFixture.CUT }
-    )).meta.status).toBe('not_started')
   })
 
   it('a_worktree_that_carries_the_seed_is_recognised_by_the_plugin_as_a_slice_and_not_as_a_coordinator', () => {

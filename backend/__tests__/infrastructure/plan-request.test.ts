@@ -208,4 +208,19 @@ describe('PlanRequest', () => {
     expect(refused.comment).toBeNull()
     expect(refused.named).toBeNull()
   })
+
+  it('loose requests and repo list retirement retain their contracts', () => {
+    const accepted = PlanRequest.from(
+      '{"user_comment":"plan the health endpoint","repo":"owner/name","path":"/repo/checkout"}'
+    )
+    const retired = PlanRequest.from(
+      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}'
+    )
+
+    expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
+    expect(accepted.comment?.text).toBe('plan the health endpoint')
+    expect(accepted.targets?.[0].repository.text).toBe('owner/name')
+    expect(accepted.targets?.[0].root.text).toBe('/repo/checkout')
+    expect(retired.outcome).toBe(PlanRequestOutcome.REPO_LIST_RETIRED)
+  })
 })

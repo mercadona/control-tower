@@ -49,8 +49,8 @@ describe('Home · plan events', () => {
     await streamFrame(PlanEventsMother.ready())
 
     expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
-    expect(screen.getByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeEnabled()
+    expect(screen.getByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Revisar plan')
     expect(FakeEventSource.last().closes).toBe(0)
   })

@@ -1,0 +1,57 @@
+{
+  "issue": 331,
+  "task": 19,
+  "task_name": "Retire live-window recovery scenarios",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The exact task-19-review.diff deletes the entire 394-line WorktreePlans suite, including its imports and four private helpers, as task-19-brief.md:180-191 requires. Record-based identity, missing/unreadable evidence and recovery without a surviving process remain covered in disk-plan-records.test.ts and recorded-plan-recovery.test.ts. Controls 1 green is inherited as supplied; log path only: .agent/run-331/task-19-controls-1.log.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The brief explicitly declares No TDD for this retirement and assigns replacement discovery coverage to Tasks 2 and 11. There is no new prescribed red assertion to compare.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "No production signature, return shape, error, constant or export is prescribed for modification. The Current state block identifies the first test to retire, which is present among the deleted lines; its retirement is measured under objetivo and manipulacion-tests.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Compared every closed-decision row with this deletion-only diff. Retiring session-title/directory discovery agrees with D-9/D-24 and D-16/D-17: durable records supply recovery identity. No other row is reopened, and no flag, gate, plugin authority, process-launch policy or continuation mechanism is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the review package's rule-by-rule precedence and the eight conventions supplied in the brief. The deletion retires helpers with their sole owning suite, consistent with CT370 conventions/architecture.md's one-concept ownership rule and conventions/testing.md's helper ownership. KnownCheckouts, SurveyedCheckout, SessionsOfCmux and PlansOf are local, unexported classes in the removed module. Backend search finds only a separate locally declared KnownCheckouts in cmux-contract-real-process.test.ts, not a consumer of the deleted class. No added code plays the role of the listed production exemplars, changes a boundary or introduces a delivery pattern. The backend TypeScript and repository language rules are satisfied. CT370 conventions/defects.md: closed vocabulary — no introduced classification or dispatch; raw map as the return value of logic — no introduced return or consumer; two fields that have to agree — no introduced paired state or absence sentinel; an error named for where it happens — no introduced error. No convention/control conflict was found.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Compared the literal names and complete bodies of all 23 deleted it cases against the 23-name retired-scenario list at task-19-brief.md:196-218: exact one-to-one match, in the same order, with no omitted listed case and no extra removed case. Every deleted assertion belongs to one of those explicitly authorized retirements. Retained disk-plan-records.test.ts:64-91 asserts full recovered identity and serialized dispatch contents; :113-152 distinguishes corrupt/unreadable evidence from missing descriptors and harvested work. Retained recorded-plan-recovery.test.ts:223-251 asserts restart identity without a process or registry and uncertain incomplete calls without replay; :438-465 covers corrupt and ambiguous call evidence. The diff removes none of these record-based assertions. Session-title, directory, symlink and cmux diagnostic expectations are intentionally withdrawn rather than owed equivalent record-based scenarios.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised retirement is effected by deleting the actual suite, not by disabling assertions or replacing behavior with scaffolding. The retained recovery tests write dispatch/call evidence to temporary directories and exercise real DiskPlanRecords and RecordedPlanRecovery. DiskPlanRecords.inFlight reads descriptors into watches; RecordedPlanRecovery reads those records before call histories and projects unowned incomplete calls as uncertain. The recovery fixture throws if launch, call minting or polling is attempted. Record-only recovery therefore has production support, rather than existing solely in fixtures; this task adds no production behavior requiring implementation lines of its own.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All 394 deleted lines belong to the expressly retired suite, its imports and its private helpers. Deleting the file implements the explicit instruction to delete this suite and its private helpers despite the Files entry using modify. There are no additions, adjacent refactors, shared-helper removals, plan amendments or changes to protected files. The independently owned cmux contract suite is outside this task's single-file scope.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The exact diff contains no added tests or assertions. Existing replacement suites were read to establish retained coverage, not treated as tests introduced by this task.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [],
+    "review_token": "13984ec6ac98bc5169f146df8f2544085ee3cfe6e7500841814f391421aa3cc9"
+  }
+}

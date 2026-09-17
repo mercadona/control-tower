@@ -13,6 +13,7 @@ export type Delivered = {
   issue: number,
   repository: RepositoryName,
   changes: string,
+  requestId?: string,
 }
 
 export type ReviewDelivery = (params: Delivered) => Promise<void>
@@ -65,7 +66,8 @@ export class ReviewWatch {
     this.live.set(key, attended)
 
     return this.#follow(watch, key, attended, recovered).catch((cause: Error) => {
-      this.stop({ issue: watch.issue.number, repository: watch.repository })
+      if (!this.#isCurrent(key, attended)) return
+      this.live.delete(key)
       this.#warn(watch, `is no longer watched: ${cause.message}`)
     })
   }
@@ -76,45 +78,58 @@ export class ReviewWatch {
 
   async #follow(watch: PlanWatch, key: string, attended: Set<string>, recovering: boolean): Promise<void> {
     if (recovering) {
-      recovering = !(await this.#baseline(watch, attended))
-      if (!this.live.has(key)) return
+      recovering = !(await this.#baseline(watch, key, attended))
+      if (!this.#isCurrent(key, attended)) return
     }
     for (;;) {
+      if (!this.#isCurrent(key, attended)) return
       await this.sleep()
-      if (!this.live.has(key)) return
+      if (!this.#isCurrent(key, attended)) return
       if (recovering) {
-        recovering = !(await this.#baseline(watch, attended))
-        if (!this.live.has(key)) return
+        recovering = !(await this.#baseline(watch, key, attended))
+        if (!this.#isCurrent(key, attended)) return
         continue
       }
       await this.#attend(watch, key, attended)
+      if (!this.#isCurrent(key, attended)) return
     }
   }
 
-  async #baseline(watch: PlanWatch, attended: Set<string>): Promise<boolean> {
-    const read = await this.#sound(watch)
+  async #baseline(watch: PlanWatch, key: string, attended: Set<string>): Promise<boolean> {
+    if (!this.#isCurrent(key, attended)) return false
+    const read = await this.#sound(watch, key, attended)
+    if (!this.#isCurrent(key, attended)) return false
     if (read === null) return false
-    for (const change of read.changes) attended.add(change.id)
+    this.#note(watch, key, attended, read.changes)
+    for (const change of read.changes) {
+      if (!this.#isCurrent(key, attended)) return false
+      attended.add(change.id)
+    }
 
     return true
   }
 
   async #attend(watch: PlanWatch, key: string, attended: Set<string>): Promise<void> {
-    const read = await this.#sound(watch)
+    if (!this.#isCurrent(key, attended)) return
+    const read = await this.#sound(watch, key, attended)
+    if (!this.#isCurrent(key, attended)) return
     if (read === null) return
+    this.#note(watch, key, attended, read.changes)
+    if (!this.#isCurrent(key, attended)) return
     const change = read.changes.find((candidate) => !attended.has(candidate.id))
     if (change === undefined) return
-    if (!this.live.has(key)) return
-    if (await this.#deliver(watch, change)) attended.add(change.id)
+    if (!this.#isCurrent(key, attended)) return
+    if (await this.#deliver(watch, key, attended, change) && this.#isCurrent(key, attended)) attended.add(change.id)
   }
 
-  async #sound(watch: PlanWatch): Promise<ChangesAsked | null> {
+  async #sound(watch: PlanWatch, key: string, attended: Set<string>): Promise<ChangesAsked | null> {
     try {
       const read = await this.asked(watch)
-      this.#note(watch, read.changes)
+      if (!this.#isCurrent(key, attended)) return null
 
       return read
     } catch (cause) {
+      if (!this.#isCurrent(key, attended)) return null
       if (!(cause instanceof PlanFailure)) throw cause
       this.#warn(watch, `could not be asked what changes were asked for: ${cause.message}`)
 
@@ -122,24 +137,29 @@ export class ReviewWatch {
     }
   }
 
-  #note(watch: PlanWatch, changes: readonly ChangeAsked[]): void {
+  #note(watch: PlanWatch, key: string, attended: Set<string>, changes: readonly ChangeAsked[]): void {
     for (const change of changes) {
+      if (!this.#isCurrent(key, attended)) return
       if (change.askedAt === null) continue
       this.log.noted({ issue: watch.issue.number, repository: watch.repository, at: change.askedAt })
     }
   }
 
-  async #deliver(watch: PlanWatch, change: ChangeAsked): Promise<boolean> {
+  async #deliver(watch: PlanWatch, key: string, attended: Set<string>, change: ChangeAsked): Promise<boolean> {
+    if (!this.#isCurrent(key, attended)) return false
     try {
       await this.review({
         agent: watch.agent,
         issue: watch.issue.number,
         repository: watch.repository,
         changes: change.text,
+        requestId: change.id,
       })
+      if (!this.#isCurrent(key, attended)) return false
 
       return true
     } catch (cause) {
+      if (!this.#isCurrent(key, attended)) return false
       if (!(cause instanceof PlanFailure)) throw cause
       this.#warn(
         watch,
@@ -153,5 +173,9 @@ export class ReviewWatch {
 
   #warn(watch: PlanWatch, said: string): void {
     this.stderr(`${this.label}: ${watch.repository.text}#${watch.issue.number} ${said}\n`)
+  }
+
+  #isCurrent(key: string, attended: Set<string>): boolean {
+    return this.live.get(key) === attended
   }
 }

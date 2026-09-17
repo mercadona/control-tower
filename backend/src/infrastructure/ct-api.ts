@@ -1,24 +1,23 @@
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import * as fs from 'node:fs/promises'
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { spawn as spawnChild } from 'node:child_process'
 import { setTimeout as after } from 'node:timers/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node-pty'
 import { ApiServer, LOOPBACK } from './api-server.ts'
 import { PtyLiveSessions } from './pty-live-sessions.ts'
-import { CmuxPlanAgents } from './cmux-plan-agents.ts'
 import { AcliUserStories } from './acli-user-stories.ts'
 import { GhUserStories } from './gh-user-stories.ts'
 import { ReferredUserStories } from './referred-user-stories.ts'
 import { GhPlanIssues } from './gh-plan-issues.ts'
 import { GitWorkspace } from './git-workspace.ts'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
-import { WorktreePlans } from './worktree-plans.ts'
-import { DiskGoRegistry } from './disk-go-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
@@ -31,8 +30,6 @@ import { DispatchCheckWorkbench } from './dispatch-check-workbench.ts'
 import { RunFileProgress } from './run-file-progress.ts'
 import { MetricsFileHistory } from './metrics-file-history.ts'
 import { ActivePlans } from './active-plans-route.ts'
-import { ActivePlanRecovery } from './active-plan-recovery.ts'
-import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
@@ -45,13 +42,15 @@ import { WorkInFlight } from './work-in-flight.ts'
 import { GhPublishedSpecs } from './gh-published-specs.ts'
 import { GhEpicIssues } from './gh-epic-issues.ts'
 import { CtGroomEpic } from './ct-groom-epic.ts'
-import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
+import { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
+import { ContinuePlan } from '../application/actions/continue-plan.ts'
+import { RecoverPlan } from '../application/actions/recover-plan.ts'
+import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
-import { ImplementPlan } from '../application/actions/implement-plan.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
@@ -64,7 +63,6 @@ import { PromoteEpic } from '../application/actions/promote-epic.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/read-fixes-asked.ts'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.ts'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
-import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import { WatchLiveSession } from '../application/queries/watch-live-session.ts'
@@ -77,15 +75,27 @@ import { ToolRunner } from './tool-runner.ts'
 import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
-import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
 import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
 import { SpecRevision } from '../domain/policies/spec-revision.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
+import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { HeadlessFiles } from './headless-files.ts'
+import { DiskPlanRecords } from './disk-plan-records.ts'
+import { ClaudeCalls } from './claude-calls.ts'
+import { ClaudePlanCalls } from './claude-plan-calls.ts'
+import { HeadlessPlanAgents } from './headless-plan-agents.ts'
+import { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
+import { GhPlanPublication } from './gh-plan-publication.ts'
+import { GhDispatchCandidates } from './gh-dispatch-candidates.ts'
+import { DispatchCheckClaims } from './dispatch-check-claims.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
 import type { UserStories } from '../domain/ports/user-stories.ts'
 import type { CoordinatingSessionRecovered } from '../application/actions/recover-coordinating-session.ts'
+import type { PlanAgents } from '../domain/ports/plan-agents.ts'
+import type { PlanRecords } from '../domain/ports/plan-records.ts'
+import type { DispatchClaims } from '../domain/ports/dispatch-claims.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -102,24 +112,24 @@ class FrontendBuild {
 class PluginTree {
   static readonly #HERE = dirname(fileURLToPath(import.meta.url))
 
-  static #root(): string {
+  static root(): string {
     return join(PluginTree.#HERE, '..', '..', '..', 'plugin')
   }
 
   static dispatchCheck(): string {
-    return join(PluginTree.#root(), 'scripts', 'dispatch-check.mjs')
+    return join(PluginTree.root(), 'scripts', 'dispatch-check.mjs')
   }
 
   static conventions(): string {
-    return join(PluginTree.#root(), 'conventions')
+    return join(PluginTree.root(), 'conventions')
   }
 
   static ctStep(): string {
-    return join(PluginTree.#root(), 'scripts', 'ct-step.mjs')
+    return join(PluginTree.root(), 'scripts', 'ct-step.mjs')
   }
 
   static ctGroom(): string {
-    return join(PluginTree.#root(), 'scripts', 'ct-groom.mjs')
+    return join(PluginTree.root(), 'scripts', 'ct-groom.mjs')
   }
 }
 
@@ -182,8 +192,9 @@ class Disk {
     try {
       await stat(path)
       return true
-    } catch {
-      return false
+    } catch (failure) {
+      if (Disk.#isMissing(failure)) return false
+      throw failure
     }
   }
 
@@ -205,6 +216,10 @@ class CtApi {
   static readonly #PROCESS_TIMEOUT_MS = 30_000
   static readonly #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
   static readonly #GROOM_TIMEOUT_MS = 6 * 60 * 1000
+  static readonly #PLAN_CALL_TIMEOUT_MS = 7_200_000
+  static readonly #PLAN_CALL_KILL_GRACE_MS = 5_000
+  static readonly #PLAN_CALL_ACCEPTANCE_MS = 10_000
+  static readonly #PLAN_CALL_POLL_MS = 250
   static readonly #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
   static readonly #SHELL = 'sh'
   static readonly #SECONDS_FOR_GH_IN_A_HARVEST = 60
@@ -212,12 +227,8 @@ class CtApi {
   static readonly #CLOCK_STOPPED = 1
   static readonly #RETRIES = 3
   static readonly #SECONDS_BETWEEN_RETRIES = 2
-  static readonly #PROBES_PER_SEND = 20
-  static readonly #RESENDS = 1
-  static readonly #SECONDS_BETWEEN_PROBES = 1
   static readonly #SECONDS_BETWEEN_READS = 2
   static readonly #SECONDS_BETWEEN_ASKS = 30
-  static readonly #LAUNCH_DIRECTORY = 'ct-plan'
 
   static #refuseUsage(reason: string | null): never {
     process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
@@ -244,8 +255,11 @@ class CtApi {
   }
 
   static #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
+    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
     return new Tool({
-      launch: CtApi.#tool(bin),
+      launch: (argv: string[]) => argv.includes('--paginate')
+        ? runner.runWholeOutput(argv)
+        : runner.run(argv),
       policy: new RetryPolicy({
         budget: new RetryBudget({
           attempts: CtApi.#RETRIES,
@@ -260,6 +274,15 @@ class CtApi {
     return after(seconds * 1000)
   }
 
+  static #headlessEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    return Object.fromEntries(Object.entries(environment).filter(([name, value]) => (
+      value !== undefined
+      && name !== ClaudeConversations.PROMPT_VARIABLE
+      && name !== ClaudeConversations.HOOKS_URL_VARIABLE
+      && name !== 'CLAUDE_CODE_SESSION_ID'
+    )))
+  }
+
   static #userStories(gh: Gh): UserStories {
     return new ReferredUserStories({
       jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
@@ -269,10 +292,12 @@ class CtApi {
 
   static #startPlan(
     workspace: GitWorkspace,
-    planAgents: CmuxPlanAgents,
+    planAgents: PlanAgents,
     planIssues: GhPlanIssues,
     checkouts: DiskCheckoutRegistry,
-    userStories: UserStories
+    userStories: UserStories,
+    records: PlanRecords,
+    claims: DispatchClaims,
   ): StartPlan {
     return new StartPlan({
       userStories,
@@ -280,11 +305,9 @@ class CtApi {
       workspace,
       planAgents,
       checkouts,
+      records,
+      claims,
     })
-  }
-
-  static #askCmux() {
-    return CmuxWorkspaceQuery.ask({ requireComplete: true })
   }
 
   static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
@@ -296,7 +319,6 @@ class CtApi {
     return new ProbedToolSessions({
       clients,
       lookUp: (bin) => Invocation.lookUp(bin, environment),
-      cmuxAnswers: () => CtApi.#askCmux().wasAnswered,
     })
   }
 
@@ -357,7 +379,7 @@ class CtApi {
   static #pullRequestReviews(
     pullRequests: GhPullRequests,
     planIssues: GhPlanIssues,
-    planAgents: CmuxPlanAgents,
+    planAgents: PlanAgents,
     workbench: DispatchCheckWorkbench
   ): ReviewWatch {
     const readFixesAsked = new ReadFixesAsked({ pullRequests, planIssues })
@@ -417,10 +439,13 @@ class CtApi {
       CtApi.#refuseUsage(asked.reason)
     }
     const git = CtApi.#tool(GitWorkspace.BIN)
+    const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const workspace = new GitWorkspace({
       run: git,
+      gh,
       write: Disk.write,
       read: Disk.read,
+      lstat: fs.lstat,
       stderr: (line) => process.stderr.write(line),
       baseline: CtApi.#baseline(),
     })
@@ -431,24 +456,45 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = new CmuxPlanAgents({
-      run: CtApi.#tool(CmuxPlanAgents.BIN),
-      write: Disk.write,
-      read: Disk.read,
-      remove: Disk.remove,
-      realpathOf: Disk.realpathOf,
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_PROBES),
-      runsIn: join(tmpdir(), CtApi.#LAUNCH_DIRECTORY),
-      policy: new LaunchPolicy({
-        budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
-      }),
-      brief: new PlanAgentBrief({
-        dispatchCheck: PluginTree.dispatchCheck(),
-        conventions: PluginTree.conventions(),
-        ctStep: PluginTree.ctStep(),
-      }),
+    const files = new HeadlessFiles({ root: asked.stateRoot, fs, newId: randomUUID })
+    const records = new DiskPlanRecords({
+      files,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+      exists: Disk.exists,
     })
-    const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const calls = new ClaudeCalls({
+      files,
+      binary: ClaudeConversations.BIN,
+      worker: fileURLToPath(new URL('./headless-call-worker.ts', import.meta.url)),
+      spawn: spawnChild,
+      env: CtApi.#headlessEnvironment(environment),
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+      budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS,
+      killGraceMs: CtApi.#PLAN_CALL_KILL_GRACE_MS,
+      acceptanceMs: CtApi.#PLAN_CALL_ACCEPTANCE_MS,
+      pollMs: CtApi.#PLAN_CALL_POLL_MS,
+      sleep: (milliseconds) => after(milliseconds),
+    })
+    const brief = new PlanAgentBrief({
+      dispatchCheck: PluginTree.dispatchCheck(),
+      conventions: PluginTree.conventions(),
+      ctStep: PluginTree.ctStep(),
+    })
+    const planCalls = new ClaudePlanCalls({
+      calls,
+      brief,
+      pluginRoot: PluginTree.root(),
+      resumable: async (watch) => new ClaudeCodeTranscript({
+        claudeDirectory: Invocation.configuredIn(environment, homedir()),
+        cwd: watch.located.path,
+        listNames: (path: string) => readdirSync(path),
+        readText: (path: string) => readFileSync(path, 'utf8'),
+      }).read(watch.agent) !== null,
+      records,
+      nowMs: Date.now,
+    })
     const userStories = CtApi.#userStories(gh)
     const planIssues = new GhPlanIssues({
       gh,
@@ -462,40 +508,40 @@ class CtApi {
     const sessions = new PlanSessions()
     const readPlanProgress = CtApi.#readPlanProgress(git)
     const activePlans = new ActivePlans({ sessions })
-    const implementationStarts = new DiskImplementationStartRegistry({
-      read: (path) => readFileSync(path, 'utf8'),
-      stat: statSync,
-      write: Disk.atomicWrite,
-      root: asked.stateRoot,
+    const planProgress = new PlanContractProgress({
+      node: CtApi.#tool(process.execPath),
+      git,
+      dispatchCheck: PluginTree.dispatchCheck(),
     })
-    const goRegistry = new DiskGoRegistry({
-      random: randomBytes,
-      read: (path) => readFileSync(path, 'utf8'),
-      stat: statSync,
-      write: Disk.write,
-      root: asked.stateRoot,
+    const publication = new GhPlanPublication({
+      gh,
+      git,
+      progress: planProgress,
+      files,
+      digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+    })
+    const continuation = new ContinuePlan({ calls: planCalls, publication })
+    const planAgents = new HeadlessPlanAgents({
+      records,
+      calls: planCalls,
+      continuation,
+      newId: randomUUID,
+      stderr: (line) => process.stderr.write(line),
+    })
+    const claims = new DispatchCheckClaims({
+      node: CtApi.#tool(process.execPath),
+      dispatchCheck: PluginTree.dispatchCheck(),
     })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
-    const surveyWorkspaces = new SurveyWorkspaces({ workspace })
-    const readPlanStory = new ReadPlanStory({ planIssues })
-    const recovery = new ActivePlanRecovery({
-      plans: new WorktreePlans({
-        checkouts,
-        survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
-        sessions: () => CtApi.#askCmux(),
-        realpathOf: Disk.realpathOf,
-        story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
-        stderr: (line) => process.stderr.write(line),
-      }),
+    const recovery = new RecordedPlanRecovery({
+      records,
+      calls: planCalls,
+      ownership: calls,
       checkouts,
-      implementationStarts,
-      goRegistry,
-      implementationProgress: runFileProgress,
-      sessions,
-      pullRequestReviews,
       activePlans,
+      reviews: pullRequestReviews,
     })
     const liveSessions = new PtyLiveSessions({
       spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
@@ -584,15 +630,21 @@ class CtApi {
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
+    const startMilestonePlan = new StartMilestonePlan({
+      candidates: new GhDispatchCandidates({ gh }),
+      claims,
+      workspace,
+      agents: planAgents,
+      records,
+      checkouts,
+    })
     const server = new ApiServer({
       port: asked.port,
-      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories),
-      pullRequestReviews,
-      implementPlan: new ImplementPlan({
-        goRegistry,
-        planIssues,
-        planAgents,
-      }),
+      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
+      startMilestonePlan,
+      startsInFlight: new WorkInFlight(),
+      recoverPlan: new RecoverPlan({ agents: planAgents }),
+      cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({
         implementationProgress: runFileProgress,
         pullRequests,
@@ -606,7 +658,6 @@ class CtApi {
         toolSessions: CtApi.#toolSessions(environment),
         metricsDelivery: MetricsDelivery.to(asked.harvestTable),
       }),
-      implementationStarts,
       recovery,
       listLiveSessions: new ListLiveSessions({ liveSessions }),
       liveSessions,
