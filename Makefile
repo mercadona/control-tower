@@ -29,6 +29,13 @@ PACKAGES := plugin backend frontend
 -include .env
 
 CT_API_PORT ?= 8787
+
+# CLAUDE_CONFIG_DIR travels only when it has a value. Expanding it empty is not
+# the same as leaving it out: `claude` reads the empty string as its config
+# directory, finds no plugins in it, and the first skill a session invokes comes
+# back as "Unknown skill" (#385). The backend normalises the empty value for
+# itself (Invocation.configuredIn), which is why nothing here ever complained.
+CLAUDE_CONFIG_DIR_ENV = $(if $(CLAUDE_CONFIG_DIR),CLAUDE_CONFIG_DIR=$(CLAUDE_CONFIG_DIR),)
 HARVEST_VARIABLE := CT_HARVEST_BQ_TABLE
 
 .PHONY: help install-all test-all clean-all \
@@ -57,7 +64,7 @@ build-frontend:
 	npm run build --prefix frontend --if-present
 
 run-backend: install-backend
-	CT_API_PORT=$(CT_API_PORT) CLAUDE_CONFIG_DIR=$(CLAUDE_CONFIG_DIR) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
+	CT_API_PORT=$(CT_API_PORT) $(CLAUDE_CONFIG_DIR_ENV) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 run-frontend: install-frontend build-frontend run-backend
 
@@ -241,7 +248,7 @@ install:
 # run-backend installs first, for a checkout; start assumes install already ran,
 # which is the case once `make install` has been run on a fresh clone.
 start:
-	CT_API_PORT=$(CT_API_PORT) CLAUDE_CONFIG_DIR=$(CLAUDE_CONFIG_DIR) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
+	CT_API_PORT=$(CT_API_PORT) $(CLAUDE_CONFIG_DIR_ENV) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 # Moves an installed clone to the newest app-v* tag and reinstalls. Refuses on a
 # dirty working tree instead of touching it: the user commits, stashes or discards
