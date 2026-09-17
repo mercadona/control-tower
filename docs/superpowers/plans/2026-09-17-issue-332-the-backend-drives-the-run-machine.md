@@ -8,30 +8,32 @@
 Base: `a1e9ee0a5490e0f6856469d8b1cbebe1b6ff23b6`. Branch: `feat/332`.
 Issue: https://github.com/mercadona/control-tower/issues/332.
 PR #375 supplied durable headless calls. `ContinuePlan` still starts one outer implementation call that conducts the plugin.
-This slice adds a default-OFF backend driver beside that path.
+This slice makes the backend driver the path for all new admissions.
 
 ### Desired end state
 
-- With the flag ON, the backend drives the existing plugin oracle after successful plan publication.
+- For every new admission, the backend drives the existing plugin oracle after successful plan publication.
 - The plugin alone chooses each step, retry, discard and terminal result.
 - Each supported model dispatch resumes the original conversation with the plugin's exact prepared files.
 - The CLI receives the plugin's response schema and role tools. Judges use the plugin's agent definitions.
 - Every call retains available CLI measurements. New projections omit unavailable metrics and label totals as reported totals.
 - Legacy call records remain readable. The backend writes no plugin attempt rows.
-- OFF preserves the original path. Restart inspection preserves identity and never replays ambiguous operations.
+- Existing legacy records retain compatible recovery and fixes. Restart inspection preserves identity and never replays ambiguous operations.
 
 ### Out of scope
 
 The entire `plugin/` tree stays byte-identical. Do not edit machine tables, verb contracts, composers, agents, prompts, bundles or hooks.
 Issue #379 owns plugin attempt-row integration. Do not add companion rows or rewrite historical telemetry.
 
-No live model invocation, historical spec edit, issue #370 work, frontend change or remote flag service belongs here.
+No live model invocation, historical spec edit, issue #370 work, frontend change or activation configuration belongs here.
 Keep `.aiplans/backend-run-driver/` local and ignored. Do not add it to task reports or commits.
 
 ## 2. Closed decisions (take as given)
 
 The live issue's `Delivery amendment — 2026-09-17` supersedes its original attempt-cost guarantee for this slice.
 The user accepted that amendment. Issue #379 holds the deferred plugin work.
+The user later prohibited every feature flag or equivalent activation switch in this slice. That instruction supersedes the earlier activation design.
+The controlling amendment is https://github.com/mercadona/control-tower/issues/332#issuecomment-5712708423.
 
 | Decision | Exact choice |
 |---|---|
@@ -46,17 +48,17 @@ The user accepted that amendment. Issue #379 holds the deferred plugin work.
 | D-20 | Preserve the existing post-review fix path after delivery; refuse a fix during an active machine run. |
 | D-25 | Relay paths, schemas and agent definitions from plugin material. Refuse an incomplete dispatch rather than invent its context. |
 | Amendment | Keep plugin bytes unchanged; persist available backend call measurements; defer attempt-row ingestion to #379. |
-| Flag | `CT_BACKEND_RUN_DRIVER`: unset, empty or `0` is OFF; `1` is ON; every other value refuses startup. |
-| Rollout | Startup configuration through `Invocation`, `.env.example` and Make. OFF is the shipped default. |
-| Rollback | Set `CT_BACKEND_RUN_DRIVER=0` and restart to stop new admissions. Existing driver admissions retain their original owner until harvest. |
+| Activation | All new admissions use the machine driver directly. No feature flag, toggle, environment setting or configurable alternate path. |
+| Deployment | Deploy the code through the existing entrypoints. Leave `Invocation`, `.env.example` and `Makefile` unchanged. |
+| Rollback | Redeploy the prior code revision. First drain or stop and preserve driver work; an older binary cannot safely recover driver-owned records. |
 | Ownership | One API process owns a state root. Coalesce one driver promise per conversation. No distributed lock guarantee. |
 | Legacy graph | Keep `ContinuePlan`, `HeadlessPlanAgents`, `ClaudePlanCalls`, `ClaudeCalls` and their worker bodies unchanged. |
-| New graph | Select the new path at admission; recover ownership from its immutable admission record. Reuse existing call transport and disk primitives. |
+| New graph | Always admit new work to the machine. Resolve existing recovery/fix ownership from durable provenance, never configuration. |
 | Call identity | Keep legacy purpose `implementation` for machine calls; correlate each through request ID `run:<ticket>`. |
 | History | New recovery reads machine evidence before legacy call classification. Multiple step calls are not multiple outer implementations. |
 | Deadlines | Retain model budgets: 7200000 ms, grace 5000 ms, acceptance 10000 ms and poll 250 ms. |
 | Command budget | Inject 7200000 ms into the dedicated oracle runner. Do not retry a mutating verb after an uncertain result. |
-| Delivery | ON ends at the plugin's delivered result. The coordinator owns PR publication and checked release. No delivery model call. |
+| Delivery | The driver ends at the plugin's delivered result. The coordinator owns PR publication and checked release. No delivery model call. |
 | Unsupported material | Current E2E lacks a role in `RoleBytes`; slice-agent reconciliation fallbacks lack a prepared role package. Refuse both explicitly. |
 | Supported reconciliation | Run plugin-prepared `ct-reconciler` calls and return to the printed consuming verb. Do not infer retry limits. |
 | Fix compatibility | After delivered, delegate existing fix calls unchanged. Their legacy errand already asks no agent to run `ct-step`. |
@@ -69,8 +71,8 @@ The user accepted that amendment. Issue #379 holds the deferred plugin work.
 
 ### Durable evidence contract
 
-ON admission writes `harness/<conversation>/run/admission.json` before the planner starts, with exact keys `version:1` and `conversation`.
-The flag chooses new admissions only. It is not a process kill switch or permission to migrate existing work.
+Each new admission writes `harness/<conversation>/run/admission.json` before the planner starts, with exact keys `version:1` and `conversation`.
+This immutable record identifies execution provenance, not an activation setting. Existing legacy records do not become new admissions.
 
 The manifest has exact keys `version: 1`, `conversation`, `repository`, `issue`, `plan` and `initialPlanSha256`.
 The plan path identifies the committed plan. Later plugin-approved plan amendments do not invalidate the initial hash.
@@ -113,7 +115,6 @@ Files to imitate:
 - `backend/src/infrastructure/claude-plan-calls.ts`
 - `backend/src/infrastructure/headless-files.ts`
 - `backend/src/infrastructure/recorded-plan-recovery.ts`
-- `backend/src/infrastructure/invocation.ts`
 - `backend/__tests__/infrastructure/headless-dispatch-dry-run.test.ts`
 - `plugin/scripts/judge-agent-definition.js`
 - `plugin/scripts/role-bytes.js`
@@ -143,7 +144,7 @@ The canonical plan and program-produced verdicts remain the committed authority.
 | Domain | `RunMachine`, `RunCalls`, `RunInstruction`, named failures | Driver actions |
 | Infrastructure | `RunJournal`, `CtRunMachine`, `ClaudeRunCalls`, `ClaudeRunMeasurements` | Runtime graph and restart inspection |
 | Infrastructure | `RunPlanAgents`, `RunPlanRecovery` | Existing start, recovery and fix surfaces |
-| Configuration | `Invocation`, `ct-api.ts`, `Makefile`, `.env.example` | Startup |
+| Runtime | `ct-api.ts` | Unconditional driver composition and existing-record compatibility |
 | Tests and docs | Scoped suites and finite rehearsal dossier | Task judges and reviewer |
 
 ## 5. Interfaces
@@ -436,7 +437,7 @@ Append the role argv and `ClaudePlanCalls.OPENING`. Keep normal settings, hooks,
 The role argv includes both `--tools` and `--allowedTools` with the plugin's tool set, excluding no declared tool.
 Use `--model` from the implementer constant or definition; use `--agents` and `--agent` for defined roles.
 Structured roles include `--json-schema` with the exact imported schema. Reconciliation edits have no invented response schema.
-No role gains `Agent`, Bash or Write beyond its plugin declaration. Copy no benchmark isolation or session-disabling flags.
+No role gains `Agent`, Bash or Write beyond its plugin declaration. Copy no benchmark isolation or session-disabling options.
 
 The file errand lists the prepared paths and `RoleBytes` material paths in order, without their contents.
 Its wrapper says only: `Read the listed files. Complete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`
@@ -469,7 +470,7 @@ npm --prefix backend test -- __tests__/infrastructure/claude-plan-calls.test.ts 
 Contract (backend/src/infrastructure/run-plan-agents.ts):
 ```ts
 export class RunPlanAgents extends PlanAgents {
-  constructor(ports: { mode: 'legacy' | 'machine'; legacy: PlanAgents;
+  constructor(ports: { legacy: PlanAgents;
     records: PlanRecords; calls: PlanCalls; transport: ClaudeCalls;
     driver: DriveRun; machine: CtRunMachine; journal: RunJournal;
     measurements: ClaudeRunMeasurements; newId: () => string; nowMs: () => number;
@@ -478,16 +479,16 @@ export class RunPlanAgents extends PlanAgents {
 ```
 
 Add journal `admitted(watch): Promise<boolean>` and `admit(watch): Promise<void>` for §2's immutable admission record.
-In legacy mode, `launch` immediately delegates unchanged to the original adapter. It writes no new evidence.
-In machine mode, prepare through `PlanRecords`, admit, then start the existing planner with `PlanCalls.start`.
+Every `launch` prepares through `PlanRecords`, admits to the machine, then starts the existing planner with `PlanCalls.start`.
+New launches never delegate to the legacy adapter.
 Return the same conversation and start supervised continuation. Capture planner measurements before driver execution, even on planner failure.
 
 Preserve definite non-launch proof and checked cleanup semantics from #331. Record `PlanAgentNeverLaunched.proof`; never delete uncertain work.
 If admission publication fails, preserve the dispatch record and report the failure. It does not prove a safe cleanup.
 Supervisor failures retain repository, issue, conversation, call and diagnostic in stderr. They do not become successful delivery.
 
-For recover/fix, find the exact recorded watch and inspect admission. Missing admission delegates to the legacy adapter regardless of flag.
-Existing admission retains driver ownership regardless of the current flag. No existing legacy implementation becomes a machine run.
+For recover/fix, find the exact recorded watch and inspect provenance. Valid legacy records retain original recovery/fix calls and create no driver admission.
+Driver records retain their owner. Missing or conflicting provenance refuses; it never selects a legacy launch or migrates an implementation.
 Recovery follows §2's establishment and latest-fix precedence; uncertain commands and unowned incomplete calls remain inspect-only.
 Explicit driver recovery first restores missing measurement projections from completed history, including completed fixes; GET never performs this write.
 
@@ -498,7 +499,9 @@ Concurrent driver and fix requests share the conversation reservation; release i
 
 **TDD:** `it('a machine admission publishes before the first oracle call')` asserts the production bridge effects and original UUID.
 
-**Tests:** `'a machine admission publishes before the first oracle call'`, `'legacy admissions execute the original adapter without new evidence'`, `'admission ownership survives a flag change without migrating a conversation'`, `'non-launch proof and ambiguous launch evidence keep their existing cleanup meanings'`, `'fixes wait for delivery and retain their original errand and measurements'`.
+**Tests:** `'a machine admission publishes before the first oracle call'`, `'legacy record recovery and fixes retain exact calls without new admission evidence'`, `'restart preserves recorded ownership without migrating a conversation'`, `'non-launch proof and ambiguous launch evidence keep their existing cleanup meanings'`, `'fixes wait for delivery and retain their original errand and measurements'`.
+
+The legacy case pins original argv, errand, UUID and response identity.
 
 **Verification:** Run both plan-agent boundary suites.
 ```bash
@@ -554,11 +557,11 @@ npm --prefix backend run typecheck
 npm --prefix backend test -- __tests__/infrastructure/recorded-plan-recovery.test.ts __tests__/infrastructure/run-plan-recovery.test.ts
 ```
 
-### Task 9 — Wire the default-OFF admission flag without a legacy refactor
+### Task 9 — Wire unconditional machine admissions with legacy-record compatibility
 
-**Objective:** Select backend-driven admissions through native startup configuration and preserve the original OFF execution.
+**Objective:** Route every new admission through the machine and preserve compatible recovery for existing legacy records.
 
-**Files:** `backend/src/infrastructure/invocation.ts` (modify), `backend/src/infrastructure/ct-api.ts` (modify), `.env.example` (modify), `Makefile` (modify), `backend/__tests__/infrastructure/run-driver-configuration.test.ts` (create), `backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify).
+**Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/__tests__/infrastructure/run-driver-runtime-real-process.test.ts` (create), `backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify).
 
 Current state (backend/src/infrastructure/ct-api.ts):
 ```ts
@@ -572,35 +575,33 @@ Current state (backend/src/infrastructure/ct-api.ts):
     })
 ```
 
-Leave that block and legacy method bodies intact. Add the new collaborators beside them.
-`Invocation` gains `RUN_DRIVER_VARIABLE = 'CT_BACKEND_RUN_DRIVER'` and readonly `runDriver: 'legacy'|'machine'`.
-Its constructor accepts optional `runDriver` with default `legacy` for existing callers; `from` always supplies the parsed choice.
-Parse §2's exact values in `from`; add outcome `MALFORMED_RUN_DRIVER: 'malformed-run-driver'` and a diagnostic naming the value.
-Refuse malformed configuration before any process or API graph starts.
+Keep the original adapters for existing legacy records only. Add the new collaborators beside them; change no legacy method body.
+Do not add an activation parameter, environment variable, request field or alternate startup path.
 
 Construct journal, oracle, measurements, model-call adapter, step action, driver and ownership-aware plan-agent wrapper.
 Use the existing files, records, transport, publication, clock and process caps. Inject separate oracle and Git runners.
 Pass `runWholeOutput` bound to its runner. Model call budgets stay on the existing transport.
 Inject `Date.now` into both new wrappers' `nowMs`; preserve recorded fix deadlines.
 
-Select the wrapper for starts, recovery and fixes; its OFF launch delegates immediately to the intact legacy adapter.
-Wire review delivery to the selected agents. Wrap the original recovery with `RunPlanRecovery`; pass both through existing server interfaces.
+Wire every start to `RunPlanAgents`, which always admits to the machine. Pass it to recovery, fixes and review delivery too.
+Wrap original recovery with `RunPlanRecovery`; use existing server interfaces. Legacy adapters serve only validated existing-record provenance.
 
-No admission means the original recovery handles the whole read. Existing ON admissions keep their owner after OFF rollback.
+With only valid legacy records, original recovery handles the read. Mixed histories retain their original UUIDs and owners without conversion.
 Cleanup retains its original action and legacy proof policy. Driver work without proven non-launch is not cleanup-eligible.
 
-Add `CT_BACKEND_RUN_DRIVER=0` to `.env.example`. Forward that variable in both `run-backend` and `start` Make recipes.
-Do not edit `.env`, change dependencies, widen permissions or introduce another flag.
-Use separate `driver OFF` and `driver ON` suites, never a parameterized boolean suite.
+Leave `Invocation`, `Makefile`, `.env.example` and `.env` unchanged. Add no dependency or permission expansion.
+Test new admissions and existing-record compatibility as distinct scenarios, not configurable modes.
+At the real entrypoint, assert original legacy argv/errand/response identity and no new admission during legacy recovery or fixes.
+Verify existing Make entrypoints need no activation input; runtime assertions must reach the actual composition graph.
 
-**TDD:** `it('driver OFF retains the exact legacy calls and creates no run admission')` compares complete argv and evidence against the base behavior.
+**TDD:** `it('the runtime routes every new admission through the machine driver')` pins planner publication, oracle calls and original conversation identity.
 
-**Tests:** `'driver OFF retains the exact legacy calls and creates no run admission'`, `'driver ON wires publication oracle calls and shared conversation identity'`, `'malformed driver configuration refuses before graph construction'`, `'both Make entrypoints forward the default OFF driver setting'`.
+**Tests:** `'the runtime routes every new admission through the machine driver'`, `'legacy record recovery preserves original call argv and response identity'`, `'runtime recovery keeps recorded driver ownership without another launch'`, `'existing entrypoints start without an activation setting'`.
 
-**Verification:** Run configuration and real entrypoint boundaries.
+**Verification:** Run unconditional runtime and legacy-record entrypoint boundaries.
 ```bash
 npm --prefix backend run typecheck
-npm --prefix backend test -- __tests__/infrastructure/ct-api-real-process.test.ts __tests__/infrastructure/run-driver-configuration.test.ts
+npm --prefix backend test -- __tests__/infrastructure/ct-api-real-process.test.ts __tests__/infrastructure/run-driver-runtime-real-process.test.ts
 ```
 
 ### Task 10 — Rehearse the finite producer-consumer matrix
@@ -616,8 +617,8 @@ No code — this task adds integration tests whose bodies follow the named asser
 Use temporary Git repositories, a local bare origin, plugin seeds and a contract-valid plan.
 Never edit run state, counters, verdict tokens or seals. Register cleanup before spawn; kill and await children in `afterEach`.
 
-The ON happy path uses the mounted API and real collaborators; double only GitHub/model boundaries with exact-request scripts that reject unknown requests.
-The model double performs task file effects and returns labelled synthetic schema responses. Task 9 owns OFF coverage.
+The happy path uses the mounted API and real collaborators; double only GitHub/model boundaries with exact-request scripts that reject unknown requests.
+The model double performs task file effects and returns labelled synthetic schema responses. Task 9 owns legacy compatibility.
 
 Drive the real plugin to delivery; compare emitted paths, consumer inputs, conversation UUIDs and distinct judge call identities.
 Assert private measurement files; only plugin verbs write attempt rows.
@@ -633,9 +634,9 @@ Produce a delivered journal through real verbs, then persist synthetic failed/su
 Failure must project uncertain/inspect with the exact diagnostic and stopped watcher. Success must retain implementing and review watching.
 Both cases execute zero model calls or verbs. Keep these assertions at the recovery adapter, not HTTP.
 
-**TDD:** `it('the ON request reaches real machine delivery with one conversation')` asserts effects through the production graph.
+**TDD:** `it('a new admission reaches real machine delivery with one conversation')` asserts effects through the production graph.
 
-**Tests:** `'the ON request reaches real machine delivery with one conversation'`, `'a stale oracle ticket returns the real wrong-step exit nine'`, `'two real vetoes produce advice and the third plugin brief'`, `'a real merge conflict uses the prepared reconciler package'`, `'established recovery consumes rewritten citations and dirty scope amendments once'`, `'a later fix result overrides real delivered journal evidence after restart'`.
+**Tests:** `'a new admission reaches real machine delivery with one conversation'`, `'a stale oracle ticket returns the real wrong-step exit nine'`, `'two real vetoes produce advice and the third plugin brief'`, `'a real merge conflict uses the prepared reconciler package'`, `'established recovery consumes rewritten citations and dirty scope amendments once'`, `'a later fix result overrides real delivered journal evidence after restart'`.
 
 **Verification:** Run the finite real-process matrix and retained dispatcher rehearsal.
 ```bash
@@ -645,7 +646,7 @@ npm --prefix backend test -- __tests__/infrastructure/headless-dispatch-dry-run.
 
 ### Task 11 — Record the amended delivery boundary and rollout evidence
 
-**Objective:** Document what the driver proves, what the flag controls and what remains deferred.
+**Objective:** Document unconditional driver deployment, legacy-record compatibility and the deferred work.
 
 **Files:** `backend/API.md` (modify), `backend/conventions/this-repository.md` (modify), `docs/superpowers/evidence/issue-332-run-driver.md` (create).
 
@@ -661,15 +662,15 @@ Record actual task commands, revisions, failure-cut tests, mutations and restora
 Separate real Git/oracle/HTTP evidence from scripted GitHub/model boundaries and synthetic schema responses.
 Name the three existing CLI captures and their limits. Include an example of omitted metrics beside preserved legacy null fields.
 
-Document exact flag values, malformed startup, `.env` forwarding and separate ON/OFF behavior.
-Roll out by explicit `CT_BACKEND_RUN_DRIVER=1` for new admissions after review; default stays `0`.
+Document unconditional new admissions and provenance-based legacy recovery/fixes. No activation setting exists.
+Deployment of the new code makes the driver the path for all new work through the existing entrypoints.
 Monitor oracle refusals, unresolved receipts and per-call reported measurements. Reported totals are not aggregate spending.
 
-Rollback sets `CT_BACKEND_RUN_DRIVER=0` and restarts. It stops new driver admissions, not existing processes or recorded ownership.
-Drain or inspect existing driver work through its original owner. Never resume it as a legacy outer implementation.
-No automatic flag retirement or critical refactor belongs to this slice.
+Rollback means redeployment of the prior code revision, not a runtime toggle.
+First drain or stop and preserve driver work; older binaries lack its recovery contract. Never resume it as a legacy outer implementation.
+Preserve durable records during downgrade. No automatic migration or deletion makes that downgrade safe.
 
-Document ON's delivered endpoint, coordinator-owned PR/release, unchanged post-review fixes and explicit unsupported-material refusals.
+Document the driver's delivered endpoint, coordinator-owned PR/release, unchanged post-review fixes and explicit unsupported-material refusals.
 Amend only the current backend convention's #332 boundary; leave all dated historical evidence and specs intact.
 The local tracking index points to these canonical tasks and remains outside commits and task reports.
 
@@ -699,7 +700,7 @@ The baseline already passed. These commands verify the final implementation, not
 | Binary schema option | Imported schemas to literal CLI argv | 4, 6 |
 | Plugin judge definition | `AgentDefinition` to `--agents` and `--agent` | 4, 6 |
 | Compatible recovery | Immutable records to explicit continuation | 2, 7, 8 |
-| Default OFF | Startup configuration to original adapter | 7, 9 |
+| Unconditional admission and legacy compatibility | Actual runtime graph and durable record provenance | 7, 9 |
 
 Task controls and the final dossier carry evidence. No table row asserts live CLI success.
 
@@ -714,10 +715,10 @@ git diff --check
 ## 9. Assumptions
 
 1. The accepted issue amendment resolves the earlier B1, B2 and scope findings. The dated frozen spec stays unchanged.
-2. The declared scope includes backend source/tests, named backend docs, issue evidence, `.env.example` and `Makefile`; it includes no plugin path.
-3. Default OFF preserves legacy execution. ON completion means machine delivery, not a PR or live rollout.
+2. The task scope includes backend source/tests, named backend docs and issue evidence; configuration files and the plugin stay unchanged.
+3. New admissions always use the driver. Existing legacy records retain compatible recovery/fixes; driver completion means machine delivery, not a PR.
 4. Missing E2E or fallback role material invokes D-25's explicit refusal contract. This plan does not promise support the plugin cannot compose.
 5. Existing captures establish measurement shapes and errors, not successful resumed billing or live schema enforcement.
-6. The parent owns later implementation, judges and publication. This architecture session commits only the complete canonical plan.
+6. The parent owns implementation, judges and publication. This amendment stays unstaged for the live task's official report, controls and commit.
 7. D-25 describes a task-base review package. Current `ct-step.mjs:826-827,852-874` uses the index for tasks and `run.baseSha` for slice review.
    The accepted plugin freeze preserves that actual behavior. This plan promises no multi-commit task-package guarantee; plugin changes remain deferred.
