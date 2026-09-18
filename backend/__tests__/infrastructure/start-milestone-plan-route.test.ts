@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { StartMilestonePlan, StartMilestonePlanParams } from '../../src/application/actions/start-milestone-plan.ts'
+import {
+  SliceNotStarted, StartMilestonePlan, StartMilestonePlanParams, StartMilestonePlanResult,
+} from '../../src/application/actions/start-milestone-plan.ts'
 import { PlanStarted, StartPlan, StartPlanResult } from '../../src/application/actions/start-plan.ts'
 import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
@@ -38,14 +40,18 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
-import { PlanAgentNeverLaunched } from '../../src/domain/exceptions.ts'
+import { PlanAgentNeverLaunched, WorkspaceNotPrepared } from '../../src/domain/exceptions.ts'
+import type { PlanFailure } from '../../src/domain/exceptions.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 
 class StartMilestonePlanDouble extends StartMilestonePlan {
   readonly asked: StartMilestonePlanParams[]
-  readonly answer: (params: StartMilestonePlanParams) => Promise<PlanStarted>
+  readonly answer: (params: StartMilestonePlanParams) => Promise<StartMilestonePlanResult>
 
-  constructor(answer: (params: StartMilestonePlanParams) => Promise<PlanStarted> = async () => Mother.started()) {
+  constructor(
+    answer: (params: StartMilestonePlanParams) => Promise<StartMilestonePlanResult> =
+      async () => Mother.dispatching(Mother.started()),
+  ) {
     super({
       candidates: new DispatchCandidates(),
       claims: new DispatchClaims(),
@@ -58,7 +64,7 @@ class StartMilestonePlanDouble extends StartMilestonePlan {
     this.answer = answer
   }
 
-  async execute(params: StartMilestonePlanParams): Promise<PlanStarted> {
+  async execute(params: StartMilestonePlanParams): Promise<StartMilestonePlanResult> {
     this.asked.push(params)
     return await this.answer(params)
   }
@@ -154,27 +160,67 @@ class Mother {
     branch: 'feat/12',
   })
   static readonly AGENT = '11111111-1111-4111-8111-111111111111'
+  static readonly AGENT_PREFIX = 'agent-'
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'coordinator' })
   static readonly BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
-  static readonly ANSWER =
+  static readonly LOOSE_ANSWER =
     '{"status":"started","id":null,"repo":"owner/name",' +
     '"issue":{"number":12,"url":"https://github.com/owner/name/issues/12"},' +
     '"agent":"11111111-1111-4111-8111-111111111111","branch":"feat/12",' +
     '"worktree":"/repo/checkout/.worktrees/12","root":"/repo/checkout",' +
     '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
 
-  static started(): PlanStarted {
+  static plan(issue: number): Record<string, unknown> {
+    return {
+      id: null,
+      repo: Mother.REPOSITORY.text,
+      issue: { number: issue, url: `https://github.com/owner/name/issues/${issue}` },
+      agent: Mother.agentOf(issue),
+      branch: `feat/${issue}`,
+      worktree: `${Mother.ROOT.text}/.worktrees/${issue}`,
+      root: Mother.ROOT.text,
+      baseline: { outcome: 'verde', command: 'npm test', summary: '42 passed' },
+    }
+  }
+
+  static agentOf(issue: number): string {
+    return issue === 12 ? Mother.AGENT : `${Mother.AGENT_PREFIX}${issue}`
+  }
+
+  static started(issue = 12): PlanStarted {
     return new PlanStarted({
-      agent: Mother.AGENT,
+      agent: Mother.agentOf(issue),
       baseline: Mother.BASELINE,
       watch: new PlanWatch({
         story: null,
-        issue: Mother.ISSUE,
-        located: Mother.LOCATION,
+        issue: Mother.issue(issue),
+        located: Mother.location(issue),
         repository: Mother.REPOSITORY,
-        agent: Mother.AGENT,
+        agent: Mother.agentOf(issue),
       }),
     })
+  }
+
+  static issue(number: number): PlanIssue {
+    return number === 12
+      ? Mother.ISSUE
+      : new PlanIssue({ number, url: `https://github.com/owner/name/issues/${number}` })
+  }
+
+  static location(issue: number): WorkspaceLocation {
+    return issue === 12 ? Mother.LOCATION : new WorkspaceLocation({
+      root: Mother.ROOT.text,
+      path: `${Mother.ROOT.text}/.worktrees/${issue}`,
+      branch: `feat/${issue}`,
+    })
+  }
+
+  static dispatching(...started: PlanStarted[]): StartMilestonePlanResult {
+    return new StartMilestonePlanResult({ started, failed: [] })
+  }
+
+  static notStarted(issue: number, cause: PlanFailure): SliceNotStarted {
+    return new SliceNotStarted({ issue: Mother.issue(issue), repository: Mother.REPOSITORY, cause })
   }
 
   static coordinating(): CoordinatingSessions {
@@ -291,21 +337,71 @@ afterEach(async () => {
 })
 
 describe('StartPlanRoute milestone entrance', () => {
-  it('a milestone command dispatches in the held checkout with the original response shape', async () => {
-    const start = new StartMilestonePlanDouble()
+  it('a milestone command dispatches in the held checkout and its 202 carries every started plan', async () => {
+    const registry = new PlanRegistryFixture()
+    const start = new StartMilestonePlanDouble(
+      async () => Mother.dispatching(Mother.started(12), Mother.started(13), Mother.started(14))
+    )
     const groom = new ReadEpicGroomDouble()
-    const port = await RunningApi.listening({ startMilestonePlan: start, readEpicGroom: groom })
+    const port = await RunningApi.listening({ startMilestonePlan: start, readEpicGroom: groom, registry })
 
     const response = await RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
 
     expect(response.status).toBe(202)
-    expect(await response.text()).toBe(Mother.ANSWER)
+    expect(await response.json()).toEqual({
+      status: 'started',
+      started: [Mother.plan(12), Mother.plan(13), Mother.plan(14)],
+      failed: [],
+    })
+    expect(registry.sessions.known().map((watch) => watch.issue.number)).toEqual([12, 13, 14])
     expect(start.asked).toHaveLength(1)
     expect(start.asked[0].milestone).toBe(Mother.MILESTONE)
     expect(start.asked[0].repository).toBe(Mother.REPOSITORY)
     expect(start.asked[0].root).toBe(Mother.ROOT)
     expect(groom.asked[0].repository).toBe(Mother.REPOSITORY)
     expect(groom.asked[0].root).toBe(Mother.ROOT)
+  })
+
+  it('a milestone 202 names the slice that could not start beside the ones that did', async () => {
+    const registry = new PlanRegistryFixture()
+    const start = new StartMilestonePlanDouble(async () => new StartMilestonePlanResult({
+      started: [Mother.started(12), Mother.started(14)],
+      failed: [Mother.notStarted(13, new WorkspaceNotPrepared('the worktree could not be cut'))],
+    }))
+    const port = await RunningApi.listening({
+      startMilestonePlan: start, readEpicGroom: new ReadEpicGroomDouble(), registry,
+    })
+
+    const response = await RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({
+      status: 'started',
+      started: [Mother.plan(12), Mother.plan(14)],
+      failed: [{
+        issue: { number: 13, url: 'https://github.com/owner/name/issues/13' },
+        repo: 'owner/name',
+        code: 'workspace-not-prepared',
+        detail: 'the worktree could not be cut',
+      }],
+    })
+    expect(registry.sessions.known().map((watch) => watch.issue.number)).toEqual([12, 14])
+  })
+
+  it('a loose issue answers exactly the shape it always answered', async () => {
+    const port = await RunningApi.listening({
+      startMilestonePlan: new StartMilestonePlanDouble(),
+      readEpicGroom: new ReadEpicGroomDouble(),
+      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
+    })
+
+    const response = await RunningApi.post(
+      port,
+      `{"user_comment":"plan this","repo":"${Mother.REPOSITORY.text}","path":"${Mother.ROOT.text}"}`,
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.text()).toBe(Mother.LOOSE_ANSWER)
   })
 
   it('milestone start exposes definite non-launch', async () => {
@@ -316,18 +412,29 @@ describe('StartPlanRoute milestone entrance', () => {
       diagnostic: 'headless worker spawn was refused',
       observedAt: '2026-09-16T10:00:00.000Z',
     })
-    const start = new StartMilestonePlanDouble(async () => {
+    const thrown = new StartMilestonePlanDouble(async () => {
       throw new PlanAgentNeverLaunched(proof)
     })
-    const port = await RunningApi.listening({ startMilestonePlan: start, readEpicGroom: new ReadEpicGroomDouble() })
+    const collected = new StartMilestonePlanDouble(async () => new StartMilestonePlanResult({
+      started: [],
+      failed: [Mother.notStarted(12, new PlanAgentNeverLaunched(proof))],
+    }))
+    const thrownPort = await RunningApi.listening({
+      startMilestonePlan: thrown, readEpicGroom: new ReadEpicGroomDouble(),
+    })
+    const collectedPort = await RunningApi.listening({
+      startMilestonePlan: collected, readEpicGroom: new ReadEpicGroomDouble(),
+    })
 
-    const response = await RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
+    const responses = await Promise.all(
+      [thrownPort, collectedPort].map((port) => RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`))
+    )
 
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({
+    expect(responses.map((response) => response.status)).toEqual([400, 400])
+    expect(await Promise.all(responses.map((response) => response.json()))).toEqual(Array(2).fill({
       code: 'plan-agent-never-launched',
       detail: 'headless worker spawn was refused',
-    })
+    }))
   })
 
   it('mixed malformed and unknown milestone fields reach no action', async () => {
@@ -443,7 +550,7 @@ describe('StartPlanRoute milestone entrance', () => {
     const start = new StartMilestonePlanDouble(async () => {
       const started = Mother.started()
       registry.activePlans.rememberImplementing(started.watch)
-      return started
+      return Mother.dispatching(started)
     })
     const port = await RunningApi.listening({
       startMilestonePlan: start,

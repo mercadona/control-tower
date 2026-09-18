@@ -657,14 +657,20 @@ describe('headless dispatch dry run', () => {
       await BoundedDrain.wait(implementationAccepted.promise, 1_000)
       expect(await response.json()).toEqual({
         status: 'started',
-        id: null,
-        repo: Rehearsal.REPOSITORY,
-        issue: { number: Rehearsal.ISSUE, url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}` },
-        agent: Rehearsal.CONVERSATION,
-        branch: `feat/${Rehearsal.ISSUE}`,
-        worktree: boundaries.worktree,
-        root: boundaries.checkoutRoot,
-        baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
+        started: [{
+          id: null,
+          repo: Rehearsal.REPOSITORY,
+          issue: {
+            number: Rehearsal.ISSUE,
+            url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}`,
+          },
+          agent: Rehearsal.CONVERSATION,
+          branch: `feat/${Rehearsal.ISSUE}`,
+          worktree: boundaries.worktree,
+          root: boundaries.checkoutRoot,
+          baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
+        }],
+        failed: [],
       })
       expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
       expect(spawnedDescriptors).toHaveLength(2)

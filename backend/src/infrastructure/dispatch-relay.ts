@@ -1,6 +1,7 @@
 import { Reservation, WorkInFlight } from './work-in-flight.ts'
 import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
 import type { PlanStarted } from '../application/actions/start-plan.ts'
+import type { SliceNotStarted, StartMilestonePlanResult } from '../application/actions/start-milestone-plan.ts'
 import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
@@ -9,13 +10,17 @@ export type EpicSpecRead = (root: CheckoutRoot) => Promise<EpicSpec | null>
 
 export type MilestoneDispatched = (asked: {
   repository: RepositoryName, root: CheckoutRoot, milestone: string,
-}) => Promise<PlanStarted>
+}) => Promise<StartMilestonePlanResult>
 
 export class RelayLine {
   static readonly SILENT = null
 
   static dispatched(started: PlanStarted): string {
     return `relay: dispatched ${started.watch.repository.text}#${started.watch.issue.number} as ${started.agent}\n`
+  }
+
+  static notStarted(slice: SliceNotStarted): string {
+    return `relay: ${slice.repository.text}#${slice.issue.number} could not be dispatched: ${slice.cause.message}\n`
   }
 
   static refused(repository: RepositoryName, failure: PlanFailure): string {
@@ -48,8 +53,9 @@ export class DispatchRelay {
 
     if (this.inFlight.reserve(repository.text) === Reservation.IN_PROGRESS) return
     try {
-      const started = await this.dispatch({ repository, root, milestone })
-      this.stderr(RelayLine.dispatched(started))
+      const dispatched = await this.dispatch({ repository, root, milestone })
+      for (const started of dispatched.started) this.stderr(RelayLine.dispatched(started))
+      for (const slice of dispatched.failed) this.stderr(RelayLine.notStarted(slice))
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
       if (failure instanceof DispatchNotAvailable) return
