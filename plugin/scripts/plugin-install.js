@@ -7,11 +7,6 @@ export class ClaudeCli {
   static BINARY = 'claude'
   static TIMEOUT_MS = 60000
 
-  // `binary` defaults to the real CLI, so production behaviour is
-  // unchanged. ct-install.mjs is the one caller that may point it
-  // elsewhere, and only through the documented CT_CLAUDE_BIN environment
-  // variable — a test fake, never PATH tampering — so no test call ever
-  // reaches the real network or a developer's own plugin cache.
   constructor(binary = ClaudeCli.BINARY) {
     this.binary = binary
     Object.freeze(this)
@@ -107,11 +102,6 @@ export class PluginInstaller {
       throw new ClaudeCliUnavailable(`claude plugin list --json did not print JSON: ${failure.message}`)
     }
     if (!Array.isArray(parsed)) throw new ClaudeCliUnavailable('claude plugin list --json did not print an array')
-    // The full id, not just the plugin name before `@`: a plugin of the same
-    // name from a DIFFERENT marketplace is not this plugin (D5). The pinned
-    // `ref` in `.claude/settings.json` is what identifies the marketplace
-    // this repo trusts, and `ControlTowerPlugin.id` already names the one
-    // exact id ("control-tower-loop@control-tower") that means this plugin.
     return parsed.some((entry) => entry?.id === ControlTowerPlugin.id)
   }
 
