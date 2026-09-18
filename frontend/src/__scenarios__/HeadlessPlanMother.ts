@@ -1,4 +1,5 @@
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkflowSnapshot } from 'app/workflow-snapshot/storage'
 
 type Answer = { status: number; body: string }
 type HeadlessPhase = 'planning' | 'implementing' | 'uncertain'
@@ -58,6 +59,11 @@ class HeadlessPlanMother {
 
   static slicesInFlight(...issues: number[]): Answer {
     return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
+  }
+
+  static workflowOfSlice(issue: number): WorkflowSnapshot {
+    const { request, plan } = HeadlessPlanMother.slice(issue)
+    return { phase: 'implementing', request, plan }
   }
 
   static agentFor(issue: number): string {

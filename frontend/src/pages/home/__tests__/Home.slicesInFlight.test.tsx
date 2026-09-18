@@ -8,6 +8,7 @@ import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { FakeEventSource } from './FakeEventSource'
 import { openHome, pressStart, typePath, typeRepository, typeTicket } from './helpers'
 
@@ -27,6 +28,10 @@ const NO_SPEC_FREEZE = SpecFreezeMother.none()
 const NO_EPIC_GROOM = EpicGroomMother.none()
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
+
+const backendFallsOver = () => {
+  throw new TypeError('Failed to fetch')
+}
 
 const backendWith = ({ activePlans, message }: {
   activePlans: () => Answer
@@ -156,5 +161,88 @@ describe('Home · the slices in flight', () => {
     ).toHaveLength(1))
     expect(screen.getByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+  })
+
+  it('shows a slice that arrives after a single one was adopted, without repeating the adopted panel', async () => {
+    vi.useFakeTimers()
+    let inFlight = [7]
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(...inFlight) })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
+
+    inFlight = [7, 8]
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)
+    expect(screen.getAllByLabelText(MESSAGE_FIELD)).toHaveLength(2)
+  })
+
+  it('a saved workflow does not hide the other slices the backend reports', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
+    openHome()
+
+    expect(await screen.findByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)
+    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
+  })
+
+  it('a saved workflow the backend no longer reports leaves the other slices standing', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(9))
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
+    openHome()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
+    expect(screen.getByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Slice #9' })).toBeNull()
+  })
+
+  it('discarding the adopted workflow keeps the panels of the slices still in flight', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8, 9) })
+    const { user } = openHome()
+    await screen.findByRole('heading', { name: 'Slice #8', level: 2 })
+
+    await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
+
+    expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Slice #9', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Slice #7' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Solicitud', level: 1 })).toBeInTheDocument()
+  })
+
+  it('a read the backend could not answer leaves the panels standing', async () => {
+    vi.useFakeTimers()
+    let answering: () => Answer = () => HeadlessPlanMother.slicesInFlight(7, 8)
+    backendWith({ activePlans: () => answering() })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    answering = backendFallsOver
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo comprobar el estado del plan')
+  })
+
+  it('the page stops warning it cannot check once a later read answers', async () => {
+    vi.useFakeTimers()
+    let answering: () => Answer = () => HeadlessPlanMother.slicesInFlight(7, 8)
+    backendWith({ activePlans: () => answering() })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    answering = backendFallsOver
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo comprobar el estado del plan')
+
+    answering = () => HeadlessPlanMother.slicesInFlight(7, 8)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
   })
 })

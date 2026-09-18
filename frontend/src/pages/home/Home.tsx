@@ -104,7 +104,6 @@ const Home = () => {
     setRecoveryFailure(null)
     setWorkflow(selected)
     setReconciliation(restored ? 'confirmed' : 'not-required')
-    setSlicesInFlight([])
     setUncertainRequest(null)
     setExpandedSummary(null)
     WorkflowSnapshotStorage.save(selected)
@@ -119,13 +118,64 @@ const Home = () => {
       setRecoveryFailure(null)
       setWorkflow(null)
       setUncertainRequest(active.request)
-      setSlicesInFlight([])
       setExpandedSummary(null)
       setReconciliation('uncertain')
       return
     }
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
+
+  const adoptFromRead = useCallback((plans: ActivePlan[]): ActivePlan | null => {
+    const current = workflowRef.current
+    if (current !== null) {
+      const active = plans.find((candidate) => isSameWorkflow(current, candidate))
+      if (active === undefined) {
+        setReconciliation('stale')
+        return null
+      }
+      if (active.phase === 'uncertain') {
+        uncertainActiveRef.current = active
+        setReconciliation('uncertain')
+        return active
+      }
+
+      uncertainActiveRef.current = null
+      const reconciled: WorkflowSnapshot = {
+        ...current,
+        phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
+      }
+      workflowRef.current = reconciled
+      setWorkflow(reconciled)
+      if (reconciled.phase !== current.phase) setExpandedSummary(null)
+      setReconciliation('confirmed')
+      WorkflowSnapshotStorage.save(reconciled)
+      return active
+    }
+
+    const uncertain = uncertainActiveRef.current
+    if (uncertain !== null) {
+      const active = plans.find((candidate) => activePlanIdentity(candidate) === activePlanIdentity(uncertain))
+      if (active === undefined) {
+        setReconciliation('stale')
+        return null
+      }
+      if (active.phase === 'uncertain') {
+        uncertainActiveRef.current = active
+        setUncertainRequest(active.request)
+        setReconciliation('uncertain')
+        return active
+      }
+      selectActivePlan(active)
+      return active
+    }
+
+    if (plans.length === 1) {
+      selectActivePlan(plans[0])
+      return plans[0]
+    }
+    setReconciliation('not-required')
+    return null
+  }, [selectActivePlan])
 
   const reconcile = useCallback((afterMutation = false): Promise<void> => {
     if (recoveryMutationRef.current !== null && !afterMutation) return Promise.resolve()
@@ -152,63 +202,15 @@ const Home = () => {
       }
 
       const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
-      const current = workflowRef.current
-      if (current !== null) {
-        const active = plans.find((candidate) => isSameWorkflow(current, candidate))
-        if (active === undefined) {
-          setReconciliation('stale')
-          return
-        }
-        if (active.phase === 'uncertain') {
-          uncertainActiveRef.current = active
-          setReconciliation('uncertain')
-          return
-        }
-
-        uncertainActiveRef.current = null
-        const reconciled: WorkflowSnapshot = {
-          ...current,
-          phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
-        }
-        workflowRef.current = reconciled
-        setWorkflow(reconciled)
-        if (reconciled.phase !== current.phase) setExpandedSummary(null)
-        setReconciliation('confirmed')
-        WorkflowSnapshotStorage.save(reconciled)
-        return
-      }
-
-      const uncertain = uncertainActiveRef.current
-      if (uncertain !== null) {
-        const active = plans.find((candidate) => activePlanIdentity(candidate) === activePlanIdentity(uncertain))
-        if (active === undefined) {
-          setSlicesInFlight([])
-          setReconciliation('stale')
-          return
-        }
-        if (active.phase === 'uncertain') {
-          uncertainActiveRef.current = active
-          setUncertainRequest(active.request)
-          setReconciliation('uncertain')
-          return
-        }
-        selectActivePlan(active)
-        return
-      }
-
-      if (plans.length === 1) {
-        selectActivePlan(plans[0])
-        return
-      }
-      setSlicesInFlight(plans)
-      if (plans.length === 0) setReconciliation('not-required')
+      const adopted = adoptFromRead(plans)
+      setSlicesInFlight(plans.filter((plan) => plan !== adopted))
     })()
     recoveryInFlightRef.current = request
     void request.finally(() => {
       if (recoveryInFlightRef.current === request) recoveryInFlightRef.current = null
     })
     return request
-  }, [selectActivePlan])
+  }, [adoptFromRead])
 
   useEffect(() => {
     mountedRef.current = true
@@ -292,7 +294,6 @@ const Home = () => {
     setRecoveryFailure(null)
     setWorkflow(null)
     setReconciliation('not-required')
-    setSlicesInFlight([])
     setUncertainRequest(null)
     setExpandedSummary(null)
     setRequestFormVersion((version) => version + 1)
