@@ -22,6 +22,7 @@ import { CoordinatingSessionRecovery } from '../../src/infrastructure/coordinati
 import { CoordinatingSessionRecovered } from '../../src/application/actions/recover-coordinating-session.ts'
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 import { SessionTerminationPermissionDenied } from '../../src/domain/exceptions.ts'
+import { GroomReviewRefusal } from '../../src/domain/ports/groom-review-admission.ts'
 
 class LiveSessionsDouble extends LiveSessions {
   readonly stopped: string[]
@@ -168,6 +169,59 @@ class Registry {
 }
 
 describe('CoordinatingSessions', () => {
+  it('revokes groom admission as soon as a permission or a new turn is reported', async () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding(Mother.FIRST_SESSION))
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const asking = { target: Mother.FIRST_TARGET, session: Mother.FIRST_SESSION }
+    await held.attend({
+      conversation: Mother.FIRST.id.text, attention: SessionAttention.waiting(null), event: TimelineEventKind.COMPLETED,
+    })
+    expect(held.refusalFor(asking)).toBe(null)
+
+    const permission = held.attend({
+      conversation: Mother.FIRST.id.text, attention: SessionAttention.waiting(null),
+      event: TimelineEventKind.WAITING_FOR_PERMISSION,
+    })
+
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.AWAITING_PERMISSION)
+    await permission
+    await held.attend({
+      conversation: Mother.FIRST.id.text, attention: SessionAttention.working(), event: TimelineEventKind.WORKING,
+    })
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.WORKING)
+    await held.attend({
+      conversation: Mother.FIRST.id.text, attention: SessionAttention.waiting(null), event: TimelineEventKind.RESUMED,
+    })
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.TURN_NOT_FINISHED)
+  })
+
+  it('revokes groom admission when its target closes, is replaced, or its terminal ends', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION, Mother.SECOND_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const asking = { target: Mother.FIRST_TARGET, session: Mother.FIRST_SESSION }
+    const identity = { target: Mother.FIRST_TARGET, conversation: Mother.FIRST.id.text }
+    await held.attend({
+      conversation: Mother.FIRST.id.text, attention: SessionAttention.waiting(null), event: TimelineEventKind.COMPLETED,
+    })
+    expect(held.refusalFor(asking)).toBe(null)
+    expect(held.refusalFor({ ...asking, session: Mother.SECOND_SESSION })).toBe(GroomReviewRefusal.NOT_LIVE)
+
+    held.beginClose(identity)
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.BUSY)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'still live' })
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.BUSY)
+    held.beginClose(identity)
+    held.finishClose(identity)
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.TARGET_CHANGED)
+    held.remember(Mother.live(Mother.SECOND, Mother.SECOND_SESSION))
+    expect(held.refusalFor(asking)).toBe(GroomReviewRefusal.TARGET_CHANGED)
+    liveSessions.exits(Mother.SECOND_SESSION)
+    expect(held.refusalFor({ target: Mother.SECOND_TARGET, session: Mother.SECOND_SESSION }))
+      .toBe(GroomReviewRefusal.NOT_LIVE)
+    await held.settled()
+  })
+
   it('projects a recovered permission failure with its specific diagnostic', () => {
     const sessions = new CoordinatingSessions({
       liveSessions: LiveSessionsDouble.holding(),

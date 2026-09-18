@@ -8,6 +8,9 @@ import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
 import type { LiveSession } from '../domain/value-objects/live-session.ts'
 import type { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import { AttentionStatus } from '../domain/value-objects/session-attention.ts'
+import { GroomReviewRefusal } from '../domain/ports/groom-review-admission.ts'
+import type { GroomReviewAdmission, GroomReviewRefusalValue } from '../domain/ports/groom-review-admission.ts'
 
 export const CoordinatingSessionState = Object.freeze({
   LIVE: 'live',
@@ -191,7 +194,7 @@ export class GateCheckout {
   }
 }
 
-export class CoordinatingSessions {
+export class CoordinatingSessions implements GroomReviewAdmission {
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   readonly records: ConversationRecords
@@ -317,6 +320,23 @@ export class CoordinatingSessions {
 
   closureError(): CoordinatingClosureError | null {
     return this.#closureError
+  }
+
+  refusalFor({ target, session }: { target: string, session: LiveSession }): GroomReviewRefusalValue | null {
+    const current = this.#held
+    if (current === null || current.target !== target) return GroomReviewRefusal.TARGET_CHANGED
+    if (this.#operation !== CoordinatingOperation.IDLE) return GroomReviewRefusal.BUSY
+    if (current.state !== CoordinatingSessionState.LIVE || current.session?.id !== session.id) {
+      return GroomReviewRefusal.NOT_LIVE
+    }
+    const reported = this.#timeline.at(-1)?.kind
+    if (reported === TimelineEventKind.WAITING_FOR_PERMISSION) return GroomReviewRefusal.AWAITING_PERMISSION
+    if (current.attention === null || current.attention.status === AttentionStatus.WORKING) {
+      return GroomReviewRefusal.WORKING
+    }
+    if (reported !== TimelineEventKind.COMPLETED) return GroomReviewRefusal.TURN_NOT_FINISHED
+
+    return null
   }
 
   gateCheckout(): GateCheckout | null {

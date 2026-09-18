@@ -7,11 +7,11 @@ import { PlanFailure } from '../domain/exceptions.ts'
 import { GroomSessionOpening, OpenGroomSessionParams } from '../application/actions/open-groom-session.ts'
 import { AskGroomReviewParams, GroomReviewAsk } from '../application/actions/ask-groom-review.ts'
 import {
-  HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState, OpeningReservation,
+  HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation,
 } from './coordinating-sessions.ts'
-import { SessionAttention, AttentionStatus } from '../domain/value-objects/session-attention.ts'
-import { TimelineEventKind } from '../domain/value-objects/session-timeline-event.ts'
-import type { TimelineEventKindValue } from '../domain/value-objects/session-timeline-event.ts'
+import { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import { GroomReviewRefusal } from '../domain/ports/groom-review-admission.ts'
+import type { GroomReviewRefusalValue } from '../domain/ports/groom-review-admission.ts'
 import { LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions, OpeningReservationValue } from './coordinating-sessions.ts'
@@ -99,30 +99,9 @@ export class GroomSessionRoute {
   static async #askTheLiveOne(
     held: CoordinatingSessions, ask: AskGroomReview, response: Response, holding: HeldCoordinatingSession
   ): Promise<void> {
-    if (held.operation() !== CoordinatingOperation.IDLE) {
-      Answer.refuse(
-        response,
-        409,
-        CoordinatingSessionTarget.BUSY,
-        `the coordinating session is ${held.operation()}: wait for it to settle before acting`,
-      )
-      return
-    }
-    const reported = GroomSessionRoute.#lastReportedBy(held)
-    if (reported === TimelineEventKind.WAITING_FOR_PERMISSION) {
-      Answer.refuse(
-        response, 409, GroomSessionOutcome.AWAITING_PERMISSION, GroomSessionRoute.#AWAITING_PERMISSION_DETAIL
-      )
-      return
-    }
-    if (holding.attention === null || holding.attention.status === AttentionStatus.WORKING) {
-      Answer.refuse(response, 409, GroomSessionOutcome.WORKING, GroomSessionRoute.#WORKING_DETAIL)
-      return
-    }
-    if (reported !== TimelineEventKind.COMPLETED) {
-      Answer.refuse(
-        response, 409, GroomSessionOutcome.TURN_NOT_FINISHED, GroomSessionRoute.#TURN_NOT_FINISHED_DETAIL
-      )
+    const refusal = held.refusalFor({ target: holding.target, session: holding.session! })
+    if (refusal !== null) {
+      GroomSessionRoute.#refuseAsk(response, refusal, held)
       return
     }
     let asked: GroomReviewAsked
@@ -131,6 +110,7 @@ export class GroomSessionRoute {
         repository: holding.conversation.repository,
         root: holding.conversation.root,
         session: holding.session!,
+        target: holding.target,
       }))
     } catch (cause) {
       if (cause instanceof LiveSessionNotLive) {
@@ -145,6 +125,10 @@ export class GroomSessionRoute {
       Answer.refuse(response, 400, GroomSessionOutcome.NO_EPIC_SPEC, GroomSessionRoute.#NO_EPIC_SPEC_DETAIL)
       return
     }
+    if (asked.outcome === GroomReviewAsk.REFUSED) {
+      GroomSessionRoute.#refuseAsk(response, asked.refusal!, held)
+      return
+    }
     Answer.send(response, 202, {
       status: GroomSessionRoute.#TYPED,
       target: holding.target,
@@ -155,10 +139,33 @@ export class GroomSessionRoute {
     })
   }
 
-  static #lastReportedBy(held: CoordinatingSessions): TimelineEventKindValue | null {
-    const timeline = held.timeline()
-
-    return timeline.length === 0 ? null : timeline[timeline.length - 1].kind
+  static #refuseAsk(response: Response, refusal: GroomReviewRefusalValue, held: CoordinatingSessions): void {
+    switch (refusal) {
+      case GroomReviewRefusal.TARGET_CHANGED:
+        Answer.refuse(response, 400, CoordinatingSessionTarget.CHANGED,
+          'the coordinating session target changed: refresh before acting')
+        return
+      case GroomReviewRefusal.BUSY:
+        Answer.refuse(response, 409, CoordinatingSessionTarget.BUSY,
+          `the coordinating session is ${held.operation()}: wait for it to settle before acting`)
+        return
+      case GroomReviewRefusal.NOT_LIVE:
+        Answer.refuse(response, 409, GroomSessionOutcome.NOT_LIVE, GroomSessionRoute.#NOT_LIVE_DETAIL)
+        return
+      case GroomReviewRefusal.AWAITING_PERMISSION:
+        Answer.refuse(response, 409, GroomSessionOutcome.AWAITING_PERMISSION, GroomSessionRoute.#AWAITING_PERMISSION_DETAIL)
+        return
+      case GroomReviewRefusal.WORKING:
+        Answer.refuse(response, 409, GroomSessionOutcome.WORKING, GroomSessionRoute.#WORKING_DETAIL)
+        return
+      case GroomReviewRefusal.TURN_NOT_FINISHED:
+        Answer.refuse(response, 409, GroomSessionOutcome.TURN_NOT_FINISHED, GroomSessionRoute.#TURN_NOT_FINISHED_DETAIL)
+        return
+      default: {
+        const exhaustive: never = refusal
+        throw new Error(`no groom review refusal declared for ${exhaustive}`)
+      }
+    }
   }
 
   static async #accept(

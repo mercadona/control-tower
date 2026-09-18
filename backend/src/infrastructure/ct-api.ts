@@ -636,7 +636,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
     })
-    const askGroomReview = new AskGroomReview({ specs: epicSpecs, liveSessions })
+    const askGroomReview = new AskGroomReview({ specs: epicSpecs, liveSessions, admission: coordinatingSessions })
     const epicBranch = new GitEpicBranch({ run: git })
     const gateKey = new GateKey({ random: randomBytes })
     const readSpecFreeze = new ReadSpecFreeze({ specs: epicSpecs, branch: epicBranch, pullRequests })

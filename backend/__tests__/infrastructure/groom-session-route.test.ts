@@ -34,6 +34,7 @@ import { SessionAttention } from '../../src/domain/value-objects/session-attenti
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
 import { JsonBody } from '../../src/infrastructure/http.ts'
+import { GroomReviewAdmission, GroomReviewRefusal } from '../../src/domain/ports/groom-review-admission.ts'
 
 class OpenGroomSessionSpy extends OpenGroomSession {
   readonly asked: OpenGroomSessionParams[]
@@ -78,7 +79,7 @@ class AskGroomReviewSpy extends AskGroomReview {
   readonly answer: () => Promise<GroomReviewAsked>
 
   constructor(answer: () => Promise<GroomReviewAsked>) {
-    super({ specs: new EpicSpecs(), liveSessions: new LiveSessions() })
+    super({ specs: new EpicSpecs(), liveSessions: new LiveSessions(), admission: new GroomReviewAdmission() })
     this.asked = []
     this.answer = answer
   }
@@ -409,7 +410,7 @@ describe('GroomSessionRoute', () => {
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
     expect(ask.asked).toEqual([new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION,
+      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
     })])
     expect(open.asked).toEqual([])
     expect(held.held()?.target).toBe(Mother.TARGET)
@@ -431,6 +432,26 @@ describe('GroomSessionRoute', () => {
       detail: 'the coordinating conversation is working: what is typed now would land in the middle of its turn',
     })
     expect(ask.asked).toEqual([])
+    expect(open.asked).toEqual([])
+  })
+
+  it.each([
+    [GroomReviewRefusal.AWAITING_PERMISSION, 409, GroomSessionOutcome.AWAITING_PERMISSION],
+    [GroomReviewRefusal.WORKING, 409, GroomSessionOutcome.WORKING],
+    [GroomReviewRefusal.TURN_NOT_FINISHED, 409, GroomSessionOutcome.TURN_NOT_FINISHED],
+    [GroomReviewRefusal.NOT_LIVE, 409, GroomSessionOutcome.NOT_LIVE],
+    [GroomReviewRefusal.TARGET_CHANGED, 400, CoordinatingSessionTarget.CHANGED],
+    [GroomReviewRefusal.BUSY, 409, CoordinatingSessionTarget.BUSY],
+  ] as const)('reports a late %s refusal instead of claiming the prompt was typed', async (refusal, status, code) => {
+    const ask = new AskGroomReviewSpy(async () => GroomReviewAsked.refused(refusal))
+    const open = OpenGroomSessionSpy.opening()
+
+    const response = await RunningApi.posting(
+      Mother.completed(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask
+    )
+
+    expect(response.status).toBe(status)
+    expect(await response.json()).toMatchObject({ code })
     expect(open.asked).toEqual([])
   })
 
