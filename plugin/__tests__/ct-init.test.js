@@ -494,7 +494,7 @@ describe('ct-init.sh', () => {
     mkdirSync(join(dir, '.agent'))
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "lo mío"\nnext_action: "seguir"\n---\ncuerpo')
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    expect(out).toMatch(/no se pisa/)
+    expect(out).toMatch(/not overwritten/)
     expect(out).toMatch(/`blocked`/)
     expect(out).toMatch(/unblock/)
     expect(readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')).toContain('task: "lo mío"')
@@ -506,7 +506,7 @@ describe('ct-init.sh', () => {
     mkdirSync(join(dir, '.agent'))
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "lo mío"\nblocked: null\n---\ncuerpo')
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    expect(out).toMatch(/STATE\.md ya existe, no se pisa/)
+    expect(out).toMatch(/STATE\.md already exists, not overwritten/)
     expect(out).not.toMatch(/unblock/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -986,7 +986,7 @@ describe('ct-init.sh', () => {
     expect(readContract(dir)).toMatch(/<!-- ct-init:slices-contract-version: \d+ -->/)
     const again = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(again.status).toBe(0)
-    expect(again.stdout).toMatch(/al día/)
+    expect(again.stdout).toMatch(/up to date/)
     expect(again.stderr).not.toMatch(/aviso|warning/i)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1008,7 +1008,7 @@ describe('ct-init.sh', () => {
     seedContract(dir, withContract(V1_BLOCK, 'mis notas irremplazables').replace('## Después\n- intocable', '## Lo que va después\n- tampoco se toca'))
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/actualizado/)
+    expect(res.stdout).toMatch(/updated/)
     const agents = readContract(dir)
     expect(agents).toContain('- mis notas irremplazables')
     expect(agents).toContain('## Lo que va después')
@@ -1020,7 +1020,7 @@ describe('ct-init.sh', () => {
     // And running it again has nothing left to do.
     const again = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(again.status).toBe(0)
-    expect(again.stdout).toMatch(/al día/)
+    expect(again.stdout).toMatch(/up to date/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1037,10 +1037,10 @@ describe('ct-init.sh', () => {
     // tell them apart — so it cannot assert either. It used to say "la has
     // editado a mano" flatly, and with that it accused someone who merely had an
     // AGENTS.md seeded by an earlier version of the plugin.
-    expect(res.stderr).not.toMatch(/la has editado a mano/)
-    expect(res.stderr).toMatch(/edición a mano/) // (a)
-    expect(res.stderr).toMatch(/versión del plugin cuyo hash este ct-init no lleva registrado/) // (b)
-    expect(res.stderr).toMatch(/NO hay forma de distinguirlas/)
+    expect(res.stderr).not.toMatch(/you have edited it by hand/)
+    expect(res.stderr).toMatch(/a hand edit/) // (a)
+    expect(res.stderr).toMatch(/a plugin version whose hash this ct-init has no record of/) // (b)
+    expect(res.stderr).toMatch(/NO way to tell them apart/)
     // And it gives the datum with which to settle the doubt / get it recorded.
     expect(res.stderr).toContain(sha256(extractBlock(before)))
     expect(res.stderr).toContain('--force')
@@ -1054,9 +1054,9 @@ describe('ct-init.sh', () => {
     seedContract(dir, `# Contrato de slices\n\n${edited}`)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract', '--force'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/no coincidía con ninguna versión que este ct-init sepa reconocer/)
-    expect(res.stderr).toMatch(/Si había ediciones tuyas/) // conditional, not "your changes have been lost"
-    expect(res.stderr).not.toMatch(/EDITADA A MANO/)
+    expect(res.stderr).toMatch(/did not match any version this ct-init knows how to recognise/)
+    expect(res.stderr).toMatch(/If you had edits of your own/) // conditional, not "your changes have been lost"
+    expect(res.stderr).not.toMatch(/EDITED BY HAND/)
     const contract = readContract(dir)
     expect(contract).not.toContain('en ESTE repo también usamos')
     expect(contract).toMatch(versionLineRe())
@@ -1073,7 +1073,7 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), `# AGENTS.md\n\n## Gotchas\n- mías\n\n${edited}`)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract', '--force'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/Si había ediciones tuyas/)
+    expect(res.stderr).toMatch(/If you had edits of your own/)
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).not.toContain('en ESTE repo también usamos')
     expect(agents).not.toContain(MARKER_OPEN)
@@ -1138,8 +1138,8 @@ describe('ct-init.sh', () => {
     seedContract(dir, withContract(previous.block))
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status, res.stderr).toBe(0)
-    expect(res.stdout).toMatch(new RegExp(`contrato v${CONTRACT_VERSION - 1} → v${CONTRACT_VERSION}`))
-    expect(res.stderr).not.toMatch(/editad|no coincide|--force/i)
+    expect(res.stdout).toMatch(new RegExp(`contract v${CONTRACT_VERSION - 1} → v${CONTRACT_VERSION}`))
+    expect(res.stderr).not.toMatch(/edit|does not match|--force/i)
     const contract = readContract(dir)
     expect(contract).toMatch(versionLineRe())
     expect(contract).toContain('- mías')
@@ -1169,9 +1169,9 @@ describe('ct-init.sh', () => {
     const env = { ...process.env, PATH: binDir }
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8', env })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/no se ha podido comprobar/)
-    expect(res.stderr).toMatch(/puede estar perfectamente intacto, simplemente no se sabe/)
-    expect(res.stderr).not.toMatch(/editad[oa] a mano/i)
+    expect(res.stderr).toMatch(/could not check whether/)
+    expect(res.stderr).toMatch(/may be perfectly intact, it is simply not known/)
+    expect(res.stderr).not.toMatch(/hand edit/i)
     expect(res.stderr).toMatch(/sha256sum/) // it says how to unblock it
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe(before)
     rmSync(dir, { recursive: true, force: true })
@@ -1184,15 +1184,15 @@ describe('ct-init.sh', () => {
     const intact = mkdtempSync(join(tmpdir(), 'ct-'))
     writeFileSync(join(intact, 'AGENTS.md'), `# AGENTS.md\n\n${V1_BLOCK}`)
     const a = spawnSync('bash', [script, intact], { encoding: 'utf8' })
-    expect(a.stderr).toMatch(/Está exactamente como la dejó ct-init/)
-    expect(a.stderr).not.toMatch(/podrías tenerla editada a mano/)
+    expect(a.stderr).toMatch(/exactly as ct-init left it/)
+    expect(a.stderr).not.toMatch(/you may have hand-edited it/)
     rmSync(intact, { recursive: true, force: true })
 
     const changed = mkdtempSync(join(tmpdir(), 'ct-'))
     writeFileSync(join(changed, 'AGENTS.md'), `# AGENTS.md\n\n${V1_BLOCK.replace('- **Dep**', '- **Dep** (ojo)')}`)
     const b = spawnSync('bash', [script, changed], { encoding: 'utf8' })
-    expect(b.stderr).toMatch(/no coincide con ningún bloque que este ct-init reconozca/)
-    expect(b.stderr).toMatch(/puede ser una edición tuya o una versión que no tiene registrada/)
+    expect(b.stderr).toMatch(/does not match any block this ct-init recognises/)
+    expect(b.stderr).toMatch(/may be an edit of yours or a version it has no record of/)
     expect(b.stderr).toMatch(/[0-9a-f]{64}/) // the hash, so it can be recorded
     rmSync(changed, { recursive: true, force: true })
   })
@@ -1215,7 +1215,7 @@ describe('ct-init.sh', () => {
     expect(contract.split('## Formato de la tabla §9').length - 1).toBe(1)
     expect(contract).toBe(crlf) // nothing is touched
     // And the warning it was due to give is given (it used to skip it entirely).
-    expect(res.stderr).toMatch(/es del contrato v1/)
+    expect(res.stderr).toMatch(/is contract v1/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1225,8 +1225,8 @@ describe('ct-init.sh', () => {
     seedContract(dir, crlf)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/actualizado/)
-    expect(res.stderr).not.toMatch(/no coincide|editad/i) // line endings are not an edit
+    expect(res.stdout).toMatch(/updated/)
+    expect(res.stderr).not.toMatch(/does not match|edit/i) // line endings are not an edit
     const contract = readContract(dir)
     expect(contract.split(MARKER_OPEN).length - 1).toBe(1)
     expect(contract).toContain('- notas')
@@ -1244,9 +1244,9 @@ describe('ct-init.sh', () => {
     writeFileSync(contractPath(dir), fromFuture)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stdout).not.toMatch(/al día/)
+    expect(res.stdout).not.toMatch(/up to date/)
     expect(res.stderr).toMatch(new RegExp(`v${CONTRACT_VERSION + 1}`))
-    expect(res.stderr).toMatch(/más nueva del plugin/)
+    expect(res.stderr).toMatch(/a newer plugin release/)
     expect(readContract(dir)).toBe(fromFuture) // it is not downgraded
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1257,8 +1257,8 @@ describe('ct-init.sh', () => {
     const before = seedContract(dir, `# Contrato de slices\n\n## Notas\n- el bloque lo marca \`<!-- ct-init:slices-contract-version: 99 -->\`\n\n${V1_BLOCK}`)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stdout).not.toMatch(/v99/) // before: "contrato v99, al día", without looking at the block
-    expect(res.stderr).toMatch(/es del contrato v1/)
+    expect(res.stdout).not.toMatch(/v99/) // before: "contract v99, up to date", without looking at the block
+    expect(res.stderr).toMatch(/is contract v1/)
     expect(res.stderr).toContain('--update-slices-contract')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1274,16 +1274,16 @@ describe('ct-init.sh', () => {
     // there is nothing to offer — warning here would be noise in every
     // session).
     const plain = spawnSync('bash', [script, dir], { encoding: 'utf8' })
-    expect(plain.stdout).toMatch(/al día/)
+    expect(plain.stdout).toMatch(/up to date/)
     expect(plain.stderr).not.toMatch(/aviso|warning/i)
-    // But if a sync is ASKED FOR, saying "al día" would cover up that the text
+    // But if a sync is ASKED FOR, saying "up to date" would cover up that the text
     // is not this plugin's — which is exactly what happened nine times under the
     // name "v1".
     const asked = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(asked.status).toBe(0)
-    expect(asked.stdout).not.toMatch(/al día/)
-    expect(asked.stderr).toMatch(/no hay actualización de versión que hacer/)
-    expect(asked.stderr).toMatch(/NO es el que emite este plugin/)
+    expect(asked.stdout).not.toMatch(/up to date/)
+    expect(asked.stderr).toMatch(/there is no version update to do/)
+    expect(asked.stderr).toMatch(/NOT what this plugin emits/)
     expect(readContract(dir)).toBe(tweaked)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1303,7 +1303,7 @@ describe('ct-init.sh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const res = spawnSync('bash', [script, dir, '--updat-slices-contract'], { encoding: 'utf8' })
     expect(res.status).toBe(2)
-    expect(res.stderr).toMatch(/no reconocida/)
+    expect(res.stderr).toMatch(/unrecognised option/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1974,7 +1974,7 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), before)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(res.status).toBe(0) // warning is not failing
-    expect(res.stderr).toMatch(/todavía lleva DENTRO el contrato/)
+    expect(res.stderr).toMatch(/still carries the slices table contract INSIDE it/)
     expect(res.stderr).toContain('--update-slices-contract')
     // Its block is not touched, and it does not get the short section either:
     // as long as the contract is still there, adding it would tell the same
@@ -1994,8 +1994,8 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), before)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status, res.stderr).toBe(0)
-    expect(res.stdout).toMatch(/el contrato de slices sale de/)
-    expect(res.stderr).not.toMatch(/editad|acusa/i) // it was unedited: nobody is accused
+    expect(res.stdout).toMatch(/the slices contract moves out of/)
+    expect(res.stderr).not.toMatch(/edited|accus/i) // it was unedited: nobody is accused
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).not.toContain(MARKER_OPEN)
     expect(agents).toContain(LOOP_MARKER_OPEN)
@@ -2012,7 +2012,7 @@ describe('ct-init.sh', () => {
     const dest = join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md')
     expect(existsSync(dest)).toBe(true)
     expect(readFileSync(dest, 'utf8')).toBe(readFileSync(join(root, 'templates', '_TEMPLATE-execution-spec.md'), 'utf8'))
-    expect(out).toMatch(/creado .*_TEMPLATE-execution-spec\.md/)
+    expect(out).toMatch(/created .*_TEMPLATE-execution-spec\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
 
