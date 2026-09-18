@@ -11,10 +11,10 @@ class GitConversation {
   run = (argv) => {
     const key = argv.join(' ')
     this.calls.push(key)
-    if (!(key in this.answers)) throw new Error(`nadie escribió respuesta para: git ${key}`)
+    if (!(key in this.answers)) throw new Error(`No answer declared for: git ${key}`)
     const answer = this.answers[key]
     if (!Array.isArray(answer)) return answer
-    if (answer.length === 0) throw new Error(`nadie escribió respuesta para: git ${key}`)
+    if (answer.length === 0) throw new Error(`No answer declared for: git ${key}`)
     return answer.shift()
   }
 
@@ -46,6 +46,24 @@ const MERGE_IN_PROGRESS = 'rev-parse --verify --quiet MERGE_HEAD'
 const ANCHORED_MARKER_SCAN = ['grep', '-l', '-e', '^<<<<<<< ', '-e', '^=======$', '-e', '^>>>>>>> ', '--']
 
 class ConversationMother {
+  static aFetchThatCouldNotReachTheRemote() {
+    return new GitConversation({
+      'fetch origin main': { code: 128, stdout: '' },
+      'rev-list --count HEAD..origin/main': GitConversation.ok('0'),
+      [MERGE_IN_PROGRESS]: GitConversation.failed(),
+      [HEAD_IS_A_MERGE_COMMIT]: GitConversation.failed(),
+    })
+  }
+
+  static aRevListThatCouldNotCountHowFarBehindTheBranchIs() {
+    return new GitConversation({
+      'fetch origin main': GitConversation.ok(),
+      'rev-list --count HEAD..origin/main': { code: 128, stdout: '' },
+      [MERGE_IN_PROGRESS]: GitConversation.failed(),
+      [HEAD_IS_A_MERGE_COMMIT]: GitConversation.failed(),
+    })
+  }
+
   static aBaseThatDidNotMove() {
     return new GitConversation({
       'fetch origin main': GitConversation.ok(),
@@ -274,5 +292,18 @@ describe('BranchReconciliation, when concluding a round', () => {
 
     expect(round.outcome).toBe(ReconcileOutcome.ROUND_DISCARDED)
     expect(round.reason).toBe(DiscardReason.TOUCHED_OUTSIDE_THE_CONFLICT)
+  })
+
+  it('a_fetch_that_failed_stops_the_round_instead_of_counting_against_a_stale_remote_ref', () => {
+    const git = ConversationMother.aFetchThatCouldNotReachTheRemote()
+    expect(() => new BranchReconciliation({ git: git.run }).merge({ baseBranch: 'main' })).toThrow(/git fetch origin main failed/)
+    expect(git.asked('rev-list')).toBe(false)
+    expect(git.asked('merge --no-edit')).toBe(false)
+  })
+
+  it('a_rev_list_that_failed_stops_the_round_instead_of_reading_its_empty_output_as_zero_commits_behind', () => {
+    const git = ConversationMother.aRevListThatCouldNotCountHowFarBehindTheBranchIs()
+    expect(() => new BranchReconciliation({ git: git.run }).merge({ baseBranch: 'main' })).toThrow(/rev-list --count HEAD\.\.origin\/main failed/)
+    expect(git.asked('merge --no-edit')).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 // A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
 // it is nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -10,6 +10,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
   judgeRows, judgeTask, judgeSlice, taskOk, sliceOk } = makeHelpers(() => repo)
 
@@ -102,6 +103,7 @@ describe('what gets committed is what was approved: the index seal', () => {
     expect(commits()).toBe(3)
     expect(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-2.json'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/"ruling": "PASS"/)
+    expect(JSON.parse(readFileSync(join(repo, 'docs/superpowers/verdicts/issue-7-task-2.json'), 'utf8')).verdict.ruling).toBe('PASS')
   })
 
   it('THE SLICE\'S TWIN: code staged before the slice verdict does not get into its commit', () => {
@@ -138,7 +140,7 @@ describe('what gets committed is what was approved: the index seal', () => {
 })
 
 describe('where it has got to lives on disk, not in the conversation', () => {
-  it('the state survives between invocations: every verb is a fresh process', () => {
+  it('the state survives between invocations: every verb reloads it from disk', () => {
     ct('report', writeReport(['uno.txt']))
     expect(runState().step).toBe('controls')
     ct('controls')

@@ -1,8 +1,8 @@
 // A piece of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { spawnSync, execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync, cpSync, symlinkSync, statSync } from 'node:fs'
+import { StepScenario } from './fixtures/step-conversations.js'
+import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync, cpSync, symlinkSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -13,6 +13,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync, spawnSync, mkdtempSync } = StepScenario
 const { ct, ctIn, writeReport, writeVerdict, writeSliceVerdict, log, commits, runState, judgeTask,
   judgeSlice, taskOk, taskPackage, slicePackage, judgeRows, seal } = makeHelpers(() => repo)
 
@@ -71,10 +72,13 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     judgeTask(writeVerdict('PASS'))
     ct('commit')
     const committed = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
-    const rows = committed.trim().split('\n').map((l) => JSON.parse(l))
-    expect(rows.filter((f) => f.attempt === 1).length).toBeGreaterThan(0)
-    expect(rows.filter((f) => f.attempt === 2).length).toBeGreaterThan(0)
-    expect(rows.find((f) => f.step === 'judge' && f.attempt === 1).ruling).toBe('FAIL')
+    const onDisk = readFileSync(join(repo, 'docs/superpowers/metrics/issue-7.jsonl'), 'utf8')
+    for (const text of [committed, onDisk]) {
+      const rows = text.trim().split('\n').map((line) => JSON.parse(line))
+      expect(rows.filter((row) => row.attempt === 1).length).toBeGreaterThan(0)
+      expect(rows.filter((row) => row.attempt === 2).length).toBeGreaterThan(0)
+      expect(rows.find((row) => row.step === 'judge' && row.attempt === 1).ruling).toBe('FAIL')
+    }
   })
 
   it('Step 6: the `controls` row carries how long it took, which is the only time the program executes', () => {

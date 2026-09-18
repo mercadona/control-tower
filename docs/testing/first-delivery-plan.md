@@ -18,6 +18,8 @@ Move command state into `CtStep.run(argv, io)`, leave `ct-step.mjs` as the execu
 
 Move the existing decision scenarios to the importable boundary; retain actual Git index/commit/trailer and Bash parsing mechanisms in focused marked tests. Record exact tool requests, disk/output effects and old-to-new guarantee mapping. Measure the complete family before calling the pilot successful. Do not reduce coverage or change the final whole-plugin acceptance metric to make this partial delivery look complete.
 
+The implemented double uses explicitly recorded per-scenario tool conversations rather than a handwritten Git model. Reply lookup is by literal request; required-consumption checks catch omitted/excess requests and mutation cut points retain ordering guarantees. The 199 original scenario assertions stay in place. A dedicated regeneration config records real external responses; the ordinary suite has no automatic recording or real-tool fallback. The capture metadata and independent marked tests document which guarantees belong to each side.
+
 ## Verification
 
 Use Node 24 for both install/native builds and Vitest. Run backend typecheck, the affected families and full integrated plugin/backend suites. Keep all required controls. Every retained process consumer is explicitly named and justified; the complete marker enforcement for the residual families is later work.

@@ -447,17 +447,17 @@ describe('the yardstick names no language and no tool', () => {
     for (const name of Object.keys(SCOPES)) {
       const text = Document.text(name)
       if (!/exit code/i.test(text)) continue
-      expect(text, `${name} habla de exit code sin nombrar el servicio que atiende`)
+      expect(text, `${name} names exit codes without naming the serving service`)
         .toContain('a service that answers')
     }
   })
 
   it('nobody in the plugin still says there are five', () => {
-    const sources = ['scripts/run-metrics.js', 'scripts/ct-next.mjs', 'scripts/kickoff.js', 'scripts/ct-step.mjs',
+    const sources = ['scripts/run-metrics.js', 'scripts/ct-next.mjs', 'scripts/kickoff.js', 'scripts/ct-step.mjs', 'scripts/ct-step.js',
       'agents/ct-reconciler.md', 'skills/writing-plans-prescriptive/SKILL.md']
     for (const path of sources) {
       const text = readFileSync(join(root, path), 'utf8')
-      expect(text, `${path} sigue diciendo cinco`).not.toMatch(/cinco documentos|five documents/i)
+      expect(text, `${path} still says five`).not.toMatch(/cinco documentos|five documents/i)
     }
   })
 })

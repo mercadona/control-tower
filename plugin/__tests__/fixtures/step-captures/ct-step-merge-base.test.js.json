@@ -1,0 +1,375 @@
+{
+  "provenance": {
+    "revision": "9a459523b2c7f18ae145eb688e3348790acc5d83",
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "clock": "2026-09-18T00:00:00Z",
+    "command": "vitest run --config ../docs/testing/record-step-conversations.config.mjs",
+    "commandSourceSha256": "c9b8350c56ab5615d790d6a599bae365708d151829e744087e145c00f0e6ee17"
+  },
+  "responses": {
+    "cee7842a67a74ab422b966ab": {
+      "output": {
+        "code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    "192bea2cab45cafb50dfbba3": {
+      "output": {
+        "code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "effects": [
+        {
+          "path": "$TEMP2/f.txt",
+          "mode": 420,
+          "text": "base\n"
+        }
+      ]
+    },
+    "553520207b75b5b11dfe588c": {
+      "output": {
+        "code": 0,
+        "stdout": "1e041cf91a55a669065507b1e53b83699a54145f\n",
+        "stderr": ""
+      }
+    },
+    "e27a80cc5901c6e5fa60cf2d": {
+      "output": {
+        "code": 0,
+        "stdout": "7bca69e847546904d055e038871e568a566f5c82\n",
+        "stderr": ""
+      }
+    },
+    "5404d4ecd2c39fb82d03187f": {
+      "output": {
+        "code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      "effects": [
+        {
+          "path": "$TEMP2/g.txt",
+          "mode": 420,
+          "text": "avance\n"
+        }
+      ]
+    },
+    "8c427bbab4ca047847f42635": {
+      "output": {
+        "code": 0,
+        "stdout": "3\n",
+        "stderr": ""
+      }
+    },
+    "d950d62f577dd2669346893c": {
+      "output": {
+        "code": 0,
+        "stdout": "2\n",
+        "stderr": ""
+      }
+    },
+    "1f0b3cab69448adbcec7622a": {
+      "output": {
+        "code": 0,
+        "stdout": "1\n",
+        "stderr": ""
+      }
+    },
+    "dd51c71e66d5eb7eab61a05a": {
+      "output": {
+        "code": 0,
+        "stdout": "$TEMP2\n",
+        "stderr": ""
+      }
+    },
+    "1314359109d6dc7fc175c956": {
+      "output": {
+        "code": 0,
+        "stdout": "3d565ca210ec0b552e30f2a308346a67c7e5cff4\n",
+        "stderr": ""
+      }
+    },
+    "3bfbf4b817e1fd17bf1e95c2": {
+      "output": {
+        "code": 0,
+        "stdout": "$TEMP0\n",
+        "stderr": ""
+      }
+    },
+    "aac32e418fc92826fb1ecfc5": {
+      "output": {
+        "code": 0,
+        "stdout": "slice@x.z\n",
+        "stderr": ""
+      }
+    }
+  },
+  "cases": {
+    "the run commit count > counts_neither_the_plan_commit_that_precedes_the_run_nor_what_the_merge_of_the_base_brought": {
+      "cuts": [],
+      "requests": {
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"--bare\",\"-b\",\"main\"],{\"cwd\":\"$TEMP0\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"-b\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"coordinadora@x.z\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"coordinadora\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab",
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"corte\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"remote\",\"add\",\"origin\",\"$TEMP0\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"-u\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"clone\",\"-q\",\"$TEMP0\",\".\"],{\"cwd\":\"$TEMP2\"}]": [
+          "192bea2cab45cafb50dfbba3"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"slice@x.z\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"slice\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"switch\",\"-q\",\"-c\",\"feat/99\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"rev-parse\",\"HEAD\"],{\"cwd\":\"$TEMP2\"}]": [
+          "553520207b75b5b11dfe588c",
+          "e27a80cc5901c6e5fa60cf2d"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab",
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"plan: la slice, planificada\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"tarea 1\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"la base avanza\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"fetch\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"merge\",\"-q\",\"--no-edit\",\"origin/main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "5404d4ecd2c39fb82d03187f"
+        ],
+        "[\"fixture\",\"git\",[\"rev-list\",\"--count\",\"7bca69e847546904d055e038871e568a566f5c82..HEAD\"],{\"cwd\":\"$TEMP2\"}]": [
+          "8c427bbab4ca047847f42635"
+        ],
+        "[\"fixture\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"1e041cf91a55a669065507b1e53b83699a54145f..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "d950d62f577dd2669346893c"
+        ],
+        "[\"fixture\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"7bca69e847546904d055e038871e568a566f5c82..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "1f0b3cab69448adbcec7622a"
+        ]
+      }
+    },
+    "ct-step for a run whose slice merged an advanced base > a_run_paused_at_a_slice_step_after_merging_an_advanced_base_is_not_rejected_as_out_of_sync": {
+      "cuts": [
+        {
+          "phase": "command 1",
+          "boundaries": [],
+          "reads": [
+            "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"remote\",\"get-url\",\"origin\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"1e041cf91a55a669065507b1e53b83699a54145f..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-parse\",\"--verify\",\"--quiet\",\"refs/remotes/origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]"
+          ]
+        }
+      ],
+      "requests": {
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"--bare\",\"-b\",\"main\"],{\"cwd\":\"$TEMP0\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"-b\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"coordinadora@x.z\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"coordinadora\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab",
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"corte\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"remote\",\"add\",\"origin\",\"$TEMP0\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"-u\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"clone\",\"-q\",\"$TEMP0\",\".\"],{\"cwd\":\"$TEMP2\"}]": [
+          "192bea2cab45cafb50dfbba3"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"slice@x.z\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"slice\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"switch\",\"-q\",\"-c\",\"feat/99\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"rev-parse\",\"HEAD\"],{\"cwd\":\"$TEMP2\"}]": [
+          "553520207b75b5b11dfe588c"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"tarea 1\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"la base avanza\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"fetch\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"merge\",\"-q\",\"--no-edit\",\"origin/main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "5404d4ecd2c39fb82d03187f"
+        ],
+        "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "dd51c71e66d5eb7eab61a05a"
+        ],
+        "[\"command 1\",\"git\",[\"rev-parse\",\"--verify\",\"--quiet\",\"refs/remotes/origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "1314359109d6dc7fc175c956"
+        ],
+        "[\"command 1\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"1e041cf91a55a669065507b1e53b83699a54145f..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "1f0b3cab69448adbcec7622a"
+        ],
+        "[\"command 1\",\"git\",[\"remote\",\"get-url\",\"origin\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "3bfbf4b817e1fd17bf1e95c2"
+        ],
+        "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "aac32e418fc92826fb1ecfc5"
+        ]
+      }
+    },
+    "ct-step for a run born after the plan commit > the_plan_commit_made_before_the_run_was_born_is_not_counted_as_work_this_run_did": {
+      "cuts": [
+        {
+          "phase": "command 1",
+          "boundaries": [],
+          "reads": [
+            "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"remote\",\"get-url\",\"origin\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"7bca69e847546904d055e038871e568a566f5c82..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
+            "[\"command 1\",\"git\",[\"rev-parse\",\"--verify\",\"--quiet\",\"refs/remotes/origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]"
+          ]
+        }
+      ],
+      "requests": {
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"--bare\",\"-b\",\"main\"],{\"cwd\":\"$TEMP0\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"init\",\"-q\",\"-b\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"coordinadora@x.z\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"coordinadora\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab",
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"corte\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"remote\",\"add\",\"origin\",\"$TEMP0\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"-u\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"clone\",\"-q\",\"$TEMP0\",\".\"],{\"cwd\":\"$TEMP2\"}]": [
+          "192bea2cab45cafb50dfbba3"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.email\",\"slice@x.z\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"config\",\"user.name\",\"slice\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"switch\",\"-q\",\"-c\",\"feat/99\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"rev-parse\",\"HEAD\"],{\"cwd\":\"$TEMP2\"}]": [
+          "553520207b75b5b11dfe588c",
+          "e27a80cc5901c6e5fa60cf2d"
+        ],
+        "[\"fixture\",\"git\",[\"add\",\"-A\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab",
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"plan: la slice, planificada\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"tarea 1\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"commit\",\"-qm\",\"la base avanza\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"push\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP1\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"fetch\",\"-q\",\"origin\",\"main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "cee7842a67a74ab422b966ab"
+        ],
+        "[\"fixture\",\"git\",[\"merge\",\"-q\",\"--no-edit\",\"origin/main\"],{\"cwd\":\"$TEMP2\"}]": [
+          "5404d4ecd2c39fb82d03187f"
+        ],
+        "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "dd51c71e66d5eb7eab61a05a"
+        ],
+        "[\"command 1\",\"git\",[\"rev-parse\",\"--verify\",\"--quiet\",\"refs/remotes/origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "1314359109d6dc7fc175c956"
+        ],
+        "[\"command 1\",\"git\",[\"rev-list\",\"--count\",\"--no-merges\",\"7bca69e847546904d055e038871e568a566f5c82..HEAD\",\"^origin/main\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "1f0b3cab69448adbcec7622a"
+        ],
+        "[\"command 1\",\"git\",[\"remote\",\"get-url\",\"origin\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "3bfbf4b817e1fd17bf1e95c2"
+        ],
+        "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP2\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
+          "aac32e418fc92826fb1ecfc5"
+        ]
+      }
+    }
+  }
+}

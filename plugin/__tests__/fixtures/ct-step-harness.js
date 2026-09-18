@@ -1,20 +1,18 @@
 // The state machine as an ORACLE (scripts/ct-step.mjs): the session keeps
 // driving, but it does not decide the sequence — it asks for it.
 //
-// This test needs neither process fixtures nor --dry-run, and that is not a
-// convenience: the implementer's report and the judge's verdict ARE JSON files,
-// so the test writes exactly what a subagent will write. The only thing not
-// simulated is git, which runs for real against a temporary repo — half the
-// properties here (the program commits, only what was declared goes in, a veto
-// leaves no trace) do not exist if git is a double.
+// Reports, verdicts and command artifacts stay on real temporary disk. Git and
+// shell requests use captured conversations with exact arguments and required
+// consumption. Actual index, commit, trailer and shell-format guarantees live
+// in the marked boundary suites.
 //
 // THE PREAMBLE LIVES HERE and the 24 describes in nine
 // `__tests__/ct-step-*.test.js` files: vitest parallelises BETWEEN files and
 // never inside one, so the 111 tests in a single file ran serially on one
 // worker with the rest of the cores idle — 530 of the 533 s the whole suite
 // took. Split up, 260 s.
-import { spawnSync, execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { StepScenario } from './step-conversations.js'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,6 +23,9 @@ import { VERDICT_RULES, SLICE_VERDICT_RULES } from '../../scripts/step-contracts
 // reads `senal:` with parseStateSafe and not with a regex), and SIGNAL_ABSENT
 // is the single constant the slice judge's package declares absence with.
 import { renderState } from '../../scripts/state.js'
+
+const { spawnSync, execFileSync, mkdtempSync } = StepScenario
+StepScenario.track()
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const SCRIPT = join(here, '..', '..', 'scripts', 'ct-step.mjs')

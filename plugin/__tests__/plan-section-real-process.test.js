@@ -8,19 +8,20 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..')
 const TASK_BRIEF = join(REPO_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief')
-const CT_STEP = join(REPO_ROOT, 'scripts', 'ct-step.mjs')
+const CT_STEP = join(REPO_ROOT, 'scripts', 'ct-step.js')
 const HEADING = '### Desired end state'
 const FENCE = '```'
 
 class TheRuleWrittenInJavaScript {
   static async load() {
     const source = readFileSync(CT_STEP, 'utf8').split('\n')
-    const opening = source.findIndex((line) => line.startsWith('function seccionDelPlan('))
-    if (opening === -1) throw new Error(`ct-step.mjs ya no declara seccionDelPlan: la copia que este test mide no está donde dice`)
-    const closing = source.findIndex((line, i) => i > opening && line === '}')
-    const body = source.slice(opening, closing + 1).join('\n')
+    const opening = source.findIndex((line) => /^\s*function planSection\(/.test(line))
+    if (opening === -1) throw new Error('ct-step.js no longer declares planSection at the boundary this test measures')
+    const indentation = /^\s*/.exec(source[opening])[0]
+    const closing = source.findIndex((line, i) => i > opening && line === `${indentation}}`)
+    const body = source.slice(opening, closing + 1).map((line) => line.slice(indentation.length)).join('\n')
     const module = await import(`data:text/javascript,${encodeURIComponent(`export ${body}`)}`)
-    return module.seccionDelPlan
+    return module.planSection
   }
 }
 
@@ -36,7 +37,7 @@ class TheRuleWrittenInAwk {
     const endOfTheFirstQuotedBlock = lines.findIndex((line, i) => line.startsWith('>') && !(lines[i + 1] ?? '').startsWith('>'))
     const startOfTheSecondQuotedBlock = lines.findIndex((line, i) => i > endOfTheFirstQuotedBlock && line.startsWith('>'))
     if (endOfTheFirstQuotedBlock === -1 || startOfTheSecondQuotedBlock === -1) {
-      throw new Error('task-brief ya no envuelve la sección entre dos bloques citados: este test no sabe recortarla')
+      throw new Error('task-brief no longer wraps the section between two quoted blocks')
     }
     return lines.slice(endOfTheFirstQuotedBlock + 1, startOfTheSecondQuotedBlock).join('\n').trim()
   }
@@ -105,15 +106,15 @@ class PlanMother {
   }
 }
 
-let seccionDelPlan
+let planSection
 let dir
 let awk
 
-beforeAll(async () => { seccionDelPlan = await TheRuleWrittenInJavaScript.load() })
+beforeAll(async () => { planSection = await TheRuleWrittenInJavaScript.load() })
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'seccion-del-plan-')); awk = new TheRuleWrittenInAwk(dir) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
-describe('the same rule written twice: extract_section in awk and seccionDelPlan in JavaScript', () => {
+describe('the same rule written twice: extract_section in awk and planSection in JavaScript', () => {
   const plans = [
     ['a_section_closed_by_the_next_heading_of_the_same_level', PlanMother.aSectionClosedByTheNextHeadingOfTheSameLevel()],
     ['a_fenced_block_carrying_something_that_looks_like_a_heading', PlanMother.aSectionWhoseFencedBlockCarriesSomethingThatLooksLikeAHeading()],
@@ -127,7 +128,7 @@ describe('the same rule written twice: extract_section in awk and seccionDelPlan
     const planPath = join(dir, 'plan.md')
     writeFileSync(planPath, plan)
 
-    expect(seccionDelPlan(plan, HEADING).trim()).toBe(awk.extract(planPath))
+    expect(planSection(plan, HEADING).trim()).toBe(awk.extract(planPath))
   })
 
   it('task_briefs_extracted_snippet_is_not_empty_or_the_five_cases_would_pass_by_comparing_nothing_with_nothing', () => {
@@ -139,6 +140,6 @@ describe('the same rule written twice: extract_section in awk and seccionDelPlan
   })
 
   it('the_call_that_pastes_the_section_into_the_reconciliation_package_matches_the_one_this_suite_measures', () => {
-    expect(readFileSync(CT_STEP, 'utf8')).toContain("seccionDelPlan(planText, '### Desired end state')")
+    expect(readFileSync(CT_STEP, 'utf8')).toContain("planSection(planText, '### Desired end state')")
   })
 })

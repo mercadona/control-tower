@@ -9,7 +9,7 @@
 // advice does not cost the task the one attempt it has left.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
@@ -17,6 +17,7 @@ import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 import { ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS } from '../scripts/step-contracts.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask, judgeRows } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })

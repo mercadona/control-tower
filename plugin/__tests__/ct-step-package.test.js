@@ -1,7 +1,7 @@
 // One piece of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— lives in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -11,6 +11,7 @@ import { makeHelpers, makeRepo, fullRubric, sliceRubric, PLUGIN_ROOT_TEST } from
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, commits, runState,
   taskPackage, slicePackage, judgeRows, packageToken, seal, judgeTask,
   judgeSlice, taskOk } = makeHelpers(() => repo)
@@ -33,7 +34,7 @@ describe('the review package gives the ct yardstick by path, not pasted', () => 
     const text = reviewPackage()
     expect(text).toContain('## Vara de ct')
     for (const name of PluginYardstick.FILES) {
-      expect(text, `${name} no llega ni por ruta`).toContain(join(PLUGIN_ROOT_TEST, 'conventions', name))
+      expect(text, `${name} is not even referenced by its path`).toContain(join(PLUGIN_ROOT_TEST, 'conventions', name))
     }
     expect(text.indexOf('## Vara de ct')).toBeLessThan(text.indexOf('## Diff'))
   })
@@ -194,6 +195,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(ct('commit').status).toBe(0)
     // The token travels in the pull request's verdict and in its row.
     const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(JSON.parse(readFileSync(join(repo, 'docs/superpowers/verdicts/issue-7-task-1.json'), 'utf8'))).toEqual(saved)
     expect(saved.verdict.review_token).toBe(token)
     expect(judgeRows().at(-1).review_token).toBe(token)
     expect(judgeRows().at(-1).ruling).toBe('PASS')
@@ -360,6 +362,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
     const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(JSON.parse(readFileSync(join(repo, 'docs/superpowers/verdicts/issue-7-slice.json'), 'utf8'))).toEqual(saved)
     expect(saved.verdict.review_token).toBe(token)
     expect(judgeRows('slice-judge').at(-1).review_token).toBe(token)
   })
@@ -372,6 +375,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
     const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(JSON.parse(readFileSync(join(repo, 'docs/superpowers/verdicts/issue-7-slice.json'), 'utf8'))).toEqual(saved)
     expect(saved.verdict.review_token).toBe(token)
   })
 

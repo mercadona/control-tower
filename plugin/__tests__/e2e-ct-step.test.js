@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +8,8 @@ import { E2E_REQUIRED_BY_VERDICT } from '../scripts/step-contracts.js'
 import { DEFAULT_BUDGETS } from '../scripts/run-machine.js'
 
 const STEP = fileURLToPath(new URL('../scripts/ct-step.mjs', import.meta.url))
+const { execFileSync, spawnSync, mkdtempSync } = StepScenario
+StepScenario.track()
 const A = 'el server escucha en 9115 por defecto y en el puerto indicado si se pasa'
 
 // A slice worktree with ONE task already committed and the run stopped at

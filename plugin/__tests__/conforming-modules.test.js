@@ -44,7 +44,8 @@ class BornConforming {
     'hooks/dispatch-guard.js',
     '__tests__/dispatch-gate.test.js',
     '__tests__/dispatch-guard-real-process.test.js',
-    '__tests__/ct-step-dispatch-seal-real-process.test.js',
+    '__tests__/ct-step-dispatch-seal.test.js',
+    '__tests__/ct-step-entrypoint-real-process.test.js',
     '__tests__/dispatch-check-collect-bq-real-process.test.js',
     'scripts/role-bytes.js',
     '__tests__/role-bytes.test.js',
@@ -241,7 +242,7 @@ describe('the marker of a real subprocess, in both directions', () => {
   })
 
   it('a_test_born_conforming_that_launches_a_real_process_through_a_fixture_counts_as_launching_it', () => {
-    expect(BornConforming.launchesRealProcesses('__tests__/ct-step-dispatch-seal-real-process.test.js')).toBe(true)
+    expect(BornConforming.launchesRealProcesses('__tests__/ct-step-entrypoint-real-process.test.js')).toBe(true)
   })
 
   it('a_test_that_imports_neither_child_process_nor_a_spawning_fixture_does_not_count_as_launching_one', () => {

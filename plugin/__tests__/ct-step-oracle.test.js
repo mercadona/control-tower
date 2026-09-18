@@ -1,7 +1,7 @@
 // One piece of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -9,6 +9,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeSliceVerdict, commits, runState, judgeTask, taskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
@@ -93,7 +94,7 @@ describe('the plan and the environment', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(/```bash\ntest -f uno\.txt\n```/, ''))
     const r = ct('next')
     expect(r.status).toBe(6)
-    expect(r.stderr).toMatch(/plan no ejecutable/)
+    expect(r.stderr).toMatch(/plan is not executable/)
   })
 
   it('outside a slice worktree it exits with 8', () => {

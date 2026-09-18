@@ -309,7 +309,8 @@ describe('the texts that teach the ct yardstick name it', () => {
   const readFile = (...parts) => readFileSync(join(root, ...parts), 'utf8')
 
   it('ct_step_is_the_one_that_reads_it_from_disk', () => {
-    expect(readFile('scripts', 'ct-step.mjs')).toContain('plugin-yardstick.js')
+    expect(readFile('scripts', 'ct-step.mjs')).toContain("import { CtStep } from './ct-step.js'")
+    expect(readFile('scripts', 'ct-step.js')).toContain('plugin-yardstick.js')
   })
 
   it('kickoff_names_the_directory_in_the_slices_first_act', () => {

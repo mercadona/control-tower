@@ -1,7 +1,7 @@
 // A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
 // it is nine files and not one— is in fixtures/ct-step-harness.js.
 //
-// Issue 161 — the plan amended halfway through a task. Before, `esDelRun`
+// Issue 161 — the plan amended halfway through a task. Before, `isRunArtifact`
 // excluded the plan's path from "what the task touched", so an amendment was
 // left staged and uncommitted (the human blockage measured on 2026-09-08). Now
 // the plan's path goes into the commit of ITS task, like any other file the
@@ -9,7 +9,7 @@
 // index (scope, tests, blocks) filter that path out so as not to read the plan
 // as if it were the task's code.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -17,45 +17,46 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeSliceVerdict, commits, runState,
   taskPackage, judgeTask, judgeSlice, taskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-const HALLAZGO = { severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }
+const FINDING = { severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }
 
 // The amendment a real implementer would make halfway through a task: task 1
 // declared only `uno.txt`, and now it also declares `extra.txt`. `writeReport`
 // writes `extra.txt` on its own (it creates what it declares and does not
 // exist), so here only the plan needs touching.
-function enmendar() {
-  const ruta = join(repo, 'plan.md')
-  const original = readFileSync(ruta, 'utf8')
-  const enmendado = original.replace(
+function amend() {
+  const path = join(repo, 'plan.md')
+  const original = readFileSync(path, 'utf8')
+  const amended = original.replace(
     '**Files:** `uno.txt` (create).',
     '**Files:** `uno.txt` (create), `extra.txt` (create).',
   )
-  expect(enmendado).not.toBe(original) // the fixture changed shape without this test noticing
-  writeFileSync(ruta, enmendado)
+  expect(amended).not.toBe(original) // the fixture changed shape without this test noticing
+  writeFileSync(path, amended)
 }
 
 describe('the amended plan travels inside the commit of its task', () => {
   it('the plan amended halfway through a task goes into that task\'s commit, and the state and the run directory do not', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
     judgeTask(writeVerdict('PASS'))
     expect(ct('commit').status).toBe(0)
 
-    const enElCommit = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
-    expect(enElCommit).toMatch(/plan\.md/)
-    expect(enElCommit).not.toMatch(/\.agent\/SLICE\.md/)
+    const committed = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
+    expect(committed).toMatch(/plan\.md/)
+    expect(committed).not.toMatch(/\.agent\/SLICE\.md/)
     expect(commits()).toBe(2) // base + this task: no new task because of the amendment
   })
 
   it('the scope control exits 0 and its output does not name the plan\'s path', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     const r = ct('controls')
 
@@ -65,18 +66,18 @@ describe('the amended plan travels inside the commit of its task', () => {
   })
 
   it('the task\'s review package brings the plan\'s diff', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
     ct('next')
 
-    const paquete = readFileSync(taskPackage(), 'utf8')
-    expect(paquete).toMatch(/diff --git a\/plan\.md b\/plan\.md/)
-    expect(paquete).toContain('extra.txt')
+    const reviewPackage = readFileSync(taskPackage(), 'utf8')
+    expect(reviewPackage).toMatch(/diff --git a\/plan\.md b\/plan\.md/)
+    expect(reviewPackage).toContain('extra.txt')
   })
 
   it('after a task with an amendment, reconcile, global and slice-verdict do not exit with PRECONDITION', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
     judgeTask(writeVerdict('PASS'))
@@ -93,24 +94,24 @@ describe('the amended plan travels inside the commit of its task', () => {
     // budget, it does not fire the advisor (that takes the SECOND veto).
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    judgeTask(writeVerdict('FAIL', [HALLAZGO]))
+    judgeTask(writeVerdict('FAIL', [FINDING]))
     expect(runState().step).toBe('implement')
 
     // Second attempt: the implementer amends the plan and declares the new
     // path. The judge vetoes again — the second veto sends it to the advisor.
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
-    judgeTask(writeVerdict('FAIL', [HALLAZGO]))
+    judgeTask(writeVerdict('FAIL', [FINDING]))
     expect(runState().step).toBe('advise')
 
     ct('next')
-    const consejo = join(repo, 'advice.json')
-    writeFileSync(consejo, JSON.stringify({
+    const advice = join(repo, 'advice.json')
+    writeFileSync(advice, JSON.stringify({
       approach: 'prueba de otra forma',
       files_to_reconsider: ['uno.txt'],
     }))
-    expect(ct('advice', consejo).status).toBe(0)
+    expect(ct('advice', advice).status).toBe(0)
     expect(runState().step).toBe('implement')
 
     const plan = readFileSync(join(repo, 'plan.md'), 'utf8')
@@ -119,20 +120,20 @@ describe('the amended plan travels inside the commit of its task', () => {
   })
 })
 
-function quitarUnoDeLasFiles() {
-  const ruta = join(repo, 'plan.md')
-  const original = readFileSync(ruta, 'utf8')
-  const enmendado = original.replace(
+function removeOneDeclaredFile() {
+  const path = join(repo, 'plan.md')
+  const original = readFileSync(path, 'utf8')
+  const amended = original.replace(
     '**Files:** `uno.txt` (create).',
     '**Files:** `dos.txt` (create).',
   )
-  expect(enmendado).not.toBe(original)
-  writeFileSync(ruta, enmendado)
+  expect(amended).not.toBe(original)
+  writeFileSync(path, amended)
 }
 
 describe('an amendment can only ADD paths', () => {
   it('an amendment that removes a declared path is refused and the step comes out red', () => {
-    quitarUnoDeLasFiles()
+    removeOneDeclaredFile()
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
 
@@ -142,7 +143,7 @@ describe('an amendment can only ADD paths', () => {
   })
 
   it('an amendment that only adds paths passes the control', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     const r = ct('controls')
 
@@ -150,12 +151,12 @@ describe('an amendment can only ADD paths', () => {
   })
 
   it('after the refusal, HEAD\'s plan still declares the path the amendment removed', () => {
-    quitarUnoDeLasFiles()
+    removeOneDeclaredFile()
     ct('report', writeReport(['uno.txt']))
     ct('controls')
 
-    const enHead = execFileSync('git', ['show', 'HEAD:plan.md'], { cwd: repo, encoding: 'utf8' })
-    expect(enHead).toContain('**Files:** `uno.txt` (create).')
+    const committed = execFileSync('git', ['show', 'HEAD:plan.md'], { cwd: repo, encoding: 'utf8' })
+    expect(committed).toContain('**Files:** `uno.txt` (create).')
   })
 })
 
@@ -167,7 +168,7 @@ describe('the plan that governs the controls is the one that is going to be comm
 
   it('editing the plan AFTER report leaves tree and index in disagreement, and the control refuses it', () => {
     ct('report', writeReport(['uno.txt']))
-    enmendar()
+    amend()
     const r = ct('controls')
 
     expect(r.stdout).toMatch(/controls: failed/)
@@ -176,13 +177,13 @@ describe('the plan that governs the controls is the one that is going to be comm
   })
 
   it('a second edit after report, with the plan already staged, is refused too', () => {
-    enmendar()
+    amend()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
-    const ruta = join(repo, 'plan.md')
-    const otra = readFileSync(ruta, 'utf8')
+    const path = join(repo, 'plan.md')
+    const changed = readFileSync(path, 'utf8')
       .replace('`extra.txt` (create).', '`extra.txt` (create), `otra.txt` (create).')
-    expect(otra).not.toBe(readFileSync(ruta, 'utf8'))
-    writeFileSync(ruta, otra)
+    expect(changed).not.toBe(readFileSync(path, 'utf8'))
+    writeFileSync(path, changed)
     const r = ct('controls')
 
     expect(r.stdout).toMatch(/controls: failed/)
@@ -193,9 +194,9 @@ describe('the plan that governs the controls is the one that is going to be comm
 describe('the scope control does not exempt the machinery that reaches the index', () => {
   it('a docs/superpowers path staged by hand is flagged by the scope control', () => {
     ct('report', writeReport(['uno.txt']))
-    const colado = join(repo, 'docs', 'superpowers', 'specs', 'colado.md')
-    mkdirSync(dirname(colado), { recursive: true })
-    writeFileSync(colado, 'colado\n')
+    const foreign = join(repo, 'docs', 'superpowers', 'specs', 'colado.md')
+    mkdirSync(dirname(foreign), { recursive: true })
+    writeFileSync(foreign, 'colado\n')
     execFileSync('git', ['add', '--', 'docs/superpowers/specs/colado.md'], { cwd: repo })
     const r = ct('controls')
 
@@ -219,9 +220,9 @@ describe('the two messages of the scope control do not contradict each other', (
 
 describe('amending the plan is not read as a defect of the report', () => {
   it('report\'s discrepancy warning does not name the plan\'s path', () => {
-    enmendar()
+    amend()
     const r = ct('report', writeReport(['uno.txt', 'extra.txt']))
 
-    expect(String(r.stderr ?? '')).not.toMatch(/Tocado y no declarado:.*plan\.md/)
+    expect(String(r.stderr ?? '')).not.toMatch(/Touched but not declared:.*plan\.md/)
   })
 })

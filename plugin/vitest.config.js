@@ -45,6 +45,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    setupFiles: [fileURLToPath(new URL('./__tests__/fixtures/process-tripwire.js', import.meta.url))],
     testTimeout: 120_000,
     hookTimeout: 120_000,
     teardownTimeout: 60_000,

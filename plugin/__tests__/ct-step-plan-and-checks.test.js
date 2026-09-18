@@ -1,8 +1,8 @@
 // A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
-import { writeFileSync, readFileSync, mkdtempSync, chmodSync } from 'node:fs'
+import { StepScenario } from './fixtures/step-conversations.js'
+import { writeFileSync, readFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,6 +10,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN, F } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync, mkdtempSync } = StepScenario
 const { ct, ctIn, writeReport, commits, runState } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })

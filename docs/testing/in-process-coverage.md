@@ -39,3 +39,26 @@ Each migration carries before/after family evidence. Changing only a filename or
 ### API acceptance
 
 The complete backend passed 2397 cases with no failures or skips after the host load subsided, using the same Node 24 invocation, default parallelism and production bounds. All API rows above are now covered by the 25 in-process composition cases, two executable cases and retained native mechanism suites. API summed duration: 42.290 s before, 5.286 s after. The first five rows are complete; ct-step and reconciliation rows remain pending.
+
+### Command-boundary migration
+
+All 199 old ct-step scenarios now invoke `CtStep.run` through explicit IO. The original behavior assertions remain. External answers and file effects are captured from real tools with per-request consumption and mutation cut-point assertions; see the [capture contract](../../plugin/__tests__/fixtures/step-captures/README.md). The recording workflow is explicit and separate from ordinary tests, which refuse actual subprocess calls.
+
+The dispatch-seal file loses its `-real-process` marker because it no longer launches one. The sole wording change to an old case name replaces “every verb is a fresh process” with “every verb reloads it from disk.” Source-text checks follow the moved implementation in `ct-step.js`, while the executable edge proves the retained `.mjs` delegates to it.
+
+Independent real boundaries now cover:
+
+- `ct-step-entrypoint-real-process.test.js`: actual node argv, path with spaces, emitted brief and dispatch seal.
+- `ct-step-commit-real-process.test.js`: approved path set/trailer, refused real index mutation and `read-tree` restoration, multi-value/mixed trailers, and actual run counts after an advanced-base merge.
+- Existing reconciliation and Bash/awk equivalence files remain real. The two doubled unreadable-base cases move into `branch-reconciliation.test.js`; their native case remains marked.
+- `process-runner-real-process.test.js`: status/streams, stdin/env/cwd, missing executable, deadline/signal and large output.
+- `command-io.test.js`: literal routing/options and the distinction between command refusal and unmeasured termination.
+- `ct-step-invocation.test.js`: early usage refusal, interleaved roots without global cwd mutation, and a nested usage exit that must not become an unnamed exception.
+
+Four non-contract diagnostics are translated to comply with repository rules: `plan no ejecutable` → `plan is not executable`, `Intento` → `Attempt` in the advice package, `Tocado y no declarado` → `Touched but not declared`, and `Declarado y no tocado` → `Declared but not touched`. Parsed headings, input verdict enums, YAML keys and stored state fields retain their spelling.
+
+Focused verification after extraction and source-check updates passed **1005 tests**. Full suite measurements and mutation evidence follow in the final acceptance record.
+
+The mechanical before/after case-name comparison retains **199/199** original cases, with eight additional invocation/native cases. Artifact assertions that used to inspect only captured `git show` output now also inspect the actual verdict/metrics files, and the real commit test checks byte identity between the committed artifacts and disk.
+
+The first whole-plugin run passed 4401 cases and timed out in the unchanged historical ct-init upgrade scenario at 120000 ms. That exact scenario subsequently passed unchanged in isolation in 52.069 s. Host load was high again (five-minute average 61.44), so this run is retained as a failed integration attempt rather than a final acceptance measurement. No initializer code, assertions or timeout was modified.

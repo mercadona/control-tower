@@ -1,7 +1,7 @@
 // A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
 // it is nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -11,6 +11,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, sliceRubric } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeSliceVerdict, commits, runState, judgeSlice, taskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
@@ -58,6 +59,7 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
     expect(runState().closed).toBe('delivered')
     // The finding travels INSIDE the committed verdict, for whoever reviews the pull request.
     const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(JSON.parse(readFileSync(join(repo, 'docs/superpowers/verdicts/issue-7-slice.json'), 'utf8'))).toEqual(saved)
     expect(saved.verdict.findings).toHaveLength(1)
   })
 
@@ -83,13 +85,16 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
     atSliceJudge()
     judgeSlice(writeSliceVerdict('PASS'))
     const committed = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
-    const rows = committed.trim().split('\n').map((l) => JSON.parse(l))
-    const global = rows.find((f) => f.step === 'global')
-    expect(global.task).toBeNull()
-    expect(global.task_name).toBeNull()
-    const judge = rows.find((f) => f.step === 'slice-judge')
-    expect(judge.task).toBeNull()
-    expect(judge.ruling).toBe('PASS')
+    const onDisk = readFileSync(join(repo, 'docs/superpowers/metrics/issue-7.jsonl'), 'utf8')
+    for (const text of [committed, onDisk]) {
+      const rows = text.trim().split('\n').map((line) => JSON.parse(line))
+      const global = rows.find((row) => row.step === 'global')
+      expect(global.task).toBeNull()
+      expect(global.task_name).toBeNull()
+      const judge = rows.find((row) => row.step === 'slice-judge')
+      expect(judge.task).toBeNull()
+      expect(judge.ruling).toBe('PASS')
+    }
   })
 
   // Slice 10 — the signal crosses the funnel inside the package: ct-step reads

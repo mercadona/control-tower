@@ -1,7 +1,7 @@
 // A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { StepScenario } from './fixtures/step-conversations.js'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -10,6 +10,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
+const { execFileSync } = StepScenario
 const { ct, writeReport, writeVerdict, writeRaw, log, commits, runState, judgeTask, taskOk, sliceOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
@@ -58,7 +59,7 @@ describe('the happy path', () => {
     writeFileSync(join(repo, 'olvidado.txt'), 'esto lo toqué y no lo dije\n')
     const r = ct('report', writeReport([]))
     expect(r.status).toBe(0)
-    expect(r.stderr).toMatch(/Tocado y no declarado: olvidado\.txt, uno\.txt/)
+    expect(r.stderr).toMatch(/Touched but not declared: olvidado\.txt, uno\.txt/)
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/olvidado\.txt/)
   })
@@ -72,7 +73,7 @@ describe('the happy path', () => {
     writeFileSync(join(repo, 'uno.txt'), 'uno\n')
     const r = ct('report', writeRaw(JSON.stringify({ paths: ['uno.txt', 'inventado.txt'], summary: 'hecho' })))
     expect(r.status).toBe(0)
-    expect(r.stderr).toMatch(/Declarado y no tocado: inventado\.txt/)
+    expect(r.stderr).toMatch(/Declared but not touched: inventado\.txt/)
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }).trim())
       .toBe('uno.txt')
   })

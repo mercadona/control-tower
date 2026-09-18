@@ -2,6 +2,14 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, resolve, relative } from 'node:path'
 
 class SuiteMeasurement {
+  static commandCases(report) {
+    return report.testResults.filter((file) => /(?:ct-step|e2e-ct-step)/.test(file.name))
+      .flatMap((file) => file.assertionResults.map((test) => [
+        file.name.split('/').at(-1).replace('ct-step-dispatch-seal-real-process', 'ct-step-dispatch-seal'),
+        test.fullName.replace('every verb is a fresh process', 'every verb reloads it from disk'),
+      ].join(': ')))
+  }
+
   static launches(path, seen = new Set()) {
     if (seen.has(path) || !existsSync(path)) return false
     seen.add(path)
@@ -22,8 +30,17 @@ class SuiteMeasurement {
   }
 
   static run(argv) {
-    const [reportPath, root = process.cwd(), mode = 'summary'] = argv
+    const [reportPath, root = process.cwd(), mode = 'summary', afterPath] = argv
     const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+    if (mode === 'compare') {
+      const after = JSON.parse(readFileSync(afterPath, 'utf8'))
+      const original = SuiteMeasurement.commandCases(report)
+      const current = new Set(SuiteMeasurement.commandCases(after))
+      const missing = original.filter((name) => !current.has(name))
+      console.log(JSON.stringify({ original: original.length, current: current.size, preserved: original.length - missing.length, missing, suitePassed: after.success }, null, 2))
+      if (missing.length) process.exitCode = 1
+      return
+    }
     if (mode === 'failures') {
       for (const file of report.testResults) {
         if (file.status !== 'failed') continue

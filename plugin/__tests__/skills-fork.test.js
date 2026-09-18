@@ -209,8 +209,8 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
 
   it("its budgets are the validator's: the prose and the code cannot diverge", () => {
     const s = read('writing-plans-prescriptive', 'SKILL.md')
-    const numeros = [...Object.values(ROLE_BUDGETS), CODE_BUDGETS.task, CODE_BUDGETS.chars]
-    for (const n of numeros) expect(s).toContain(String(n))
+    const numbers = [...Object.values(ROLE_BUDGETS), CODE_BUDGETS.task, CODE_BUDGETS.chars]
+    for (const n of numbers) expect(s).toContain(String(n))
   })
 
   it('it says every TASK fits on one A4 page, and that if it does not fit the task is two', () => {
@@ -230,7 +230,7 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
 
   it("it describes the brief ct-step really delivers, with the plan's yardstick", () => {
     const s = read('writing-plans-prescriptive', 'SKILL.md')
-    const ctStep = readFileSync(join(ROOT, 'scripts', 'ct-step.mjs'), 'utf8')
+    const ctStep = readFileSync(join(ROOT, 'scripts', 'ct-step.js'), 'utf8')
     expect(ctStep).toContain('--with-plan-context')
     expect(s).toContain('--with-plan-context')
     expect(s).toContain('## 2. Closed decisions')
