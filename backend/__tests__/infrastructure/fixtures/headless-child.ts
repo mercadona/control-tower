@@ -1,9 +1,29 @@
 import { spawn } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 
 class HeadlessChildFixture {
+  static readonly #ERRAND = /^Read the file at (.+) and do exactly what it says\.$/
+
   static run(argv: readonly string[]): void {
     switch (argv[0]) {
+      case 'errand': {
+        const capturePath = argv[1]
+        const conversation = argv[2]
+        const errand = argv[argv.length - 1]
+        const match = HeadlessChildFixture.#ERRAND.exec(errand)
+        if (match === null) throw new Error(`expected the CLI errand as the last argument, got ${JSON.stringify(errand)}`)
+        const prompt = readFileSync(match[1], 'utf8')
+        writeFileSync(capturePath, JSON.stringify({
+          argv: [...argv],
+          prompt,
+          promptVariable: process.env.CT_CALL_PROMPT ?? null,
+        }), 'utf8')
+        process.stdout.write(`${JSON.stringify({
+          type: 'result', subtype: 'success', session_id: conversation, is_error: false,
+          total_cost_usd: 0.5, num_turns: 1, duration_ms: 10,
+        })}\n`)
+        return
+      }
       case 'success':
         process.stdout.write(`${JSON.stringify({
           type: 'result', subtype: 'success', session_id: argv[1], is_error: false,

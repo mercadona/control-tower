@@ -471,7 +471,7 @@ describe('RecordedPlanRecovery', () => {
     releaseOldSleep()
     await new Promise<void>((resolve) => queueMicrotask(resolve))
 
-    expect(reads).toBe(2)
+    expect(reads).toBe(1)
     expect(deliveries).toBe(0)
     expect(reviews.live.get(`${RecoveryMother.REPOSITORY}#${RecoveryMother.ISSUE}`)).toBe(registration)
     releaseNewBaseline({ changes: [] })

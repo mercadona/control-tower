@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 6,
+  "task_name": "Make one recorded resumed call for each supported dispatch",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "ClaudeRunCalls resolves machine.dispatch and transports its sealed role argv and ordered paths using the original conversation UUID. It records one implementation request per run:<ticket>, observes completion, captures measurements before returning or installing a response, and never invokes a consuming verb. Structured responses replace stale destination bytes; reconciliation returns only after successful completion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named TDD test exercises all five supported roles through real ClaudeRunCalls and ClaudeCalls. It compares the complete recorded argv and file errand, purpose, request identity and cwd, and compares prepared input bytes before and after. Expected role material comes from plugin constants and definitions independently of ClaudeRunCalls.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The exported class, constructor ports and perform signature match the brief. The common argv, opening and errand wording match. startedFor precedes start; completed calls are reused, owned incomplete calls are awaited, and unowned incomplete calls refuse without launch. Failed completion diagnostics become RunNotAdvanced after measurement capture. response.json uses immutable publication with byte equality on replay; installation uses a synchronized temporary file and rename. Missing or unreadable structured output becomes JSON null. Projection failures stop return, permitting retry against the recorded completion without a second model launch; unexpected errors are not broadly translated.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The diff preserves the legacy graph and plugin bytes, imports the existing transport rather than replacing it, adds no activation switch, and leaves sequence decisions with the machine. Original conversation identity and implementation/run:<ticket> correlation are retained. Role tools, models, agent definitions and schemas are relayed from dispatch material. Tests use explicitly synthetic offline protocol responses; they establish transport behavior, not live CLI schema enforcement. Inherited controls are accepted as green without reruns.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The injected infrastructure adapter follows ClaudePlanCalls invocation construction and HeadlessFiles immutable publication. The new files use English and erasable TypeScript, with helpers attached to types and the private response boundary kept beside its sole consumer. Against the brief's embedded defects convention: closed vocabulary uses existing instruction, response and execution variants, with exhaustive execution dispatch; raw map as the return value of logic is absent, since parsed stream records remain internal and the boundary emits serialized text; two fields that have to agree are not introduced, and JSON null is the explicitly required wire discard input rather than an internal absence sentinel; errors are named for what happens through existing RunNotAdvanced, with no new location-named error family. The brief explicitly requires synthetic schema transport fixtures, so their lack of live-capture provenance is a declared task-versus-testing-yardstick tension, not an implementer finding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Both files are additions. No pre-existing assertion, test case or legacy worker body is removed or weakened.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The machine double supplies already-resolved dispatches and rejects oracle execution; the worker double supplies external stream and completion evidence. Real production code constructs and persists invocations, applies ownership checks, captures measurements, extracts structured output and publishes response files. Assertions inspect those recorded requests and filesystem effects, so the promised transport is implemented outside the scaffolding. Future graph wiring is outside this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff contains only the declared adapter and its tests. Its helpers serve request transport, structured response extraction and immutable/atomic publication. It introduces no plugin changes, flags, live calls, graph wiring, attempt rows or unrelated recovery changes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The added tests are deterministic and isolated: writable state uses unique temporary roots cleaned after each test, identities and timestamps are fixed, and pending completion uses injected synchronization rather than sleeping or invoking Claude. Plugin reads are repository contract inputs rather than external mutable fixtures. Tests verify actual recorded argv and prompts, unchanged inputs, durable measurements, refusal diagnostics, replay without a second launch and replacement of stale output with either structured bytes or null. These effects depend on the new production adapter. Finer optional TDD-skill criteria were not loaded because this review permits only repository reads/searches and the verdict write.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "d357df6703aa6f0f223349cc79cc8b12bb78496cdcd2b12280bf89890e927450"
+  }
+}

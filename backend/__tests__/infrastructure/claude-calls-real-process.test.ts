@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
-import { ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
+import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
@@ -285,5 +285,35 @@ describe('ClaudeCalls with real local processes', () => {
       expect(recovery.action).toBe('cleanup')
       await expect(fs.access(join(root, 'nonexistent-claude'))).rejects.toMatchObject({ code: 'ENOENT' })
     }
+  })
+
+  it('a started call tells the child the concrete path of its prompt file instead of a shell variable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-real-call-'))
+    roots.push(root)
+    const capturePath = join(root, 'capture.json')
+    const prompt = 'errand capture fixture prompt'
+    const calls = RealCallMother.calls(root)
+    const invocation = new CallInvocation({
+      conversation: RealCallMother.CONVERSATION,
+      purpose: 'plan',
+      cwd: root,
+      argv: [
+        RealCallMother.FIXTURE, 'errand', capturePath, RealCallMother.CONVERSATION,
+        '--session-id', RealCallMother.CONVERSATION,
+      ],
+      prompt,
+    })
+
+    const call = await calls.start(invocation)
+    await calls.wait(call)
+
+    const capture = JSON.parse(await readFile(capturePath, 'utf8')) as {
+      argv: string[], prompt: string, promptVariable: string | null,
+    }
+    const promptPath = join(RealCallMother.directory(root), CallDescriptor.PROMPT)
+    expect(capture.argv[capture.argv.length - 1]).toBe(CallDescriptor.opening(promptPath))
+    expect(capture.prompt).toBe(prompt)
+    expect(capture.argv.join(' ')).not.toContain(prompt)
+    expect(capture.promptVariable).toBeNull()
   })
 })

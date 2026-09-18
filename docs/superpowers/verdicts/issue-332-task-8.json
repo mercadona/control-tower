@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 8,
+  "task_name": "Project driver recovery from durable facts",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "outcome": "conforme",
+        "result": "Read the entire current task-8-review.diff and brief, including the embedded travelling conventions, and independently compared the five findings retained in task-8-verdict-4.json with the current code. Read-only recovery stages evidence before changing projections and offers explicit continuation without invoking a model or oracle verb. The restored premanifest matrix covers owned planning, completed planning, failed planning, exact-deadline expiry and definite non-launch. The delivered-fix matrix covers failed/successful, owned/unowned incomplete, exact deadline, equal timestamps and both directions of latest-fix ordering, with diagnostic/action, watcher and zero-execution assertions where applicable. The earlier missing-matrix finding is resolved. The reported green controls and full-backend result are inherited, not rerun or used as a substitute for reading the diff."
+      },
+      {
+        "rule": "asercion-tdd",
+        "outcome": "conforme",
+        "result": "The exact prescribed test now arranges an unfinished implementation descriptor and matching journal on disk, rebuilds the production recovery collaborators, and asserts the original conversation identity, uncertain/inspect projection, zero command calls and zero model spawns. It compares dispatch, descriptor, prompt, request, receipt and prepared-material bytes and verifies completion and response remain absent. This is the required unowned unfinished-call input, independently of the completed-response bridge. The prior missing-original-record assertion is resolved."
+      },
+      {
+        "rule": "contrato",
+        "outcome": "conforme",
+        "result": "RunPlanRecovery exports the prescribed constructor ports and recover(): Promise<string | null>; RunPlanAgents.owns reads its supervisor reservation. Provenance remains agents.provenance, descriptor reads remain typed, and machine state is obtained from RunInspection. Absent and delivered facts dispatch to planner and latest-fix policy before supervisor ownership. The unfinished-current-work guard also precedes the reservation shortcut. Thus owned planning is planning, expired planners/fixes remain inspect-only, and reservation ownership cannot conceal an unrelated incomplete call. Watch starts now allocate a fresh frozen registration object and finally compares that exact object before deletion. The real ReviewWatch A/B test delays A until B is registered, settles A, recovers again and asserts the same live B registration with no extra baseline read or delivery. Both prior behavioral-contract findings are resolved. Transactional projection, journal-ticket uniqueness, mixed ownership, explicit unstarted continuation and harvested-record forgetting are retained."
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "outcome": "conforme",
+        "result": "The diff leaves plugin material, legacy method bodies, activation configuration and transport budgets untouched. It introduces no flag, durable phase/cursor, synthesized outer completion or attempt row. Delivered recovery passes actual fix RecoveryCall values, including original start, deadline and completion, to PlanRecovery.from with null proof/cleanup and injected nowMs; machine implementation calls are excluded from that legacy classifier. Successful latest fixes enable review, incomplete owned fixes stop review, and failed/expired/ambiguous/unowned fixes remain uncertain. Offline bridge outputs are synthetic protocol fixtures, not evidence of live CLI enforcement."
+      },
+      {
+        "rule": "patrones",
+        "outcome": "conforme",
+        "result": "Compared the embedded eight travelling conventions, supplied AGENTS.md, local backend conventions and relevant local exemplars. The adapter follows the recorded recovery projection pattern with named constructor dependencies and an immutable RecoveredRunPlan. Closed vocabulary: provenance, inspection, phase and recovery action are typed alternatives; the independent binary review eligibility does not collapse a distinction required by its consumer. Raw map as the return value of logic: production projections use the declared immutable recovery object, with typed fact collections and the contract-required nullable diagnostic rather than an untyped dictionary. Two fields that have to agree: no duplicate durable state, recovery absence sentinel or phase-derived review flag is introduced; implementing work legitimately has distinct review eligibility. Errors named for where they happen: no new error class is introduced. New code and tests are English TypeScript. The graph and boundary seams remain consistent with the task's prescribed infrastructure adapter."
+      },
+      {
+        "rule": "manipulacion-tests",
+        "outcome": "no-aplica",
+        "result": "The staged test file is entirely new. The complete diff removes or relaxes no committed test, case or assertion. Earlier failed attempts are review history, not the committed baseline; their five findings were assessed against the current implementation and brief."
+      },
+      {
+        "rule": "fixture-theater",
+        "outcome": "conforme",
+        "result": "The finite consume-once bridge remains real through RunPlanAgents, DriveRun, ExecuteRunInstruction, CtRunMachine, ClaudeRunCalls, measurements and disk records/journal. The external runner checks exact report argv/cwd and installed response bytes before returning successful consuming output. Production reuses the complete matching resumed invocation, installs saved and printed response bytes, links the consuming request to the original dispatch, and writes receipts. The following next records a finite nonzero refusal rather than pretending delivery. A second rebuilt graph refuses explicit continuation without additional commands or model spawns and with unchanged journal/response bytes. GET itself is separately checked for no commands, spawns or journal changes. The production code, rather than a consumption double, produces these effects."
+      },
+      {
+        "rule": "alcance",
+        "outcome": "conforme",
+        "result": "The complete package changes only the declared recovery adapter, ownership query and recovery tests. Their contents serve Task 8. No plan amendment, plugin edit, feature flag, live-model call, frontend change or activation configuration is introduced. Later entrypoint wiring is not treated as a missing part of this task."
+      },
+      {
+        "rule": "test-desiderata",
+        "outcome": "conforme",
+        "result": "Tests use fixed recorded times, isolated scenarios, temporary writable roots, rebuilt disk collaborators and explicit asynchronous barriers. Repository plugin files are read as immutable protocol material. The ownership test now constructs real RunPlanAgents, observes owns false before launch and true while its actual planner supervisor is pending, rejects the bounded pending work and observes release to false; no owns override or test-only reservation Set supplies its answer. The prior self-confirming ownership finding is resolved. The real delayed ReviewWatch case observes production loop identity, and both disk restart scenarios assert production projections and durable effects rather than only fixture values. No remaining blocking defect in determinism, isolation or real-behavior verification was established. Finer stylistic skill-based findings were not assessed under this session's local Read/Grep/Glob-only review restriction."
+      }
+    ],
+    "findings": [],
+    "review_token": "18cbd0e8be10bd824d5dbf3b3fc30533f591db5c76df7b1dd83cde55e5ef5343"
+  }
+}

@@ -45,6 +45,7 @@ describe('PlanCollapse', () => {
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
     'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
+    'RunFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -61,8 +62,9 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.ImplementationHistoryFailure) &&
     !(thrown.prototype instanceof exceptions.WorkbenchFailure) &&
     !(thrown.prototype instanceof exceptions.PlanRecoveryFailure) &&
-    !(thrown.prototype instanceof exceptions.PlanCleanupFailure)
-    && !(thrown.prototype instanceof exceptions.SessionClosureFailure)
+    !(thrown.prototype instanceof exceptions.PlanCleanupFailure) &&
+    !(thrown.prototype instanceof exceptions.SessionClosureFailure) &&
+    !(thrown.prototype instanceof exceptions.RunFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)
@@ -171,6 +173,31 @@ describe('PlanCollapse', () => {
 
   it('a_family_is_not_a_way_of_collapsing_so_answering_one_raises_instead_of_guessing', () => {
     expect(() => PlanCollapse.of(new exceptions.PlanFailure('nope'))).toThrow(/no refusal declared/)
+  })
+
+  it('internal run failures do not hide public refusal gaps', () => {
+    class RunPublicProbe extends exceptions.PlanFailure {}
+    const runTypes = [
+      exceptions.RunFailure,
+      exceptions.RunNotAdvanced,
+      exceptions.RunNotUnderstood,
+    ]
+    const runFailures = runTypes.map((RunType) => new RunType(`internal ${RunType.name}`))
+
+    expect(FAMILIES).toContain('RunFailure')
+    expect(runFailures.map((failure) => failure.constructor.name)).toEqual([
+      'RunFailure', 'RunNotAdvanced', 'RunNotUnderstood',
+    ])
+    expect(runTypes.every((RunType) => !startingAPlan([RunType.name, RunType]))).toBe(true)
+    expect(PlanCollapse.declaredFailures()).not.toContain('RunFailure')
+    expect(PlanCollapse.declaredFailures()).not.toContain('RunNotAdvanced')
+    expect(PlanCollapse.declaredFailures()).not.toContain('RunNotUnderstood')
+    for (const failure of runFailures) {
+      expect(() => PlanCollapse.of(failure)).toThrow(/no refusal declared/)
+    }
+
+    expect(startingAPlan(['RunPublicProbe', RunPublicProbe])).toBe(true)
+    expect(() => PlanCollapse.of(new RunPublicProbe('public probe'))).toThrow(/no refusal declared/)
   })
 
   it('definite non-launch keeps its start refusal', () => {

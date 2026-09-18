@@ -653,11 +653,12 @@ describe('headless dispatch dry run', () => {
       expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
       expect(spawnedDescriptors).toHaveLength(2)
       const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>
+      const plannerPromptPath = join(dirname(spawnedDescriptors[0]), CallDescriptor.PROMPT)
       expect(plannerDescriptor.argv).toEqual([
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
         '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
-        ClaudePlanCalls.OPENING,
+        CallDescriptor.opening(plannerPromptPath),
       ])
       expect(plannerCompletion.measurement).toEqual({
         cost: { kind: 'reported', totalUsd: 0.4208795, attribution: 'initial-invocation' },
@@ -678,7 +679,7 @@ describe('headless dispatch dry run', () => {
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
         '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
-        ClaudePlanCalls.OPENING,
+        CallDescriptor.opening(join(dirname(spawnedDescriptors[1]), CallDescriptor.PROMPT)),
       ])
       const restartedFiles = new HeadlessFiles({ root: stateRoot, fs, newId: () => 'read-only-temporary-record' })
       const restartedRecords = new DiskPlanRecords({
@@ -774,7 +775,7 @@ describe('headless dispatch dry run', () => {
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
         '--model', 'opus', '--plugin-dir', '/plugin', '--session-id', Rehearsal.CONVERSATION,
-        ClaudePlanCalls.OPENING,
+        CallDescriptor.opening(join(seededDirectory, CallDescriptor.PROMPT)),
       ],
       startedAt: '2026-09-16T09:00:01.000Z',
       budgetMs: 7_200_000,
@@ -959,7 +960,7 @@ describe('headless dispatch dry run', () => {
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
       '--allowedTools', 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent',
       '--model', 'opus', '--plugin-dir', '/plugin', '--resume', Rehearsal.CONVERSATION,
-      ClaudePlanCalls.OPENING,
+      CallDescriptor.opening(join(dirname(spawnedDescriptors[0]), CallDescriptor.PROMPT)),
     ])
     expect(boundaries.publicationAttempts).toBe(2)
     expect(spawnedDescriptors).toHaveLength(1)
