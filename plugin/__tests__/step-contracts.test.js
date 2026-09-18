@@ -104,7 +104,7 @@ const implementerPoint3 = () => {
 
 const PLAN_TEMPLATE = join(
   dirname(fileURLToPath(import.meta.url)), '..',
-  'skills', 'writing-plans-prescriptive', 'plan-template.md',
+  'skills', 'ct-writing-plans-prescriptive', 'plan-template.md',
 )
 // The plan template's `## 3. Reference patterns`: the section that declares
 // what is admitted as a yardstick. It is isolated up to the next `## ` because
@@ -405,8 +405,8 @@ describe('who can do what', () => {
     // before Slice 1. And it is the SAME copy the implementer's prompt names: a
     // judge that blocks with a text the implementer never received is a
     // surprise, which is exactly what e473c97's mirror exists to prevent.
-    expect(rubricItem9()).toMatch(/control-tower-loop:test-driven-development/)
-    expect(readFileSync(IMPLEMENTER_PROMPT, 'utf8')).toMatch(/control-tower-loop:test-driven-development/)
+    expect(rubricItem9()).toMatch(/control-tower-loop:ct-test-driven-development/)
+    expect(readFileSync(IMPLEMENTER_PROMPT, 'utf8')).toMatch(/control-tower-loop:ct-test-driven-development/)
     expect(judgeAgentTools()).toMatch(/\bSkill\b/)
   })
 

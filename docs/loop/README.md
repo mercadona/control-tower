@@ -84,8 +84,8 @@ second-hand description:
 
 - the `commands/*.md` and, since #93, their long references in this directory
   (`ct-init`, `ct-groom`, `ct-next`, `ct-status`, `ct-harvest`);
-- the skills forked from `skills/` (`brainstorming`, `writing-plans`,
-  `finishing-a-development-branch`, `subagent-driven-development`) and `skills/FORK.md`;
+- the skills forked from `skills/` (`ct-brainstorming`, `ct-writing-plans`,
+  `ct-finishing-a-development-branch`, `ct-subagent-driven-development`) and `skills/FORK.md`;
 - `scripts/groom.js` — `buildIssueTitle`, `buildLabels`, `buildIssueBody`;
 - `scripts/kickoff.js` — `renderKickoff`, `buildStateSeed`, `ADDENDA`;
 - `scripts/ct-init.sh` — the slices table contract (v16 when the document was
@@ -98,7 +98,7 @@ second-hand description:
 - `templates/_TEMPLATE-execution-spec.md` — the execution spec template.
   It already travels with the plugin: `ct-init` seeds it into
   `docs/superpowers/specs/_TEMPLATE-execution-spec.md` of the target repo, which
-  is where `skills/brainstorming/SKILL.md` looks for it. It used to live loose in
+  is where `skills/ct-brainstorming/SKILL.md` looks for it. It used to live loose in
   menoplus, and step 8 of brainstorming was left without a source in any other
   repo.
 

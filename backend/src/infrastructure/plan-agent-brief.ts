@@ -40,7 +40,7 @@ export class PlanAgentBrief {
       `Control Tower's yardstick lives in ${conventions}, and the program carries it to every task: pasted for the implementer and provided by path to the judge. Your plan selects the repository yardstick in §3's \`Rules to obey:\`; open from ${conventions} only the document needed for a concrete decision, not all five in advance.`,
       'The header carried with that yardstick states how the two relate when they conflict, and it is included here because this repository may not put it in `AGENTS.md`. It is the only wording of that rule: apply it verbatim rather than reinterpreting or rewriting it in the plan.',
       PluginYardstick.precedenceHeader(),
-      'Write the plan with control-tower-loop:writing-plans-prescriptive, using the issue as its spec.',
+      'Write the plan with control-tower-loop:ct-writing-plans-prescriptive, using the issue as its spec.',
       `Save it as docs/superpowers/plans/YYYY-MM-DD-issue-${issue.number}-<slug>.md.`,
       `Validate it with \`node ${dispatchCheck} ${issue.number} --repo ${named} --check-plan\` until it exits 0.`,
       'Commit it: the plan travels in the pull request and does not count as written until committed.',

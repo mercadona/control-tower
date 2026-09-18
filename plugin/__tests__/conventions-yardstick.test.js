@@ -454,7 +454,7 @@ describe('the yardstick names no language and no tool', () => {
 
   it('nobody in the plugin still says there are five', () => {
     const sources = ['scripts/run-metrics.js', 'scripts/ct-next.mjs', 'scripts/kickoff.js', 'scripts/ct-step.mjs',
-      'agents/ct-reconciler.md', 'skills/writing-plans-prescriptive/SKILL.md']
+      'agents/ct-reconciler.md', 'skills/ct-writing-plans-prescriptive/SKILL.md']
     for (const path of sources) {
       const text = readFileSync(join(root, path), 'utf8')
       expect(text, `${path} sigue diciendo cinco`).not.toMatch(/cinco documentos|five documents/i)

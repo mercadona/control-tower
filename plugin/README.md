@@ -11,7 +11,7 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 | Version | `0.58.0` <!-- x-release-please-version --> · slice table contract `v26` |
 | Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` · `/ct-harvest` |
 | Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
-| Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`writing-plans-prescriptive`) |
+| Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`ct-writing-plans-prescriptive`) |
 | Requirements | Node ≥ 24 · `gh` authenticated · `cmux` · git worktrees |
 | Licence | [MIT](LICENSE) |
 
@@ -234,7 +234,7 @@ The principle that orders the whole design:
 | Kickoff | `/ct-next` | an ephemeral prompt + a temporary launcher |
 | `SLICE.md` | `/ct-next` seeds it, the agent writes it | `.worktrees/<n>/.agent/` — **ignored by git** |
 | `STATE.md` | `/ct-init`, the coordinator | `.agent/` — tracked |
-| The slice's plan | the agent, with `writing-plans-prescriptive` | `docs/superpowers/plans/` — committed, travels in the PR |
+| The slice's plan | the agent, with `ct-writing-plans-prescriptive` | `docs/superpowers/plans/` — committed, travels in the PR |
 | PR | the agent | GitHub — with the closing keyword in the **body** |
 | `conventions-ack.md` | the human | `.agent/` — silences a warning without deleting documentation |
 
@@ -281,7 +281,7 @@ scripts/      the logic — pure modules and the .mjs executables (the loop's fo
 scripts/vendor/  `yaml` bundled — DERIVED, tracked, see below
 hooks/        SessionStart (hydration), Stop (state up to date), PreToolUse over Bash (commit guard) and over Task (the dispatch gate)
 dist/         bundles of the hooks — DERIVED, tracked, see above
-skills/       the 11 forked skills + writing-plans-prescriptive (our own) + LICENSE-superpowers + FORK.md
+skills/       the 11 forked skills + ct-writing-plans-prescriptive (our own), every one under the ct- prefix (#384) + LICENSE-superpowers + FORK.md
 __tests__/    158 files, 4,281 tests
 ```
 
@@ -301,9 +301,9 @@ The skills under `skills/` are a fork of **superpowers 6.0.3** (Jesse Vincent, M
 
 **Three seams are rewritten and are not trampled in a cherry-pick** (`__tests__/skills-fork.test.js` watches over them):
 
-1. `brainstorming` — its terminal state is no longer invoking `writing-plans`: it is writing the execution spec and **asking for the freeze**.
-2. `subagent-driven-development` — the «there is no plan» branch no longer sends you off to brainstorm: it sends you to write the plan now, scoped to the issue.
-3. `finishing-a-development-branch` — step 0: if `.agent/SLICE.md` exists, **there is no menu**. PR + `--release` + stop. The merge is human.
+1. `ct-brainstorming` — its terminal state is no longer invoking `writing-plans`: it is writing the execution spec and **asking for the freeze**.
+2. `ct-subagent-driven-development` — the «there is no plan» branch no longer sends you off to brainstorm: it sends you to write the plan now, scoped to the issue.
+3. `ct-finishing-a-development-branch` — step 0: if `.agent/SLICE.md` exists, **there is no menu**. PR + `--release` + stop. The merge is human.
 
 The details and the cherry-pick procedure are in [`skills/FORK.md`](skills/FORK.md).
 

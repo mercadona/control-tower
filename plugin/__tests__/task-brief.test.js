@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 // documentation (docs/ is deliberately not distributed) and sits one level up.
 const PLUGIN_ROOT = join(here, '..')
 const REPO_ROOT = join(PLUGIN_ROOT, '..')
-const SCRIPT = join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief')
+const SCRIPT = join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief')
 const PLAN = join(REPO_ROOT, 'docs', 'superpowers', 'plans', '2026-08-18-los-dos-agentes-y-la-vara-del-plan.md')
 const TASK = '7'
 // The last commit before this round, earlier as well than `1c2fc61` (which

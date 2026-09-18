@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..')
-const TASK_BRIEF = join(REPO_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief')
+const TASK_BRIEF = join(REPO_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief')
 const CT_STEP = join(REPO_ROOT, 'scripts', 'ct-step.mjs')
 const HEADING = '### Desired end state'
 const FENCE = '```'

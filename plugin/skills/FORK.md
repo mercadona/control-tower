@@ -1,11 +1,15 @@
 # Fork of superpowers — origin and seams
 
-The skills in this directory (except `writing-plans-prescriptive`,
+The skills in this directory (except `ct-writing-plans-prescriptive`,
 which is our own) are a
 fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see
 [LICENSE-superpowers](./LICENSE-superpowers)), taken from the local cache
 `~/.claude/plugins/cache/claude-plugins-official/superpowers/6.0.3/` on
-2026-08-07 (F32). They are invoked as `control-tower-loop:<name>`.
+2026-08-07 (F32). Every directory here carries the `ct-` prefix (#384), so a
+skill of ours never collides with one a team already ships under the upstream
+name: `brainstorming` upstream is `ct-brainstorming` here, and it is invoked as
+`control-tower-loop:ct-<name>`. The names below are the upstream ones, which is
+what a cherry-pick has to look for.
 
 ## Scope
 
@@ -41,7 +45,7 @@ writing-skills.
    The merge is human.
 4. **subagent-driven-development** (second seam over the same file,
    F-jjponz-1): the "no plan" branch no longer sends you to writing-plans but to
-   `writing-plans-prescriptive` — a skill OF OUR OWN (it does not exist
+   `ct-writing-plans-prescriptive` — a skill OF OUR OWN (it does not exist
    upstream), with a mechanical contract in `scripts/plan-contract.js` and a hard
    gate in `--release`. A cherry-pick from upstream that restores writing-plans
    here disarms the gate: `skills-fork.test.js` watches it (costura 4).
@@ -57,7 +61,7 @@ writing-skills.
    watches it (costura 5).
 6. **test-driven-development** (F39): `prompts/task-implementer.md` no longer
    carries the cycle written inside it — it loads
-   `control-tower-loop:test-driven-development`. From here on, a cherry-pick from
+   `control-tower-loop:ct-test-driven-development`. From here on, a cherry-pick from
    upstream over that skill changes the behaviour of `ct-step`'s implementer,
    which used to be immune. The fork was taken from 6.0.3; check what changed in
    the cycle before bringing it in. `skills-fork.test.js` watches it (costura 6).

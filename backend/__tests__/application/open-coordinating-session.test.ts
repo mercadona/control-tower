@@ -203,7 +203,7 @@ describe('OpenCoordinatingSession', () => {
 
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
-      'Invoke the skill control-tower-loop:brainstorming.',
+      'Invoke the skill control-tower-loop:ct-brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
@@ -220,7 +220,7 @@ describe('OpenCoordinatingSession', () => {
     expect(flow.userStories.asked).toEqual([])
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
-      'Invoke the skill control-tower-loop:brainstorming.',
+      'Invoke the skill control-tower-loop:ct-brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       Flow.COMMENT.text,
@@ -297,7 +297,7 @@ describe('OpenCoordinatingSession', () => {
 
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
-      'Invoke the skill control-tower-loop:brainstorming.',
+      'Invoke the skill control-tower-loop:ct-brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,

@@ -31,8 +31,8 @@ class DispatchedRole {
   static PACKAGE = '/repo/.agent/run-7/task-1-review.diff'
 
   static #TDD_SKILL = {
-    '/plugin/skills/test-driven-development/SKILL.md': 900,
-    '/plugin/skills/test-driven-development/testing-anti-patterns.md': 80,
+    '/plugin/skills/ct-test-driven-development/SKILL.md': 900,
+    '/plugin/skills/ct-test-driven-development/testing-anti-patterns.md': 80,
   }
 
   static everythingReadable() {
@@ -68,8 +68,8 @@ class DispatchedRole {
   static withOneUnreadableSkill() {
     return DispatchedRole.#reading({
       '/plugin/agents/ct-judge.md': 5000,
-      '/plugin/skills/test-driven-development/SKILL.md': 900,
-      '/plugin/skills/test-driven-development/testing-anti-patterns.md': null,
+      '/plugin/skills/ct-test-driven-development/SKILL.md': 900,
+      '/plugin/skills/ct-test-driven-development/testing-anti-patterns.md': null,
       [DispatchedRole.PACKAGE]: 42,
     })
   }

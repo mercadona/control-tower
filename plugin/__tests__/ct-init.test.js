@@ -1922,7 +1922,7 @@ describe('ct-init.sh', () => {
 
   // -------------------------------------------------------------------------
   // The execution spec's template. The flow after /ct-init is brainstorming →
-  // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8
+  // design doc → execution spec, and `skills/ct-brainstorming/SKILL.md` (steps 8
   // and §"After the self-review") orders that spec to be written «from the
   // repo's `_TEMPLATE-execution-spec.md`». Up to here that template did NOT
   // travel with the plugin: it lived loose in a private repo, so step 8 was

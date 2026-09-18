@@ -69,7 +69,7 @@ else
 fi
 
 # The execution spec's template. The flow after this bootstrap is
-# brainstorming -> design doc -> execution spec, and skills/brainstorming/SKILL.md
+# brainstorming -> design doc -> execution spec, and skills/ct-brainstorming/SKILL.md
 # orders the spec to be written «from the repo's `_TEMPLATE-execution-spec.md`»:
 # without this, that step is left with no source and the spec has to be written
 # guessing at its sections.

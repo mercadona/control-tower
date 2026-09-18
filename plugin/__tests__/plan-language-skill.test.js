@@ -8,7 +8,7 @@ const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 class Skill {
   static text() {
-    return readFileSync(join(PLUGIN_ROOT, 'skills', 'writing-plans-prescriptive', 'SKILL.md'), 'utf8')
+    return readFileSync(join(PLUGIN_ROOT, 'skills', 'ct-writing-plans-prescriptive', 'SKILL.md'), 'utf8')
   }
 }
 

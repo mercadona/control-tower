@@ -1,5 +1,5 @@
 ---
-name: subagent-driven-development
+name: ct-subagent-driven-development
 description: Use when executing implementation plans with independent tasks in the current session
 ---
 
@@ -25,12 +25,12 @@ digraph when_to_use {
     "Stay in this session?" [shape=diamond];
     "subagent-driven-development" [shape=box];
     "executing-plans" [shape=box];
-    "Write the plan now:\ncontrol-tower-loop:writing-plans-prescriptive,\nscoped to the issue" [shape=box];
+    "Write the plan now:\ncontrol-tower-loop:ct-writing-plans-prescriptive,\nscoped to the issue" [shape=box];
     "Manual execution" [shape=box];
 
     "Have implementation plan?" -> "Tasks mostly independent?" [label="yes"];
-    "Have implementation plan?" -> "Write the plan now:\ncontrol-tower-loop:writing-plans-prescriptive,\nscoped to the issue" [label="no"];
-    "Write the plan now:\ncontrol-tower-loop:writing-plans-prescriptive,\nscoped to the issue" -> "Tasks mostly independent?";
+    "Have implementation plan?" -> "Write the plan now:\ncontrol-tower-loop:ct-writing-plans-prescriptive,\nscoped to the issue" [label="no"];
+    "Write the plan now:\ncontrol-tower-loop:ct-writing-plans-prescriptive,\nscoped to the issue" -> "Tasks mostly independent?";
     "Tasks mostly independent?" -> "Stay in this session?" [label="yes"];
     "Tasks mostly independent?" -> "Manual execution" [label="no - tightly coupled"];
     "Stay in this session?" -> "subagent-driven-development" [label="yes"];
@@ -38,7 +38,7 @@ digraph when_to_use {
 }
 ```
 
-**No plan yet?** Write it now with control-tower-loop:writing-plans-prescriptive, scoped to the issue you were dispatched for. A CT-dispatched issue brings acceptance criteria (EARS), «Protegido» and the «Contexto del epic» (the milestone context section, «del milestone» once the writing flips) — exactly the spec that writing-plans-prescriptive expects as input. Save the plan under `docs/superpowers/plans/` (filename `YYYY-MM-DD-issue-<n>-<slug>.md`), validate it with `--check-plan` and commit it: it travels in the PR, and `--release` refuses without it. Do NOT go back to brainstorming — the design was frozen in the execution spec before the issue existed.
+**No plan yet?** Write it now with control-tower-loop:ct-writing-plans-prescriptive, scoped to the issue you were dispatched for. A CT-dispatched issue brings acceptance criteria (EARS), «Protegido» and the «Contexto del epic» (the milestone context section, «del milestone» once the writing flips) — exactly the spec that writing-plans-prescriptive expects as input. Save the plan under `docs/superpowers/plans/` (filename `YYYY-MM-DD-issue-<n>-<slug>.md`), validate it with `--check-plan` and commit it: it travels in the PR, and `--release` refuses without it. Do NOT go back to brainstorming — the design was frozen in the execution spec before the issue existed.
 
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
@@ -67,7 +67,7 @@ digraph process {
     "Read plan, note context and global constraints, create todos" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent (./code-reviewer.md)" [shape=box];
-    "Use control-tower-loop:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
+    "Use control-tower-loop:ct-finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Read plan, note context and global constraints, create todos" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
@@ -82,7 +82,7 @@ digraph process {
     "Mark task complete in todo list and progress ledger" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer subagent (./code-reviewer.md)" [label="no"];
-    "Dispatch final code reviewer subagent (./code-reviewer.md)" -> "Use control-tower-loop:finishing-a-development-branch";
+    "Dispatch final code reviewer subagent (./code-reviewer.md)" -> "Use control-tower-loop:ct-finishing-a-development-branch";
 }
 ```
 
@@ -411,13 +411,13 @@ Done!
 ## Integration
 
 **Required workflow skills:**
-- **control-tower-loop:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
-- **control-tower-loop:writing-plans-prescriptive** - Creates the plan this skill executes
+- **control-tower-loop:ct-using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **control-tower-loop:ct-writing-plans-prescriptive** - Creates the plan this skill executes
 - **[code-reviewer.md](./code-reviewer.md)** (bundled) - Code review template for the final whole-branch review
-- **control-tower-loop:finishing-a-development-branch** - Complete development after all tasks
+- **control-tower-loop:ct-finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
-- **control-tower-loop:test-driven-development** - Subagents follow TDD for each task
+- **control-tower-loop:ct-test-driven-development** - Subagents follow TDD for each task
 
 **Alternative workflow:**
-- **control-tower-loop:executing-plans** - Use for parallel session instead of same-session execution
+- **control-tower-loop:ct-executing-plans** - Use for parallel session instead of same-session execution

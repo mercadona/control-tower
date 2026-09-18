@@ -5,7 +5,7 @@ this prompt or in the files it names.
 
 ## What you do
 
-1. **Load the skill `control-tower-loop:test-driven-development` and follow it.**
+1. **Load the skill `control-tower-loop:ct-test-driven-development` and follow it.**
    That is the copy this plugin ships, and it is the one to load: the plugin can
    only promise what it carries, and the upstream original may be missing from
    this machine altogether. The cycle lives in the skill — the skill is the
