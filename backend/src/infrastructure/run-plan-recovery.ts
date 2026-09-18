@@ -1,3 +1,4 @@
+import { PlanRecoveryConflict } from '../domain/exceptions.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { CheckoutRegistry } from '../domain/ports/checkout-registry.ts'
 import type { PlanCalls } from '../domain/ports/plan-calls.ts'
@@ -27,6 +28,10 @@ type PlanOutcome =
     readonly diagnostic: string,
     readonly recovery: ActivePlanRecovery,
   }
+
+type WatchProvenance =
+  | { readonly kind: 'proven', readonly provenance: RunProvenanceValue }
+  | { readonly kind: 'unproven', readonly diagnostic: string }
 
 class RecoveredRunPlan {
   readonly watch: PlanWatch
@@ -96,20 +101,26 @@ export class RunPlanRecovery {
     const found = await this.records.inFlight()
     if (!found.wereListed) return found.reason
     const watches = found.watches ?? []
-    let provenances: RunProvenanceValue[]
+    let provenances: WatchProvenance[]
     try {
-      provenances = await Promise.all(watches.map((watch) => this.agents.provenance(watch)))
+      provenances = await Promise.all(watches.map((watch) => this.#provenanceOf(watch)))
     } catch (cause) {
       return RunPlanRecovery.#diagnostic(cause)
     }
-    if (watches.length > 0 && provenances.every((provenance) => provenance === RunProvenance.LEGACY)) {
+    if (watches.length > 0
+      && provenances.every((entry) => entry.kind === 'proven' && entry.provenance === RunProvenance.LEGACY)) {
       return this.legacy.recover()
     }
 
     const recovered: RecoveredRunPlan[] = []
     try {
       for (let index = 0; index < watches.length; index += 1) {
-        recovered.push(provenances[index] === RunProvenance.LEGACY
+        const provenance = provenances[index]
+        if (provenance.kind === 'unproven') {
+          recovered.push(this.#inspect(watches[index], provenance.diagnostic))
+          continue
+        }
+        recovered.push(provenance.provenance === RunProvenance.LEGACY
           ? await this.#legacy(watches[index])
           : await this.#driver(watches[index]))
       }
@@ -133,6 +144,15 @@ export class RunPlanRecovery {
       this.#remember(plan)
     }
     return null
+  }
+
+  async #provenanceOf(watch: PlanWatch): Promise<WatchProvenance> {
+    try {
+      return { kind: 'proven', provenance: await this.agents.provenance(watch) }
+    } catch (cause) {
+      if (cause instanceof PlanRecoveryConflict) return { kind: 'unproven', diagnostic: cause.message }
+      throw cause
+    }
   }
 
   async #legacy(watch: PlanWatch): Promise<RecoveredRunPlan> {

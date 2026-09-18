@@ -10,6 +10,7 @@ import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { IMPLEMENTER_MODEL, IMPLEMENTER_TOOLS, REPORT_SCHEMA } from '../../../plugin/scripts/step-contracts.js'
 import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../src/application/actions/execute-run-instruction.ts'
+import { PlanRecoveryConflict } from '../../src/domain/exceptions.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
@@ -758,7 +759,30 @@ describe('RunPlanRecovery projection', () => {
     expect(tested.reviews.started).toEqual(expect.arrayContaining([legacyWatch, driverWatch]))
   })
 
-  it('a malformed later record preserves every previous projection transactionally', async () => {
+  it('an unproven legacy record is projected as uncertain while every other plan keeps its phase', async () => {
+    const first = RecoveryMother.watch(331, '1')
+    const second = RecoveryMother.watch(332, '2')
+    const tested = new ProjectionScenario([first, second])
+    tested.agents.provenances.set(
+      second.agent,
+      new PlanRecoveryConflict('conversation "workspace:2" has unproven call provenance'),
+    )
+
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(tested.activePlans.known()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'implementing', plan: expect.objectContaining({ agent: first.agent }) }),
+      expect.objectContaining({
+        phase: 'uncertain',
+        diagnostic: 'conversation "workspace:2" has unproven call provenance',
+        recovery: { action: 'inspect', detail: 'conversation "workspace:2" has unproven call provenance' },
+        plan: expect.objectContaining({ agent: second.agent }),
+      }),
+    ]))
+    expect(tested.reviews.started).toEqual([first])
+  })
+
+  it('a record that cannot be read preserves every previous projection transactionally', async () => {
     const first = RecoveryMother.watch(331, '1')
     const second = RecoveryMother.watch(332, '2')
     const tested = new ProjectionScenario([first, second])
