@@ -12,20 +12,37 @@
 // worse: throwing when the read of closed issues failed THREW AWAY the read
 // of open ones, which was already whole in memory. Reproduced: the /ct-status
 // report came out empty under a footer that closed with «what is above is
-// only what it did manage to check»… and above it there was nothing. (Back
-// then the footer counted «2 reads not completed»; today it counts warnings,
-// which is the exact thing — see ct-status.mjs.) It contradicts the contract
-// that command publishes in its own header and in commands/ct-status.md: what
-// IS known is reported. So both reads are ALWAYS ATTEMPTED and whatever came out
-// right is returned together with the reasons for whatever did not:
+// only what it did manage to check»… and above it there was nothing. It
+// contradicts the contract that command publishes in its own header and in
+// commands/ct-status.md: what IS known is reported. So both reads are ALWAYS
+// ATTEMPTED and whatever came out right is returned together with the reasons
+// for whatever did not:
 //
 //   { abiertos, cerrados, motivos }   motivos: [] ⇔ both reads went fine
 //
-// Every reason names WHICH of the two reads failed, just as the Error did. A
-// caller that wants to abort on any failure looks at `motivos.length` (that is
-// what /ct-next does, and its behaviour does not change); one that wants to
-// report the partial picture uses the arrays all the same.
-import { flattenIssuePages, realIssuesOnly } from './gh-issues.js'
+// Every reason names WHICH of the two reads failed. A caller that wants to
+// abort on any failure looks at `motivos.length` (that is what /ct-next does);
+// one that wants to report the partial picture uses the arrays all the same.
+//
+// The listing goes over GraphQL (issuesQueryFor, scripts/gh-issues.js) and
+// NEVER over the REST `repos/<repo>/issues` (#46): that endpoint shares its
+// namespace with pull requests and shipped every PR of the repository with its
+// whole body, which in a repository the size of mo.picking.api overflowed
+// execFileSync's buffer (ENOBUFS) before a single issue was read. Nor the
+// search index (`--search`/`gh search issues`): that one has indexing latency
+// and might not reflect a label another runner has just written. Nor a fixed
+// `--limit`: newest first, so a cap leaves out precisely the OLD issues, which
+// are the ones that tend to have dependents.
+import { issuesQueryFor, normalizeGraphqlIssues } from './gh-issues.js'
+
+const OPEN_ISSUES_QUERY = issuesQueryFor(['OPEN'])
+const CLOSED_ISSUES_QUERY = issuesQueryFor(['CLOSED'])
+
+function listIssues({ repo, gh, query }) {
+  const [owner, name] = repo.split('/')
+  return normalizeGraphqlIssues(JSON.parse(
+    gh(['api', 'graphql', '--paginate', '--slurp', '-f', `query=${query}`, '-f', `owner=${owner}`, '-f', `name=${name}`])))
+}
 
 export function loadIssues({ repo, gh }) {
   // A failed read leaves its array EMPTY and its reason in the list. Never the
@@ -34,31 +51,13 @@ export function loadIssues({ repo, gh }) {
   // avoids.
   const reasons = []
   // open issues with labels → {n, order, status, deps, touches, name, type, ac, issue}.
-  // Enumerated through the REST endpoint `gh api repos/<repo>/issues`, NEVER
-  // the search index (`--search`/`gh search issues`): that one has indexing
-  // latency and might not reflect a label another runner has just written.
-  // Nor `gh issue list --limit N` with a fixed cap (finding 2 of the final
-  // review): that endpoint returns newest first, so a fixed `--limit` leaves
-  // out precisely the OLD issues — which are the ones that tend to have
-  // dependents. Two silent consequences observed: a merged dependency that
-  // falls outside `mergedIssues` leaves a slice permanently undispatchable,
-  // and (in dispatch-check.mjs) a colliding `in-progress` that falls outside
-  // `allOpen()` makes the lock fail open. Instead we use real pagination
-  // (`--paginate --slurp`, with no cap) just as ct-groom.mjs does, and we
-  // reuse its very same helper for flattening/filtering PRs
-  // (scripts/gh-issues.js) — that endpoint also returns pull requests (they
-  // share a namespace in the v3 API). The mapping itself
-  // (mapGhIssue/filterMergedIssues) is pure logic extracted to
-  // gh-issue-map.js — see __tests__/gh-issue-map.test.js — so that it can be
+  // The mapping itself (mapGhIssue/filterMergedIssues) is pure logic extracted
+  // to gh-issue-map.js — see __tests__/gh-issue-map.test.js — so that it can be
   // tested without a network and so that a format drift against groom.js is
   // caught.
   let open = []
   try {
-    // per_page=100 (re-review): the REST default is 30/page — with --paginate
-    // they all get fetched anyway, but at 3x more round-trips than needed. 100
-    // is the maximum this endpoint admits.
-    open = realIssuesOnly(flattenIssuePages(JSON.parse(
-      gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp']))))
+    open = listIssues({ repo, gh, query: OPEN_ISSUES_QUERY })
   } catch (e) {
     reasons.push(`could not list open issues of ${repo}: ${e.message}`)
   }
@@ -71,16 +70,10 @@ export function loadIssues({ repo, gh }) {
     // in order space into the real issue number of a dependency that has
     // already been merged (see gh-issue-map.js#buildOrderIndex).
     //
-    // The state field of the REST endpoint is `state_reason`, in lower case
-    // (e.g. "completed") — DIFFERENT from the `stateReason` that `gh issue
-    // list --json stateReason` exposes through GraphQL, in upper case
-    // ("COMPLETED"), which is what filterMergedIssues expects (see
-    // gh-issue-map.js, verified against gh 2.86). We normalise here, in the
-    // wrapper, so as not to have to teach the pure layer two formats of the
-    // same thing.
-    const rawClosed = realIssuesOnly(flattenIssuePages(JSON.parse(
-      gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp']))))
-    closed = rawClosed.map((i) => ({
+    // `stateReason` arrives as GitHub's enum (upper case: "COMPLETED"), which is
+    // exactly what filterMergedIssues expects; the REST `state_reason` in lower
+    // case that this wrapper used to normalise no longer enters.
+    closed = listIssues({ repo, gh, query: CLOSED_ISSUES_QUERY }).map((i) => ({
       number: i.number,
       body: i.body,
       // milestone (D1 finding 1): buildOrderIndex needs the milestone of ANY
@@ -91,14 +84,12 @@ export function loadIssues({ repo, gh }) {
       // genuinely do have different milestones (one simply did not travel
       // this far).
       milestone: i.milestone || null,
-      // labels (F18/H2): the labels of a CLOSED issue were used for nothing
-      // and were thrown away here. They are the ones that reveal the
-      // contradictory state "closed + a live `status:`" — the issue that fell
-      // out of the dispatch queue without anyone saying so. They travel in
-      // this VERY SAME REST response: keeping them does not cost one extra
-      // call.
+      // labels (F18/H2): the labels of a CLOSED issue reveal the contradictory
+      // state "closed + a live `status:`" — the issue that fell out of the
+      // dispatch queue without anyone saying so. They travel in this VERY SAME
+      // response: keeping them does not cost one extra call.
       labels: i.labels || [],
-      stateReason: i.state_reason ? String(i.state_reason).toUpperCase() : null,
+      stateReason: i.stateReason ?? null,
     }))
   } catch (e) {
     reasons.push(`could not list closed issues of ${repo}: ${e.message}`)

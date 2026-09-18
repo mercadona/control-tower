@@ -305,8 +305,10 @@ describe('/ct-status', () => {
     // The test looks at the REAL argv `gh` was invoked with, not at the
     // absence of errors: a command can mutate and exit 0 quite happily.
     expect(log.length).toBeGreaterThan(0)
-    expect(log).not.toMatch(/issue edit/)
-    expect(log).not.toMatch(/label/)
+    // Anchored to the start of the line: each line is one gh invocation, and the
+    // GraphQL issue listing legitimately names the `labels` field in its query.
+    expect(log).not.toMatch(/^issue edit /m)
+    expect(log).not.toMatch(/^label /m)
     expect(log).not.toMatch(/--method (POST|PATCH|PUT|DELETE)/)
     for (const l of log.split('\n').filter(Boolean)) expect(l).toMatch(/^api /)
     cleanUp(b)

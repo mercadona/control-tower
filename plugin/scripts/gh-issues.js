@@ -34,47 +34,63 @@ export function realIssuesOnly(entries) {
   return (entries || []).filter((e) => !isPullRequest(e))
 }
 
-// GROOM_ISSUES_QUERY: the repo's issue listing that /ct-groom needs in order
-// to be idempotent and safe to re-run (idempotence via the ct-order marker,
-// orphans, and Gates A/B of the per-epic scope). It is asked for over GraphQL
-// instead of the REST `repos/<o>/<r>/issues` for a PAYLOAD reason, not a
-// behavioural one:
+// issuesQueryFor: the repository's issue listing over GraphQL instead of the
+// REST `repos/<o>/<r>/issues`, for a PAYLOAD reason, not a behavioural one:
 //   1. GraphQL's `issues` connection returns ONLY issues, NEVER pull requests
 //      — REST v3 shares a namespace and brought in every PR of the repo, which
 //      `realIssuesOnly` threw away after downloading them (in a repo with
 //      thousands of PRs, that dead weight overflowed execFileSync's buffer →
-//      ENOBUFS and the groom died before creating anything).
-//   2. ONLY the fields the code uses are asked for (number/title/body/state/
-//      milestone/labels), not the whole REST object (reactions, user,
-//      assignees…).
+//      ENOBUFS and the command died before doing anything).
+//   2. ONLY the fields the loop uses are asked for (number/title/body/state/
+//      stateReason/milestone/labels), not the whole REST object (reactions,
+//      user, assignees…).
 // The resulting set of issues is IDENTICAL to the one REST produced after
 // `realIssuesOnly`: same behaviour, a fraction of the bytes.
 //
-// `$endCursor` + `pageInfo` are what `gh api graphql --paginate` uses to follow
-// cursor pagination on its own. `states:[OPEN,CLOSED]` = the `state=all` of
-// before.
+// `states` is the caller's: /ct-groom wants every issue in one sweep
+// (`[OPEN, CLOSED]` = the `state=all` of before); /ct-next, /ct-status and
+// dispatch-check read the open and the closed ones in two separate calls so
+// that one failed read does not throw away the other (see loop-issues.js).
+// A spelling GitHub would not understand is refused here: `states:[open]`
+// would not fail, it would silently return nothing.
 //
-// `$endCursor` is DECLARED FIRST (review of #45): GraphQL variables are passed
-// by name, not by position, so in theory it makes no difference — but it is the
-// shape of `gh`'s canonical example and it removes any doubt. What is NOT
-// optional: the variable has to be called exactly `endCursor` and `pageInfo`
-// has to be present, or `gh api graphql --paginate` silently returns ONLY the
-// first page. The net that catches this is the fake-gh multi-page test.
-export const GROOM_ISSUES_QUERY = `query($endCursor:String,$owner:String!,$name:String!){
-  repository(owner:$owner,name:$name){
-    issues(first:100,after:$endCursor,states:[OPEN,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){
-      nodes{ number title body state milestone{title} labels(first:50){nodes{name}} }
-      pageInfo{ hasNextPage endCursor }
-    }
+// `$endCursor` + `pageInfo` are what `gh api graphql --paginate` uses to follow
+// cursor pagination on its own. `$endCursor` is DECLARED FIRST (review of
+// #45): GraphQL variables are passed by name, not by position, so in theory it
+// makes no difference — but it is the shape of `gh`'s canonical example and it
+// removes any doubt. What is NOT optional: the variable has to be called
+// exactly `endCursor` and `pageInfo` has to be present, or `gh api graphql
+// --paginate` silently returns ONLY the first page. The net that catches this
+// is the fake-gh multi-page test.
+//
+// ONE line, no newlines: the tests read the fake gh's argv log one invocation
+// per line, and a query with line breaks would count as several calls.
+export const ISSUE_STATES = Object.freeze(['OPEN', 'CLOSED'])
+
+export function issuesQueryFor(states) {
+  if (!Array.isArray(states) || states.length === 0 || states.some((state) => !ISSUE_STATES.includes(state))) {
+    throw new Error(`issue states must be a non-empty subset of ${ISSUE_STATES.join(', ')}: ${JSON.stringify(states)}`)
   }
-}`
+  return [
+    'query($endCursor:String,$owner:String!,$name:String!){',
+    'repository(owner:$owner,name:$name){',
+    `issues(first:100,after:$endCursor,states:[${states.join(',')}],orderBy:{field:CREATED_AT,direction:ASC}){`,
+    'nodes{ number title body state stateReason milestone{number title description} labels(first:50){nodes{name}} }',
+    'pageInfo{ hasNextPage endCursor }',
+    '} } }',
+  ].join(' ')
+}
+
+export const GROOM_ISSUES_QUERY = issuesQueryFor(['OPEN', 'CLOSED'])
 
 // normalizeGraphqlIssues: flattens the pages of `gh api graphql --paginate
 // --slurp` (an array of response objects, one per page) and returns the issues
 // in the SAME shape the rest of the pipeline already expects from REST: `state`
 // lowercased ('open'/'closed', as diffIssue used to compare it), `labels`
-// flattened to `[{name}]`, `milestone` as `{title}` or null. It invents no
-// fields: it only translates.
+// flattened to `[{name}]`, `milestone` as `{number, title, description}` or
+// null, `stateReason` as GitHub spells it (upper case, the casing
+// filterMergedIssues compares against) or null. It invents no fields: it only
+// translates.
 export function normalizeGraphqlIssues(pages) {
   if (!Array.isArray(pages)) return []
   const out = []
@@ -87,7 +103,8 @@ export function normalizeGraphqlIssues(pages) {
         title: n.title,
         body: n.body,
         state: typeof n.state === 'string' ? n.state.toLowerCase() : n.state,
-        milestone: n.milestone ? { title: n.milestone.title } : null,
+        stateReason: n.stateReason ?? null,
+        milestone: n.milestone ? { number: n.milestone.number, title: n.milestone.title, description: n.milestone.description } : null,
         labels: (n.labels?.nodes || []).map((l) => ({ name: l.name })),
       })
     }
