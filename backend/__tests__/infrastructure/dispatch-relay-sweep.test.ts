@@ -1,0 +1,269 @@
+import { describe, it, expect } from 'vitest'
+import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { HarvestClock } from '../../src/infrastructure/harvest-clock.ts'
+import { DispatchRelay } from '../../src/infrastructure/dispatch-relay.ts'
+import { GhDispatchCandidates } from '../../src/infrastructure/gh-dispatch-candidates.ts'
+import { StartMilestonePlan, StartMilestonePlanParams } from '../../src/application/actions/start-milestone-plan.ts'
+import { Gh } from '../../src/infrastructure/gh.ts'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
+import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
+import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
+import { Workspace } from '../../src/domain/ports/workspace.ts'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
+import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.ts'
+import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
+import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
+import type { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
+import type { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+
+type RawIssue = {
+  number: number,
+  html_url: string,
+  title: string,
+  body: string,
+  milestone: { number: number, title: string } | null,
+  labels: { name: string }[],
+  state_reason?: string | null,
+}
+
+class Slice {
+  static readonly REPOSITORY = new RepositoryName('mercadona/control-tower-plugin')
+  static readonly MILESTONE = Object.freeze({ number: 370, title: 'The chain that does not stop' })
+  static readonly ROOT = new CheckoutRoot('/repo/checkout')
+
+  static issue({
+    number, order, status = 'ready', dependencies = [], touches = [], stateReason = null,
+  }: {
+    number: number, order: number, status?: string, dependencies?: number[], touches?: string[],
+    stateReason?: string | null,
+  }): RawIssue {
+    const dependencySection = dependencies.length === 0
+      ? ''
+      : `\n## Dependencias\n${dependencies.map((dependency) => `- merge-after #${dependency}`).join('\n')}`
+
+    return {
+      number,
+      html_url: `https://github.com/mercadona/control-tower-plugin/issues/${number}`,
+      title: `Slice ${order}`,
+      body: `<!-- ct-order:${order} -->${dependencySection}`,
+      milestone: Slice.MILESTONE,
+      labels: [
+        { name: `status:${status}` },
+        ...touches.map((touch) => ({ name: `touches:${touch}` })),
+        { name: 'gate:none' },
+      ],
+      state_reason: stateReason,
+    }
+  }
+
+  static pages(issues: RawIssue[]): string {
+    return JSON.stringify([issues])
+  }
+
+  static frozenSpec(): EpicSpec {
+    return new EpicSpec({
+      path: 'docs/superpowers/specs/2026-09-18-the-chain-that-does-not-stop-execution.md',
+      text: `# ${Slice.MILESTONE.title}${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
+    })
+  }
+}
+
+class ScriptedGh {
+  readonly calls: string[][] = []
+  readonly answers: Map<string, ProcessOutput>
+
+  constructor(open: RawIssue[], closed: RawIssue[] = []) {
+    this.answers = new Map([
+      [JSON.stringify(ScriptedGh.argv('open')), new ProcessOutput({ code: 0, stdout: Slice.pages(open), stderr: '' })],
+      [JSON.stringify(ScriptedGh.argv('closed')), new ProcessOutput({ code: 0, stdout: Slice.pages(closed), stderr: '' })],
+    ])
+  }
+
+  static argv(state: 'open' | 'closed'): string[] {
+    return [
+      'api', `repos/${Slice.REPOSITORY.text}/issues`, '--method', 'GET',
+      '-f', `state=${state}`, '-f', 'per_page=100', '--paginate', '--slurp',
+    ]
+  }
+
+  build(): Gh {
+    return new Gh({
+      launch: async (argv: string[]): Promise<ProcessOutput> => {
+        this.calls.push(argv)
+        const answer = this.answers.get(JSON.stringify(argv))
+        if (answer === undefined) throw new Error(`unexpected gh call ${JSON.stringify(argv)}`)
+
+        return answer
+      },
+      policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+      sleep: async () => undefined,
+    })
+  }
+}
+
+class WorkspaceDouble extends Workspace {
+  override async confirm({ root }: { root: CheckoutRoot }): Promise<CheckoutRoot> {
+    return root
+  }
+
+  override async prepare({ issue }: { issue: PlanIssue }): Promise<SownWorkspace> {
+    return new SownWorkspace({
+      located: new RootedWorkspaceLocation({
+        root: Slice.ROOT.text, path: `${Slice.ROOT.text}/.worktrees/${issue.number}`, branch: `feat/${issue.number}`,
+      }),
+      baseline: BaselineResult.notMeasured('no test command declared'),
+    })
+  }
+
+  override async undo(): Promise<void> {}
+}
+
+class DispatchClaimsDouble extends DispatchClaims {
+  override async claim(): Promise<void> {}
+
+  override async requeue(): Promise<void> {}
+}
+
+class PlanRecordsDouble extends PlanRecords {
+  readonly asked: { issue: number, repository: RepositoryName }[] = []
+
+  override async find(asked: { issue: number, repository: RepositoryName }): Promise<PlanWatch | null> {
+    this.asked.push(asked)
+
+    return null
+  }
+}
+
+class PlanAgentsDouble extends PlanAgents {
+  readonly asked: PlanBriefing[] = []
+
+  override async launch(briefing: PlanBriefing): Promise<string> {
+    this.asked.push(briefing)
+
+    return `workspace:${briefing.issue.number}`
+  }
+}
+
+class CheckoutRegistryDouble extends CheckoutRegistry {
+  override remember(): void {}
+
+  override known(): RegisteredCheckout[] {
+    return []
+  }
+}
+
+type DispatchAsked = { repository: RepositoryName, root: CheckoutRoot, milestone: string }
+
+class Sweep {
+  readonly written: string[] = []
+  readonly dispatchAsked: DispatchAsked[] = []
+  readonly gh: ScriptedGh
+  readonly claims = new DispatchClaimsDouble()
+  readonly workspace = new WorkspaceDouble()
+  readonly agents = new PlanAgentsDouble()
+  readonly records = new PlanRecordsDouble()
+  readonly checkouts = new CheckoutRegistryDouble()
+
+  constructor(gh: ScriptedGh) {
+    this.gh = gh
+  }
+
+  async run(): Promise<Sweep> {
+    const startMilestonePlan = new StartMilestonePlan({
+      candidates: new GhDispatchCandidates({ gh: this.gh.build() }),
+      claims: this.claims,
+      workspace: this.workspace,
+      agents: this.agents,
+      records: this.records,
+      checkouts: this.checkouts,
+    })
+    const relay = new DispatchRelay({
+      spec: () => Promise.resolve(Slice.frozenSpec()),
+      dispatch: (asked) => {
+        this.dispatchAsked.push(asked)
+
+        return startMilestonePlan.execute(new StartMilestonePlanParams(asked))
+      },
+      inFlight: new WorkInFlight(),
+      stderr: (line) => this.written.push(line),
+    })
+    const clock = new HarvestClock({
+      checkouts: () => [Slice.ROOT],
+      survey: () => Promise.resolve({ survey: new WorkspaceSurvey({ repository: Slice.REPOSITORY, prepared: [] }) }),
+      harvest: () => { throw new Error('no prepared workspace should reach harvest in this suite') },
+      relay: (root, repository) => relay.relay(root, repository),
+      sleep: () => Promise.resolve(),
+      stderr: (line) => this.written.push(line),
+    })
+
+    await clock.sweep()
+
+    return this
+  }
+}
+
+describe('DispatchRelay crossed with the real plugin selection', () => {
+  it('an open pull request frees the cap and the sweep dispatches the next slice', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 10, order: 2, status: 'in-review', touches: ['api'] }),
+        Slice.issue({ number: 20, order: 3, status: 'ready', dependencies: [1] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.agents.asked).toHaveLength(1)
+    expect(swept.agents.asked[0].issue.number).toBe(20)
+    expect(swept.written).toEqual(['relay: dispatched mercadona/control-tower-plugin#20 as workspace:20\n'])
+  })
+
+  it('a merged dependency makes the sweep dispatch what it unblocked', async () => {
+    const gh = new ScriptedGh(
+      [Slice.issue({ number: 31, order: 2, status: 'ready', dependencies: [1] })],
+      [Slice.issue({ number: 6, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.agents.asked).toHaveLength(1)
+    expect(swept.agents.asked[0].issue.number).toBe(31)
+    expect(swept.written).toEqual(['relay: dispatched mercadona/control-tower-plugin#31 as workspace:31\n'])
+  })
+
+  it('no caller of the sweep names the issue the plugin selected', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 10, order: 2, status: 'in-review', touches: ['api'] }),
+        Slice.issue({ number: 20, order: 3, status: 'ready', dependencies: [1] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.dispatchAsked).toEqual([
+      { repository: Slice.REPOSITORY, root: Slice.ROOT, milestone: Slice.MILESTONE.title },
+    ])
+    expect(swept.records.asked).toEqual([{ issue: 20, repository: Slice.REPOSITORY }])
+    expect(swept.agents.asked[0].issue.number).toBe(20)
+  })
+
+  it('a sweep with nothing admissible launches no agent and writes no line', async () => {
+    const gh = new ScriptedGh([], [])
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.agents.asked).toEqual([])
+    expect(swept.written).toEqual([])
+  })
+})
