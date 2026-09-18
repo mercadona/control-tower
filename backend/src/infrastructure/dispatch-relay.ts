@@ -1,0 +1,67 @@
+import { Reservation, WorkInFlight } from './work-in-flight.ts'
+import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
+import type { PlanStarted } from '../application/actions/start-plan.ts'
+import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
+import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+
+export type EpicSpecRead = (root: CheckoutRoot) => Promise<EpicSpec | null>
+
+export type MilestoneDispatched = (asked: {
+  repository: RepositoryName, root: CheckoutRoot, milestone: string,
+}) => Promise<PlanStarted>
+
+export class RelayLine {
+  static readonly SILENT = null
+
+  static dispatched(started: PlanStarted): string {
+    return `relay: dispatched ${started.watch.repository.text}#${started.watch.issue.number} as ${started.agent}\n`
+  }
+
+  static refused(repository: RepositoryName, failure: PlanFailure): string {
+    return `relay: ${repository.text} could not be dispatched: ${failure.message}\n`
+  }
+}
+
+export class DispatchRelay {
+  readonly spec: EpicSpecRead
+  readonly dispatch: MilestoneDispatched
+  readonly inFlight: WorkInFlight
+  readonly stderr: (line: string) => void
+
+  constructor({ spec, dispatch, inFlight, stderr }: {
+    spec: EpicSpecRead,
+    dispatch: MilestoneDispatched,
+    inFlight: WorkInFlight,
+    stderr: (line: string) => void,
+  }) {
+    this.spec = spec
+    this.dispatch = dispatch
+    this.inFlight = inFlight
+    this.stderr = stderr
+  }
+
+  async relay(root: CheckoutRoot, repository: RepositoryName): Promise<void> {
+    const found = await this.spec(root)
+    const milestone = DispatchRelay.#milestoneOf(found)
+    if (milestone === null) return
+
+    if (this.inFlight.reserve(repository.text) === Reservation.IN_PROGRESS) return
+    try {
+      const started = await this.dispatch({ repository, root, milestone })
+      this.stderr(RelayLine.dispatched(started))
+    } catch (failure) {
+      if (!(failure instanceof PlanFailure)) throw failure
+      if (failure instanceof DispatchNotAvailable) return
+      this.stderr(RelayLine.refused(repository, failure))
+    } finally {
+      this.inFlight.release(repository.text)
+    }
+  }
+
+  static #milestoneOf(spec: EpicSpec | null): string | null {
+    if (spec === null || !spec.isFrozen()) return null
+
+    return spec.title()
+  }
+}
