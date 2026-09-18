@@ -24,6 +24,7 @@ import {
   VERDICT_SCHEMA,
   VERDICT_RULES,
 } from '../../../../plugin/scripts/step-contracts.js'
+import { issuesQueryFor } from '../../../../plugin/scripts/gh-issues.js'
 import { AgentDefinition } from '../../../../plugin/scripts/judge-agent-definition.js'
 import { RecoverPlan, RecoverPlanParams } from '../../../src/application/actions/recover-plan.ts'
 import { RunInstruction } from '../../../src/domain/value-objects/run-instruction.ts'
@@ -1212,6 +1213,23 @@ export class RunDriverMother {
 
   async #executables(): Promise<void> {
     const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
+    const graphqlIssuesArgv = (states: string[]): string[] => [
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${issuesQueryFor(states) as string}`,
+      '-f', 'owner=acme', '-f', 'name=widget',
+    ]
+    const graphqlPage = (nodes: object[]): string => JSON.stringify([
+      { data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } },
+    ])
+    const openIssueNode = {
+      number: 7,
+      title: 'Finite fixture',
+      body: '<!-- ct-order:1 -->',
+      state: 'OPEN',
+      stateReason: null,
+      milestone: null,
+      labels: { nodes: [{ name: 'status:ready' }] },
+    }
     const issueCreate = GhPlanIssues.argvFor({
       story: null,
       comment: new PlanComment('Run the finite offline driver fixture'),
@@ -1228,6 +1246,10 @@ export class RunDriverMother {
       "const path = require('node:path')",
       'const argv = process.argv.slice(2)',
       `const issueCreate = ${JSON.stringify(issueCreate)}`,
+      `const openIssuesArgv = ${JSON.stringify(graphqlIssuesArgv(['OPEN']))}`,
+      `const closedIssuesArgv = ${JSON.stringify(graphqlIssuesArgv(['CLOSED']))}`,
+      `const openIssuesPage = ${JSON.stringify(graphqlPage([openIssueNode]))}`,
+      `const noIssuesPage = ${JSON.stringify(graphqlPage([]))}`,
       "const equal = (expected) => JSON.stringify(argv) === JSON.stringify(expected)",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'gh.jsonl'), JSON.stringify(argv) + '\\n')",
       "if (equal(issueCreate)) console.log('https://github.com/acme/widget/issues/7')",
@@ -1241,6 +1263,8 @@ export class RunDriverMother {
       "  fs.copyFileSync(argv[6], process.env.CT_FIXTURE_PUBLICATION)",
       "}",
       "else if (equal(['issue', 'edit', '7', '--repo', 'acme/widget', '--add-label', 'status:in-progress', '--remove-label', 'status:ready'])) {}",
+      "else if (equal(openIssuesArgv)) console.log(openIssuesPage)",
+      "else if (equal(closedIssuesArgv)) console.log(noIssuesPage)",
       "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log(JSON.stringify([[{ number: 7, html_url: 'https://github.com/acme/widget/issues/7', title: 'Finite fixture', body: '<!-- ct-order:1 -->', milestone: null, labels: [{ name: 'status:ready' }] }]]))",
       "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log('[[]]')",
       "else if (equal(['api', 'repos/acme/widget/issues/7/comments', '--paginate', '--slurp'])) console.log('[[]]')",
