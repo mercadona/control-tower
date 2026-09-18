@@ -10,6 +10,15 @@ const FREEZE_BUTTON = { name: 'Congelar el spec' }
 describe('SpecFreezePanel', () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it('keeps reading the checkout with no session held, offers no freeze and says what is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftReadyWithoutSession().body, { status: 200 })))
+
+    render(<SpecFreezePanel target={null} />)
+
+    expect(await screen.findByRole('button', FREEZE_BUTTON)).toBeDisabled()
+    expect(screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.')).toBeInTheDocument()
+  })
+
   it('refuses the freeze while a clarification marker remains and shows the line the backend gave', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithMarker().body, { status: 200 })))
 

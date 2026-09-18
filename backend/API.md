@@ -1217,13 +1217,15 @@ The cabin polls it to draw gate 1's panel.
 
 **200 OK** — four shapes, told apart by `status`.
 
-No coordinating session is held, so there is nothing to freeze:
+No checkout is known, so there is nothing to read: no coordinating conversation
+was ever held, or the one that was closed has been superseded by a plan started
+in another checkout:
 
 ```json
 {"status":"none"}
 ```
 
-A session is held, but the checkout carries no execution spec under
+The checkout is known, but it carries no execution spec under
 `docs/superpowers/specs/`:
 
 ```json
@@ -1275,6 +1277,13 @@ since have merged or closed.
 Every non-`none` answer names the target captured before the read began. If
 that target changes while the query is running, the delayed answer is
 `{"status":"none"}` and carries no key or stale authority.
+
+`target` is `null` when the answer describes the checkout of a conversation that
+has been closed: the read still reports what the checkout and GitHub say, and
+`POST /spec-freeze` has no target to carry, so it refuses with
+`coordinating-session-target-changed` until a session is opened again. A plan
+started in another checkout forgets that closed one, and the read goes back to
+`{"status":"none"}`.
 
 **Refusals**
 
@@ -1464,13 +1473,19 @@ The cabin polls it to draw gate 2's panel.
 
 **200 OK** — ten shapes, told apart by `status`.
 
-No coordinating session is held, so there is nothing to groom:
+No checkout is known, so there is nothing to read: no coordinating conversation
+was ever held, or the one that was closed has been superseded by a plan started
+in another checkout:
 
 ```json
 {"status":"none"}
 ```
 
-A session is held, but the checkout carries no execution spec — the same absence `GET
+`target` is `null` when the answer describes the checkout of a closed
+conversation. The read is the same; the presses of gate 2 refuse with
+`coordinating-session-target-changed`, because they have no target to carry.
+
+The checkout is known, but it carries no execution spec — the same absence `GET
 /spec-freeze` answers with `no-spec`:
 
 ```json

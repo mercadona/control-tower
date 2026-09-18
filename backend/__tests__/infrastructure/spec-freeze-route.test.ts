@@ -188,6 +188,15 @@ class Mother {
     })
   }
 
+  static closed(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.finishClose(identity)
+
+    return held
+  }
+
   static replacement(): HeldCoordinatingSession {
     return new HeldCoordinatingSession({
       target: Mother.NEXT_TARGET,
@@ -672,6 +681,38 @@ describe('SpecFreezeRoute', () => {
     const freeze = FreezeSpecSpy.neverAsked()
     const key = Keys.minted()
     const port = await RunningApi.listening(held, read, freeze, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
+    })
+    expect(freeze.asked).toEqual([])
+  })
+  it('reads the checkout of the closed conversation and answers with no target', async () => {
+    const held = Mother.closed()
+    const read = ReadSpecFreezeSpy.answering(Mother.frozenRead())
+    const port = await RunningApi.listening(held, read, FreezeSpecSpy.neverAsked(), Keys.minted())
+
+    const response = await RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'frozen',
+      target: null,
+      spec: Mother.SPEC_PATH,
+      on: '2026-09-14',
+      pullRequest: Mother.PULL_REQUEST,
+    })
+    expect(read.asked.map((asked) => asked.root.text)).toEqual([Mother.ROOT.text])
+  })
+
+  it('the freeze is refused on the closed checkout, which offers no target to carry', async () => {
+    const held = Mother.closed()
+    const freeze = FreezeSpecSpy.neverAsked()
+    const port = await RunningApi.listening(held, ReadSpecFreezeSpy.neverAsked(), freeze, Keys.minted())
 
     const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
 

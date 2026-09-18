@@ -49,6 +49,16 @@ const frozen = () => ({
   body: `{"status":"frozen","target":"${TARGET}","spec":"${SPEC}","on":"${ON}","pullRequest":{"number":${PULL_REQUEST.number},"url":"${PULL_REQUEST.url}"}}`,
 })
 
+const frozenWithoutSession = () => ({
+  status: 200,
+  body: `{"status":"frozen","target":null,"spec":"${SPEC}","on":"${ON}","pullRequest":{"number":${PULL_REQUEST.number},"url":"${PULL_REQUEST.url}"}}`,
+})
+
+const draftReadyWithoutSession = () => ({
+  status: 200,
+  body: `{"status":"draft","target":null,"spec":"${SPEC}","findings":[],"key":"${KEY}"}`,
+})
+
 const notFreezable = () => ({
   status: 400,
   body: `{"code":"spec-not-freezable","detail":${JSON.stringify(NOT_FREEZABLE_DETAIL)}}`,
@@ -92,6 +102,8 @@ export const SpecFreezeMother = {
   draftReady,
   draftWithoutKey,
   frozen,
+  frozenWithoutSession,
+  draftReadyWithoutSession,
   notFreezable,
   notFromThePage,
 }

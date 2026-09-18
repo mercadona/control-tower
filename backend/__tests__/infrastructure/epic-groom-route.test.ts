@@ -209,6 +209,15 @@ class Mother {
     })
   }
 
+  static closed(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.finishClose(identity)
+
+    return held
+  }
+
   static replacement(): HeldCoordinatingSession {
     return new HeldCoordinatingSession({
       target: Mother.NEXT_TARGET,
@@ -876,5 +885,55 @@ describe('EpicGroomRoute', () => {
     expect(response.headers.get('allow')).toBe('GET, POST')
     expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
     expect(read.asked).toEqual([])
+  })
+  it('reads the checkout of the closed conversation and answers with no target', async () => {
+    const held = Mother.closed()
+    const read = ReadEpicGroomSpy.answering(Mother.groomableRead())
+    const port = await RunningApi.listening(held, read, GroomEpicSpy.neverAsked(), Keys.minted())
+
+    const response = await RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'groomable',
+      target: null,
+      milestone: Mother.MILESTONE,
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
+      key: Keys.MINTED,
+    })
+    expect(read.asked.map((asked) => asked.root.text)).toEqual([Mother.ROOT.text])
+  })
+
+  it('a read of the closed checkout is dropped once a plan starts in another one', async () => {
+    const held = Mother.closed()
+    const read = ReadEpicGroomSpy.hanging()
+    const port = await RunningApi.listening(held, read, GroomEpicSpy.neverAsked(), Keys.minted())
+
+    const pending = RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+    await read.started
+    held.planStartedIn(new CheckoutRoot('/another-repo'))
+    read.answerTheHangingOne()
+    const response = await pending
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+  })
+
+  it('the groom is refused on the closed checkout, which offers no target to carry', async () => {
+    const held = Mother.closed()
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
+    })
+    expect(groom.asked).toEqual([])
   })
 })

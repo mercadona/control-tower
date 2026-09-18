@@ -29,17 +29,22 @@ const isFreezeFinding = (value: unknown): value is FreezeFinding =>
 const isFreezeFindings = (value: unknown): value is FreezeFinding[] =>
   Array.isArray(value) && value.every(isFreezeFinding)
 
+const namesACheckout = (body: Record<string, unknown>): boolean =>
+  typeof body.target === 'string' || body.target === null
+
+const targetOf = (body: Record<string, unknown>): string | null =>
+  typeof body.target === 'string' ? body.target : null
+
 const toOutcome = (body: unknown): SpecFreezeOutcome => {
   if (!isRecord(body)) return { kind: 'unavailable' }
   if (body.status === 'none') return { kind: 'none' }
-  if (body.status === 'no-spec' && typeof body.target === 'string') return { kind: 'no-spec', target: body.target }
-  if (
-    body.status === 'draft' && typeof body.target === 'string' &&
-    typeof body.spec === 'string' && isFreezeFindings(body.findings)
-  ) {
+  if (!namesACheckout(body)) return { kind: 'unavailable' }
+  const target = targetOf(body)
+  if (body.status === 'no-spec') return { kind: 'no-spec', target }
+  if (body.status === 'draft' && typeof body.spec === 'string' && isFreezeFindings(body.findings)) {
     return {
       kind: 'draft',
-      target: body.target,
+      target,
       spec: body.spec,
       findings: body.findings,
       key: typeof body.key === 'string' ? body.key : null,
@@ -47,12 +52,11 @@ const toOutcome = (body: unknown): SpecFreezeOutcome => {
   }
   if (
     body.status === 'frozen' &&
-    typeof body.target === 'string' &&
     typeof body.spec === 'string' &&
     (body.on === null || typeof body.on === 'string') &&
     isNullablePullRequestRef(body.pullRequest)
   ) {
-    return { kind: 'frozen', target: body.target, spec: body.spec, on: body.on, pullRequest: body.pullRequest }
+    return { kind: 'frozen', target, spec: body.spec, on: body.on, pullRequest: body.pullRequest }
   }
   return { kind: 'unavailable' }
 }

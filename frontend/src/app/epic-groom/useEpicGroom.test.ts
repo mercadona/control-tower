@@ -13,6 +13,30 @@ describe('useEpicGroom', () => {
     vi.useRealTimers()
   })
 
+  it('shows a read that names no coordinating target while it watches none', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseFor(EpicGroomMother.groomableWithoutSession())))
+
+    const { result } = renderHook(() => useEpicGroom(false, null))
+
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable', target: null }))
+  })
+
+  it('drops a read that names a coordinating target while it watches none', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseFor(EpicGroomMother.groomable())))
+
+    const { result } = renderHook(() => useEpicGroom(false, null))
+
+    await vi.waitFor(() => expect(result.current).toEqual({ phase: 'read', kind: 'none' }))
+  })
+
+  it('drops a read that names no coordinating target while it watches one', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => responseFor(EpicGroomMother.groomableWithoutSession())))
+
+    const { result } = renderHook(() => useEpicGroom(false, EpicGroomMother.TARGET))
+
+    await vi.waitFor(() => expect(result.current).toEqual({ phase: 'read', kind: 'none' }))
+  })
+
   it('stops asking once there is something to press and keeps asking while it waits', async () => {
     const reading = vi
       .fn()
@@ -22,7 +46,7 @@ describe('useEpicGroom', () => {
     vi.stubGlobal('fetch', reading)
     vi.useFakeTimers()
 
-    renderHook(() => useEpicGroom())
+    renderHook(() => useEpicGroom(false, EpicGroomMother.TARGET))
     await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
@@ -40,7 +64,7 @@ describe('useEpicGroom', () => {
     vi.stubGlobal('fetch', reading)
     vi.useFakeTimers()
 
-    renderHook(() => useEpicGroom(true))
+    renderHook(() => useEpicGroom(true, EpicGroomMother.TARGET))
     await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
@@ -55,7 +79,7 @@ describe('useEpicGroom', () => {
     vi.stubGlobal('fetch', reading)
     vi.useFakeTimers()
 
-    renderHook(() => useEpicGroom(true))
+    renderHook(() => useEpicGroom(true, EpicGroomMother.TARGET))
     await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
@@ -67,7 +91,7 @@ describe('useEpicGroom', () => {
     vi.stubGlobal('fetch', reading)
     vi.useFakeTimers()
 
-    const { rerender } = renderHook(({ watching }: { watching: boolean }) => useEpicGroom(watching), {
+    const { rerender } = renderHook(({ watching }: { watching: boolean }) => useEpicGroom(watching, EpicGroomMother.TARGET), {
       initialProps: { watching: false },
     })
     await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))

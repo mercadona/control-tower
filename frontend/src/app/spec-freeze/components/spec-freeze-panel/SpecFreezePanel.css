@@ -17,7 +17,8 @@
   list-style: none;
 }
 
-.spec-freeze-panel__only-from-the-page {
+.spec-freeze-panel__only-from-the-page,
+.spec-freeze-panel__no-session {
   margin: 0;
   color: var(--foreground-secondary);
 }

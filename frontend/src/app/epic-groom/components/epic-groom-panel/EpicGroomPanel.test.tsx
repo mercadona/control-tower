@@ -31,6 +31,18 @@ describe('EpicGroomPanel', () => {
     vi.useRealTimers()
   })
 
+  it('keeps reading the checkout with no session held, offers no press and says what is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomableWithoutSession().body, { status: 200 })))
+
+    render(<EpicGroomPanel target={null} openingBlocked operationBusy={false} openSession={vi.fn()} />)
+
+    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
+    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
+    expect(screen.getByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.')).toBeInTheDocument()
+  })
+
   it('shows what the groom will create before anything is created', async () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)

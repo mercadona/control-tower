@@ -423,7 +423,7 @@ export class StartPlanRoute {
       }
       const repository = asked.targets![0].repository.text
       await StartPlanRoute.#withReservation(repository, inFlight, response, async () => {
-        await StartPlanRoute.#accept(startPlan, sessions, response, asked)
+        await StartPlanRoute.#accept(startPlan, sessions, response, asked, collaborators.coordinating)
       })
     }
   }
@@ -551,7 +551,8 @@ export class StartPlanRoute {
     startPlan: StartPlan,
     sessions: PlanSessionRegistry,
     response: Response,
-    asked: PlanRequest
+    asked: PlanRequest,
+    coordinating: CoordinatingSessions | null = null,
   ): Promise<void> {
     let result: StartPlanResult
     try {
@@ -569,6 +570,7 @@ export class StartPlanRoute {
     }
     const [started] = result.started
     sessions.remember(started.watch)
+    coordinating?.planStartedIn(asked.targets![0].root)
     Answer.send(response, 202, { status: 'started', ...StartPlanRoute.#startedAnswer(started) })
   }
 

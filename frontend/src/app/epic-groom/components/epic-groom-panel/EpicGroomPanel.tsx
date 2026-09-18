@@ -30,6 +30,7 @@ const PROMOTING = 'Autorizando el trabajo'
 const AUTHORISED = 'Trabajo autorizado: el loop ya puede despachar el primer slice.'
 const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
+const NO_COORDINATING_SESSION = 'No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.'
 const GROOM_UNCONFIRMED_TITLE = 'No se ha podido confirmar el groom'
 const GROOM_UNCONFIRMED_DETAIL = 'Puede seguir en marcha: no lo vuelvas a pulsar. La página lo dirá en cuanto lo sepa.'
 const ISSUES_UNCERTAIN_TITLE = 'No se ha podido leer completa la lista de issues del epic'
@@ -63,7 +64,7 @@ const EpicGroomPanelLabels = {
 }
 
 type EpicGroomPanelProps = {
-  target: string
+  target: string | null
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<import('app/epic-groom/EpicGroom.types').GroomSessionOutcome>
@@ -115,6 +116,9 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
   const gateNotice = gateKey === null && (
     <p className="epic-groom-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>
   )
+  const sessionNeeded = target === null && (
+    <p className="epic-groom-panel__no-session">{NO_COORDINATING_SESSION}</p>
+  )
   const askBanner =
     refusal?.kind === 'refused' ? (
       <Banner type="error" role="alert" title={refusal.error} />
@@ -155,7 +159,7 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
     return (
       <div className="epic-groom-panel">
         <p className="epic-groom-panel__resliced">{RESLICED}</p>
-        <Button onClick={() => void presses.publishReslicing(gateKey)} disabled={gateKey === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.publishReslicing(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
           {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
         </Button>
         {reslicing?.kind === 'published' && (
@@ -167,6 +171,7 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
           </>
         )}
         {gateNotice}
+        {sessionNeeded}
         {reslicingBanner}
       </div>
     )
@@ -195,14 +200,15 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
             </a>
           </>
         )}
-        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || isPressing || openingBlocked || operationBusy}>
+        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || target === null || isPressing || openingBlocked || operationBusy}>
           {presses.pressed === 'session' ? OPENING_SESSION : OPEN_SESSION}
         </Button>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {sessionNotice}
         {gateNotice}
+        {sessionNeeded}
         {askBanner}
       </div>
     )
@@ -223,10 +229,11 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
           ))}
         </ul>
         <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {gateNotice}
+        {sessionNeeded}
         {askBanner}
       </div>
     )
@@ -251,10 +258,11 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
             </li>
           ))}
         </ul>
-        <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
           {presses.pressed === 'promote' ? PROMOTING : PROMOTE}
         </Button>
         {gateNotice}
+        {sessionNeeded}
         {askBanner}
       </div>
     )

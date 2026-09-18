@@ -17,6 +17,7 @@ const FINDING: Record<string, string> = {
 const FREEZE = 'Congelar el spec'
 const FREEZING = 'Congelando el spec'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
+const NO_COORDINATING_SESSION = 'No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.'
 const FROZEN = 'Spec congelado el'
 const FROZEN_UNDATED = 'Spec congelado, sin fecha en la línea de congelación.'
 const PULL_REQUEST = 'Pull request'
@@ -28,7 +29,7 @@ const findingLabel = (finding: FreezeFinding): string =>
 
 interface SpecFreezePanelProps {
   isGate2Actionable?: boolean
-  target: string
+  target: string | null
   operationBusy?: boolean
 }
 
@@ -65,10 +66,10 @@ const SpecFreezePanel = ({ isGate2Actionable = false, target, operationBusy = fa
 
   const { findings, key: gateKey } = read
   const isBlocked = findings.length > 0
-  const isDisabled = isBlocked || gateKey === null || isFreezing || operationBusy
+  const isDisabled = isBlocked || gateKey === null || target === null || isFreezing || operationBusy
 
   const freezeSpec = async () => {
-    if (gateKey === null || operationBusy || isFreezingRef.current) return
+    if (gateKey === null || target === null || operationBusy || isFreezingRef.current) return
     isFreezingRef.current = true
     setIsFreezing(true)
     try {
@@ -97,6 +98,7 @@ const SpecFreezePanel = ({ isGate2Actionable = false, target, operationBusy = fa
         {isFreezing ? FREEZING : FREEZE}
       </Button>
       {gateKey === null && <p className="spec-freeze-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>}
+      {target === null && <p className="spec-freeze-panel__no-session">{NO_COORDINATING_SESSION}</p>}
       {asked?.kind === 'refused' && <Banner type="error" role="alert" title={asked.error} />}
       {asked?.kind === 'backend-unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
     </div>

@@ -3,6 +3,28 @@ import userEvent from '@testing-library/user-event'
 import { CollapsableCard } from 'system-ui/collapsable-card'
 
 describe('CollapsableCard', () => {
+  it('should take no room when hidden, so the display of its own class cannot win', () => {
+    render(
+      <CollapsableCard heading="Puerta 1" hidden>
+        Detalle de la puerta
+      </CollapsableCard>,
+    )
+
+    const card = document.querySelector('.collapsable-card') as HTMLElement
+    expect(card).toHaveAttribute('hidden')
+    expect(card.style.display).toBe('none')
+  })
+
+  it('should carry no display of its own while it is shown', () => {
+    render(
+      <CollapsableCard heading="Puerta 1">
+        Detalle de la puerta
+      </CollapsableCard>,
+    )
+
+    expect((document.querySelector('.collapsable-card') as HTMLElement).style.display).toBe('')
+  })
+
   it('should expose an uncontrolled card as a heading with a chevron button that reveals its content', async () => {
     const user = userEvent.setup()
     render(

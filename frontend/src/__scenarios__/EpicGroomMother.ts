@@ -55,6 +55,12 @@ const groomable = () => ({
     `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":null,"key":"${KEY}"}`,
 })
 
+const groomableWithoutSession = () => ({
+  status: 200,
+  body: `{"status":"groomable","target":null,"milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+    `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":null,"key":"${KEY}"}`,
+})
+
 const groomableAfterReslicing = () => ({
   status: 200,
   body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
@@ -159,6 +165,7 @@ export const EpicGroomMother = {
   issuesUncertain,
   groomable,
   groomableAcrossRepositories,
+  groomableWithoutSession,
   groomableWithoutKey,
   partiallyGroomed,
   groomed,

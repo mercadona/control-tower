@@ -299,13 +299,15 @@ describe('Home and the coordinating session', () => {
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
   })
 
-  it('mounts no gate readers until the lifecycle owns an authoritative target', async () => {
+  it('reads both gates of the checkout with no coordinating session held', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.none())
 
     openHome()
     await screen.findByRole('button', { name: 'Arrancar brainstorming' })
 
-    expect(fetching.mock.calls.some(([input]) => input === '/spec-freeze')).toBe(false)
-    expect(fetching.mock.calls.some(([input]) => input === '/epic-groom')).toBe(false)
+    await vi.waitFor(() => {
+      expect(fetching.mock.calls.some(([input]) => input === '/spec-freeze')).toBe(true)
+      expect(fetching.mock.calls.some(([input]) => input === '/epic-groom')).toBe(true)
+    })
   })
 })

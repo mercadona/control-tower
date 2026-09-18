@@ -24,6 +24,23 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     })
   })
 
+  it('a groomable body whose target is null reads as a groomable epic with no session, not as unavailable', async () => {
+    answerWith(EpicGroomMother.groomableWithoutSession())
+
+    const outcome = await EpicGroomClient.read()
+
+    expect(outcome).toEqual({
+      kind: 'groomable',
+      target: null,
+      milestone: EpicGroomMother.MILESTONE,
+      plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+      home: EpicGroomMother.HOME,
+      planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
+      reslicing: null,
+      key: EpicGroomMother.KEY,
+    })
+  })
+
   it('a wait that names no pull request reads as a wait with none, not as unavailable', async () => {
     answerWith(EpicGroomMother.awaitingPublicationWithNoPullRequest())
 

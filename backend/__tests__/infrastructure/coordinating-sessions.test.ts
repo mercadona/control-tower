@@ -527,4 +527,68 @@ describe('CoordinatingSessions', () => {
     expect(held.finishClose(identity)).toBe(true)
     expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
+  it('reads the gates of the checkout it holds, and of the one it closed with no target', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const identity = { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }
+
+    const holding = held.gateCheckout()
+    expect(holding?.conversation).toBe(Mother.FIRST)
+    expect(holding?.target).toBe(Mother.FIRST_TARGET)
+
+    held.beginClose(identity)
+    held.finishClose(identity)
+
+    const closed = held.gateCheckout()
+    expect(closed?.conversation).toBe(Mother.FIRST)
+    expect(closed?.target).toBe(null)
+    expect(held.isCurrentCheckout(closed!)).toBe(true)
+    expect(held.isCurrentCheckout(holding!)).toBe(false)
+  })
+
+  it('reads no gates before a conversation is ever held', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding(Mother.FIRST_SESSION))
+
+    expect(held.gateCheckout()).toBe(null)
+  })
+
+  it('forgets the closed checkout when a plan starts in another one, and keeps it for the same one', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const identity = { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }
+    held.beginClose(identity)
+    held.finishClose(identity)
+
+    held.planStartedIn(Mother.ROOT)
+    expect(held.gateCheckout()?.conversation).toBe(Mother.FIRST)
+
+    held.planStartedIn(new CheckoutRoot('/another-repo'))
+    expect(held.gateCheckout()).toBe(null)
+  })
+
+  it('keeps the held checkout when a plan starts in another one', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    held.planStartedIn(new CheckoutRoot('/another-repo'))
+
+    expect(held.gateCheckout()?.target).toBe(Mother.FIRST_TARGET)
+  })
+
+  it('a newly remembered conversation replaces the checkout the closed one left', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION, Mother.SECOND_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    const identity = { conversation: Mother.FIRST.id.text, target: Mother.FIRST_TARGET }
+    held.beginClose(identity)
+    held.finishClose(identity)
+
+    held.remember(Mother.live(Mother.SECOND, Mother.SECOND_SESSION))
+
+    expect(held.gateCheckout()?.conversation).toBe(Mother.SECOND)
+    expect(held.gateCheckout()?.target).toBe(Mother.SECOND_TARGET)
+  })
 })

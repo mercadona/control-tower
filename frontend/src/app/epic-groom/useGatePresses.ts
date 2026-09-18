@@ -26,7 +26,7 @@ const useGatePresses = ({
   operationBusy,
   openSession,
 }: {
-  target: string
+  target: string | null
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
@@ -39,7 +39,10 @@ const useGatePresses = ({
   const pressing = useRef<Pressed>(NOTHING)
 
   const held = (what: Pressed, gateKey: string | null): boolean => {
-    if (gateKey === null || pressing.current !== NOTHING || operationBusy || (what === 'session' && openingBlocked)) return false
+    if (
+      gateKey === null || target === null || pressing.current !== NOTHING || operationBusy ||
+      (what === 'session' && openingBlocked)
+    ) return false
     pressing.current = what
     setPressed(what)
 
@@ -79,21 +82,21 @@ const useGatePresses = ({
     reslicing,
     groom: (gateKey: string | null, planFingerprint: string) => asked(
       'groom', gateKey, async (key) => {
-        settle(await EpicGroomClient.groom(key, planFingerprint, target))
+        settle(await EpicGroomClient.groom(key, planFingerprint, target!))
       }
     ),
     promote: (gateKey: string | null) => asked(
       'promote', gateKey, async (key) => {
-        settle(await EpicGroomClient.promote(key, target))
+        settle(await EpicGroomClient.promote(key, target!))
       }
     ),
     openSession: (gateKey: string | null) => asked('session', gateKey, async (key) => {
-      const answered = await openSession(key, target)
+      const answered = await openSession(key, target!)
       setSession(answered)
     }),
     publishReslicing: (gateKey: string | null) => asked(
       'reslicing', gateKey, async (key) => {
-        setReslicing(await EpicGroomClient.publishReslicing(key, target))
+        setReslicing(await EpicGroomClient.publishReslicing(key, target!))
       }
     ),
   }

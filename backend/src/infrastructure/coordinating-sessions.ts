@@ -4,6 +4,7 @@ import { SessionTimelineEvent, TimelineEventKind } from '../domain/value-objects
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import type { TimelineEventKindValue } from '../domain/value-objects/session-timeline-event.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
+import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
 import type { LiveSession } from '../domain/value-objects/live-session.ts'
 import type { SessionAttention } from '../domain/value-objects/session-attention.ts'
@@ -179,6 +180,17 @@ export class ReservedOpening {
   }
 }
 
+export class GateCheckout {
+  readonly conversation: CoordinatingConversation
+  readonly target: string | null
+
+  constructor({ conversation, target }: { conversation: CoordinatingConversation, target: string | null }) {
+    this.conversation = conversation
+    this.target = target
+    Object.freeze(this)
+  }
+}
+
 export class CoordinatingSessions {
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
@@ -193,6 +205,7 @@ export class CoordinatingSessions {
   #operation: CoordinatingOperationValue
   #closureError: CoordinatingClosureError | null
   #closing: Promise<unknown> | null
+  #closed: CoordinatingConversation | null
 
   constructor({
     liveSessions,
@@ -218,6 +231,7 @@ export class CoordinatingSessions {
     this.#operation = CoordinatingOperation.IDLE
     this.#closureError = null
     this.#closing = null
+    this.#closed = null
   }
 
   reserve(): ReservedOpening {
@@ -265,6 +279,7 @@ export class CoordinatingSessions {
 
   remember(held: HeldCoordinatingSession, timeline: readonly SessionTimelineEvent[] = []): void {
     this.#stopFollowingTheHeldSession()
+    this.#closed = null
     this.#held = held
     this.#timeline = timeline
     this.#operation = CoordinatingOperation.IDLE
@@ -280,6 +295,7 @@ export class CoordinatingSessions {
     timeline: readonly SessionTimelineEvent[] = [],
   ): void {
     this.#stopFollowingTheHeldSession()
+    this.#closed = null
     this.#held = held
     this.#timeline = timeline
     this.#operation = CoordinatingOperation.CLOSE_FAILED
@@ -303,8 +319,25 @@ export class CoordinatingSessions {
     return this.#closureError
   }
 
-  isCurrent(holding: HeldCoordinatingSession): boolean {
-    return this.#held?.target === holding.target
+  gateCheckout(): GateCheckout | null {
+    if (this.#held !== null) {
+      return new GateCheckout({ conversation: this.#held.conversation, target: this.#held.target })
+    }
+    if (this.#closed === null) return null
+
+    return new GateCheckout({ conversation: this.#closed, target: null })
+  }
+
+  isCurrentCheckout(checkout: GateCheckout): boolean {
+    const current = this.gateCheckout()
+    if (current === null) return false
+
+    return current.target === checkout.target && current.conversation.root.text === checkout.conversation.root.text
+  }
+
+  planStartedIn(root: CheckoutRoot): void {
+    if (this.#closed === null || this.#closed.root.text === root.text) return
+    this.#closed = null
   }
 
   beginClose(identity: CoordinatingSessionIdentity): ReservedClosure {
@@ -332,6 +365,7 @@ export class CoordinatingSessions {
   finishClose(identity: CoordinatingSessionIdentity): boolean {
     if (!this.#matches(identity) || this.#operation !== CoordinatingOperation.CLOSING) return false
     this.#stopFollowingTheHeldSession()
+    this.#closed = this.#held!.conversation
     this.#held = null
     this.#timeline = []
     this.#operation = CoordinatingOperation.IDLE

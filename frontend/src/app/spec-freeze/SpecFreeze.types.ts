@@ -4,9 +4,9 @@ export type PullRequestRef = { number: number; url: string }
 
 export type SpecFreezeOutcome =
   | { kind: 'none' }
-  | { kind: 'no-spec'; target: string }
-  | { kind: 'draft'; target: string; spec: string; findings: FreezeFinding[]; key: string | null }
-  | { kind: 'frozen'; target: string; spec: string; on: string | null; pullRequest: PullRequestRef | null }
+  | { kind: 'no-spec'; target: string | null }
+  | { kind: 'draft'; target: string | null; spec: string; findings: FreezeFinding[]; key: string | null }
+  | { kind: 'frozen'; target: string | null; spec: string; on: string | null; pullRequest: PullRequestRef | null }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'unavailable' }
 

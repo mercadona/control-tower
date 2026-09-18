@@ -14,6 +14,11 @@ const RESTING_KINDS: readonly EpicGroomOutcome['kind'][] = [
 
 const A_CONVERSATION_CAN_STILL_CHANGE: readonly EpicGroomOutcome['kind'][] = ['groomable', 'partially-groomed']
 
+const NAMES_NO_CHECKOUT = Symbol('the read names no checkout')
+
+const answeredFor = (outcome: EpicGroomOutcome): string | null | typeof NAMES_NO_CHECKOUT =>
+  'target' in outcome ? outcome.target : NAMES_NO_CHECKOUT
+
 const restsAt = (outcome: EpicGroomOutcome): boolean => RESTING_KINDS.includes(outcome.kind)
 
 const isWorthWatching = (outcome: EpicGroomOutcome): boolean =>
@@ -29,10 +34,8 @@ const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = nul
     const poll = async (): Promise<void> => {
       const outcome = await EpicGroomClient.read()
       if (cancelled) return
-      if (
-        target !== null && outcome.kind !== 'none' && outcome.kind !== 'refused' &&
-        outcome.kind !== 'unavailable' && outcome.target !== target
-      ) {
+      const answered = answeredFor(outcome)
+      if (answered !== NAMES_NO_CHECKOUT && answered !== target) {
         setRead({ phase: 'read', kind: 'none' })
         timer = window.setTimeout(poll, POLL_INTERVAL_MS)
         return
