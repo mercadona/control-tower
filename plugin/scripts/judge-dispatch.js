@@ -27,8 +27,8 @@ export class RunPaths {
     return join(RunPaths.AGENT_DIRECTORY, `run-${this.issue}`)
   }
 
-  get brief() {
-    return join(this.runDirectory, `task-${this.task}-brief.md`)
+  get judgeBrief() {
+    return join(this.runDirectory, `task-${this.task}-judge-brief.md`)
   }
 
   get reviewPackage() {
@@ -72,7 +72,7 @@ export class JudgeDispatch {
         '--agent', this.agent.name,
       ],
       prompt,
-      briefPath: join(runDirectory, paths.brief),
+      briefPath: join(runDirectory, paths.judgeBrief),
       packagePath: join(runDirectory, paths.reviewPackage),
       verdictPath: join(runDirectory, paths.verdict),
     })
@@ -82,7 +82,7 @@ export class JudgeDispatch {
     return [
       `Juzga la tarea ${benchCase.task}/${benchCase.tasksTotal} del issue #${benchCase.issue}. Sus controles ya corrieron y pasaron.`,
       `  - el paquete de revisión: ${paths.reviewPackage}`,
-      `  - el brief de la tarea: ${paths.brief}`,
+      `  - el brief de la tarea: ${paths.judgeBrief}`,
       '  - los logs de los controles, YA en verde, por si los quiere: (ninguno)',
       `  - escribe tu veredicto en: ${paths.verdict}`,
     ].join('\n')

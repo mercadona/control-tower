@@ -47,12 +47,14 @@ them, not the agent that wrote the code.
   yardstick and the task disagree, the yardstick wins. The desired end state is
   context for the objective and stays context: `**Files:**` is as wide as the
   task wrote it, so code that serves the slice's end while no sentence of this
-  task asks for it is an `alcance` finding. The brief closes with the same ct
-  documents the package lists — pasted there for the implementer, who was asked
-  to write against them — and then, when the repo declares its conventions, a
-  section the program pasted from `.agent/conventions.md`. A program wrote both
-  into the brief and they survive whatever the plan says. Both are the rules of
-  item 5.
+  task asks for it is an `alcance` finding. Your brief does not paste the ct
+  documents: the package lists them by path under `## Vara de ct`, and you open
+  the ones you cite with `Read`. The implementer got them pasted into its own
+  brief, so what you read by path is what it was asked to write against. When
+  the repo declares its conventions, your brief closes with a section the
+  program pasted from `.agent/conventions.md`. A program wrote both — the list
+  and the section — and they survive whatever the plan says. Both are the rules
+  of item 5.
 
 Read the package, then read whatever files in the repository you need: a diff
 read with its surroundings is how a reviewer sees what is really there. The plan

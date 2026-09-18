@@ -349,6 +349,59 @@ describe('the ct yardstick travels in the brief, and goes ahead of the repo one'
 // gets added), the yardstick of its `observabilidad` item. One single path, not
 // the pasted document: `## Vara` goes FIRST, ahead even of `## Señal`, for the
 // same reason that `## Señal` goes ahead of the diff -U10.
+describe('the judge gets a brief of its own: the task, without the ct documents its package already lists by path', () => {
+  const toJudgeStep = () => {
+    ct('next')
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    return ct('next')
+  }
+  const implementerBrief = () => join(repo, '.agent', 'run-7', 'task-1-brief.md')
+  const judgeBrief = () => join(repo, '.agent', 'run-7', 'task-1-judge-brief.md')
+  const ctDocuments = () => PluginYardstick.FILES.map((name) => {
+    const path = join(PLUGIN_ROOT_TEST, PluginYardstick.DIRECTORY, name)
+    return { name, path, content: readFileSync(path, 'utf8') }
+  })
+
+  it('`next` at the judge step writes the judge brief and names it, and the implementer brief is untouched', () => {
+    ct('next')
+    const implementerBefore = readFileSync(implementerBrief(), 'utf8')
+    const r = toJudgeStep()
+    expect(r.stdout).toMatch(/the task's brief: .*task-1-judge-brief\.md/)
+    expect(r.stdout).not.toMatch(/the task's brief: .*task-1-brief\.md/)
+    expect(existsSync(judgeBrief())).toBe(true)
+    expect(readFileSync(implementerBrief(), 'utf8')).toBe(implementerBefore)
+  })
+
+  it('the judge brief carries the task and none of the pasted ct documents', () => {
+    toJudgeStep()
+    const brief = readFileSync(judgeBrief(), 'utf8')
+    expect(brief).toMatch(/### Task 1/)
+    expect(brief).toMatch(/\*\*Objective:\*\*/)
+    expect(brief).not.toMatch(/## Vara de ct: conventions\//)
+    expect(brief).not.toContain(PluginYardstick.precedenceHeader())
+  })
+
+  it('what the judge no longer reads twice is the whole pasted yardstick: the judge brief is smaller by exactly that', () => {
+    toJudgeStep()
+    const pasted = Buffer.byteLength(PluginYardstick.composeSection(ctDocuments()))
+    expect(statSync(implementerBrief()).size - statSync(judgeBrief()).size).toBe(pasted)
+    expect(pasted).toBeGreaterThan(15_000)
+  })
+
+  it('the repo yardstick still reaches the judge brief, behind the task, when the repo declares one', () => {
+    mkdirSync(join(repo, '.agent'), { recursive: true })
+    writeFileSync(join(repo, '.agent', 'conventions.md'), '# La vara\n\n- `AGENTS.md`\n')
+    execFileSync('git', ['add', '.agent/conventions.md'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'declare the conventions'], { cwd: repo })
+    toJudgeStep()
+    const brief = readFileSync(judgeBrief(), 'utf8')
+    expect(brief).toMatch(/leída directo de `\.agent\/conventions\.md`/)
+    expect(brief).toContain('- `AGENTS.md`')
+    expect(brief.indexOf('Task 1')).toBeLessThan(brief.indexOf('leída directo'))
+  })
+})
+
 describe('the slice package carries the path of simplicity.md, not the whole document', () => {
   it('the "## Vara" section is the first of the package and carries the absolute path of simplicity.md', () => {
     taskOk('uno.txt')

@@ -125,7 +125,7 @@ class ScriptedJudge {
 }
 
 class Benches {
-  static YARDSTICK = '\n---\n\n## Vara de ct: conventions/defects.md\n\nno defects\n'
+  static YARDSTICK = '## Vara de ct\n\n- `/plugin/conventions/defects.md`\n'
 
   static over({ root, answers, budgetUsd = 3 }) {
     const judge = new ScriptedJudge(answers)
@@ -292,7 +292,7 @@ describe('JudgeDispatch', () => {
     const judgeRun = dispatch().compose({ benchCase: Cases.correct(), attempt: 2, runDirectory: '/work/tarea-correcta/2' })
     const paths = new RunPaths({ issue: 52, task: 3 })
     expect(judgeRun.prompt).toContain(`el paquete de revisión: ${paths.reviewPackage}`)
-    expect(judgeRun.prompt).toContain(`el brief de la tarea: ${paths.brief}`)
+    expect(judgeRun.prompt).toContain(`el brief de la tarea: ${paths.judgeBrief}`)
     expect(judgeRun.prompt).toContain(`escribe tu veredicto en: ${paths.verdict}`)
     expect(judgeRun.prompt).not.toContain(REVIEW_TOKEN_LABEL)
     expect(judgeRun.prompt).not.toContain('review_token')
@@ -302,7 +302,7 @@ describe('JudgeDispatch', () => {
 
   it('writes in the judge room the paths ct-step uses for a run of that issue and task', () => {
     const paths = new RunPaths({ issue: 31, task: 2 })
-    expect(paths.brief).toBe('.agent/run-31/task-2-brief.md')
+    expect(paths.judgeBrief).toBe('.agent/run-31/task-2-judge-brief.md')
     expect(paths.reviewPackage).toBe('.agent/run-31/task-2-review.diff')
     expect(paths.verdict).toBe('.agent/run-31/task-2-verdict.json')
   })
@@ -338,14 +338,15 @@ describe('JudgeBench', () => {
 
   afterEach(() => rmSyncBestEffort(root))
 
-  it('prepares each run with the working tree of the case, the brief closed by the ct yardstick and the package verbatim', () => {
+  it('prepares each run with the working tree of the case, the brief as the case wrote it and the package carrying the ct yardstick by path, as ct-step writes it', () => {
     const { bench } = Benches.over({ root, answers: {} })
     const benchCase = Cases.missingTest()
     const [{ judgeRun }] = bench.plan({ cases: [benchCase], runs: 1 })
     expect(judgeRun.cwd).toBe(join(root, 'test-inexistente-en-verde', '1'))
     expect(readFileSync(join(judgeRun.cwd, 'test', 'verdict-file.js'), 'utf8')).toContain("it.todo('an unreadable verdict file is a discard, not a crash')")
-    expect(readFileSync(judgeRun.briefPath, 'utf8')).toBe(benchCase.brief + Benches.YARDSTICK)
-    expect(readFileSync(judgeRun.packagePath, 'utf8')).toBe(benchCase.reviewPackage)
+    expect(readFileSync(judgeRun.briefPath, 'utf8')).toBe(benchCase.brief)
+    const [header, token, ...rest] = benchCase.reviewPackage.split('\n')
+    expect(readFileSync(judgeRun.packagePath, 'utf8')).toBe([header, token, Benches.YARDSTICK, ...rest].join('\n'))
     expect(existsSync(judgeRun.verdictPath)).toBe(false)
   })
 
