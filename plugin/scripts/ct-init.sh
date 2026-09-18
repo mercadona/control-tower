@@ -60,6 +60,47 @@ say() {
   fi
 }
 
+# ARTIFACT_CLASSES: the closed, literal list slice 5 asks for — which
+# artifact belongs to which of the four drift classes. It is read by
+# `record` below as a guard: an artifact classified `user-owned` or `exempt`
+# can only ever be reported `created` or `already-present` — reporting
+# `drifted` or `refused` for one of those would mean this script compared
+# something the doctrine says it must never compare, and that is a bug in
+# THIS script, not a fact about the target repo. Only `generated` and
+# `versioned` artifacts may ever say `drifted`; only `versioned` may ever say
+# `refused` (an old ct-init that will not downgrade a contract a newer
+# release wrote).
+#
+#   user-owned  — create-if-absent, NEVER compared: STATE.md, conventions.md,
+#                 the execution-spec template, the AGENTS.md skeleton, the
+#                 .gitignore rules, the scope-gate workflow, the scope-gate
+#                 package.json and .claude/settings.json (merged, but never
+#                 byte-compared against a golden copy either).
+#   generated   — byte compare against what this release ships, report
+#                 `drifted`, replace only with --force: the scope-gate bundle.
+#   versioned   — its own version line and hash ledger: the slices contract.
+#   exempt      — a template the user fills in on purpose: a content change
+#                 is correct use, not drift. The loop section and the e2e
+#                 traversal section, both inside AGENTS.md.
+ARTIFACT_CLASSES='
+state-md             user-owned
+conventions-md       user-owned
+spec-template        user-owned
+gitignore            user-owned
+scope-gate-workflow  user-owned
+scope-gate-package   user-owned
+claude-settings      user-owned
+agents-md            user-owned
+loop-section         exempt
+e2e-howto            exempt
+scope-gate-bundle    generated
+slices-contract      versioned
+'
+
+artifact_class() {
+  printf '%s\n' "$ARTIFACT_CLASSES" | awk -v id="$1" '$1 == id { print $2; found=1 } END { if (!found) print "unknown" }'
+}
+
 # json_escape: our own values are literals and paths — no control characters,
 # only backslashes and double quotes can appear (a version string, a status
 # word, a POSIX-ish path). No `jq` needed for that.
@@ -84,6 +125,13 @@ REPORT_ARTIFACTS=()
 record() {
   local id="$1" path="$2" status="$3"
   shift 3
+  local class
+  class="$(artifact_class "$id")"
+  if { [ "$status" = drifted ] || [ "$status" = refused ]; } \
+     && [ "$class" != generated ] && [ "$class" != versioned ]; then
+    echo "internal error in ct-init.sh: artifact '$id' was reported '$status', but it is classified '$class' — only a generated or versioned artifact may drift or be refused" >&2
+    exit 70
+  fi
   local extra="" kv key val
   for kv in "$@"; do
     key="${kv%%=*}"

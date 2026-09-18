@@ -99,4 +99,86 @@ describe('ct-init.sh --json', () => {
     expect(() => JSON.parse(lines[0])).not.toThrow()
     rmSync(dir, { recursive: true, force: true })
   })
+
+  describe('the four drift classes', () => {
+    it('user-owned: an edited scope-gate workflow is still reported already-present, never drifted', () => {
+      const dir = mkTarget()
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const workflowPath = join(dir, '.github', 'workflows', 'ct-scope-gate.yml')
+      writeFileSync(workflowPath, `${readFileSync(workflowPath, 'utf8')}\n# a governed repo's own edit\n`)
+      const report = runJson(dir)
+      expect(byId(report)['scope-gate-workflow'].status).toBe('already-present')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('generated: a scope-gate bundle that no longer matches this release is reported drifted', () => {
+      const dir = mkTarget()
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      appendFileSync(join(dir, '.github', 'ct', 'scope-check.js'), '\n// a stale copy\n')
+      const report = runJson(dir)
+      expect(byId(report)['scope-gate-bundle'].status).toBe('drifted')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('exempt: an e2e-howto section filled in by the user is reported already-present, never drifted', () => {
+      const dir = mkTarget()
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const agentsPath = join(dir, 'AGENTS.md')
+      const filled = readFileSync(agentsPath, 'utf8').replace(
+        '<!-- ct-init:e2e-howto -->',
+        '<!-- ct-init:e2e-howto -->\n(filled in by the repo owner: `npm start`, then open localhost:3000)'
+      )
+      writeFileSync(agentsPath, filled)
+      const report = runJson(dir)
+      expect(byId(report)['e2e-howto'].status).toBe('already-present')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('versioned: an older contract than this release ships is reported drifted, with foundVersion and shippedVersion', () => {
+      const dir = mkTarget()
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
+      writeFileSync(
+        contractPath,
+        [
+          '<!-- ct-init:slices-contract -->',
+          '<!-- ct-init:slices-contract-version: 1 -->',
+          '## Slices table format (contract with /ct-groom)',
+          'body of an older contract',
+          '<!-- /ct-init:slices-contract -->',
+          '',
+        ].join('\n')
+      )
+      const report = runJson(dir)
+      const artifact = byId(report)['slices-contract']
+      expect(artifact.status).toBe('drifted')
+      expect(artifact.foundVersion).toBe(1)
+      expect(artifact.shippedVersion).toBe(CONTRACT_VERSION)
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('versioned: a NEWER contract than this release ships is refused, not drifted — an old plugin never downgrades', () => {
+      const dir = mkTarget()
+      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
+      const newerVersion = CONTRACT_VERSION + 500
+      const original = [
+        '<!-- ct-init:slices-contract -->',
+        `<!-- ct-init:slices-contract-version: ${newerVersion} -->`,
+        '## Slices table format (contract with /ct-groom)',
+        'body seeded by a newer plugin release',
+        '<!-- /ct-init:slices-contract -->',
+        '',
+      ].join('\n')
+      writeFileSync(contractPath, original)
+      const report = runJson(dir)
+      const artifact = byId(report)['slices-contract']
+      expect(artifact.status).toBe('refused')
+      expect(artifact.foundVersion).toBe(newerVersion)
+      expect(artifact.shippedVersion).toBe(CONTRACT_VERSION)
+      // An old ct-init never downgrades: the file on disk is untouched.
+      expect(readFileSync(contractPath, 'utf8')).toBe(original)
+      rmSync(dir, { recursive: true, force: true })
+    })
+  })
 })
