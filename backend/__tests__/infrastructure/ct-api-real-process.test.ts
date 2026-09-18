@@ -1,12 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 import { ActualHeadlessRuntime, Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
 import type { Refusal, StartedPlan } from './fixtures/ct-api-process.ts'
@@ -329,6 +330,77 @@ class TheCoordinatingSessionEndpoint {
       await reader.cancel().catch(() => {})
     }
     if (!received.includes(token)) throw new Error(`session output did not contain ${JSON.stringify(token)}`)
+  }
+}
+
+class ADraftSpecCheckout {
+  static readonly REPOSITORY = 'acme/draft-widget'
+  static readonly SPEC_PATH = 'docs/superpowers/specs/2026-09-18-draft-fixture-execution.md'
+
+  static async prepared(): Promise<{ base: string, root: string, state: string, bin: string, ghCalls: string }> {
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-draft-sweep-'))
+    const root = join(base, 'checkout')
+    const state = join(base, 'config')
+    const bin = join(base, 'bin')
+    await Promise.all([mkdir(root), mkdir(state), mkdir(bin)])
+    ADraftSpecCheckout.#git(root, 'init', '-q')
+    ADraftSpecCheckout.#git(root, 'config', 'user.email', 'draft@example.test')
+    ADraftSpecCheckout.#git(root, 'config', 'user.name', 'Draft Fixture')
+    ADraftSpecCheckout.#git(root, 'remote', 'add', 'origin', `https://github.com/${ADraftSpecCheckout.REPOSITORY}.git`)
+    await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
+    await writeFile(join(root, ADraftSpecCheckout.SPEC_PATH), ADraftSpecCheckout.#spec())
+    ADraftSpecCheckout.#git(root, 'add', '.')
+    ADraftSpecCheckout.#git(root, 'commit', '-q', '-m', 'draft fixture baseline')
+    const ghCalls = join(base, 'gh-calls.ndjson')
+    await writeFile(join(bin, 'gh'), [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs')",
+      'const argv = process.argv.slice(2)',
+      `fs.appendFileSync(${JSON.stringify(ghCalls)}, JSON.stringify(argv) + '\\n')`,
+      "console.log('[]')",
+    ].join('\n') + '\n', { mode: 0o755 })
+    const controlTower = join(state, 'control-tower')
+    await mkdir(controlTower, { recursive: true })
+    await writeFile(join(controlTower, 'checkouts.json'), `${JSON.stringify({
+      checkouts: [{ repo: ADraftSpecCheckout.REPOSITORY, path: root }],
+    }, null, 2)}\n`)
+
+    return { base, root, state, bin, ghCalls }
+  }
+
+  static environment({ state, bin }: { state: string, bin: string }): NodeJS.ProcessEnv {
+    return {
+      CT_API_PORT: '0',
+      CLAUDE_CONFIG_DIR: state,
+      SHELL: '/bin/sh',
+      PATH: `${bin}:${process.env.PATH}`,
+    }
+  }
+
+  static async remove(fixture: { base: string }): Promise<void> {
+    await rm(fixture.base, { recursive: true, force: true })
+  }
+
+  static #git(cwd: string, ...argv: string[]): void {
+    execFileSync('git', argv, { cwd, stdio: 'ignore' })
+  }
+
+  static #spec(): string {
+    return [
+      '# Draft fixture milestone — Execution spec',
+      '',
+      '**Fecha de congelación:** —',
+      '**Estado:** DRAFT',
+      '',
+      '## Hipótesis del experimento',
+      '',
+      '**The bet:** the draft spec dispatches nothing.',
+      '',
+      '**How we will know it failed:** the sweep asks gh for issues.',
+      '',
+      '**Anti-scope — what this epic does NOT do:** no dispatch while draft.',
+      '',
+    ].join('\n')
   }
 }
 
@@ -661,7 +733,7 @@ describe('ct-api entrypoint', () => {
   })
 
   it('both entrances use recorded calls and the runtime constructs no go or window client', async () => {
-    const runtime = await ActualHeadlessRuntime.prepared()
+    const runtime = await ActualHeadlessRuntime.prepared({ spec: EpicSpec.FROZEN })
     try {
       const port = await Entrypoint.listening(runtime.environment())
       await TheCoordinatingSession.recoveredBy(port)
@@ -723,5 +795,35 @@ describe('ct-api entrypoint', () => {
       await Entrypoint.killAll()
       await RunFileFixture.remove(state)
     }
+  })
+
+  it('the runtime sweeps every registered checkout and mounts the slice message path', async () => {
+    const fixture = await ADraftSpecCheckout.prepared()
+    try {
+      const started = await Entrypoint.started(ADraftSpecCheckout.environment(fixture))
+
+      const response = await fetch(`http://127.0.0.1:${started.port}/slices/42/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+
+      expect(response.status).not.toBe(404)
+      expect(await response.json()).toMatchObject({ code: 'malformed-repo' })
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      expect(existsSync(fixture.ghCalls)).toBe(false)
+      expect(started.saidLater()).not.toContain('could not survey')
+    } finally {
+      await ADraftSpecCheckout.remove(fixture)
+    }
+  }, 30_000)
+
+  it('the mounted path refuses another method with an allow header', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/slices/42/message`)
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
   })
 })

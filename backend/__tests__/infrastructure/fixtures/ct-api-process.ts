@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ClaudeCodeTranscript } from '../../../../plugin/scripts/claude-code-usage.js'
+import { EpicSpec } from '../../../src/domain/value-objects/epic-spec.ts'
 import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
 
 export type StartedEntrypoint = {
@@ -245,6 +246,8 @@ export class ActualHeadlessRuntime {
   static readonly COORDINATOR = '22222222-2222-4222-8222-222222222222'
   static readonly WRONG_AGENT = '33333333-3333-4333-8333-333333333333'
   static readonly ISSUE_BODY_UNITS = ToolRunner.PIPE_BUFFER_BYTES * 32
+  static readonly #FROZEN_ON = '2026-09-16'
+  static readonly #NEVER_FROZEN = '—'
   static readonly #WAIT_TRIES = 100
   static readonly #WAIT_MS = 100
 
@@ -262,7 +265,7 @@ export class ActualHeadlessRuntime {
     this.specSha = asked.specSha
   }
 
-  static async prepared(): Promise<ActualHeadlessRuntime> {
+  static async prepared({ spec }: { spec: string }): Promise<ActualHeadlessRuntime> {
     const base = await mkdtemp(join(tmpdir(), 'ct-api-headless-runtime-'))
     const root = join(base, 'checkout')
     const state = join(base, 'config')
@@ -275,7 +278,8 @@ export class ActualHeadlessRuntime {
     await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
     await writeFile(join(root, 'AGENTS.md'), '# Fixture\n')
     await writeFile(
-      join(root, 'docs', 'superpowers', 'specs', '2026-01-01-fixture-execution.md'), ActualHeadlessRuntime.#spec()
+      join(root, 'docs', 'superpowers', 'specs', '2026-01-01-fixture-execution.md'),
+      ActualHeadlessRuntime.#spec(spec)
     )
     ActualHeadlessRuntime.#git(root, 'add', '.')
     ActualHeadlessRuntime.#git(root, 'commit', '-q', '-m', 'fixture baseline')
@@ -364,12 +368,16 @@ export class ActualHeadlessRuntime {
     execFileSync('git', argv, { cwd, stdio: 'ignore' })
   }
 
-  static #spec(): string {
+  static #freezeDateFor(state: string): string {
+    return state === EpicSpec.FROZEN ? ActualHeadlessRuntime.#FROZEN_ON : ActualHeadlessRuntime.#NEVER_FROZEN
+  }
+
+  static #spec(state: string): string {
     return [
-      '# Fixture milestone — Execution spec',
+      `# ${ActualHeadlessRuntime.MILESTONE}${EpicSpec.TITLE_SUFFIX}`,
       '',
-      '**Fecha de congelación:** 2026-09-16',
-      '**Estado:** CONGELADA',
+      `${EpicSpec.DATE_LINE} ${ActualHeadlessRuntime.#freezeDateFor(state)}`,
+      `${EpicSpec.STATE_LINE} ${state}`,
       '',
       '## Hipótesis del experimento',
       '',

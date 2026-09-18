@@ -25,6 +25,8 @@ import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import { RecoverPlanRoute } from './recover-plan-route.ts'
 import { CleanupPlanRoute } from './cleanup-plan-route.ts'
+import { SliceMessageRoute } from './slice-message-route.ts'
+import type { SliceChangeAsked } from './slice-message-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { RecoverPlan } from '../application/actions/recover-plan.ts'
@@ -134,6 +136,7 @@ export type ApiCollaborators = {
   groomEpic?: GroomEpic | null,
   epicGroomInFlight?: WorkInFlight | null,
   promoteEpic?: PromoteEpic | null,
+  sliceMessage?: SliceChangeAsked | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -200,6 +203,7 @@ export class ApiServer {
   readonly groomEpic: GroomEpic | null | undefined
   readonly epicGroomInFlight: WorkInFlight | null | undefined
   readonly promoteEpic: PromoteEpic | null | undefined
+  readonly sliceMessage: SliceChangeAsked | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
@@ -211,7 +215,7 @@ export class ApiServer {
     openCoordinatingSession, openGroomSession, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
-    stderr, frontendRoot,
+    sliceMessage, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -245,6 +249,7 @@ export class ApiServer {
     this.groomEpic = groomEpic
     this.epicGroomInFlight = epicGroomInFlight
     this.promoteEpic = promoteEpic
+    this.sliceMessage = sliceMessage
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -289,6 +294,14 @@ export class ApiServer {
       CleanupPlanRoute.handledBy(this.cleanupPlan!, this.recovery!, this.startsInFlight),
     )
     app.all(CleanupPlanRoute.PATH, CleanupPlanRoute.refuseOtherMethods)
+    app.post(
+      SliceMessageRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      SliceMessageRoute.handledBy(this.sliceMessage!)
+    )
+    app.all(SliceMessageRoute.PATH, SliceMessageRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

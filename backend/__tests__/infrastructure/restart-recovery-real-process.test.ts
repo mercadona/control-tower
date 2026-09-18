@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { ActualHeadlessRuntime, Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
 import type { RecordedLaunch, StartedEntrypoint, StartedPlan } from './fixtures/ct-api-process.ts'
 
@@ -358,7 +359,7 @@ describe('a crash of the backend with work in flight', () => {
   })
 
   it('gives back every record it had written, opens a new terminal, and reaps nothing it had started', async () => {
-    const runtime = await ActualHeadlessRuntime.prepared()
+    const runtime = await ActualHeadlessRuntime.prepared({ spec: EpicSpec.DRAFT })
     let owned: TheProcessesTheBackendOwned | null = null
     try {
       const crashed = await ABackendThatCrashed.andStartedAgain(runtime)
@@ -399,7 +400,7 @@ describe('a crash of the backend with work in flight', () => {
   }, 120_000)
 
   it('refuses the recovery as often as it is pressed, naming the ownership the crash took away', async () => {
-    const runtime = await ActualHeadlessRuntime.prepared()
+    const runtime = await ActualHeadlessRuntime.prepared({ spec: EpicSpec.DRAFT })
     let owned: TheProcessesTheBackendOwned | null = null
     try {
       const crashed = await ABackendThatCrashed.andStartedAgain(runtime)

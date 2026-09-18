@@ -21,6 +21,8 @@ export type WorkspaceHarvested = (
 
 export type SweepWait = () => Promise<void>
 
+export type CheckoutRelayed = (root: CheckoutRoot, repository: RepositoryName) => Promise<void>
+
 export class SweepLine {
   static readonly SILENT = null
 
@@ -69,19 +71,22 @@ export class HarvestClock {
   readonly checkouts: CheckoutsKnown
   readonly survey: CheckoutSurveyed
   readonly harvest: WorkspaceHarvested
+  readonly relay: CheckoutRelayed
   readonly sleep: SweepWait
   readonly stderr: (line: string) => void
 
-  constructor({ checkouts, survey, harvest, sleep, stderr }: {
+  constructor({ checkouts, survey, harvest, relay, sleep, stderr }: {
     checkouts: CheckoutsKnown,
     survey: CheckoutSurveyed,
     harvest: WorkspaceHarvested,
+    relay: CheckoutRelayed,
     sleep: SweepWait,
     stderr: (line: string) => void,
   }) {
     this.checkouts = checkouts
     this.survey = survey
     this.harvest = harvest
+    this.relay = relay
     this.sleep = sleep
     this.stderr = stderr
   }
@@ -117,6 +122,7 @@ export class HarvestClock {
     for (const prepared of checkout.prepared) {
       await this.#collect(prepared, checkout.repository)
     }
+    await this.relay(root, checkout.repository)
   }
 
   #say(line: string | null): void {

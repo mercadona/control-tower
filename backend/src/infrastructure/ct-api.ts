@@ -20,6 +20,7 @@ import { GitWorkspace } from './git-workspace.ts'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
+import { DispatchRelay } from './dispatch-relay.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanEvents, PlanSessions } from './plan-events-route.ts'
@@ -44,7 +45,7 @@ import { GhPublishedSpecs } from './gh-published-specs.ts'
 import { GhEpicIssues } from './gh-epic-issues.ts'
 import { CtGroomEpic } from './ct-groom-epic.ts'
 import { StartPlan } from '../application/actions/start-plan.ts'
-import { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
+import { StartMilestonePlan, StartMilestonePlanParams } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
 import { DriveRun } from '../application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../application/actions/execute-run-instruction.ts'
@@ -333,11 +334,12 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, environment, harvestTable }: {
+  static #harvestClock({ workspace, checkouts, environment, harvestTable, relay }: {
     workspace: GitWorkspace,
     checkouts: DiskCheckoutRegistry,
     environment: NodeJS.ProcessEnv,
     harvestTable: string | null,
+    relay: DispatchRelay,
   }): HarvestClock {
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const harvestDelivery = new HarvestDelivery({
@@ -358,6 +360,7 @@ class CtApi {
       survey: (root) => surveyWorkspaces.execute(new SurveyWorkspacesParams({ root })),
       harvest: (prepared, repository) =>
         harvestDelivery.execute(new HarvestDeliveryParams({ prepared, repository })),
+      relay: (root, repository) => relay.relay(root, repository),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_SWEEPS),
       stderr: (line) => process.stderr.write(line),
     })
@@ -390,11 +393,9 @@ class CtApi {
   static #pullRequestReviews(
     pullRequests: GhPullRequests,
     planIssues: GhPlanIssues,
-    planAgents: PlanAgents,
-    workbench: DispatchCheckWorkbench
+    requestFixes: RequestFixes,
   ): ReviewWatch {
     const readFixesAsked = new ReadFixesAsked({ pullRequests, planIssues })
-    const requestFixes = new RequestFixes({ workbench, planAgents })
 
     return new ReviewWatch({
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
@@ -548,7 +549,8 @@ class CtApi {
       node: CtApi.#tool(process.execPath),
       dispatchCheck: PluginTree.dispatchCheck(),
     })
-    const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
+    const requestFixes = new RequestFixes({ workbench, planAgents })
+    const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, requestFixes)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
     const legacyRecovery = new RecordedPlanRecovery({
@@ -670,6 +672,7 @@ class CtApi {
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
+    const startsInFlight = new WorkInFlight()
     const startMilestonePlan = new StartMilestonePlan({
       candidates: new GhDispatchCandidates({ gh }),
       claims,
@@ -678,11 +681,18 @@ class CtApi {
       records,
       checkouts,
     })
+    const dispatchRelay = new DispatchRelay({
+      spec: (root) => epicSpecs.mostRecent(root),
+      dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
+      inFlight: startsInFlight,
+      stderr: (line) => process.stderr.write(line),
+    })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,
-      startsInFlight: new WorkInFlight(),
+      startsInFlight,
+      sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({
@@ -735,7 +745,7 @@ class CtApi {
     )
     await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
-      workspace, checkouts, environment, harvestTable: asked.harvestTable,
+      workspace, checkouts, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
     }))
   }
 }
