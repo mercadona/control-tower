@@ -24,6 +24,7 @@ class Sweeping {
   static ELSEWHERE = new CheckoutRoot('/elsewhere/clone')
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static SURVEY = 'survey'
+  static RELAY = 'relay'
   static SLEEP = 'sleep'
 
   readonly checkouts: Map<string, Surveyed[]>
@@ -131,6 +132,12 @@ class Sweeping {
     return Promise.resolve(new HarvestDeliveryResult({ outcome: answer }))
   }
 
+  #relayed(root: CheckoutRoot): Promise<void> {
+    this.trace.push(`${Sweeping.RELAY} ${root.text}`)
+
+    return Promise.resolve()
+  }
+
   #slept(): Promise<void> {
     this.trace.push(Sweeping.SLEEP)
     this.slept += 1
@@ -147,6 +154,7 @@ class Sweeping {
       checkouts: () => this.known,
       survey: (root) => this.#surveyed(root),
       harvest: (prepared, repository) => this.#harvested(prepared, repository),
+      relay: (root) => this.#relayed(root),
       sleep: () => this.#slept(),
       stderr: (line) => this.written.push(line),
     })
@@ -171,7 +179,7 @@ describe('HarvestClock', () => {
   it('the_first_sweep_happens_at_once_so_a_restarted_server_does_not_leave_a_merged_slice_lying_a_minute', async () => {
     const swept = await Sweeping.answering([[42, HarvestOutcome.COLLECTED]]).run()
 
-    expect(swept.trace).toEqual(['survey /repo/checkout', 'harvest #42', 'sleep'])
+    expect(swept.trace).toEqual(['survey /repo/checkout', 'harvest #42', 'relay /repo/checkout', 'sleep'])
   })
 
   it('it_waits_only_after_the_sweep_is_over_so_two_sweeps_can_never_overlap', async () => {
@@ -180,8 +188,8 @@ describe('HarvestClock', () => {
     ]).run()
 
     expect(swept.trace).toEqual([
-      'survey /repo/checkout', 'harvest #42', 'harvest #7', 'sleep',
-      'survey /repo/checkout', 'harvest #42', 'harvest #7', 'sleep',
+      'survey /repo/checkout', 'harvest #42', 'harvest #7', 'relay /repo/checkout', 'sleep',
+      'survey /repo/checkout', 'harvest #42', 'harvest #7', 'relay /repo/checkout', 'sleep',
     ])
   })
 
@@ -270,8 +278,8 @@ describe('HarvestClock', () => {
     }).run()
 
     expect(swept.trace).toEqual([
-      'survey /repo/checkout', 'harvest #42',
-      'survey /elsewhere/clone', 'harvest #7',
+      'survey /repo/checkout', 'harvest #42', 'relay /repo/checkout',
+      'survey /elsewhere/clone', 'harvest #7', 'relay /elsewhere/clone',
       'sleep',
     ])
   })
@@ -286,7 +294,9 @@ describe('HarvestClock', () => {
       'harvest sweep: could not survey the checkout: /repo/checkout does not name a origin remote\n',
       'harvest #7: collected\n',
     ])
-    expect(swept.trace).toEqual(['survey /repo/checkout', 'survey /elsewhere/clone', 'harvest #7', 'sleep'])
+    expect(swept.trace).toEqual([
+      'survey /repo/checkout', 'survey /elsewhere/clone', 'harvest #7', 'relay /elsewhere/clone', 'sleep',
+    ])
   })
 
   it('a_server_that_knows_no_clone_yet_sweeps_nothing_and_just_waits_for_the_next_turn', async () => {
@@ -303,6 +313,31 @@ describe('HarvestClock', () => {
     expect(swept.written).toEqual([
       'harvest sweep: the registry of checkouts cannot be read, so this sweep surveys none of them\n',
     ])
+  })
+
+  it('the sweep relays once for each surveyed checkout after its harvest', async () => {
+    const swept = await Sweeping.knowingTwo({
+      here: [[42, HarvestOutcome.COLLECTED]],
+      there: [[7, HarvestOutcome.WAITING]],
+    }).run()
+
+    expect(swept.trace).toEqual([
+      'survey /repo/checkout', 'harvest #42', 'relay /repo/checkout',
+      'survey /elsewhere/clone', 'harvest #7', 'relay /elsewhere/clone',
+      'sleep',
+    ])
+  })
+
+  it('a checkout whose survey fails reaches no relay', async () => {
+    const swept = await Sweeping.unableToSurvey(new WorkspaceNotRead('git worktree list refused')).run()
+
+    expect(swept.trace).toEqual(['survey /repo/checkout', 'sleep'])
+  })
+
+  it('a checkout with no prepared workspace still reaches the relay', async () => {
+    const swept = await Sweeping.answering([]).run()
+
+    expect(swept.trace).toEqual(['survey /repo/checkout', 'relay /repo/checkout', 'sleep'])
   })
 })
 
