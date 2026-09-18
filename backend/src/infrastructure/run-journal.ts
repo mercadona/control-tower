@@ -1,6 +1,8 @@
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
+import { SliceMessages } from '../domain/ports/slice-messages.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
+import { HeldMessage } from '../domain/value-objects/held-message.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { HeadlessFiles } from './headless-files.ts'
 
@@ -23,20 +25,92 @@ export class JournalEntry {
   }
 }
 
-export class RunJournal {
+export class RunJournal extends SliceMessages {
   static readonly #ADMISSION = 'admission.json'
   static readonly #MANIFEST = 'manifest.json'
   static readonly #OPERATIONS = 'operations'
   static readonly #REQUEST = 'request.json'
   static readonly #RECEIPT = 'receipt.json'
   static readonly #MATERIAL = 'material.json'
+  static readonly #MESSAGES = 'messages'
+  static readonly #MESSAGE = 'message.json'
+  static readonly #DELIVERY = 'delivery.json'
+  static readonly #MESSAGE_FIELDS: readonly string[] = Object.freeze(['askedAt', 'text', 'version'])
+  static readonly #VERSION = 1
 
   readonly files: HeadlessFiles
   readonly newId: () => string
+  readonly now: () => string
 
-  constructor(ports: { files: HeadlessFiles, newId: () => string }) {
+  constructor(ports: { files: HeadlessFiles, newId: () => string, now: () => string }) {
+    super()
     this.files = ports.files
     this.newId = ports.newId
+    this.now = ports.now
+  }
+
+  override async hold(watch: PlanWatch, text: string): Promise<string> {
+    const ticket = this.#ticket(this.newId())
+    await this.#publish(
+      join(this.#messagesPath(watch), ticket, RunJournal.#MESSAGE),
+      `${JSON.stringify({ version: RunJournal.#VERSION, askedAt: this.now(), text })}\n`,
+    )
+    return ticket
+  }
+
+  override async pending(watch: PlanWatch): Promise<readonly HeldMessage[]> {
+    const messages = this.#messagesPath(watch)
+    const kind = await this.#kindOf(messages)
+    if (kind === 'absent') return Object.freeze([])
+    if (kind !== 'directory') throw new RunNotUnderstood(`${messages} is not a messages directory`)
+    const held: HeldMessage[] = []
+    for (const name of await this.#list(messages)) {
+      const ticket = this.#ticket(name)
+      const directory = join(messages, ticket)
+      if (await this.#readOptional(join(directory, RunJournal.#DELIVERY)) !== null) continue
+      held.push(RunJournal.#heldFrom(ticket, await this.#readRequired(join(directory, RunJournal.#MESSAGE))))
+    }
+    held.sort((left, right) => (left.askedAt === right.askedAt
+      ? left.ticket.localeCompare(right.ticket)
+      : left.askedAt.localeCompare(right.askedAt)))
+    return Object.freeze(held)
+  }
+
+  override async settle(watch: PlanWatch, ticket: string, call: string): Promise<void> {
+    await this.#publish(
+      join(this.#messagesPath(watch), this.#ticket(ticket), RunJournal.#DELIVERY),
+      `${JSON.stringify({ version: RunJournal.#VERSION, call })}\n`,
+    )
+  }
+
+  static #heldFrom(ticket: string, text: string): HeldMessage {
+    let value: unknown
+    try {
+      value = JSON.parse(text)
+    } catch (cause) {
+      throw new RunNotUnderstood(`the held change ${ticket} is not valid JSON: ${String(cause)}`)
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new RunNotUnderstood(`the held change ${ticket} is not an object: ${text}`)
+    }
+    const record: Record<string, unknown> = { ...value }
+    const keys = Object.keys(record).sort()
+    if (keys.length !== RunJournal.#MESSAGE_FIELDS.length
+      || keys.some((key, index) => key !== RunJournal.#MESSAGE_FIELDS[index])) {
+      throw new RunNotUnderstood(`the held change ${ticket} has unexpected keys: ${text}`)
+    }
+    if (record.version !== RunJournal.#VERSION) {
+      throw new RunNotUnderstood(`the held change ${ticket} has an unknown version: ${text}`)
+    }
+    try {
+      return new HeldMessage({
+        ticket,
+        askedAt: record.askedAt as string,
+        text: record.text as string,
+      })
+    } catch (cause) {
+      throw new RunNotUnderstood(`the held change ${ticket} is malformed: ${String(cause)}`)
+    }
   }
 
   async admitted(watch: PlanWatch): Promise<boolean> {
@@ -243,6 +317,10 @@ export class RunJournal {
 
   #operationsPath(watch: PlanWatch): string {
     return join(this.#runPath(watch), RunJournal.#OPERATIONS)
+  }
+
+  #messagesPath(watch: PlanWatch): string {
+    return join(this.#runPath(watch), RunJournal.#MESSAGES)
   }
 
   #runPath(watch: PlanWatch): string {

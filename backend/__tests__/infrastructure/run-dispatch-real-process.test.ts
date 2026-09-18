@@ -123,6 +123,7 @@ class DispatchRepository {
     this.journal = new RunJournal({
       files: new HeadlessFiles({ root: stateRoot, fs, newId: () => 'temporary-record' }),
       newId: () => DispatchRepository.TICKET,
+      now: () => { throw new Error('the journal clock is not asked') },
     })
   }
 

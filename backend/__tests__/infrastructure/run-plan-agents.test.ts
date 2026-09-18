@@ -507,6 +507,7 @@ describe('RunPlanAgents', () => {
     const journal = new RunJournal({
       files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
       newId: () => '44444444-4444-4444-8444-444444444444',
+      now: () => { throw new Error('the journal clock is not asked') },
     })
     if (admit) await journal.admit(AgentMother.WATCH)
     const calls = new CallsDouble(events, plannerDone, fixDone)
@@ -582,6 +583,7 @@ describe('RunPlanAgents', () => {
         if (id === undefined) throw new Error('no journal identity was arranged')
         return id
       },
+      now: () => { throw new Error('the journal clock is not asked') },
     })
     if (admit) await journal.admit(AgentMother.WATCH)
     const calls = new CallsDouble(events, plannerDone, fixDone)

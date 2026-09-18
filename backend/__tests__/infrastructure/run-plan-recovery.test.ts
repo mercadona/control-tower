@@ -155,7 +155,7 @@ class RecoveryMachine extends CtRunMachine {
     const files = new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' })
     const effects = { commands: 0 }
     super({
-      journal: new RunJournal({ files, newId: () => 'unused' }),
+      journal: new RunJournal({ files, newId: () => 'unused', now: () => { throw new Error('the journal clock is not asked') } }),
       node: async () => { effects.commands += 1; throw new Error('GET must not execute the oracle') },
       git: async () => { throw new Error('GET must not inspect git') },
       read: async () => null,
@@ -178,6 +178,7 @@ class RecoveryJournal extends RunJournal {
     super({
       files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
       newId: () => 'unused',
+      now: () => { throw new Error('the journal clock is not asked') },
     })
   }
 
@@ -981,7 +982,11 @@ describe('RunPlanRecovery projection', () => {
     try {
       const watch = RecoveryMother.watch()
       const files = new HeadlessFiles({ root, fs, newId: () => 'temporary-record' })
-      const journal = new RunJournal({ files, newId: () => '99999999-9999-4999-8999-999999999999' })
+      const journal = new RunJournal({
+        files,
+        newId: () => '99999999-9999-4999-8999-999999999999',
+        now: () => { throw new Error('the journal clock is not asked') },
+      })
       const records = new LifecycleRecords(watch)
       const calls = new LifecycleCalls(watch)
       lifecycleCalls = calls
@@ -1298,11 +1303,15 @@ class FiniteBridge {
     }
     const files = new HeadlessFiles({ root: state, fs, newId: () => 'temporary-response' })
     const ids = asked.ids ?? [FiniteBridge.DISPATCH, FiniteBridge.CONSUMING, FiniteBridge.BOUNDARY]
-    const journal = new RunJournal({ files, newId: () => {
-      const id = ids.shift()
-      if (id === undefined) throw new Error('unexpected or duplicate journal request')
-      return id
-    } })
+    const journal = new RunJournal({
+      files,
+      newId: () => {
+        const id = ids.shift()
+        if (id === undefined) throw new Error('unexpected or duplicate journal request')
+        return id
+      },
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     const watch = new PlanWatch({
       story: null,
       issue: new PlanIssue({ number: 332, url: 'https://github.com/mercadona/control-tower-plugin/issues/332' }),

@@ -413,7 +413,11 @@ export class RunDriverMother {
     this.publication = asked.publication
     this.#processes = new FixtureProcesses(this.captures)
     this.files = new HeadlessFiles({ root: this.state, fs, newId: () => this.#identity() })
-    this.journal = new RunJournal({ files: this.files, newId: () => this.#identity() })
+    this.journal = new RunJournal({
+      files: this.files,
+      newId: () => this.#identity(),
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     this.watch = new PlanWatch({
       story: null,
       issue: new PlanIssue({ number: RunDriverMother.ISSUE, url: 'https://github.com/acme/widget/issues/7' }),
@@ -798,7 +802,11 @@ export class RunDriverMother {
         }
         const publicationsBefore = await fixture.#publicationCount()
         const rebuiltFiles = new HeadlessFiles({ root: fixture.state, fs, newId: () => fixture.#identity() })
-        const rebuiltJournal = new RunJournal({ files: rebuiltFiles, newId: () => fixture.#identity() })
+        const rebuiltJournal = new RunJournal({
+          files: rebuiltFiles,
+          newId: () => fixture.#identity(),
+          now: () => { throw new Error('the journal clock is not asked') },
+        })
         const rebuiltRecords = new DiskPlanRecords({
           files: rebuiltFiles, newId: () => fixture.#identity(), now: () => new Date().toISOString(),
           exists: async (path) => existsSync(path),
@@ -1117,7 +1125,11 @@ export class RunDriverMother {
       files, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
       exists: async (path) => existsSync(path),
     })
-    const journal = new RunJournal({ files, newId: () => this.#identity() })
+    const journal = new RunJournal({
+      files,
+      newId: () => this.#identity(),
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     const machine = new CtRunMachine({
       journal,
       node: async () => { verbs += 1; throw new Error('recovery must not execute a verb') },

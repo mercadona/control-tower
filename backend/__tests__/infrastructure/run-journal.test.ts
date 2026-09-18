@@ -31,11 +31,36 @@ class JournalMother {
     })
   }
 
-  static journal(root: string, newId = () => JournalMother.TICKET, fileSystem = fs): RunJournal {
+  static readonly EARLY_TICKET = '33333333-3333-4333-8333-333333333333'
+  static readonly LATE_TICKET = '44444444-4444-4444-8444-444444444444'
+  static readonly EARLY_AT = '2026-09-19T10:00:01.000Z'
+  static readonly LATE_AT = '2026-09-19T10:00:05.000Z'
+
+  static journal(
+    root: string,
+    newId = () => JournalMother.TICKET,
+    fileSystem = fs,
+    now = () => JournalMother.LATE_AT,
+  ): RunJournal {
     return new RunJournal({
       files: new HeadlessFiles({ root, fs: fileSystem, newId: () => 'temporary-record' }),
       newId,
+      now,
     })
+  }
+
+  static sequence(values: readonly string[]): () => string {
+    let taken = 0
+    return () => {
+      if (taken >= values.length) throw new Error('the sequence ran out of values')
+      const value = values[taken]
+      taken += 1
+      return value
+    }
+  }
+
+  static messages(root: string): string {
+    return join(root, 'harness', JournalMother.CONVERSATION, 'run', 'messages')
   }
 
   static operations(root: string): string {
@@ -76,6 +101,60 @@ describe('RunJournal', () => {
 
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it('a held change stays pending until its delivery is settled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-held-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(
+      root,
+      JournalMother.sequence([JournalMother.LATE_TICKET, JournalMother.EARLY_TICKET]),
+      fs,
+      JournalMother.sequence([JournalMother.LATE_AT, JournalMother.EARLY_AT]),
+    )
+
+    const late = await journal.hold(watch, 'rename the port')
+    const early = await journal.hold(watch, 'drop the flag')
+
+    expect((await journal.pending(watch)).map((message) => message.ticket)).toEqual([early, late])
+    expect((await journal.pending(watch)).map((message) => message.text)).toEqual([
+      'drop the flag', 'rename the port',
+    ])
+
+    await journal.settle(watch, early, 'call-early')
+
+    expect((await journal.pending(watch)).map((message) => message.ticket)).toEqual([late])
+    expect(JSON.parse(await readFile(
+      join(JournalMother.messages(root), early, 'delivery.json'), 'utf8',
+    ))).toEqual({ version: 1, call: 'call-early' })
+  })
+
+  it('a held change outlives the journal that wrote it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-held-restart-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const ticket = await JournalMother.journal(root).hold(watch, 'split the task')
+    const restarted = JournalMother.journal(root, () => {
+      throw new Error('journal recovery must not allocate message identity')
+    })
+
+    const held = await restarted.pending(watch)
+
+    expect(held).toHaveLength(1)
+    expect(held[0].ticket).toBe(ticket)
+    expect(held[0].askedAt).toBe(JournalMother.LATE_AT)
+    expect(held[0].text).toBe('split the task')
+  })
+
+  it('a malformed held change is not understood', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-held-malformed-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    await mkdir(join(JournalMother.messages(root), JournalMother.TICKET), { recursive: true })
+    await writeFile(join(JournalMother.messages(root), JournalMother.TICKET, 'message.json'), '{"version":2}\n')
+
+    await expect(JournalMother.journal(root).pending(watch)).rejects.toThrow(RunNotUnderstood)
   })
 
   it('a command request survives a missing receipt without becoming replay permission', async () => {
