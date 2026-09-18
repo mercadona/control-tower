@@ -358,10 +358,20 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
     // fifty bytes. A ratchet left above the real size is a ratchet that lets
     // the next addition in for free. Accumulated since 16,314: +1,207 bytes,
     // 7.4%.
+    //
+    // Cap LOWERED from 17,521 to 17,451 (A-3, issue #434). The `plan` gate
+    // retired, so step 9 of the checklist stopped ordering the agent to stop
+    // and wait for a human OK and the handoff stopped naming a closed gate;
+    // the sentence that explains why a 74k plan is a bad checkpoint stayed,
+    // reworded, because the reason survives the gate that motivated it. It is
+    // lowered and not left where it was by the rule written just above: a
+    // ratchet above the real size lets the next addition in for free, and a
+    // retirement is exactly the moment that invites one. Accumulated since
+    // 16,314: +1,137 bytes, 7.0%.
     expect(
       bytes('SKILL.md'),
       'SKILL.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
-    ).toBeLessThanOrEqual(17521)
+    ).toBeLessThanOrEqual(17451)
     expect(
       bytes('plan-template.md'),
       'plan-template.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'

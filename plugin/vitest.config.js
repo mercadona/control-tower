@@ -48,36 +48,29 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 120_000,
     teardownTimeout: 60_000,
-    // CT_WATCH_GO_BIN — NO test launches the real `-OK` watcher.
+    // CT_WATCH_MERGE_BIN — NO test launches the real MERGE watcher, which
+    // `dispatch-check --release` launches detached.
     //
-    // `ct-next` launches it DETACHED after dispatching a slice with a `plan`
-    // gate, that is, in most of the tests that dispatch anything. Measured the
-    // first time the suite ran with this in place: 42 orphaned
-    // `ct-watch-go.mjs` processes, each one polling every 30 s for eight
-    // hours. A `pkill` after every run is not a solution: the suite cannot
-    // leave processes behind, full stop.
+    // `--release` is exercised in many more tests than the ones that talk
+    // about it (all the e2e correspondence ones, the dry-run ones, the
+    // truncation ones), so without this each one would leave a process polling
+    // GitHub every minute for 48 hours. It goes here and not in each test
+    // because the defect is exactly that: a test that does NOT talk about this
+    // launching it by accident. The files that do talk about it set their own
+    // value and do not depend on this one.
     //
-    // It goes here and not in each test because the defect is exactly that: a
-    // test that does NOT talk about this launching it by accident. The three
-    // files that do talk about it set their own value and do not depend on
-    // this one.
-    //
-    // The recorder, besides polling nothing, notes down its argv when the test
-    // gives it a FAKE_WATCH_GO_LOG — so the same double serves both to do no
-    // harm and to check that the launch happens with the right arguments.
-    // CT_WATCH_MERGE_BIN — the same for the MERGE watcher, which
-    // `dispatch-check --release` launches detached. `--release` is exercised
-    // in many more tests than the ones that talk about it (all the e2e
-    // correspondence ones, the dry-run ones, the truncation ones), so without
-    // this each one would leave a process polling GitHub every minute for 48
-    // hours. It is exactly the defect CT_WATCH_GO_BIN came to close; that it
-    // is here and not in each test is the point.
+    // It used to have a sibling, CT_WATCH_GO_BIN, for the `-OK` watcher, and
+    // that is where this lesson was paid for: measured the first time the
+    // suite ran without it, 42 orphaned watcher processes, each one polling
+    // every 30 s for eight hours. A `pkill` after every run is not a solution:
+    // the suite cannot leave processes behind, full stop. The go watcher
+    // retired with its protocol (A-3, issue #434) and its double went with it;
+    // the rule it established is what remains here.
     env: {
       // `fileURLToPath` and not `.pathname`: with the checkout under a path
       // with spaces or non-ASCII, `.pathname` comes percent-encoded and would
       // point at a file that does not exist. It is what the repo's other 56
       // files use.
-      CT_WATCH_GO_BIN: fileURLToPath(new URL('./__tests__/fixtures/fake-watch-go-bin/recorder.mjs', import.meta.url)),
       CT_WATCH_MERGE_BIN: fileURLToPath(new URL('./__tests__/fixtures/fake-watch-merge-bin/recorder.mjs', import.meta.url)),
     },
   },

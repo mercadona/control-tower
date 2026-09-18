@@ -22,10 +22,11 @@
 import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
 import { OUTCOMES } from './run-machine.js'
-// `node:crypto` does not break the «PURE module» of the header, and the
-// precedent is written in go-response.js: `createHash` is a deterministic
-// function of its argument —no disk, no network and no clock—, «the same as a
-// more expensive String.trim».
+// `node:crypto` does not break the «PURE module» of the header: `createHash`
+// is a deterministic function of its argument —no disk, no network and no
+// clock—, «the same as a more expensive String.trim». The precedent used to be
+// written in go-response.js, which retired with the go protocol (A-3, issue
+// #434).
 import { createHash } from 'node:crypto'
 
 export const SEVERITIES = ['high', 'medium', 'low']
@@ -597,11 +598,12 @@ export function readAdvice(structured) {
 // captured sha.
 //
 // CONTENT-ADDRESSED AND NOT A DRAWN NONCE, and the difference with the `go`
-// nonce (go-response.js) is the reason: that one is SECRET and unguessable, and
-// its property is that the agent cannot fabricate the permission. This one is
-// public and derivable —it is in the file the judge reads, and anyone with a
-// shell recomputes it—, so it does NOT authenticate the judge: it ties the
-// verdict to a state of the code. A random nonce would close (a) and not (b)
+// nonce the `plan` gate used to draw (retired with its protocol by A-3, issue
+// #434) is the reason: that one was SECRET and unguessable, and its property
+// was that the agent could not fabricate the permission. This one is public
+// and derivable —it is in the file the judge reads, and anyone with a shell
+// recomputes it—, so it does NOT authenticate the judge: it ties the verdict
+// to a state of the code. A random nonce would close (a) and not (b)
 // (in the gap the package is not regenerated, so the nonce is still valid), and
 // on top of that it would punish the obedient: a verdict reissued over a package
 // regenerated with the SAME diff would be discarded for carrying the old nonce.

@@ -8,7 +8,9 @@
 //
 //   - `ct-next.mjs#queryAllCmuxWorkspaces` — hardened by two external reviews,
 //     with the complete schema guard that sits further down.
-//   - `ct-watch-go.mjs#querySession` — raw, matching by `custom_title`.
+//   - `ct-watch-go.mjs#querySession` — raw, matching by `custom_title`. That
+//     watcher retired with the `plan` gate's go protocol (A-3, issue #434);
+//     the duplication it contributed is what this file exists to have ended.
 //   - `ct-watch-merge.mjs#consultarCoordinadora` — raw, matching by
 //     `current_directory`.
 //
@@ -218,10 +220,10 @@ function ejecutar(argv, timeoutMs) {
 //   { consultado: false, ref: null }       → it could not be known.
 //
 // The third is the one a raw read loses, and losing it has opposite
-// consequences in the two watchers: the `-OK` one shuts down with exit 4 saying
-// the slice's session no longer exists, and the merge one accuses a person of
-// not having the coordinator where it belongs. Both confidently and both
-// falsely. That is why `listCmuxWorkspaces`'s `null` is translated here into
+// consequences in the two watchers of the time: the `-OK` one shut down with
+// exit 4 saying the slice's session no longer exists, and the merge one
+// accuses a person of not having the coordinator where it belongs. Both
+// confidently and both falsely. That is why `listCmuxWorkspaces`'s `null` is translated here into
 // `consultado: false` and not into "it is not there": this is the only place
 // where that translation happens, and so it cannot diverge again.
 //

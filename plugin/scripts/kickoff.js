@@ -297,7 +297,7 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
     // rest stay available by path, on demand.
     `La vara de ct vive en ${conventionsDir} y el programa la lleva a cada tarea: al implementador pegada, al juez por ruta. Cómo se relaciona con las convenciones de este repo cuando chocan lo dice la CABECERA con la que viaja, que es donde está escrita esa regla y el único sitio donde está — léela ahí y sigue lo que dice tal cual. Antes de escribir el plan abre dos de ellos, porque el plan decide justo lo que miden: \`simplicity.md\` (la carga de la prueba está en lo que se añade, y que el plan lo pida la deja donde estaba) y \`decisions.md\` (dónde vive una decisión ya tomada, para escribirla una sola vez). Los demás quedan a mano por ruta, el que necesites para decidir algo concreto. Lo que el plan tiene que seleccionar sigue siendo la vara del REPO, en el \`Rules to obey:\` de §3, como hasta ahora.`,
     `Primer acto, con el baseline verde: escribe el plan del slice con control-tower-loop:ct-writing-plans-prescriptive usando el issue como spec (sus AC, "Protegido", "${milestoneContextHeading}" y "${FROZEN_DECISIONS_HEADING}" son la entrada que la skill pide; vuelca cada decisión congelada en "## 2. Closed decisions" del plan — son del epic y las DEBES respetar con sus mismas palabras). SOLO bloques esenciales, cada uno con su etiqueta de rol: contratos, call sites y el tramo que cambia — los cuerpos de los módulos y los ficheros de test los escribe el implementador con TDD, y la configuración se describe en prosa. Guárdalo como docs/superpowers/plans/YYYY-MM-DD-issue-${slice.n}-<slug>.md, valídalo con \`node ${dispatchCheckPath} ${slice.n} --repo ${repo} --check-plan\` hasta exit 0, y commitéalo: viaja en el PR, y el --release del final se negará (exit 6) sin un plan válido commiteado.`,
-    renderRunMachineLine(gates, ctStepPath, slice.n),
+    renderRunMachineLine(ctStepPath, slice.n),
     addendum,
     ...gateLines,
     e2eLine,
@@ -368,28 +368,20 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
   ].filter(Boolean).join('\n')
 }
 
-// renderRunMachineLine (2026-09-11 plan, "the kickoff names only the gates
-// the slice has") — the opening that names (or does not name) the human OK on
-// the `plan` gate, followed by the run-machine sequence itself, out of ONE
-// piece of text. Before this, the opening was an UNCONDITIONAL element of
-// `renderKickoff`'s array: a slice whose resolved gates left `plan` out was
-// still told to wait for a human OK that nothing mechanical enforces
-// (run-machine.js has no go step, and dispatch-check --release only demands
-// the go when the issue carries the `plan` label) — so the dispatched agent
-// was told to stop for nobody. `gates` is `resolveGatesForAgent(slice)`,
-// resolved ONCE by the caller and passed in here — this function asks the
-// bare token, it does not resolve the gate set a second time.
+// renderRunMachineLine — the opening, and then the run-machine sequence
+// itself, out of ONE piece of text.
 //
-// The run-machine sequence — ct-step next, report, controls, judge, verdict,
-// commit, reconcile, global, slice-verdict, back to `next` until "run
-// delivered" — is the SAME text in both branches, moved here unchanged from
-// what used to be the second half of this line: two branches must not each
-// carry their own copy of it (conventions/decisions.md).
-function renderRunMachineLine(gates, ctStepPath, issueNumber) {
-  const opening = gates.includes('plan')
-    ? "Con el plan commiteado y el gate 'plan' con OK humano, la secuencia de la implementación la dicta la máquina."
-    : 'Con el plan commiteado, la secuencia de la implementación la dicta la máquina y arranca ahí mismo.'
-  return `${opening} Pregunta el paso con \`node ${ctStepPath} next --plan docs/superpowers/plans/<el-plan-que-commiteaste>.md --issue ${issueNumber}\` y obedece LITERALMENTE lo que imprima en cada paso (donde diga \`ct-step\`, es \`node ${ctStepPath}\`): despacha el implementador como subagente con la rúbrica y el brief que te indique, luego \`ct-step report\`, \`ct-step controls\`, despacha el juez como subagente ct-judge (declarado sin Bash), \`ct-step verdict\` y \`ct-step commit\` — quien comitea es ct-step. Tras el commit de la última tarea quedan tres pasos más, que \`next\` también dicta: \`ct-step reconcile\` (fusiona la rama con su base; si hay conflicto, despacha ct-reconciler como subagente, declarado sin Bash y sin Write — quien stagea, comitea y aborta la fusión es el programa), \`ct-step global\` (la Global verification del plan la ejecuta el programa) y el juicio del slice entero — despacha ct-slice-judge como subagente (declarado sin Bash) y entrega su JSON con \`ct-step slice-verdict\`. Vuelve a \`next\` tras cada paso hasta "run delivered".`
+// IT HAD A BRANCH AND IT NO LONGER HAS ONE. The 2026-09-11 plan ("the kickoff
+// names only the gates the slice has") made the opening conditional on the
+// slice carrying the `plan` gate: a slice that did not carry it was no longer
+// told to wait for a human OK that nothing mechanical enforced. A-3 (issue
+// #434) retired the gate itself, so there is no longer a slice on the other
+// side of that branch — the plan is committed and published as a comment on
+// the issue, and the run starts right there. Keeping the branch would have
+// meant keeping a text that nothing can reach: `resolveGatesForAgent` cannot
+// return a retired token (gates.js#RETIRED_GATES).
+function renderRunMachineLine(ctStepPath, issueNumber) {
+  return `Con el plan commiteado, la secuencia de la implementación la dicta la máquina y arranca ahí mismo. Pregunta el paso con \`node ${ctStepPath} next --plan docs/superpowers/plans/<el-plan-que-commiteaste>.md --issue ${issueNumber}\` y obedece LITERALMENTE lo que imprima en cada paso (donde diga \`ct-step\`, es \`node ${ctStepPath}\`): despacha el implementador como subagente con la rúbrica y el brief que te indique, luego \`ct-step report\`, \`ct-step controls\`, despacha el juez como subagente ct-judge (declarado sin Bash), \`ct-step verdict\` y \`ct-step commit\` — quien comitea es ct-step. Tras el commit de la última tarea quedan tres pasos más, que \`next\` también dicta: \`ct-step reconcile\` (fusiona la rama con su base; si hay conflicto, despacha ct-reconciler como subagente, declarado sin Bash y sin Write — quien stagea, comitea y aborta la fusión es el programa), \`ct-step global\` (la Global verification del plan la ejecuta el programa) y el juicio del slice entero — despacha ct-slice-judge como subagente (declarado sin Bash) y entrega su JSON con \`ct-step slice-verdict\`. Vuelve a \`next\` tras cada paso hasta "run delivered".`
 }
 
 // renderStateGates: the value of the seeded SLICE.md's `gates` field. A

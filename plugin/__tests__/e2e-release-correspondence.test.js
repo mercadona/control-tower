@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { goEnv } from './fixtures/go-gate.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/dispatch-check.mjs', import.meta.url))
 const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url))
@@ -111,10 +110,7 @@ function repo(opts = {}) {
   return dir
 }
 
-// `go` (F38): the `plan` gate of door 9 is CLOSED by default in this file,
-// because what is being tested here is the e2e correspondence and not the go.
-// The go's tests are in f38-the-plan-gate-go.test.js.
-function release(dir, { body, viewFail = false, labels, go = true } = {}) {
+function release(dir, { body, viewFail = false, labels } = {}) {
   const log = join(dir, 'gh-argv.log')
   const r = spawnSync(process.execPath, [SCRIPT, '9', '--repo', 'o/r', '--release'], {
     cwd: dir, encoding: 'utf8',
@@ -124,8 +120,7 @@ function release(dir, { body, viewFail = false, labels, go = true } = {}) {
       FAKE_GH_ARGV_LOG_FILE: log,
       ...(body !== undefined ? { FAKE_GH_VIEW_BODY: body } : {}),
       ...(viewFail ? { FAKE_GH_VIEW_FAIL: '1' } : {}),
-      FAKE_GH_VIEW_LABELS: JSON.stringify(labels || ['status:in-progress', 'gate:plan', 'gate:e2e']),
-      ...(go ? goEnv({ repo: 'o/r', issue: 9 }) : {}),
+      FAKE_GH_VIEW_LABELS: JSON.stringify(labels || ['status:in-progress', 'gate:e2e']),
     },
   })
   return { ...r, argv: existsSync(log) ? readFileSync(log, 'utf8') : '' }

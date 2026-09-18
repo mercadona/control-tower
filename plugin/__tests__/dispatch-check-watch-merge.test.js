@@ -8,15 +8,13 @@
 //
 // The real watcher is replaced by a recorder via CT_WATCH_MERGE_BIN: without it
 // every test that releases a slice would set a REAL process polling GitHub every
-// minute for 48 hours. It is the same double, and for the same reason, as
-// CT_WATCH_GO_BIN in ct-next-watch-go.test.js.
+// minute for 48 hours.
 import { describe, it, expect } from 'vitest'
 import { spawnSync, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { goEnv } from './fixtures/go-gate.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/dispatch-check.mjs', import.meta.url))
 const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url))
@@ -100,8 +98,7 @@ function repo() {
 
 // The child goes DETACHED and with `unref`, so dispatch-check can finish before
 // the recorder writes. The file is polled instead of read once: otherwise the
-// test would be flaky by construction. It is the same wait, and for the same
-// reason, as `waitForArgv` in ct-next-watch-go.test.js.
+// test would be flaky by construction.
 async function waitForArgv(path, ms = 5000) {
   const deadline = Date.now() + ms
   while (Date.now() < deadline) {
@@ -119,12 +116,11 @@ function release(dir, { args = [], env = {} } = {}) {
       ...process.env,
       PATH: `${FAKE_GH}:${process.env.PATH}`,
       FAKE_GH_VIEW_BODY: BODY,
+      // `gate:plan` on purpose: a label a live issue still carries from
+      // before the retirement of that gate (A-3, issue #434) is no longer a
+      // door on the release ladder, so it does not stand between this file and
+      // the watcher it is about.
       FAKE_GH_VIEW_LABELS: JSON.stringify(['status:in-progress', 'gate:plan']),
-      // The `plan` gate with its nonce (F38): without a registered commitment
-      // and a comment satisfying it, `--release` refuses with exit 9 long before
-      // reaching the watcher's launch. It is not this file's subject, so the
-      // shared fixture is used instead of recreating the record.
-      ...goEnv({ repo: 'o/r', issue: 9 }),
       CT_WATCH_MERGE_BIN: RECORDER,
       FAKE_WATCH_MERGE_LOG: watchLog,
       ...env,
@@ -205,22 +201,6 @@ describe('--release launches the merge watcher', () => {
       }))
       const r = release(dir)
       expect(r.status).toBe(7)
-      expect(r.stdout + r.stderr).not.toMatch(/merge watcher/)
-      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
-    } finally { rmSync(dir, { recursive: true, force: true }) }
-  })
-
-  it('a release held back by the go gate (exit 9) launches nothing either', async () => {
-    // The newest door on the ladder (F38): without an `-OK <nonce>` on the issue
-    // the release refuses. It goes here and not only in the F38 tests because
-    // what this file pins down is "the watcher is born IF AND ONLY IF the slice
-    // was really delivered", and that property has to hold against EVERY door,
-    // not against the ones that existed the day it was written. A watcher
-    // launched here would poll for 48 h for a PR nobody has opened.
-    const dir = repo()
-    try {
-      const r = release(dir, { env: goEnv({ repo: 'o/r', issue: 9, given: false }) })
-      expect(r.status).toBe(9)
       expect(r.stdout + r.stderr).not.toMatch(/merge watcher/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }

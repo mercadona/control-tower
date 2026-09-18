@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { goEnv } from './fixtures/go-gate.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'dispatch-check.mjs')
 // Stub of `gh` for the error-handling tests (review round 1, Critical 2): it
@@ -169,7 +168,7 @@ describe('dispatch-check --dry-run', () => {
       // against an 'o/r' repository that does not exist. FAKE_GH_VIEW_BODY not
       // set → empty body → no "## E2E" section → nothing to cross-check, the
       // happy path of this test.
-      const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
+      const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` } })
       expect(out).toMatch(/released #9.*in-review/)
     } catch (e) {
       throw new Error(`no debería fallar: ${e.status} ${(e.stdout || '') + (e.stderr || '')}`)
@@ -314,7 +313,7 @@ describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rej
     // Task 10 (F-e2e): --release reads the body of the issue through `gh` — it
     // needs the stub here just as the test above does, or it hits the real
     // 'o/r'.
-    const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
+    const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` } })
     expect(out).toMatch(/released #9.*in-review/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -429,9 +428,6 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     const dir = mkReleaseDryRunRepo(19)
     const r = runReal(['19', '--repo', 'o/r', '--release'], {
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:in-review',
-      // F38: door 9 goes before the mutation, so this test needs the `plan`
-      // gate closed in order to reach the `gh edit` it wants to see fail.
-      ...goEnv({ repo: 'o/r', issue: 19 }),
     }, dir)
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(1)
@@ -597,7 +593,7 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
     // Task 10 (F-e2e): likewise — the `gh` stub is needed for reading the body
     // of the issue, not only for the mutation scenario.
     const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'],
-      { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, CT_CLAIM_PRECLAIM_DELAY_MS: 'not-a-number', ...goEnv({ repo: 'o/r', issue: 9 }) } })
+      { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, CT_CLAIM_PRECLAIM_DELAY_MS: 'not-a-number' } })
     expect(out).toMatch(/released #9.*in-review/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -695,17 +691,7 @@ function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
 // the PATH to the stub, the real gh would fail against an o/r repository that
 // does not exist. FAKE_GH_VIEW_BODY not set → empty body → no "## E2E" section
 // → nothing to cross-check.
-//
-// `goEnv` (F38): since the go nonce, `--release` has one more door —the `plan`
-// gate does not close without a registered `-OK <nonce>`— and without
-// satisfying it ALL of this would come out 9 before reaching what these tests
-// measure, which is where the base of the diff comes from and what the `base:`
-// guardrail warns about. Door 9 is not the object of this test: it is covered
-// in f38-the-plan-gate-go.test.js. The shared fixture is used and not a copy
-// because its own header asks for it («the day the format of the record
-// changes, a shared fixture breaks once and in one place»), and it is what the
-// other `--release` tests of this file and those of f22 already do.
-const releaseStale = (dir) => spawnSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
+const releaseStale = (dir) => spawnSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` } })
 
 describe('dispatch-check --release — the base of the diff is the real cut (slice 2, Capde notes)', () => {
   it('with base_sha: present the diff comes out against that commit even when the local main is behind', () => {

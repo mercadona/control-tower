@@ -19,8 +19,8 @@ blocks, too big for one issue comment; five of its commits fixed defects that ha
 inside it: a leaked temp directory, a bare `catch` that swallowed git failures, a type export
 leaking author emails, a doc line asserting something false, and four test vectors that missed
 the threshold they pinned. Code written blind, with no compiler and nothing executed, arrives
-with unseen defects: the human `plan` gate had 74k characters to read, and at that size an OK
-is an act of faith.
+with unseen defects: 74k characters on an issue comment is not a plan somebody reads, it is
+one they skim.
 
 **Announce at start:** "I'm using the writing-plans-prescriptive skill to write the slice plan."
 
@@ -271,12 +271,11 @@ to hold for Task 1 and easy to lose by Task 6; step 5 is what keeps them in view
    check later and refuses without a valid committed plan.
 8. Commit the plan as the branch's first commit: it travels in the PR and gets reviewed with
    the code.
-9. Post the plan as an issue comment and STOP until a human replies OK — the `plan` gate, in the
-   `gates` field of `.agent/SLICE.md` unless the spec waived it for this row with `!plan`. A
-   human closes it.
+9. Post the plan as an issue comment and carry on: it is read there, not answered. Nothing
+   waits for a reply — the gate that used to stop the run here is retired.
 
 ## Execution handoff
 
-With the plan committed and the `plan` gate closed, continue with
+With the plan committed and published, continue with
 control-tower-loop:ct-subagent-driven-development: its "Have implementation plan?" diamond finds
 the plan and dispatches a fresh subagent per task, starting with none of your context.
