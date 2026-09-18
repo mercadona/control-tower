@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { HarvestClock } from '../../src/infrastructure/harvest-clock.ts'
 import { DispatchRelay } from '../../src/infrastructure/dispatch-relay.ts'
 import { GhDispatchCandidates } from '../../src/infrastructure/gh-dispatch-candidates.ts'
@@ -26,17 +27,20 @@ import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 
 type RawIssue = {
   number: number,
-  html_url: string,
+  url: string,
   title: string,
   body: string,
-  milestone: { number: number, title: string } | null,
-  labels: { name: string }[],
-  state_reason?: string | null,
+  state: 'OPEN' | 'CLOSED',
+  stateReason: string | null,
+  milestone: { number: number, title: string, description: string | null } | null,
+  labels: { nodes: { name: string }[] },
 }
 
 class Slice {
   static readonly REPOSITORY = new RepositoryName('mercadona/control-tower-plugin')
-  static readonly MILESTONE = Object.freeze({ number: 370, title: 'The chain that does not stop' })
+  static readonly MILESTONE = Object.freeze({
+    number: 370, title: 'The chain that does not stop', description: null,
+  })
   static readonly ROOT = new CheckoutRoot('/repo/checkout')
 
   static issue({
@@ -51,21 +55,24 @@ class Slice {
 
     return {
       number,
-      html_url: `https://github.com/mercadona/control-tower-plugin/issues/${number}`,
+      url: `https://github.com/mercadona/control-tower-plugin/issues/${number}`,
       title: `Slice ${order}`,
       body: `<!-- ct-order:${order} -->${dependencySection}`,
+      state: stateReason === null ? 'OPEN' : 'CLOSED',
+      stateReason,
       milestone: Slice.MILESTONE,
-      labels: [
+      labels: { nodes: [
         { name: `status:${status}` },
         ...touches.map((touch) => ({ name: `touches:${touch}` })),
         { name: 'gate:none' },
-      ],
-      state_reason: stateReason,
+      ] },
     }
   }
 
   static pages(issues: RawIssue[]): string {
-    return JSON.stringify([issues])
+    return JSON.stringify([
+      { data: { repository: { issues: { nodes: issues, pageInfo: { hasNextPage: false, endCursor: null } } } } },
+    ])
   }
 
   static frozenSpec(): EpicSpec {
@@ -82,15 +89,17 @@ class ScriptedGh {
 
   constructor(open: RawIssue[], closed: RawIssue[] = []) {
     this.answers = new Map([
-      [JSON.stringify(ScriptedGh.argv('open')), new ProcessOutput({ code: 0, stdout: Slice.pages(open), stderr: '' })],
-      [JSON.stringify(ScriptedGh.argv('closed')), new ProcessOutput({ code: 0, stdout: Slice.pages(closed), stderr: '' })],
+      [JSON.stringify(ScriptedGh.argv(['OPEN'])), new ProcessOutput({ code: 0, stdout: Slice.pages(open), stderr: '' })],
+      [JSON.stringify(ScriptedGh.argv(['CLOSED'])), new ProcessOutput({ code: 0, stdout: Slice.pages(closed), stderr: '' })],
     ])
   }
 
-  static argv(state: 'open' | 'closed'): string[] {
+  static argv(states: string[]): string[] {
+    const [owner, name] = Slice.REPOSITORY.text.split('/')
+
     return [
-      'api', `repos/${Slice.REPOSITORY.text}/issues`, '--method', 'GET',
-      '-f', `state=${state}`, '-f', 'per_page=100', '--paginate', '--slurp',
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${issuesQueryFor(states)}`, '-f', `owner=${owner}`, '-f', `name=${name}`,
     ]
   }
 
