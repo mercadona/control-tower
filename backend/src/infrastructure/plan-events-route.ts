@@ -126,13 +126,16 @@ export class EventsRefusal {
 export class PlanEvents {
   readonly read: (session: PlanWatch) => Promise<ReadProgress>
   readonly sleep: () => Promise<void>
+  readonly stopped: () => boolean
 
-  constructor({ read, sleep }: {
+  constructor({ read, sleep, stopped = () => false }: {
     read: (session: PlanWatch) => Promise<ReadProgress>,
     sleep: () => Promise<void>,
+    stopped?: () => boolean,
   }) {
     this.read = read
     this.sleep = sleep
+    this.stopped = stopped
   }
 
   static readonly ERROR_EVENT = 'error'
@@ -154,6 +157,7 @@ export class PlanEvents {
   async *stream(session: PlanWatch, cancelled: () => boolean): AsyncGenerator<string> {
     let last: PlanStateValue | null = null
     for (;;) {
+      if (this.stopped()) return
       let read: ReadProgress | null = null
       try {
         read = await this.read(session)

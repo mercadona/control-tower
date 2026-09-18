@@ -8,7 +8,7 @@ import { spawn as spawnChild } from 'node:child_process'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawn } from 'node-pty'
 import { ApiServer, LOOPBACK } from './api-server.ts'
 import { PtyLiveSessions } from './pty-live-sessions.ts'
@@ -96,10 +96,47 @@ import type { UserStories } from '../domain/ports/user-stories.ts'
 import type { PlanAgents } from '../domain/ports/plan-agents.ts'
 import type { PlanRecords } from '../domain/ports/plan-records.ts'
 import type { DispatchClaims } from '../domain/ports/dispatch-claims.ts'
+import type { TerminalSpawn } from './pty-live-sessions.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
 type ToolCollaborators = { launch: ToolLaunch, policy: RetryPolicy, sleep: ToolSleep }
+
+export type ApiRuntime = {
+  tool: (options: { bin: string, budgetMs: number, env?: NodeJS.ProcessEnv }) => Pick<ToolRunner, 'run' | 'runWholeOutput'>,
+  spawn: typeof spawnChild,
+  terminal: TerminalSpawn,
+  signal: (pid: number, signal: NodeJS.Signals | 0) => void,
+  inspectProcessTable?: (signal: AbortSignal) => Promise<string>,
+  sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>,
+  home: () => string,
+  out: (text: string) => void,
+  err: (text: string) => void,
+}
+
+export class ApiInvocationFailure extends Error {
+  readonly code: number
+
+  constructor(code: number, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+class ProductionRuntime {
+  static create(): ApiRuntime {
+    return {
+      tool: (options) => new ToolRunner(options),
+      spawn: spawnChild,
+      terminal: spawn,
+      signal: (pid, signal) => { process.kill(pid, signal) },
+      sleep: (milliseconds, signal) => after(milliseconds, undefined, { signal }),
+      home: homedir,
+      out: (text) => { process.stdout.write(text) },
+      err: (text) => { process.stderr.write(text) },
+    }
+  }
+}
 
 class FrontendBuild {
   static readonly #HERE = dirname(fileURLToPath(import.meta.url))
@@ -208,7 +245,40 @@ class Disk {
   }
 }
 
-class CtApi {
+export class CtApi {
+  readonly #runtime: ApiRuntime
+  readonly #stopped = new AbortController()
+  #server: ApiServer | null = null
+  #reviews: ReviewWatch | null = null
+  #sweeping: Promise<void> = Promise.resolve()
+  #port: number | null = null
+
+  constructor(runtime: ApiRuntime) {
+    this.#runtime = runtime
+  }
+
+  get port(): number | null { return this.#port }
+
+  get finished(): Promise<void> { return this.#sweeping }
+
+  static async run(argv: string[], environment: NodeJS.ProcessEnv, runtime = ProductionRuntime.create()): Promise<CtApi> {
+    const api = new CtApi(runtime)
+    try {
+      await api.#start(argv, environment)
+      return api
+    } catch (failure) {
+      await api.close()
+      throw failure
+    }
+  }
+
+  async close(): Promise<void> {
+    this.#reviews?.live.clear()
+    await this.#server?.stop()
+    this.#stopped.abort()
+    await this.#sweeping
+  }
+
   static readonly #USAGE =
     `usage: make run-backend (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
   static readonly #BAD_USAGE = 2
@@ -233,32 +303,33 @@ class CtApi {
   static readonly #SESSION_KILL_GRACE_MS = 2_000
   static readonly #SESSION_TERMINATION_POLL_MS = 25
 
-  static #refuseUsage(reason: string | null): never {
-    process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
-    process.exit(CtApi.#BAD_USAGE)
+  #refuseUsage(reason: string | null): never {
+    const message = `${reason}\n${CtApi.#USAGE}\n`
+    this.#runtime.err(message)
+    throw new ApiInvocationFailure(CtApi.#BAD_USAGE, message)
   }
 
-  static #refuseListen(reason: string): never {
-    process.stderr.write(`${reason}\n`)
-    process.exit(CtApi.#CANNOT_LISTEN)
+  #refuseListen(reason: string): never {
+    this.#runtime.err(`${reason}\n`)
+    throw new ApiInvocationFailure(CtApi.#CANNOT_LISTEN, reason)
   }
 
-  static #tool(
+  #tool(
     bin: string,
     { budgetMs = CtApi.#PROCESS_TIMEOUT_MS, env }: { budgetMs?: number, env?: NodeJS.ProcessEnv } = {}
   ): LaunchTool {
-    const runner = new ToolRunner({ bin, budgetMs, env })
+    const runner = this.#runtime.tool({ bin, budgetMs, env })
     return (argv, options) => runner.run(argv, options)
   }
 
-  static #baseline(): Baseline {
-    const shell = CtApi.#tool(CtApi.#SHELL, { budgetMs: CtApi.#BASELINE_TIMEOUT_MS })
+  #baseline(): Baseline {
+    const shell = this.#tool(CtApi.#SHELL, { budgetMs: CtApi.#BASELINE_TIMEOUT_MS })
 
     return new Baseline({ run: (command: string, cwd: string) => shell(['-c', command], { cwd }) })
   }
 
-  static #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
-    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+  #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
+    const runner = this.#runtime.tool({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
     return new Tool({
       launch: (argv: string[]) => argv.includes('--paginate')
         ? runner.runWholeOutput(argv)
@@ -269,12 +340,12 @@ class CtApi {
           waitSeconds: CtApi.#SECONDS_BETWEEN_RETRIES,
         }),
       }),
-      sleep: (seconds) => CtApi.#waiting(seconds),
+      sleep: (seconds) => this.#waiting(seconds),
     })
   }
 
-  static #waiting(seconds: number): Promise<void> {
-    return after(seconds * 1000)
+  #waiting(seconds: number): Promise<void> {
+    return this.#runtime.sleep(seconds * 1000, this.#stopped.signal)
   }
 
   static #headlessEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -286,9 +357,9 @@ class CtApi {
     )))
   }
 
-  static #userStories(gh: Gh): UserStories {
+  #userStories(gh: Gh): UserStories {
     return new ReferredUserStories({
-      jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
+      jira: new AcliUserStories({ acli: this.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
       github: new GhUserStories({ gh }),
     })
   }
@@ -313,10 +384,10 @@ class CtApi {
     })
   }
 
-  static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
+  #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
     const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
     const clients = Object.fromEntries(
-      probes.map((bin): [string, ExternalTool] => [bin, CtApi.#talkingTo(bin, ExternalTool)])
+      probes.map((bin): [string, ExternalTool] => [bin, this.#talkingTo(bin, ExternalTool)])
     )
 
     return new ProbedToolSessions({
@@ -325,7 +396,7 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, environment, harvestTable }: {
+  #harvestClock({ workspace, checkouts, environment, harvestTable }: {
     workspace: GitWorkspace,
     checkouts: DiskCheckoutRegistry,
     environment: NodeJS.ProcessEnv,
@@ -334,7 +405,7 @@ class CtApi {
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const harvestDelivery = new HarvestDelivery({
       harvest: new DispatchCheckHarvest({
-        node: CtApi.#tool(process.execPath, {
+        node: this.#tool(process.execPath, {
           budgetMs: CtApi.#HARVEST_TIMEOUT_MS,
           env: Invocation.harvestEnvironment(environment, {
             ghTimeoutMs: CtApi.#SECONDS_FOR_GH_IN_A_HARVEST * 1000,
@@ -350,36 +421,50 @@ class CtApi {
       survey: (root) => surveyWorkspaces.execute(new SurveyWorkspacesParams({ root })),
       harvest: (prepared, repository) =>
         harvestDelivery.execute(new HarvestDeliveryParams({ prepared, repository })),
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_SWEEPS),
-      stderr: (line) => process.stderr.write(line),
+      sleep: () => this.#waiting(CtApi.#SECONDS_BETWEEN_SWEEPS),
+      stderr: this.#runtime.err,
     })
   }
 
-  static #sweepUntilItBreaks(clock: HarvestClock): void {
-    clock.start().catch((failure) => {
-      process.stderr.write(`harvest sweep: the clock stopped sweeping and nothing else will: ${failure.stack}\n`)
-      process.exit(CtApi.#CLOCK_STOPPED)
-    })
+  async #sweepUntilStopped(clock: HarvestClock): Promise<void> {
+    try {
+      while (!this.#stopped.signal.aborted) {
+        await clock.sweep()
+        await this.#waiting(CtApi.#SECONDS_BETWEEN_SWEEPS)
+      }
+    } catch (failure) {
+      if (this.#stopped.signal.aborted && failure instanceof Error && failure.name === 'AbortError') return
+      this.#runtime.err(`harvest sweep: the clock stopped sweeping and nothing else will: ${failure instanceof Error ? failure.stack : CtApi.#messageOf(failure)}\n`)
+      throw new ApiInvocationFailure(CtApi.#CLOCK_STOPPED, CtApi.#messageOf(failure))
+    }
   }
 
-  static #readPlanProgress(git: LaunchTool): ReadPlanProgress {
+  #readPlanProgress(git: LaunchTool): ReadPlanProgress {
     return new ReadPlanProgress({
       planProgress: new PlanContractProgress({
-        node: CtApi.#tool(process.execPath),
+        node: this.#tool(process.execPath),
         git,
         dispatchCheck: PluginTree.dispatchCheck(),
       }),
     })
   }
 
-  static #planEvents(readPlanProgress: ReadPlanProgress): PlanEvents {
+  #planEvents(readPlanProgress: ReadPlanProgress): PlanEvents {
     return new PlanEvents({
       read: (session) => readPlanProgress.execute(new ReadPlanProgressParams(session)),
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_READS),
+      stopped: () => this.#stopped.signal.aborted,
+      sleep: async () => {
+        try {
+          await this.#waiting(CtApi.#SECONDS_BETWEEN_READS)
+        } catch (failure) {
+          if (this.#stopped.signal.aborted && failure instanceof Error && failure.name === 'AbortError') return
+          throw failure
+        }
+      },
     })
   }
 
-  static #pullRequestReviews(
+  #pullRequestReviews(
     pullRequests: GhPullRequests,
     planIssues: GhPlanIssues,
     planAgents: PlanAgents,
@@ -391,8 +476,8 @@ class CtApi {
     return new ReviewWatch({
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
       review: (params) => requestFixes.execute(new RequestFixesParams(params)),
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
-      stderr: (line) => process.stderr.write(line),
+      sleep: () => this.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
+      stderr: this.#runtime.err,
       label: 'pull request review watch',
       log: new MemoryReviewLog(),
     })
@@ -402,27 +487,27 @@ class CtApi {
     return failure instanceof Error ? failure.message : String(failure)
   }
 
-  static async run(argv: string[], environment: NodeJS.ProcessEnv): Promise<void> {
-    const asked = Invocation.from(argv, environment, homedir())
+  async #start(argv: string[], environment: NodeJS.ProcessEnv): Promise<void> {
+    const asked = Invocation.from(argv, environment, this.#runtime.home())
     if (asked.outcome !== InvocationOutcome.READY || asked.port === null || asked.stateRoot === null) {
-      CtApi.#refuseUsage(asked.reason)
+      this.#refuseUsage(asked.reason)
     }
-    const git = CtApi.#tool(GitWorkspace.BIN)
-    const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const git = this.#tool(GitWorkspace.BIN)
+    const gh = this.#talkingTo(Gh.BIN, Gh)
     const workspace = new GitWorkspace({
       run: git,
       gh,
       write: Disk.write,
       read: Disk.read,
       lstat: fs.lstat,
-      stderr: (line) => process.stderr.write(line),
-      baseline: CtApi.#baseline(),
+      stderr: this.#runtime.err,
+      baseline: this.#baseline(),
     })
     const checkouts = new DiskCheckoutRegistry({
       read: (path) => readFileSync(path, 'utf8'),
       stat: statSync,
       write: Disk.atomicWriteSync,
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
       root: asked.stateRoot,
     })
     const files = new HeadlessFiles({ root: asked.stateRoot, fs, newId: randomUUID })
@@ -436,7 +521,7 @@ class CtApi {
       files,
       binary: ClaudeConversations.BIN,
       worker: fileURLToPath(new URL('./headless-call-worker.ts', import.meta.url)),
-      spawn: spawnChild,
+      spawn: this.#runtime.spawn,
       env: CtApi.#headlessEnvironment(environment),
       newId: randomUUID,
       now: () => new Date().toISOString(),
@@ -444,7 +529,7 @@ class CtApi {
       killGraceMs: CtApi.#PLAN_CALL_KILL_GRACE_MS,
       acceptanceMs: CtApi.#PLAN_CALL_ACCEPTANCE_MS,
       pollMs: CtApi.#PLAN_CALL_POLL_MS,
-      sleep: (milliseconds) => after(milliseconds),
+      sleep: (milliseconds) => this.#runtime.sleep(milliseconds, this.#stopped.signal),
     })
     const brief = new PlanAgentBrief({
       dispatchCheck: PluginTree.dispatchCheck(),
@@ -456,7 +541,7 @@ class CtApi {
       brief,
       pluginRoot: PluginTree.root(),
       resumable: async (watch) => new ClaudeCodeTranscript({
-        claudeDirectory: Invocation.configuredIn(environment, homedir()),
+        claudeDirectory: Invocation.configuredIn(environment, this.#runtime.home()),
         cwd: watch.located.path,
         listNames: (path: string) => readdirSync(path),
         readText: (path: string) => readFileSync(path, 'utf8'),
@@ -464,21 +549,21 @@ class CtApi {
       records,
       nowMs: Date.now,
     })
-    const userStories = CtApi.#userStories(gh)
+    const userStories = this.#userStories(gh)
     const planIssues = new GhPlanIssues({
       gh,
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
     })
     const pullRequests = new GhPullRequests({ gh })
     const workbench = new DispatchCheckWorkbench({
-      node: CtApi.#tool(process.execPath),
+      node: this.#tool(process.execPath),
       dispatchCheck: PluginTree.dispatchCheck(),
     })
     const sessions = new PlanSessions()
-    const readPlanProgress = CtApi.#readPlanProgress(git)
+    const readPlanProgress = this.#readPlanProgress(git)
     const activePlans = new ActivePlans({ sessions })
     const planProgress = new PlanContractProgress({
-      node: CtApi.#tool(process.execPath),
+      node: this.#tool(process.execPath),
       git,
       dispatchCheck: PluginTree.dispatchCheck(),
     })
@@ -495,13 +580,14 @@ class CtApi {
       calls: planCalls,
       continuation,
       newId: randomUUID,
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
     })
     const claims = new DispatchCheckClaims({
-      node: CtApi.#tool(process.execPath),
+      node: this.#tool(process.execPath),
       dispatchCheck: PluginTree.dispatchCheck(),
     })
-    const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
+    const pullRequestReviews = this.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
+    this.#reviews = pullRequestReviews
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
     const recovery = new RecordedPlanRecovery({
@@ -513,9 +599,10 @@ class CtApi {
       reviews: pullRequestReviews,
     })
     const liveSessions = new PtyLiveSessions({
-      spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
-      signal: (pid, signal) => process.kill(pid, signal),
-      sleep: (milliseconds) => after(milliseconds),
+      spawn: this.#runtime.terminal, newId: randomUUID, stderr: this.#runtime.err,
+      signal: this.#runtime.signal,
+      inspectProcessTable: this.#runtime.inspectProcessTable,
+      sleep: (milliseconds) => this.#runtime.sleep(milliseconds, this.#stopped.signal),
       now: Date.now,
       termGraceMs: CtApi.#SESSION_TERM_GRACE_MS,
       killGraceMs: CtApi.#SESSION_KILL_GRACE_MS,
@@ -526,7 +613,7 @@ class CtApi {
       liveSessions,
       shell: environment.SHELL,
       env: environment,
-      claudeDirectory: Invocation.configuredIn(environment, homedir()),
+      claudeDirectory: Invocation.configuredIn(environment, this.#runtime.home()),
       pluginRoot: PluginTree.root(),
       listNames: (path) => readdirSync(path),
       readText: (path) => readFileSync(path, 'utf8'),
@@ -543,7 +630,7 @@ class CtApi {
     })
     const coordinatingSessions = new CoordinatingSessions({
       liveSessions,
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
       records: conversationRecords,
       newId: randomUUID,
       now: () => new Date().toISOString(),
@@ -562,7 +649,7 @@ class CtApi {
       liveSessions,
       newId: randomUUID,
       now: () => new Date().toISOString(),
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
     })
     const closeCoordinatingSession = new CloseCoordinatingSession({
       records: conversationRecords,
@@ -589,7 +676,7 @@ class CtApi {
     })
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
-    const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
+    const groomRunner = this.#runtime.tool({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
     const epicGroom = new CtGroomEpic({
       node: (argv, options) => groomRunner.run(argv, options),
       wholeOutput: (argv, options) => groomRunner.runWholeOutput(argv, options),
@@ -631,11 +718,11 @@ class CtApi {
         planIssues,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
-      planEvents: CtApi.#planEvents(readPlanProgress),
+      planEvents: this.#planEvents(readPlanProgress),
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
-        toolSessions: CtApi.#toolSessions(environment),
+        toolSessions: this.#toolSessions(environment),
         metricsDelivery: MetricsDelivery.to(asked.harvestTable),
       }),
       recovery,
@@ -658,26 +745,36 @@ class CtApi {
       groomEpic,
       epicGroomInFlight: new WorkInFlight(),
       promoteEpic,
-      stderr: (line) => process.stderr.write(line),
+      stderr: this.#runtime.err,
       frontendRoot: FrontendBuild.root(),
     })
+    this.#server = server
     let port: number
     coordinatingSessions.beginRecovery()
     try {
       port = await server.start()
     } catch (error) {
-      CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${CtApi.#messageOf(error)}`)
+      this.#refuseListen(`could not listen on ${LOOPBACK}: ${CtApi.#messageOf(error)}`)
     }
     listeningPort = port
-    process.stdout.write(`${JSON.stringify({ port })}\n`)
+    this.#port = port
+    this.#runtime.out(`${JSON.stringify({ port })}\n`)
     CoordinatingSessionRecovery.remember(
-      await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
+      await recoverCoordinatingSession.execute(), coordinatingSessions, this.#runtime.err
     )
     await recovery.recover()
-    CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
+    this.#sweeping = this.#sweepUntilStopped(this.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
     }))
   }
 }
 
-await CtApi.run(process.argv.slice(2), process.env)
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  try {
+    const api = await CtApi.run(process.argv.slice(2), process.env)
+    await api.finished
+  } catch (failure) {
+    if (!(failure instanceof ApiInvocationFailure)) throw failure
+    process.exit(failure.code)
+  }
+}

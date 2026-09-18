@@ -220,7 +220,7 @@ class Programs {
     "const { spawn } = require('node:child_process')",
     "const code = `process.on('SIGTERM', () => {}); process.on('SIGHUP', () => {}); if (process.send) process.send('ready'); setInterval(() => {}, 1000)`",
     "const child = spawn(process.execPath, ['-e', code], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })",
-    "child.on('message', () => { console.log(`READY:${process.pid}:${child.pid}`); setTimeout(() => process.exit(0), 200) })",
+    "child.on('message', () => { console.log(`READY:${process.pid}:${child.pid}`); process.stdin.once('data', () => process.exit(0)) })",
   ].join(';')
 
   static readonly SILENT_CHILD = [
@@ -245,6 +245,16 @@ class Programs {
 
   static echo(): SessionProgram {
     return Programs.node('echo', "process.stdin.on('data', bytes => process.stdout.write(bytes)); setInterval(() => {}, 1000)")
+  }
+
+  static shell(): SessionProgram {
+    return new SessionProgram({
+      name: 'interactive-shell',
+      file: '/bin/sh',
+      argv: ['-i'],
+      cwd: process.cwd(),
+      env: { PATH: '/usr/bin:/bin' },
+    })
   }
 }
 
@@ -304,7 +314,7 @@ describe('PtyLiveSessions with real processes', () => {
 
   it('a real terminal prints into the scrollback and answers what is written to it', async () => {
     const sessions = RealCabin.opening(terminals)
-    const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
+    const session = sessions.open(Programs.shell())
     const token = `ct-real-pty-${randomUUID()}`
 
     const echoed = Printed.until(sessions, session, new RegExp(token))
@@ -318,7 +328,7 @@ describe('PtyLiveSessions with real processes', () => {
 
   it('the real process stays alive after every watcher has stopped', async () => {
     const sessions = RealCabin.opening(terminals)
-    const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
+    const session = sessions.open(Programs.shell())
     const abandoned = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
     abandoned.stop()
     const token = `ct-real-pty-${randomUUID()}`
@@ -332,7 +342,7 @@ describe('PtyLiveSessions with real processes', () => {
 
   it('a resize reaches the real terminal, and the shell sees the new size', async () => {
     const sessions = RealCabin.opening(terminals)
-    const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
+    const session = sessions.open(Programs.shell())
     const token = 'ct-size:40 120'
 
     const echoed = Printed.until(sessions, session, new RegExp(token))
@@ -410,7 +420,9 @@ describe('PtyLiveSessions with real processes', () => {
     const parent = Number(ready[1])
     const child = Number(ready[2])
     const checkpoint = await ClosureMother.checkpoint(sessions, session)
+    expect(checkpoint.ownership?.members.map(({ pid }) => pid)).toEqual(expect.arrayContaining([parent, child]))
     const closing = sessions.terminate(checkpoint)
+    sessions.write({ session, text: 'exit\n' })
     await Processes.absent(parent)
     await closing
     await Processes.absent(child)
@@ -425,7 +437,9 @@ describe('PtyLiveSessions with real processes', () => {
     const parent = Number(ready[1])
     const child = Number(ready[2])
     const checkpoint = await ClosureMother.checkpoint(sessions, session)
+    expect(checkpoint.ownership?.members.map(({ pid }) => pid)).toEqual(expect.arrayContaining([parent, child]))
 
+    sessions.write({ session, text: 'exit\n' })
     await Processes.absent(parent)
     expect(Processes.exists(child)).toBe(true)
 
@@ -440,6 +454,8 @@ describe('PtyLiveSessions with real processes', () => {
     const ready = await Printed.until(sessions, session, /READY:(\d+):(\d+)/)
     const parent = Number(ready[1])
     const child = Number(ready[2])
+    const checkpoint = await ClosureMother.checkpoint(sessions, session)
+    expect(checkpoint.ownership?.members.map(({ pid }) => pid)).toEqual(expect.arrayContaining([parent, child]))
     const records = new PausedClosureRecords()
     const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
     const closing = close.execute(new CloseCoordinatingSessionParams({
@@ -448,10 +464,15 @@ describe('PtyLiveSessions with real processes', () => {
       session,
     }))
 
-    await records.requested.promise
-    await Processes.absent(parent)
-    expect(Processes.exists(child)).toBe(true)
-    records.release.resolve()
+    try {
+      await records.requested.promise
+      expect(records.closure!.ownership?.members.map(({ pid }) => pid)).toEqual(expect.arrayContaining([parent, child]))
+      sessions.write({ session, text: 'exit\n' })
+      await Processes.absent(parent)
+      expect(Processes.exists(child)).toBe(true)
+    } finally {
+      records.release.resolve()
+    }
 
     await closing
     await Processes.absent(child)
