@@ -69,20 +69,27 @@ say() {
 
 # ARTIFACT_CLASSES: the closed, literal list slice 5 asks for — which
 # artifact belongs to which drift class. It is read by `record` below as a
-# guard: an artifact classified `user-owned` or `exempt` can only ever be
-# reported `created` or `already-present` — reporting `drifted` or `refused`
-# for one of those would mean this script compared something the doctrine
-# says it must never compare, and that is a bug in THIS script, not a fact
-# about the target repo. `drifted` is only ever said by `generated` or
-# `versioned` (an old ct-init that will not downgrade a contract a newer
-# release wrote); `refused` is only ever said by `versioned` or, since slice
-# 6, `install`.
+# guard: an artifact classified `user-owned` or `exempt` can never be
+# reported `drifted` — reporting that would mean this script compared
+# something the doctrine says it must never compare, and that is a bug in
+# THIS script, not a fact about the target repo. `drifted` is only ever said
+# by `generated` or `versioned` (an old ct-init that will not downgrade a
+# contract a newer release wrote).
+#
+# `refused` carries no such restriction: it means "this run could not act,
+# and nothing was compared", which is a legitimate outcome for ANY class —
+# `claude-settings` (user-owned) reports it when `node` is missing or the
+# seeder failed, exactly as `plugin-install` already did. `refused` is never
+# a comparison, so it never contradicts a class's promise not to compare.
 #
 #   user-owned  — create-if-absent, NEVER compared: STATE.md, conventions.md,
 #                 the execution-spec template, the AGENTS.md skeleton, the
 #                 .gitignore rules, the scope-gate workflow, the scope-gate
 #                 package.json and .claude/settings.json (merged, but never
-#                 byte-compared against a golden copy either).
+#                 byte-compared against a golden copy either). `.claude/
+#                 settings.json` reports `refused`, not `already-present`,
+#                 when this run could not seed or check it at all (`node`
+#                 missing, or the seeder failed) — nothing was compared then.
 #   generated   — byte compare against what this release ships, report
 #                 `drifted`, replace only with --force: the scope-gate bundle.
 #   versioned   — its own version line and hash ledger: the slices contract.
@@ -143,10 +150,6 @@ record() {
   class="$(artifact_class "$id")"
   if [ "$status" = drifted ] && [ "$class" != generated ] && [ "$class" != versioned ]; then
     echo "internal error in ct-init.sh: artifact '$id' was reported 'drifted', but it is classified '$class' — only a generated or versioned artifact may drift" >&2
-    exit 70
-  fi
-  if [ "$status" = refused ] && [ "$class" != versioned ] && [ "$class" != install ]; then
-    echo "internal error in ct-init.sh: artifact '$id' was reported 'refused', but it is classified '$class' — only a versioned or install artifact may be refused" >&2
     exit 70
   fi
   local extra="" kv key val
@@ -525,22 +528,32 @@ if command -v node >/dev/null 2>&1; then
 else
   SETTINGS_STATUS=127
 fi
+SETTINGS_REFUSAL_DETAIL=''
 if [ "$SETTINGS_STATUS" -ne 0 ]; then
-  echo "warning: $TARGET/.claude/settings.json could neither be seeded nor checked — the operation needs \`node\` and it could not be run (status $SETTINGS_STATUS). Do NOT read that as \"the plugin is declared\": without that file, whoever clones this repo receives no command, skill, agent or hook of this plugin, and that is indistinguishable from a repo nobody has initialised." >&2
+  if [ "$SETTINGS_STATUS" -eq 127 ]; then
+    SETTINGS_REFUSAL_DETAIL='node is not on the PATH'
+  else
+    SETTINGS_REFUSAL_DETAIL="seed-claude-settings.mjs failed (status $SETTINGS_STATUS)"
+  fi
+  echo "warning: $TARGET/.claude/settings.json could neither be seeded nor checked — $SETTINGS_REFUSAL_DETAIL. Do NOT read that as \"the plugin is declared\": without that file, whoever clones this repo receives no command, skill, agent or hook of this plugin, and that is indistinguishable from a repo nobody has initialised." >&2
 elif [ -n "$SETTINGS_OUT" ]; then
   say "$SETTINGS_OUT"
 fi
 # claude-settings (user-owned: a merge, never a byte compare against a golden
 # copy). "created" means this run changed what is on disk — the file did not
 # exist, or the merge added something to it; "already-present" means it
-# already declared this plugin and nothing was written.
-CLAUDE_SETTINGS_STATUS=already-present
-if [ "$SETTINGS_STATUS" -eq 0 ]; then
+# already declared this plugin and nothing was written; "refused" means this
+# run could not even attempt the merge (`node` missing, or the seeder
+# failed) — nothing was compared, so it is never read as "already-present".
+if [ "$SETTINGS_STATUS" -ne 0 ]; then
+  record claude-settings .claude/settings.json refused "detail=$SETTINGS_REFUSAL_DETAIL"
+else
+  CLAUDE_SETTINGS_STATUS=already-present
   CLAUDE_SETTINGS_AFTER=''
   if [ -f "$CLAUDE_SETTINGS_PATH" ]; then CLAUDE_SETTINGS_AFTER="$(cat "$CLAUDE_SETTINGS_PATH")"; fi
   if [ "$CLAUDE_SETTINGS_BEFORE" != "$CLAUDE_SETTINGS_AFTER" ]; then CLAUDE_SETTINGS_STATUS=created; fi
+  record claude-settings .claude/settings.json "$CLAUDE_SETTINGS_STATUS"
 fi
-record claude-settings .claude/settings.json "$CLAUDE_SETTINGS_STATUS"
 
 # Issue #386 — the install itself. `.claude/settings.json` above only
 # DECLARES the plugin; nothing until now made it resolve on this machine, and

@@ -80,11 +80,10 @@ function artifactById(report, id) {
 
 // Both node-dependent artifacts, excluded from the blanket "created" checks
 // that follow the `node`-hidden run: `plugin-install` for the reason given at
-// the top of this file, and `claude-settings` because ct-init.sh's own
-// pre-existing fallback (`CLAUDE_SETTINGS_STATUS=already-present`, only ever
-// promoted to `created`) reads "could not check" as `already-present` — its
-// class forbids it from ever saying `refused` — never as `created`, even on a
-// fresh directory where the file was in fact never written.
+// the top of this file, and `claude-settings` because with `node` hidden it
+// reports `refused` (nothing was compared, so it is never read as
+// `already-present`), never `created` — even on a fresh directory where the
+// file was in fact never written.
 function nodeIndependentArtifacts(report) {
   return report.artifacts.filter((artifact) => artifact.id !== PLUGIN_INSTALL_ID && artifact.id !== CLAUDE_SETTINGS_ID)
 }
@@ -131,7 +130,8 @@ describe('ct-init.sh --json is a true no-op the second time it runs', () => {
     }
     expect(installArtifact(first).status).toBe('refused')
     expect(installArtifact(first).detail).toBe('node is not on the PATH')
-    expect(artifactById(first, CLAUDE_SETTINGS_ID).status).toBe('already-present')
+    expect(artifactById(first, CLAUDE_SETTINGS_ID).status).toBe('refused')
+    expect(artifactById(first, CLAUDE_SETTINGS_ID).detail).toBe('node is not on the PATH')
 
     const before = snapshotTree(dir)
     const second = runJson(dir, env)
@@ -143,6 +143,8 @@ describe('ct-init.sh --json is a true no-op the second time it runs', () => {
     }
     expect(installArtifact(second).status).toBe('refused')
     expect(installArtifact(second).detail).toBe(installArtifact(first).detail)
+    expect(artifactById(second, CLAUDE_SETTINGS_ID).status).toBe('refused')
+    expect(artifactById(second, CLAUDE_SETTINGS_ID).detail).toBe(artifactById(first, CLAUDE_SETTINGS_ID).detail)
     expect(second.exitCode).toBe(first.exitCode)
     rmSync(dir, { recursive: true, force: true })
   })

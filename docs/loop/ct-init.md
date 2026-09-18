@@ -257,6 +257,7 @@ person reading a terminal.
     { "id": "state-md", "path": ".agent/STATE.md", "status": "created" },
     { "id": "scope-gate-bundle", "path": ".github/ct/scope-check.js", "status": "drifted", "replaced": false },
     { "id": "plugin-install", "path": "", "status": "refused", "detail": "folder not trusted" },
+    { "id": "claude-settings", "path": ".claude/settings.json", "status": "refused", "detail": "node is not on the PATH" },
     { "id": "slices-contract", "path": "docs/superpowers/SLICES-CONTRACT.md", "status": "drifted",
       "foundVersion": 24, "shippedVersion": 26, "blockStatus": "pristine", "replaced": false }
   ]
@@ -319,7 +320,7 @@ run. Five classes, and what each one means for the status above:
 
 | Class | Artifacts | Policy |
 |---|---|---|
-| User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the execution spec template, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either) |
+| User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the execution spec template, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either). It CAN report `refused`: `.claude/settings.json` does, when this run could not even attempt the merge (`node` missing, or the seeder failed) |
 | Generated | `.github/ct/scope-check.js` | byte-compared against the bundle this release ships; a mismatch reports `drifted`, replaced only with `--force`, and the `replaced` field says which happened |
 | Versioned | the slices contract | its own doctrine of version numbers and pristine hashes, unchanged by this table; see "What is contract" above. Also carries `replaced` on every `drifted` report |
 | Exempt by design | the loop section and the e2e-howto section, both inside `AGENTS.md` | never `drifted` — each is a template the repository owner fills in, so a changed body is correct use, not tampering |
