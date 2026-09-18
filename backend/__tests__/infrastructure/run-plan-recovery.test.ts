@@ -504,7 +504,8 @@ describe('RunPlanRecovery projection', () => {
         argv: [
           '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
           '--plugin-dir', FiniteBridge.pluginRoot, '--resume', fixture.watch.agent,
-          ...dispatch.argv, ClaudePlanCalls.OPENING,
+          ...dispatch.argv,
+          CallDescriptor.opening(join(fixture.files.callDirectory(call), CallDescriptor.PROMPT)),
         ],
         prompt: `Read the listed files.\n${dispatch.paths.join('\n')}\n${ClaudeRunCalls.ERRAND_END}`,
         requestId: `run:${ticket}`,
@@ -1521,7 +1522,8 @@ describe('RunPlanRecovery finite bridge', () => {
       argv: [
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--plugin-dir', FiniteBridge.pluginRoot, '--resume', fixture.watch.agent,
-        ...dispatch.argv, ClaudePlanCalls.OPENING,
+        ...dispatch.argv,
+        CallDescriptor.opening(join(fixture.files.callDirectory(implementation), CallDescriptor.PROMPT)),
       ],
       prompt: `Read the listed files.\n${dispatch.paths.join('\n')}\n${ClaudeRunCalls.ERRAND_END}`,
       requestId: `run:${dispatchTicket}`,

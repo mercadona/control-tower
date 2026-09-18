@@ -1007,7 +1007,7 @@ export class RunDriverMother {
       invocationArgv: Object.freeze([
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--plugin-dir', RunDriverMother.#PLUGIN, '--resume', this.watch.agent,
-        ...dispatch.argv, ClaudePlanCalls.OPENING,
+        ...dispatch.argv,
       ]),
     })
   }
@@ -1021,11 +1021,15 @@ export class RunDriverMother {
       if (descriptor.requestId === `run:${producer.ticket}`) callId = candidate
     }
     if (callId === null) throw new Error(`no model call recorded request run:${producer.ticket}`)
+    const invocationArgv = Object.freeze([
+      ...producer.invocationArgv,
+      CallDescriptor.opening(join(callsRoot, callId, CallDescriptor.PROMPT)),
+    ])
     const captures = (await readFile(join(this.captures, 'model.jsonl'), 'utf8')).split('\n').filter(Boolean)
       .map((line) => RunDriverMother.#modelCapture(line))
     const consumer = captures.find((capture) => capture.callId === callId)
     if (consumer === undefined) throw new Error(`model subprocess ${callId} left no capture`)
-    return Object.freeze({ producer, consumer, requestId: `run:${producer.ticket}` })
+    return Object.freeze({ producer: { ...producer, invocationArgv }, consumer, requestId: `run:${producer.ticket}` })
   }
 
   static #modelCapture(line: string): ModelCapture {
@@ -1294,7 +1298,6 @@ export class RunDriverMother {
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--allowedTools', ClaudePlanCalls.ALLOWED_TOOLS, '--model', 'opus',
         '--plugin-dir', RunDriverMother.#PLUGIN, '--session-id', RunDriverMother.CONVERSATION,
-        ClaudePlanCalls.OPENING,
       ],
     }
     await writeFile(join(this.bin, 'claude'), [
@@ -1303,20 +1306,24 @@ export class RunDriverMother {
       "const path = require('node:path')",
       "const crypto = require('node:crypto')",
       'const argv = process.argv.slice(2)',
-      "const prompt = fs.readFileSync(process.env.CT_CALL_PROMPT, 'utf8')",
-      "const callId = path.basename(path.dirname(process.env.CT_CALL_PROMPT))",
+      'const errand = argv[argv.length - 1]',
+      "const errandMatch = /^Read the file at (.+) and do exactly what it says\\.$/.exec(errand)",
+      "if (errandMatch === null) throw new Error('unexpected CLI errand: ' + JSON.stringify(errand))",
+      "const promptPath = errandMatch[1]",
+      "const prompt = fs.readFileSync(promptPath, 'utf8')",
+      "const callId = path.basename(path.dirname(promptPath))",
+      "const opening = 'Read the file at ' + promptPath + ' and do exactly what it says.'",
       "const conversation = argv[(argv.indexOf('--session-id') >= 0 ? argv.indexOf('--session-id') : argv.indexOf('--resume')) + 1]",
       "const agentAt = argv.indexOf('--agent')",
       "const role = argv.indexOf('--session-id') >= 0 ? 'plan' : agentAt < 0 ? 'implement' : argv[agentAt + 1]",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'processes.jsonl'), JSON.stringify({ pid: process.pid, ppid: process.ppid, callId }) + '\\n')",
       `const contracts = ${JSON.stringify(contracts)}`,
       `const planner = ${JSON.stringify(planner)}`,
-      `const opening = ${JSON.stringify(ClaudePlanCalls.OPENING)}`,
       `const errandEnd = ${JSON.stringify(ClaudeRunCalls.ERRAND_END)}`,
       "const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right)",
       "let paths = []",
       "if (role === 'plan') {",
-      "  const expectedPlannerArgv = [...planner.argv]",
+      "  const expectedPlannerArgv = [...planner.argv, opening]",
       "  expectedPlannerArgv[expectedPlannerArgv.indexOf('--session-id') + 1] = conversation",
       "  if (!equal(argv, expectedPlannerArgv) || prompt !== planner.prompt) throw new Error('planner request mismatch: ' + JSON.stringify({ argv, prompt }))",
       "} else {",

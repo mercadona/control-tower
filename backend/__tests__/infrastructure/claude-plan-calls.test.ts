@@ -172,7 +172,7 @@ describe('ClaudePlanCalls', () => {
       expect(grant, invocation.purpose).toBeGreaterThan(-1)
       expect(invocation.argv[grant + 1], invocation.purpose).toBe('Read,Glob,Grep,Edit,Write,Bash,Skill,Agent')
       const identity = invocation.purpose === 'plan' ? '--session-id' : '--resume'
-      expect(invocation.argv.slice(-3, -1), invocation.purpose).toEqual([identity, PlanCallMother.CONVERSATION])
+      expect(invocation.argv.slice(-2), invocation.purpose).toEqual([identity, PlanCallMother.CONVERSATION])
     }
   })
 
@@ -214,7 +214,6 @@ describe('ClaudePlanCalls', () => {
       '--model', 'opus',
       '--plugin-dir', '/installed/control-tower-loop',
       '--resume', PlanCallMother.CONVERSATION,
-      'Read the file at $CT_CALL_PROMPT and do exactly what it says.',
     ])
     expect(subject.calls.invocations[0].argv.join(' ')).not.toContain(subject.calls.invocations[0].prompt)
     expect(await subject.adapter.wait(started)).toBe(subject.calls.result)

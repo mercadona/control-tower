@@ -48,7 +48,6 @@ export class CallDescriptor {
   static readonly STREAM = 'stream.ndjson'
   static readonly STDERR = 'stderr.log'
   static readonly COMPLETION = 'completion.json'
-  static readonly PROMPT_VARIABLE = 'CT_CALL_PROMPT'
   static readonly #KEYS = Object.freeze([
     'conversation', 'purpose', 'requestId', 'cwd', 'binary', 'argv', 'startedAt', 'budgetMs', 'killGraceMs',
   ])
@@ -116,6 +115,10 @@ export class CallDescriptor {
       budgetMs: this.budgetMs,
       killGraceMs: this.killGraceMs,
     }, null, 2)}\n`
+  }
+
+  static opening(promptPath: string): string {
+    return `Read the file at ${promptPath} and do exactly what it says.`
   }
 
   mode(): CallMode {
@@ -448,11 +451,13 @@ export class ClaudeCalls {
     let call: StartedPlanCall
     let directory: string
     let descriptorPath: string
+    let promptPath: string
     let startedAt: string
     try {
       call = new StartedPlanCall({ conversation: invocation.conversation, id: this.newId() })
       directory = this.files.callDirectory(call)
       descriptorPath = join(directory, CallDescriptor.FILE)
+      promptPath = join(directory, CallDescriptor.PROMPT)
       startedAt = this.now()
     } catch (cause) {
       throw this.#neverLaunched(
@@ -470,7 +475,7 @@ export class ClaudeCalls {
         requestId: invocation.requestId,
         cwd: invocation.cwd,
         binary: this.binary,
-        argv: invocation.argv,
+        argv: [...invocation.argv, CallDescriptor.opening(promptPath)],
         startedAt,
         budgetMs: this.budgetMs,
         killGraceMs: this.killGraceMs,
@@ -482,7 +487,7 @@ export class ClaudeCalls {
       )
     }
     try {
-      await this.#writeOnceOrMatch(join(directory, CallDescriptor.PROMPT), invocation.prompt)
+      await this.#writeOnceOrMatch(promptPath, invocation.prompt)
       await this.#writeOnceOrMatch(descriptorPath, descriptor.text())
     } catch (cause) {
       if (cause instanceof PlanAgentNotNamed) throw cause

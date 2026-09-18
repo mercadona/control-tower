@@ -746,7 +746,6 @@ describe('RunPlanAgents', () => {
       '--model', 'opus',
       '--plugin-dir', '/plugin',
       '--resume', AgentMother.CONVERSATION,
-      'Read the file at $CT_CALL_PROMPT and do exactly what it says.',
     ])
     expect(producerTransport.invocations[1].prompt).toBe(
       'A person reviewed the pull request for issue #332 and requested these changes: '

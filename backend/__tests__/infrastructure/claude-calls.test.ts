@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
-import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
+import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { HeadlessCallWorker } from '../../src/infrastructure/headless-call-worker.ts'
 
@@ -375,7 +375,7 @@ describe('ClaudeCalls', () => {
       requestId: null,
       cwd: '/checkout/.worktrees/331',
       binary: '/usr/local/bin/claude',
-      argv: ['-p', '--session-id', CallMother.CONVERSATION],
+      argv: ['-p', '--session-id', CallMother.CONVERSATION, CallDescriptor.opening(join(directory, 'prompt.md'))],
       startedAt: CallMother.STARTED_AT,
       budgetMs: 100,
       killGraceMs: 20,

@@ -700,7 +700,10 @@ class ActualHeadlessRuntime {
       "if (argv[0] === '-p') {",
       "  const at = argv.indexOf('--session-id')",
       '  const id = argv[at + 1]',
-      "  fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${id}.json`), JSON.stringify({ argv, prompt: process.env.CT_CALL_PROMPT }))",
+      '  const errand = argv[argv.length - 1]',
+      "  const errandMatch = /^Read the file at (.+) and do exactly what it says\\.$/.exec(errand)",
+      "  if (errandMatch === null) throw new Error('unexpected CLI errand: ' + JSON.stringify(errand))",
+      "  fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${id}.json`), JSON.stringify({ argv, prompt: errandMatch[1] }))",
       '}',
       'setInterval(() => {}, 1000)',
     ].join('\n') + '\n', { mode: 0o755 })

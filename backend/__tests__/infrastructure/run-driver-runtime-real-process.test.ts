@@ -367,7 +367,10 @@ class MachineRuntimeFixture {
       "const resumeAt = argv.indexOf('--resume')",
       'const conversation = argv[(initialAt >= 0 ? initialAt : resumeAt) + 1]',
       "const purpose = initialAt >= 0 ? 'plan' : 'implementation'",
-      "fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${purpose}.json`), JSON.stringify({ conversation, argv, prompt: fs.readFileSync(process.env.CT_CALL_PROMPT, 'utf8') }))",
+      'const errand = argv[argv.length - 1]',
+      "const errandMatch = /^Read the file at (.+) and do exactly what it says\\.$/.exec(errand)",
+      "if (errandMatch === null) throw new Error('unexpected CLI errand: ' + JSON.stringify(errand))",
+      "fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${purpose}.json`), JSON.stringify({ conversation, argv, prompt: fs.readFileSync(errandMatch[1], 'utf8') }))",
       'if (initialAt >= 0) {',
       "  const plan = path.join(process.cwd(), process.env.CT_FIXTURE_PLAN)",
       "  fs.mkdirSync(path.dirname(plan), { recursive: true })",
@@ -545,6 +548,7 @@ class LegacyRuntimeFixture {
   async fixEvidence(): Promise<{
     descriptor: CallRecord,
     prompt: string,
+    promptPath: string,
     capture: { conversation: string, argv: string[], prompt: string },
     admission: string | null,
     ghCalls: string[][],
@@ -572,6 +576,7 @@ class LegacyRuntimeFixture {
           return {
             descriptor,
             prompt: await readFile(join(directory, CallDescriptor.PROMPT), 'utf8'),
+            promptPath: join(directory, CallDescriptor.PROMPT),
             capture,
             admission,
             ghCalls: ghLines.filter(Boolean).map((line) => JSON.parse(line) as string[]),
@@ -677,7 +682,7 @@ class LegacyRuntimeFixture {
       '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
       '--allowedTools', ClaudePlanCalls.ALLOWED_TOOLS, '--model', 'opus', '--plugin-dir',
       join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'plugin'),
-      mode, LegacyRuntimeFixture.CONVERSATION, ClaudePlanCalls.OPENING,
+      mode, LegacyRuntimeFixture.CONVERSATION,
     ]
   }
 
@@ -717,7 +722,10 @@ class LegacyRuntimeFixture {
       'const argv = process.argv.slice(2)',
       "const resumeAt = argv.indexOf('--resume')",
       'const conversation = argv[resumeAt + 1]',
-      "const prompt = fs.readFileSync(process.env.CT_CALL_PROMPT, 'utf8')",
+      'const errand = argv[argv.length - 1]',
+      "const errandMatch = /^Read the file at (.+) and do exactly what it says\\.$/.exec(errand)",
+      "if (errandMatch === null) throw new Error('unexpected CLI errand: ' + JSON.stringify(errand))",
+      "const prompt = fs.readFileSync(errandMatch[1], 'utf8')",
       "fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'fix.json'), JSON.stringify({ conversation, argv, prompt }))",
       "console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: conversation, is_error: false, total_cost_usd: 0, num_turns: 1, duration_ms: 1 }))",
     ].join('\n') + '\n', { mode: 0o755 })
@@ -818,7 +826,7 @@ describe('run driver production runtime', () => {
     await fixture.exposeReviewAfterBaseline()
 
     const evidence = await fixture.fixEvidence()
-    const expectedArgv = LegacyRuntimeFixture.argv('--resume')
+    const expectedArgv = [...LegacyRuntimeFixture.argv('--resume'), CallDescriptor.opening(evidence.promptPath)]
     const expectedPrompt = LegacyRuntimeFixture.fixErrand()
 
     expect(evidence.admission).toBeNull()

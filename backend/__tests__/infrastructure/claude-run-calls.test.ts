@@ -24,7 +24,6 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
-import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
 import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
@@ -285,7 +284,7 @@ class RunCallScenario {
       requestId: `run:${dispatch.ticket}`,
       cwd: this.watch.located.path,
       binary: '/usr/local/bin/claude',
-      argv: RunCallScenario.argv(dispatch),
+      argv: RunCallScenario.argv(dispatch, join(directory, CallDescriptor.PROMPT)),
       startedAt: RunCallMother.STARTED_AT,
       budgetMs: 7_200_000,
       killGraceMs: 5_000,
@@ -300,7 +299,7 @@ class RunCallScenario {
     return `Read the listed files.\n${paths.join('\n')}\nComplete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`
   }
 
-  static argv(dispatch: RunDispatch): readonly string[] {
+  static argv(dispatch: RunDispatch, promptPath: string): readonly string[] {
     return [
       '-p',
       '--output-format', 'stream-json',
@@ -309,7 +308,7 @@ class RunCallScenario {
       '--plugin-dir', RunCallMother.pluginRoot,
       '--resume', RunCallMother.CONVERSATION,
       ...dispatch.argv,
-      ClaudePlanCalls.OPENING,
+      CallDescriptor.opening(promptPath),
     ]
   }
 }
@@ -368,12 +367,12 @@ describe('ClaudeRunCalls', () => {
     expect(scenario.launch.descriptors).toHaveLength(dispatches.length)
     dispatches.forEach((dispatch, index) => {
       const descriptor = scenario.descriptor(index)
+      const promptPath = join(dirname(scenario.launch.descriptors[index]), CallDescriptor.PROMPT)
       expect(descriptor.purpose).toBe('implementation')
       expect(descriptor.requestId).toBe(`run:${dispatch.ticket}`)
       expect(descriptor.cwd).toBe(scenario.watch.located.path)
-      expect(descriptor.argv).toEqual(RunCallScenario.argv(dispatch))
-      expect(readFileSync(join(dirname(scenario.launch.descriptors[index]), CallDescriptor.PROMPT), 'utf8'))
-        .toBe(RunCallScenario.prompt(dispatch.paths))
+      expect(descriptor.argv).toEqual(RunCallScenario.argv(dispatch, promptPath))
+      expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch.paths))
     })
     expect(scenario.descriptor(0).argv).toContain(JSON.stringify(REPORT_SCHEMA))
     expect(scenario.descriptor(4).argv).not.toContain('--json-schema')

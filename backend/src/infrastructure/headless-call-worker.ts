@@ -150,10 +150,7 @@ export class HeadlessCallWorker {
     try {
       child = this.spawn(this.#descriptor.binary, [...this.#descriptor.argv], {
         cwd: this.#descriptor.cwd,
-        env: {
-          ...process.env,
-          [CallDescriptor.PROMPT_VARIABLE]: join(directory, CallDescriptor.PROMPT),
-        },
+        env: { ...process.env },
         detached: true,
         stdio: ['ignore', stdout.fd, stderr.fd],
       })

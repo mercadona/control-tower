@@ -5,7 +5,6 @@ import type { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RunInstruction } from '../domain/value-objects/run-instruction.ts'
 import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
-import { ClaudePlanCalls } from './claude-plan-calls.ts'
 import type { ClaudeRunMeasurements } from './claude-run-measurements.ts'
 import type { CtRunMachine } from './ct-run-machine.ts'
 import { HeadlessFiles } from './headless-files.ts'
@@ -93,7 +92,6 @@ export class ClaudeRunCalls extends RunCalls {
       '--plugin-dir', this.pluginRoot,
       '--resume', conversation,
       ...dispatch.argv,
-      ClaudePlanCalls.OPENING,
     ])
   }
 
