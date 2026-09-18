@@ -2,20 +2,19 @@
 # lockfile and suite; this file only spells out the commands in one place.
 # Every target names the package it touches; only *-all spans them.
 #
+#   make start                                                  START HERE: the whole application — builds frontend/dist, then serves it from the API on CT_API_PORT (8787). Needs `make install` to have run once.
 #   make install-plugin | install-backend | install-frontend | install-all
 #   make test-plugin    | test-backend    | test-frontend    | test-all
 #   make build-plugin                                          build plugin/dist (the hook bundles)
 #   make build-frontend                                        build frontend/dist
-#   make run-backend                                           install backend deps, then start the API on CT_API_PORT (8787); serves frontend/dist if built; CT_HARVEST_BQ_TABLE=project:dataset.table loads every harvested slice into BigQuery, and without it nothing is uploaded (read at start-up, so changing it needs a restart)
-#   make run-frontend                                          build the frontend, then run-backend
-#   make dev-frontend                                          vite dev server (run `make run-backend` in another terminal)
+#   make run-backend                                           the API alone, on CT_API_PORT (8787), without rebuilding the page: installs backend deps first, and serves whatever frontend/dist already holds; CT_HARVEST_BQ_TABLE=project:dataset.table loads every harvested slice into BigQuery, and without it nothing is uploaded (read at start-up, so changing it needs a restart)
+#   make dev-frontend                                          the page alone, on vite's 5173 with hot reload (run `make run-backend` in another terminal)
 #   make clean-frontend | clean-all
 #   make version                                                print the VERSION file
-#   make check                                                  preflight: the build tools, then the six external tools the backend drives
+#   make check                                                  preflight: the build tools, then the five external tools the backend drives
 #   make check-release                                          compare VERSION against the newest app-v* tag on origin
 #   make update                                                 move this install to the newest app-v* tag, then reinstall
 #   make install                                                install backend deps, and build the frontend when its sources are present
-#   make start                                                  run the already-installed backend (no install step)
 #   .env                                                        local, git-ignored values read by every target above (see .env.example)
 
 SHELL := /bin/bash
@@ -40,7 +39,7 @@ HARVEST_VARIABLE := CT_HARVEST_BQ_TABLE
 
 .PHONY: help install-all test-all clean-all \
         $(addprefix install-,$(PACKAGES)) $(addprefix test-,$(PACKAGES)) \
-        build-plugin build-frontend run-backend run-frontend dev-frontend clean-frontend \
+        build-plugin build-frontend run-backend dev-frontend clean-frontend \
         version check check-release install start update
 
 help:
@@ -60,13 +59,27 @@ $(addprefix test-,$(PACKAGES)): test-%:
 build-plugin:
 	npm run build --prefix plugin
 
+# `start` and `install` both depend on this, so it answers for both trees they
+# run in. --if-present guards a missing build *script*, never a missing
+# frontend/, which is why the absent package.json is decided here instead: a
+# tree without frontend sources still installs and still starts, exactly as it
+# did before `start` began building.
+#
+# An uninstalled frontend is the other way this cannot run, and it is reported
+# by name rather than as npm's bare ENOENT on vite.
 build-frontend:
+ifeq ($(wildcard frontend/package.json),)
+	@echo "no frontend sources in this tree: nothing to build"
+else
+	@if [ ! -d frontend/node_modules ]; then \
+	  echo "the frontend is not installed, so frontend/dist cannot be built: run make install first"; \
+	  exit 1; \
+	fi
 	npm run build --prefix frontend --if-present
+endif
 
 run-backend: install-backend
 	CT_API_PORT=$(CT_API_PORT) $(CLAUDE_CONFIG_DIR_ENV) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
-
-run-frontend: install-frontend build-frontend run-backend
 
 dev-frontend: install-frontend
 	npm run dev --prefix frontend --if-present
@@ -88,17 +101,21 @@ version:
 #
 # This target answers one question only: is every binary on PATH. It never asks
 # whether a credential works, because that is not knowable from here — gh, acli
-# and bq answer to a login, and cmux answers only while its app is running. The
-# backend measures those at GET /external-tools once it is up, and that endpoint,
-# not this one, is what says a setup is finished.
+# and bq answer to a login. The backend measures those at GET /external-tools
+# once it is up, and that endpoint, not this one, is what says a setup is
+# finished.
 #
 # Two classes, both required. The build tools are what the install itself needs.
-# The six external tools are the binaries the backend drives; the authority on
-# which six, and on what is asked of each, is probed-tool-sessions.ts, and the
+# The five external tools are the binaries the backend drives; the authority on
+# which five, and on what is asked of each, is probed-tool-sessions.ts, and the
 # backend answers `"ready": false` on GET /external-tools while one is missing.
-# ssh and gcloud are not a seventh and eighth tool: they are how git and bq are
+# ssh and gcloud are not a sixth and seventh tool: they are how git and bq are
 # probed. A missing binary fails this target either way — the split is what it
 # costs you, not whether it counts.
+#
+# cmux is not among them. #375 made the dispatcher headless, so the backend
+# neither drives cmux nor has to be started from inside it, and
+# probed-tool-sessions.ts stopped naming it.
 check:
 	@node_needed="24.12"; \
 	fail_required=""; \
@@ -153,7 +170,7 @@ check:
 	  fail_required="$$fail_required toolchain"; \
 	fi; \
 	echo ""; \
-	echo "external tools — git is the sixth, reported above; bq only with $(HARVEST_VARIABLE)"; \
+	echo "external tools — git is the fifth, reported above; bq only with $(HARVEST_VARIABLE)"; \
 	external() { \
 	  if command -v "$$1" >/dev/null 2>&1; then line "$$1" ok "$$(command -v "$$1")"; \
 	  else line "$$1" missing "$$2"; fail_required="$$fail_required $$1"; fi; \
@@ -161,14 +178,13 @@ check:
 	external gh "GitHub issues and pull requests will not sync"; \
 	external acli "the Jira user stories will not load"; \
 	external claude "plan agents will not have an implementer to run"; \
-	external cmux "plan agents will not have a session to launch into"; \
 	if [ -n "$(CT_HARVEST_BQ_TABLE)" ]; then \
 	  external bq "no harvested slice will leave its row in the ledger"; \
 	else \
 	  line bq skipped "not needed: $(HARVEST_VARIABLE) is unset"; \
 	fi; \
 	echo ""; \
-	echo "probes — how two of those six are checked, not tools of their own"; \
+	echo "probes — how two of those five are checked, not tools of their own"; \
 	external ssh "git's access to GitHub cannot be probed"; \
 	if [ -n "$(CT_HARVEST_BQ_TABLE)" ]; then \
 	  external gcloud "bq's credential cannot be probed"; \
@@ -245,9 +261,20 @@ install:
 	npm ci --omit=dev --prefix backend
 	@if [ -f frontend/package.json ]; then $(MAKE) install-frontend build-frontend; fi
 
-# run-backend installs first, for a checkout; start assumes install already ran,
-# which is the case once `make install` has been run on a fresh clone.
-start:
+# The one command that starts the whole application: it rebuilds frontend/dist
+# from the sources in this checkout, then serves it from the API. One command,
+# because the page and the API are one product to whoever runs it — the split
+# targets below stay for working on one side at a time.
+#
+# The rebuild is not a convenience. The backend serves whatever frontend/dist
+# holds, and nothing else in this file writes that directory once `make install`
+# has run. A checkout that follows a branch therefore served the bundle of the
+# last install after every pull, with no sign that the page was older than the
+# code. The build costs about two seconds; a stale page costs an afternoon.
+#
+# It does not install. run-backend installs first, for a checkout; start assumes
+# `make install` already ran, which is the case on a fresh clone.
+start: build-frontend
 	CT_API_PORT=$(CT_API_PORT) $(CLAUDE_CONFIG_DIR_ENV) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 # Moves an installed clone to the newest app-v* tag and reinstalls. Refuses on a

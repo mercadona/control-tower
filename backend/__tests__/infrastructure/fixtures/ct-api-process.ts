@@ -123,8 +123,14 @@ export class Entrypoint {
     return (await Entrypoint.started(environment)).port
   }
 
+  static #asOverridesThatBeatALocalEnvFile(environment: NodeJS.ProcessEnv): string[] {
+    return Object.entries(environment).map(([name, value]) => `${name}=${value ?? ''}`)
+  }
+
   static async makeStart(environment: NodeJS.ProcessEnv): Promise<number> {
-    const child = spawn('make', ['--silent', 'start'], {
+    const child = spawn('make', [
+      '--silent', 'start', ...Entrypoint.#asOverridesThatBeatALocalEnvFile(environment),
+    ], {
       cwd: Entrypoint.#ROOT,
       env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -204,12 +204,17 @@ on every machine.
 | `gh` | GitHub issues and pull requests | `gh auth login` |
 | `acli` | the user stories that come from Jira | `acli jira auth login` |
 | `claude` | the agent that writes the plan and implements it | `claude`, then `/login` |
-| `cmux` | the terminal a plan agent is launched into | see step 4.4 |
 | `git` | clones, worktrees and branches | an SSH key on your GitHub account |
 | `bq` | the row every harvested slice leaves in the ledger | only with `CT_HARVEST_BQ_TABLE` set |
 
 `bq` is the conditional one. Leave `CT_HARVEST_BQ_TABLE` unset — the default —
 and a working install needs no Google Cloud SDK at all.
+
+`cmux` is not in that table and the application does not need it. #375 made the
+backend's dispatcher headless, so it neither drives cmux nor probes it. The
+plugin's own `/ct-next` still launches a dispatched agent into a cmux session —
+see «What the environment needs» above — but that is the loop's requirement, not
+the cabin's.
 
 ### 4.2 Install
 
@@ -231,19 +236,25 @@ browser or prompt interactively. No agent completes them on a person's behalf.
 
 ### 4.4 Run
 
-**Open `cmux` first, and start the backend from a terminal inside it.** Control
-Tower launches every plan agent into a `cmux` session, so readiness for that
-tool is a live workspace query rather than a `PATH` lookup, and a `cmux` that
-is not running does not answer it. Started anywhere else the backend still
-comes up and still serves the page — what you lose is the agents.
+**One command starts the whole application**, and nothing has to be opened
+first:
 
 ```sh
 make start
 ```
 
-It works when stdout carries a line shaped `{"port":<n>}`. **That line is not
-always the first line of output**, so a script that waits for the server must
-match a line against that shape, not read line 1. Then open
+It builds `frontend/dist` from this checkout's sources, then serves that bundle
+and the API together on `CT_API_PORT` (`8787` by default).
+
+**Do not start the application with `make run-backend`.** The backend serves
+whatever `frontend/dist` already holds and never builds it, so in a clone that
+follows a branch a `git pull` leaves the page several commits behind the code
+with nothing on screen to say so. The build costs about two seconds, and
+paying it on every start is why `start` is the one command.
+
+It works when stdout carries a line shaped `{"port":<n>}`. **That line is never
+the first line of output** — the build prints first — so a script that waits for
+the server must match every line against that shape, not read line 1. Then open
 `http://127.0.0.1:8787`.
 
 Stop it by matching the `node` process, not `make`, which spawns it as a child:
@@ -366,14 +377,14 @@ names its package, and `make help` lists them all:
 | `make test-plugin` · `test-backend` · `test-frontend` · `test-all` | the suites |
 | `make build-plugin` | `plugin/dist` — the hook bundles |
 | `make build-frontend` | `frontend/dist` |
-| `make run-backend` | installs, then starts the API; serves `frontend/dist` if built |
-| `make run-frontend` | builds the front end, then `run-backend` |
+| `make start` | **the whole application**: builds `frontend/dist`, then serves it with the API |
+| `make run-backend` | the API alone; serves whatever `frontend/dist` already holds, and never builds it |
 | `make dev-frontend` | vite on 5173 proxying to the API — run `make run-backend` in another terminal |
-| `make check` · `check-release` · `install` · `start` · `update` · `version` | the install path of section 4 |
+| `make check` · `check-release` · `install` · `update` · `version` | the install path of section 4 |
 
 **`make dev-frontend` cannot press the gate buttons.** The vite proxy strips
 `Origin` before forwarding, so no gate key is minted, and a press without the
-key is refused with `gate-not-from-the-page`. Use `make run-frontend` to
+key is refused with `gate-not-from-the-page`. Use `make start` to
 exercise gates 1 and 2.
 
 ### Two derived directories are tracked, and both have a rule
