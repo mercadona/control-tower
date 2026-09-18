@@ -1666,8 +1666,8 @@ if (typeof baseArg === 'string') {
 function readDispatchInput() {
   if (fx) return fx
   // The paginated read of open/closed issues lives in scripts/loop-issues.js,
-  // shared with other commands: the same two `gh api ... --paginate --slurp`
-  // blocks, the same comments, the same normalisation of state_reason.
+  // shared with other commands: the same two GraphQL listings (open, closed),
+  // the same shape out of normalizeGraphqlIssues.
   const { abiertos: open, cerrados: closed, motivos: reasons } = loadIssues({ repo, gh })
   // The same criterion as always, and /ct-next's behaviour does not change: a
   // failed read is NOT degraded to "there are no issues". We abort with the

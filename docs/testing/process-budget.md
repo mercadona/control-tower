@@ -93,3 +93,20 @@ The issue's approximate 35-case budget is not an acceptance count. The original 
 ## API migration measurement
 
 After Slice 2, on the same base and Node 24 runner: **2397 backend tests passed**, zero failed or pending, **89.228 s** summed file duration and **22.155 s** observed report span. The API family moved from **19 process cases / 42.290 s** to **25 in-process composition cases plus two executable cases / 5.286 s**. Host contention varied during the work; [the investigation record](pty-validation-findings.md) retains both failed and successful runs rather than presenting a controlled microbenchmark.
+
+## ct-step migration and retained boundaries
+
+The original 199 scenarios all remain and run without real subprocesses. The first matched-case replay measured **28.534 s summed / 4.435 s report span**, against **1497.614 s summed** in the original whole-plugin baseline. Expanded runs include three invocation cases and five actual CLI/Git cases; timing varied substantially under host contention, so those first figures are a measurement, not a fixed runtime guarantee.
+
+Additional retained boundaries in this delivery:
+
+| Package | File | Cases | Required real mechanism |
+|---|---|---:|---|
+| plugin | `process-runner-real-process.test.js` | 6 | Real invocation/streams/options, missing binary, timeout and large output. |
+| plugin | `ct-step-entrypoint-real-process.test.js` | 1 | Supported executable, argv, brief and seal from a path with spaces. |
+| plugin | `ct-step-commit-real-process.test.js` | 4 | Actual index/object behavior, commit scope/trailers, artifact byte identity and merged-base counts. |
+| plugin | `process-tripwire-real-process.test.js` | 1 | A separate test runner proves accidental process execution is refused even when caught. |
+| backend | `ct-api-real-process.test.ts` | 2 | Actual bound port and request through the symlinked executable. |
+| backend | `ct-api-make-real-process.test.ts` | 3 | Make startup and both configuration-variable forms added by #417. |
+
+The two doubled unreadable-base cases moved to `branch-reconciliation.test.js`; one native case remains. The dispatch-seal filename is now unmarked and its nine cases are included in the fast selection. The baseline's other process families and main's newly added run/restart mechanism tests remain accounted for separately; the full-issue process budget is not closed by this first delivery.

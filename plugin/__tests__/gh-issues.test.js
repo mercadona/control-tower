@@ -117,20 +117,44 @@ describe('partitionByEpic', () => {
   })
 })
 
+describe('issuesQueryFor — one query shape, the states as the caller needs them', () => {
+  it('pins the states it is given, paginates by endCursor and asks for the fields the loop reads', async () => {
+    const { issuesQueryFor } = await import('../scripts/gh-issues.js')
+    const query = issuesQueryFor(['OPEN'])
+    expect(query).toContain('states:[OPEN]')
+    expect(query).toContain('$endCursor')
+    expect(query).toContain('first:100')
+    expect(query).toMatch(/pageInfo\{\s*hasNextPage endCursor\s*\}/)
+    expect(query).toContain('stateReason')
+    expect(query).toContain('milestone{number title description}')
+  })
+  it('CLOSED alone and both together spell their states the way the fake and the real API read them', async () => {
+    const { issuesQueryFor, GROOM_ISSUES_QUERY } = await import('../scripts/gh-issues.js')
+    expect(issuesQueryFor(['CLOSED'])).toContain('states:[CLOSED]')
+    expect(GROOM_ISSUES_QUERY).toBe(issuesQueryFor(['OPEN', 'CLOSED']))
+    expect(GROOM_ISSUES_QUERY).toContain('states:[OPEN,CLOSED]')
+  })
+  it('refuses a state GitHub would not understand, instead of shipping a query that returns nothing', async () => {
+    const { issuesQueryFor } = await import('../scripts/gh-issues.js')
+    expect(() => issuesQueryFor(['open'])).toThrow(/state/)
+    expect(() => issuesQueryFor([])).toThrow(/state/)
+  })
+})
+
 describe('normalizeGraphqlIssues — it translates the GraphQL answer into the REST shape the rest of the code expects', () => {
-  it('it flattens pages, lowercases state and normalises labels/milestone', async () => {
+  it('it flattens pages, lowercases state, keeps stateReason and normalises labels/milestone', async () => {
     const { normalizeGraphqlIssues } = await import('../scripts/gh-issues.js')
     const pages = [
       { data: { repository: { issues: { nodes: [
-        { number: 501, title: '#1 login', body: 'x <!-- ct-order:1 -->', state: 'OPEN', milestone: { title: 'Epic' }, labels: { nodes: [{ name: 'type:backend' }, { name: 'area:api' }] } },
+        { number: 501, title: '#1 login', body: 'x <!-- ct-order:1 -->', state: 'OPEN', stateReason: null, milestone: { number: 3, title: 'Epic', description: 'reach' }, labels: { nodes: [{ name: 'type:backend' }, { name: 'area:api' }] } },
       ], pageInfo: { hasNextPage: true, endCursor: 'a' } } } } },
       { data: { repository: { issues: { nodes: [
-        { number: 502, title: '#2 scoring', body: 'y <!-- ct-order:2 -->', state: 'CLOSED', milestone: null, labels: { nodes: [] } },
+        { number: 502, title: '#2 scoring', body: 'y <!-- ct-order:2 -->', state: 'CLOSED', stateReason: 'COMPLETED', milestone: null, labels: { nodes: [] } },
       ], pageInfo: { hasNextPage: false, endCursor: 'b' } } } } },
     ]
     expect(normalizeGraphqlIssues(pages)).toEqual([
-      { number: 501, title: '#1 login', body: 'x <!-- ct-order:1 -->', state: 'open', milestone: { title: 'Epic' }, labels: [{ name: 'type:backend' }, { name: 'area:api' }] },
-      { number: 502, title: '#2 scoring', body: 'y <!-- ct-order:2 -->', state: 'closed', milestone: null, labels: [] },
+      { number: 501, title: '#1 login', body: 'x <!-- ct-order:1 -->', state: 'open', stateReason: null, milestone: { number: 3, title: 'Epic', description: 'reach' }, labels: [{ name: 'type:backend' }, { name: 'area:api' }] },
+      { number: 502, title: '#2 scoring', body: 'y <!-- ct-order:2 -->', state: 'closed', stateReason: 'COMPLETED', milestone: null, labels: [] },
     ])
   })
   it('TWO pages → it concatenates the nodes of both in order (it does not lose page 2)', async () => {

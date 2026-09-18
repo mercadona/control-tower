@@ -724,7 +724,7 @@ describe('ct-next — enumerating issues with no fixed --limit (final review, fi
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
   }
 
-  it('enumerating open and closed issues uses --paginate and never --limit', () => {
+  it('enumerating open and closed issues goes over GraphQL, one states filter per call, with --paginate and never --limit', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-nolimit-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -739,8 +739,9 @@ describe('ct-next — enumerating issues with no fixed --limit (final review, fi
     const log = readFileSync(logFile, 'utf8')
     expect(log).toMatch(/--paginate/)
     expect(log).not.toMatch(/--limit/)
-    expect(log).toMatch(/state=open/)
-    expect(log).toMatch(/state=closed/)
+    expect(log).toMatch(/states:\[OPEN\]/)
+    expect(log).toMatch(/states:\[CLOSED\]/)
+    expect(log).not.toMatch(/repos\/o\/r\/issues /)
   })
 
   // Re-review: the normalisation of `state_reason` (REST, lowercase) →

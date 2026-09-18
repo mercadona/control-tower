@@ -116,7 +116,7 @@ describe('ct-init: conventions the repository already has on the turf the loop c
       env: { ...process.env, PATH: `${emptyBin}:/usr/bin:/bin` },
     })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/no se ha podido comprobar si este repo ya tiene convenciones/i)
+    expect(res.stderr).toMatch(/could not check whether this repo already has conventions/i)
     rmSync(dir, { recursive: true, force: true })
     rmSync(emptyBin, { recursive: true, force: true })
   })
