@@ -9,6 +9,7 @@ import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
+import { PlanAgentNotLaunched } from '../../src/domain/exceptions.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
@@ -153,9 +154,17 @@ class PlanRecordsDouble extends PlanRecords {
 
 class PlanAgentsDouble extends PlanAgents {
   readonly asked: PlanBriefing[] = []
+  readonly refusing: ReadonlyMap<number, Error>
+
+  constructor(refusing: ReadonlyMap<number, Error> = new Map()) {
+    super()
+    this.refusing = refusing
+  }
 
   override async launch(briefing: PlanBriefing): Promise<string> {
     this.asked.push(briefing)
+    const refusal = this.refusing.get(briefing.issue.number)
+    if (refusal !== undefined) throw refusal
 
     return `workspace:${briefing.issue.number}`
   }
@@ -177,12 +186,18 @@ class Sweep {
   readonly gh: ScriptedGh
   readonly claims = new DispatchClaimsDouble()
   readonly workspace = new WorkspaceDouble()
-  readonly agents = new PlanAgentsDouble()
+  readonly agents: PlanAgentsDouble
   readonly records = new PlanRecordsDouble()
   readonly checkouts = new CheckoutRegistryDouble()
 
-  constructor(gh: ScriptedGh) {
+  constructor(gh: ScriptedGh, refusing: ReadonlyMap<number, Error> = new Map()) {
     this.gh = gh
+    this.agents = new PlanAgentsDouble(refusing)
+  }
+
+  dispatched(): number[] {
+    return this.written
+      .flatMap((line) => line.startsWith('relay: dispatched ') ? [Number(line.split('#')[1].split(' ')[0])] : [])
   }
 
   async run(): Promise<Sweep> {
@@ -220,7 +235,7 @@ class Sweep {
 }
 
 describe('DispatchRelay crossed with the real plugin selection', () => {
-  it('an open pull request frees the cap and the sweep dispatches the next slice', async () => {
+  it('an open pull request holds only its tokens and the sweep dispatches the next slice', async () => {
     const gh = new ScriptedGh(
       [
         Slice.issue({ number: 10, order: 2, status: 'in-review', touches: ['api'] }),
@@ -274,5 +289,78 @@ describe('DispatchRelay crossed with the real plugin selection', () => {
 
     expect(swept.agents.asked).toEqual([])
     expect(swept.written).toEqual([])
+  })
+
+  it('every unblocked slice goes in one sweep, with no human input between them', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 21, order: 2, status: 'ready', dependencies: [1], touches: ['api'] }),
+        Slice.issue({ number: 22, order: 3, status: 'ready', dependencies: [1], touches: ['ui'] }),
+        Slice.issue({ number: 23, order: 4, status: 'ready', dependencies: [1], touches: [] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.dispatchAsked).toHaveLength(1)
+    expect(swept.agents.asked.map((briefing) => briefing.issue.number)).toEqual([21, 22, 23])
+    expect(swept.written).toEqual([
+      'relay: dispatched mercadona/control-tower-plugin#21 as workspace:21\n',
+      'relay: dispatched mercadona/control-tower-plugin#22 as workspace:22\n',
+      'relay: dispatched mercadona/control-tower-plugin#23 as workspace:23\n',
+    ])
+  })
+
+  it('two ready slices sharing a touches token: the first goes and the second waits', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 24, order: 2, status: 'ready', dependencies: [1], touches: ['api'] }),
+        Slice.issue({ number: 25, order: 3, status: 'ready', dependencies: [1], touches: ['api'] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.dispatched()).toEqual([24])
+    expect(swept.agents.asked.map((briefing) => briefing.issue.number)).toEqual([24])
+  })
+
+  it('an unmerged pull request keeps holding its tokens, so what collides with it waits', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 26, order: 2, status: 'in-review', touches: ['api'] }),
+        Slice.issue({ number: 27, order: 3, status: 'ready', dependencies: [1], touches: ['api'] }),
+        Slice.issue({ number: 28, order: 4, status: 'ready', dependencies: [1], touches: ['ui'] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.dispatched()).toEqual([28])
+    expect(swept.agents.asked.map((briefing) => briefing.issue.number)).toEqual([28])
+  })
+
+  it('a slice that fails to start stops none of the others and is named in its own line', async () => {
+    const gh = new ScriptedGh(
+      [
+        Slice.issue({ number: 31, order: 2, status: 'ready', dependencies: [1], touches: ['api'] }),
+        Slice.issue({ number: 32, order: 3, status: 'ready', dependencies: [1], touches: ['ui'] }),
+        Slice.issue({ number: 33, order: 4, status: 'ready', dependencies: [1], touches: [] }),
+      ],
+      [Slice.issue({ number: 5, order: 1, status: 'closed', stateReason: 'COMPLETED' })],
+    )
+    const refused = new PlanAgentNotLaunched('worker acceptance was lost')
+
+    const swept = await new Sweep(gh, new Map([[32, refused]])).run()
+
+    expect(swept.dispatched()).toEqual([31, 33])
+    expect(swept.written).toEqual([
+      'relay: dispatched mercadona/control-tower-plugin#31 as workspace:31\n',
+      'relay: dispatched mercadona/control-tower-plugin#33 as workspace:33\n',
+      'relay: mercadona/control-tower-plugin#32 could not be dispatched: worker acceptance was lost\n',
+    ])
   })
 })

@@ -116,8 +116,12 @@ class GhDouble {
     })
   }
 
-  next(): Promise<import('../../src/domain/value-objects/plan-issue.ts').PlanIssue> {
-    return this.candidates().next({ repository: CandidateMother.REPOSITORY, milestone: CandidateMother.TARGET })
+  admissible(): Promise<readonly import('../../src/domain/value-objects/plan-issue.ts').PlanIssue[]> {
+    return this.candidates().admissible({ repository: CandidateMother.REPOSITORY, milestone: CandidateMother.TARGET })
+  }
+
+  numbers(): Promise<number[]> {
+    return this.admissible().then((issues) => issues.map((issue) => issue.number))
   }
 }
 
@@ -137,14 +141,25 @@ describe('GhDispatchCandidates', () => {
       }),
     ])
 
-    await expect(gh.next()).resolves.toEqual({
-      number: 500,
-      url: 'https://github.com/mercadona/control-tower-plugin/issues/500',
-    })
+    await expect(gh.admissible()).resolves.toEqual([
+      { number: 500, url: 'https://github.com/mercadona/control-tower-plugin/issues/500' },
+      { number: 2, url: 'https://github.com/mercadona/control-tower-plugin/issues/2' },
+    ])
     expect(gh.calls).toEqual([CandidateMother.listing(['OPEN']), CandidateMother.listing(['CLOSED'])])
   })
 
-  it('in review releases cap but retains tokens', async () => {
+  it('every unblocked slice of the milestone comes back in one read', async () => {
+    const gh = GhDouble.listing([
+      CandidateMother.issue({ number: 41, order: 1, touches: ['api'] }),
+      CandidateMother.issue({ number: 42, order: 2, touches: ['ui'] }),
+      CandidateMother.issue({ number: 43, order: 3, touches: [] }),
+    ])
+
+    await expect(gh.numbers()).resolves.toEqual([41, 42, 43])
+    expect(gh.calls).toHaveLength(2)
+  })
+
+  it('a slice under review retains its tokens while the one beside it goes', async () => {
     const gh = GhDouble.listing([
       CandidateMother.issue({ number: 11, order: 1, touches: ['api'] }),
       CandidateMother.issue({ number: 12, order: 2, touches: ['ui'] }),
@@ -157,24 +172,26 @@ describe('GhDispatchCandidates', () => {
       }),
     ])
 
-    await expect(gh.next()).resolves.toEqual({
-      number: 12,
-      url: 'https://github.com/mercadona/control-tower-plugin/issues/12',
-    })
+    await expect(gh.numbers()).resolves.toEqual([12])
   })
 
-  it('cap one releases a candidate only after the previous claim is ready again', async () => {
-    const held = GhDouble.listing([
-      CandidateMother.issue({ number: 11, order: 1, status: 'in-progress' }),
-      CandidateMother.issue({ number: 12, order: 2 }),
+  it('work in flight holds its tokens and no longer holds a cap', async () => {
+    const colliding = GhDouble.listing([
+      CandidateMother.issue({ number: 11, order: 1, status: 'in-progress', touches: ['api'] }),
+      CandidateMother.issue({ number: 12, order: 2, touches: ['api'] }),
     ])
-    const released = GhDouble.listing([
-      CandidateMother.issue({ number: 11, order: 1 }),
-      CandidateMother.issue({ number: 12, order: 2 }),
+    const free = GhDouble.listing([
+      CandidateMother.issue({ number: 11, order: 1, status: 'in-progress', touches: ['api'] }),
+      CandidateMother.issue({ number: 12, order: 2, touches: ['ui'] }),
     ])
 
-    await expect(held.next()).rejects.toBeInstanceOf(DispatchNotAvailable)
-    await expect(released.next()).resolves.toMatchObject({ number: 11 })
+    const refusal = await colliding.admissible().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(DispatchNotAvailable)
+    expect(refusal.message).toContain('"reason":"collision"')
+    expect(refusal.message).toContain('"token":"api"')
+    expect(refusal.message).not.toContain('cap-full')
+    await expect(free.numbers()).resolves.toEqual([12])
   })
 
   it('not planned closure does not satisfy a dependency', async () => {
@@ -183,7 +200,7 @@ describe('GhDispatchCandidates', () => {
       [CandidateMother.issue({ number: 10, order: 1, status: 'closed', stateReason: 'NOT_PLANNED' })],
     )
 
-    const refusal = await gh.next().catch((cause) => cause)
+    const refusal = await gh.admissible().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(DispatchNotAvailable)
     expect(refusal.message).toContain('NOT_PLANNED')
@@ -213,17 +230,17 @@ describe('GhDispatchCandidates', () => {
       }),
     ])
 
-    await expect(partial.next()).rejects.toBeInstanceOf(DispatchNotRead)
+    await expect(partial.admissible()).rejects.toBeInstanceOf(DispatchNotRead)
     expect(partial.calls).toHaveLength(2)
-    await expect(duplicate.next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
+    await expect(duplicate.admissible()).rejects.toBeInstanceOf(DispatchNotUnderstood)
     await expect(new GhDouble([
       GhDouble.output(0, '{"broken":true}'),
       GhDouble.output(0, CandidateMother.pages([])),
-    ]).next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
+    ]).admissible()).rejects.toBeInstanceOf(DispatchNotUnderstood)
     await expect(new GhDouble([
       GhDouble.output(0, JSON.stringify([{ data: { repository: null } }])),
       GhDouble.output(0, CandidateMother.pages([])),
-    ]).next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
+    ]).admissible()).rejects.toBeInstanceOf(DispatchNotUnderstood)
   })
 
   it('a slice that declares the plan gate is dispatched instead of stopping the chain in silence', async () => {
@@ -231,10 +248,9 @@ describe('GhDispatchCandidates', () => {
       CandidateMother.issue({ number: 11, order: 1, gates: ['plan'] }),
     ])
 
-    await expect(gh.next()).resolves.toEqual({
-      number: 11,
-      url: 'https://github.com/mercadona/control-tower-plugin/issues/11',
-    })
+    await expect(gh.admissible()).resolves.toEqual([
+      { number: 11, url: 'https://github.com/mercadona/control-tower-plugin/issues/11' },
+    ])
   })
 
   it('empty issue urls are malformed payloads that retain the offending value', async () => {
@@ -242,7 +258,7 @@ describe('GhDispatchCandidates', () => {
       CandidateMother.issue({ number: 11, order: 1, url: '' }),
     ])
 
-    const refusal = await gh.next().catch((cause) => cause)
+    const refusal = await gh.admissible().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(DispatchNotUnderstood)
     expect(refusal.message).toContain('url')
@@ -272,10 +288,7 @@ describe('GhDispatchCandidates', () => {
         }),
       ])
 
-      await expect(gh.next()).resolves.toEqual({
-        number: 12,
-        url: 'https://github.com/mercadona/control-tower-plugin/issues/12',
-      })
+      await expect(gh.numbers()).resolves.toEqual([12])
     } finally {
       TOKEN_HOLDING_STATUSES.splice(TOKEN_HOLDING_STATUSES.indexOf(authorityOnlyStatus), 1)
     }

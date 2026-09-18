@@ -19,6 +19,7 @@ export type StartedEntrypoint = {
 
 export type Refusal = { status: number | null, said: string[] }
 export type StartedPlan = { agent: string, issue: { number: number } }
+export type StartedMilestone = { started: StartedPlan[], failed: { issue: { number: number } }[] }
 export type CapturedLaunch = { argv: string[], prompt: string, pid: number }
 export type RecordedLaunch = {
   agent: string,

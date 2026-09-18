@@ -1,6 +1,6 @@
 import { issuesQueryFor, normalizeGraphqlIssues } from '../../../plugin/scripts/gh-issues.js'
 import { buildDispatchInput, mapGhIssue } from '../../../plugin/scripts/gh-issue-map.js'
-import { collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
+import { UNCAPPED, collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
 import { DispatchCandidates } from '../domain/ports/dispatch-candidates.ts'
 import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../domain/exceptions.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
@@ -186,10 +186,19 @@ export class GhDispatchCandidates extends DispatchCandidates {
     return `${state} issues exited ${output.code}: stdout ${JSON.stringify(output.stdout)}, stderr ${JSON.stringify(output.stderr)}`
   }
 
-  async next({ repository, milestone }: {
+  static #selectedIssue(selected: { n: number }, openIssues: GhOpenIssue[]): PlanIssue {
+    const raw = openIssues.find((issue) => issue.number === selected.n)
+    if (raw === undefined) {
+      throw new DispatchNotUnderstood(`the plugin selected an issue absent from the open issue table: ${selected.n}`)
+    }
+
+    return new PlanIssue({ number: raw.number, url: raw.url })
+  }
+
+  async admissible({ repository, milestone }: {
     repository: RepositoryName,
     milestone: string,
-  }): Promise<PlanIssue> {
+  }): Promise<readonly PlanIssue[]> {
     const [openOutput, closedOutput] = await Promise.all([
       this.gh.run(GhDispatchCandidates.#argv(repository, 'open'), { safeToRepeat: true }),
       this.gh.run(GhDispatchCandidates.#argv(repository, 'closed'), { safeToRepeat: true }),
@@ -226,17 +235,14 @@ export class GhDispatchCandidates extends DispatchCandidates {
     const dispatch = planDispatch([...issueByNumber.values()], {
       mergedIssues: dispatchInput.mergedIssues,
       depStates: dispatchInput.depStates,
-      cap: 1,
+      cap: UNCAPPED,
     })
-    const selected = dispatch.selected[0]
-    if (selected === undefined) {
+    if (dispatch.selected.length === 0) {
       throw new DispatchNotAvailable(`the plugin did not select a slice: ${JSON.stringify(dispatch.blockReason)}`)
     }
-    const raw = openIssues.find((issue) => issue.number === selected.n)
-    if (raw === undefined) {
-      throw new DispatchNotUnderstood(`the plugin selected an issue absent from the open issue table: ${selected.n}`)
-    }
 
-    return new PlanIssue({ number: raw.number, url: raw.url })
+    return dispatch.selected.map(
+      (selected: { n: number }) => GhDispatchCandidates.#selectedIssue(selected, openIssues)
+    )
   }
 }

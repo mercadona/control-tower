@@ -10,7 +10,7 @@ import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 import { ActualHeadlessRuntime, Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
-import type { Refusal, StartedPlan } from './fixtures/ct-api-process.ts'
+import type { Refusal, StartedMilestone, StartedPlan } from './fixtures/ct-api-process.ts'
 
 type Failure = { code: string, detail: string }
 type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
@@ -749,12 +749,14 @@ describe('ct-api entrypoint', () => {
       const milestoneText = await milestoneResponse.text()
       expect(milestoneResponse.status, milestoneText).toBe(202)
       const loose = await looseResponse.json() as StartedPlan
-      const milestone = JSON.parse(milestoneText) as StartedPlan
+      const milestone = JSON.parse(milestoneText) as StartedMilestone
+      expect(milestone.failed).toEqual([])
+      expect(milestone.started).toHaveLength(1)
       const launches = await runtime.launches(2)
       expect(launches).toHaveLength(2)
       expect(ActualHeadlessRuntime.ISSUE_BODY_UNITS).toBeGreaterThan(ToolRunner.PIPE_BUFFER_BYTES)
       const looseLaunch = runtime.launchFor(loose, launches)
-      runtime.launchFor(milestone, launches)
+      runtime.launchFor(milestone.started[0], launches)
       const sessionAt = looseLaunch.captured.argv.indexOf('--session-id')
       const mutatedArgv = [...looseLaunch.captured.argv]
       mutatedArgv[sessionAt + 1] = ActualHeadlessRuntime.WRONG_AGENT

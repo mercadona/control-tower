@@ -31,7 +31,7 @@ import {
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
 import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
-import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
+import type { SliceNotStarted, StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
@@ -509,16 +509,35 @@ export class StartPlanRoute {
     target: PlanTarget,
   ): Promise<void> {
     try {
-      const started = await start.execute(new StartMilestonePlanParams({
+      const dispatched = await start.execute(new StartMilestonePlanParams({
         repository: target.repository,
         root: target.root,
         milestone: asked.milestone,
       }))
-      sessions.remember(started.watch)
-      Answer.send(response, 202, { status: 'started', ...StartPlanRoute.#startedAnswer(started) })
+      for (const started of dispatched.started) sessions.remember(started.watch)
+      if (dispatched.started.length === 0 && dispatched.failed.length > 0) {
+        Answer.refuseAs(response, PlanCollapse.of(dispatched.failed[0].cause))
+        return
+      }
+      Answer.send(response, 202, {
+        status: 'started',
+        started: dispatched.started.map((started) => StartPlanRoute.#startedAnswer(started)),
+        failed: dispatched.failed.map((slice) => StartPlanRoute.#notStartedAnswer(slice)),
+      })
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
       Answer.refuseAs(response, PlanCollapse.of(cause))
+    }
+  }
+
+  static #notStartedAnswer(slice: SliceNotStarted): Record<string, unknown> {
+    const refusal = PlanCollapse.of(slice.cause)
+
+    return {
+      issue: { number: slice.issue.number, url: slice.issue.url },
+      [PlanRequest.REPO_FIELD]: slice.repository.text,
+      code: refusal.code,
+      detail: refusal.detail,
     }
   }
 

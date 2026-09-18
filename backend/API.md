@@ -62,9 +62,12 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 ## `POST /start-plan`
 
 Starts a headless plan agent. The original loose request remains available; a
-milestone request instead selects the next eligible ready issue with the plugin's
-ordering, dependency, cap and token rules, claims it through `dispatch-check`,
-prepares its worktree and starts planning in a newly minted conversation.
+milestone request instead selects **every** admissible ready issue with the
+plugin's ordering, dependency and token rules — there is no cap — claims each of
+them through `dispatch-check`, prepares its worktree and starts planning in a
+newly minted conversation. A slice whose `touches` collide with work that is not
+merged yet waits for that merge, and a slice that fails to start stops none of
+the others.
 
 The loose body names one target: a repository and the path of its local clone. The
 `repo_list` field, which once named several at once, is retired — a body
@@ -90,6 +93,8 @@ not send `null`, which is a malformed value.
 
 ### 202 Accepted
 
+A loose body answers one plan:
+
 ```json
 {"status":"started","id":"ABC-123","repo":"owner/name",
  "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
@@ -98,13 +103,32 @@ not send `null`, which is a malformed value.
  "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}
 ```
 
-For a milestone body, `id` is `null`. `agent` is the durable Claude conversation
-UUID. Every new loose or milestone admission writes machine provenance before
-planning. After a successful committed plan is published to the issue, the
-backend drives the plugin's run sequencer in that same conversation. There is no
-feature flag, toggle, environment variable or alternate activation path for new
-admissions. `root` is git's canonical checkout path, which may differ from a
-loose request's `path`.
+A milestone body answers the whole batch: `started` holds one of those objects
+per plan that started — with `id` always `null` — and `failed` names each slice
+that did not, with the issue it was, and the `code` and `detail` that refusal
+would have answered on its own.
+
+```json
+{"status":"started",
+ "started":[{"id":null,"repo":"owner/name",
+             "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
+             "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
+             "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
+             "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],
+ "failed":[{"issue":{"number":8,"url":"https://github.com/owner/name/issues/8"},
+            "repo":"owner/name","code":"workspace-not-prepared",
+            "detail":"the worktree could not be cut"}]}
+```
+
+When nothing in the batch started, the milestone request refuses with the first
+failure instead, exactly as it did when it dispatched one slice at a time.
+
+`agent` is the durable Claude conversation UUID. Every new loose or milestone
+admission writes machine provenance before planning. After a successful
+committed plan is published to the issue, the backend drives the plugin's run
+sequencer in that same conversation. There is no feature flag, toggle,
+environment variable or alternate activation path for new admissions. `root` is
+git's canonical checkout path, which may differ from a loose request's `path`.
 
 The plugin remains the sequencing authority: its real `ct-step next` output
 chooses each call, command, retry, discard, reconciliation and terminal result.

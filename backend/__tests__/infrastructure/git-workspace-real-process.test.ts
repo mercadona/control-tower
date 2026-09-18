@@ -278,8 +278,9 @@ describe('GitWorkspace real cleanup', () => {
           sleep: async () => {},
         }),
       })
-      const candidate = await candidates.next({ repository, milestone: 'CT331' })
-      expect(candidate).toEqual(issue)
+      const admissible = await candidates.admissible({ repository, milestone: 'CT331' })
+      expect(admissible).toEqual([issue])
+      const candidate = admissible[0]
       const prepared = await records().prepare(new PlanBriefing({
         story: null,
         issue: candidate,
