@@ -10,7 +10,7 @@ const FIELD_LABEL = 'Pedir un cambio a esta conversación'
 const SEND_LABEL = 'Enviar'
 const DELIVERED_MESSAGE = 'Cambio entregado a la conversación del slice'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
-const TEXT_FIELD_ID = 'slice-session-text'
+const textFieldId = (issue: number) => `slice-session-text-${issue}`
 
 type SliceSessionProps = { issue: number; root: string; repo: string; agent: string }
 
@@ -51,11 +51,11 @@ const SliceSession = ({ issue, root, repo, agent }: SliceSessionProps) => {
       <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
       <ImplementProgress issue={issue} root={root} repo={repo} />
       <div className="slice-session__message">
-        <label className="slice-session__label lg-caption1-regular" htmlFor={TEXT_FIELD_ID}>
+        <label className="slice-session__label lg-caption1-regular" htmlFor={textFieldId(issue)}>
           {FIELD_LABEL}
         </label>
         <TextArea
-          id={TEXT_FIELD_ID}
+          id={textFieldId(issue)}
           value={text}
           onChange={(event) => {
             setText(event.target.value)

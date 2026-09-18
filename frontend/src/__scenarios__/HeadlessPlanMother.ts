@@ -56,6 +56,29 @@ class HeadlessPlanMother {
     return new DeferredHeadlessPlanChanges()
   }
 
+  static slicesInFlight(...issues: number[]): Answer {
+    return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
+  }
+
+  static agentFor(issue: number): string {
+    return `conversation-of-${issue}`
+  }
+
+  private static slice(issue: number) {
+    return {
+      phase: 'implementing',
+      request: { id: null, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
+      plan: {
+        id: null,
+        repo: StartPlanMother.REPO,
+        issue: { number: issue, url: `https://github.com/${StartPlanMother.REPO}/issues/${issue}` },
+        agent: HeadlessPlanMother.agentFor(issue),
+        branch: `feat/${issue}`,
+        worktree: `${StartPlanMother.PATH}/.worktrees/${issue}`,
+      },
+    }
+  }
+
   private static active(phase: HeadlessPhase, recovery?: RecoveryAction): Answer {
     return {
       status: 200,
