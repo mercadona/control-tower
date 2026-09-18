@@ -207,6 +207,90 @@ describe('ct-init.sh --json', () => {
       rmSync(dir, { recursive: true, force: true })
     })
 
+    it('versioned: content that does not match any recognised hash at the CURRENT version is drifted (not already-present) once an update is asked for, without --force (D1+D6)', () => {
+      const dir = mkTarget()
+      run(dir)
+      const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
+      writeFileSync(
+        contractPath,
+        [
+          '<!-- ct-init:slices-contract -->',
+          `<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION} -->`,
+          '## Slices table format (contract with /ct-groom)',
+          'body that this ct-init does not recognise for this version',
+          '<!-- /ct-init:slices-contract -->',
+          '',
+        ].join('\n')
+      )
+      // A PLAIN run (no --update-slices-contract) still reads as
+      // already-present and stays quiet — the version is current and there
+      // is nothing to offer without being asked; only the update-slices-
+      // contract path names the mismatch.
+      const plain = runJson(dir)
+      expect(byId(plain)['slices-contract'].status).toBe('already-present')
+
+      const report = runJson(dir, ['--update-slices-contract'])
+      const artifact = byId(report)['slices-contract']
+      expect(artifact.status).toBe('drifted')
+      expect(artifact.replaced).toBe(false)
+      // Not touched without --force: the report matches the tree.
+      expect(readFileSync(contractPath, 'utf8')).toContain('body that this ct-init does not recognise')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('versioned: --update-slices-contract --force over that same content DOES replace the file, and the report says so (D1+D6)', () => {
+      const dir = mkTarget()
+      run(dir)
+      const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
+      writeFileSync(
+        contractPath,
+        [
+          '<!-- ct-init:slices-contract -->',
+          `<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION} -->`,
+          '## Slices table format (contract with /ct-groom)',
+          'body that this ct-init does not recognise for this version',
+          '<!-- /ct-init:slices-contract -->',
+          '',
+        ].join('\n')
+      )
+      const report = runJson(dir, ['--update-slices-contract', '--force'])
+      const artifact = byId(report)['slices-contract']
+      expect(artifact.status).toBe('drifted')
+      expect(artifact.replaced).toBe(true)
+      // The file WAS rewritten: the old body is gone.
+      expect(readFileSync(contractPath, 'utf8')).not.toContain('body that this ct-init does not recognise')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('versioned: a contract file with no markers at all is refused, not drifted — nothing was compared', () => {
+      const dir = mkTarget()
+      run(dir)
+      const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
+      writeFileSync(contractPath, 'not a contract at all, no markers here\n')
+      const report = runJson(dir)
+      const artifact = byId(report)['slices-contract']
+      expect(artifact.status).toBe('refused')
+      rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('generated: a --force replace of a drifted scope-gate bundle reports replaced=true; leaving it alone reports replaced=false', () => {
+      const dirLeft = mkTarget()
+      run(dirLeft)
+      appendFileSync(join(dirLeft, '.github', 'ct', 'scope-check.js'), '\n// a stale copy\n')
+      const leftReport = runJson(dirLeft)
+      expect(byId(leftReport)['scope-gate-bundle'].status).toBe('drifted')
+      expect(byId(leftReport)['scope-gate-bundle'].replaced).toBe(false)
+      rmSync(dirLeft, { recursive: true, force: true })
+
+      const dirForced = mkTarget()
+      run(dirForced)
+      appendFileSync(join(dirForced, '.github', 'ct', 'scope-check.js'), '\n// a stale copy\n')
+      const forcedReport = runJson(dirForced, ['--force'])
+      expect(byId(forcedReport)['scope-gate-bundle'].status).toBe('drifted')
+      expect(byId(forcedReport)['scope-gate-bundle'].replaced).toBe(true)
+      rmSync(dirForced, { recursive: true, force: true })
+    })
+
   })
 
   it('D2: CT_CLAUDE_BIN is honoured — pointing it at a fake binary makes plugin-install install against that fake, never the real claude', () => {

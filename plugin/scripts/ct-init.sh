@@ -131,10 +131,11 @@ REPORT_ARTIFACTS=()
 # literal (the fixed order comes from the order these calls appear in the
 # script, never from listing the filesystem); `path` is relative to the
 # target repo — this report names no absolute target path, so the same
-# inputs produce the same bytes on any machine. Extra fields (for the
-# slices contract: foundVersion, shippedVersion, blockStatus) are passed as
-# trailing `key=value` arguments; a value made only of digits is emitted as
-# a JSON number, anything else as a JSON string.
+# inputs produce the same bytes on any machine. Extra fields (for the slices
+# contract: foundVersion, shippedVersion, blockStatus, replaced; for the
+# scope-gate bundle: replaced) are passed as trailing `key=value` arguments;
+# a value made only of digits is emitted as a JSON number, `true`/`false` as
+# a JSON boolean, anything else as a JSON string.
 record() {
   local id="$1" path="$2" status="$3"
   shift 3
@@ -153,6 +154,8 @@ record() {
     key="${kv%%=*}"
     val="${kv#*=}"
     if [[ "$val" =~ ^-?[0-9]+$ ]]; then
+      extra="${extra},\"${key}\":${val}"
+    elif [ "$val" = true ] || [ "$val" = false ]; then
       extra="${extra},\"${key}\":${val}"
     else
       extra="${extra},\"${key}\":\"$(json_escape "$val")\""
@@ -461,21 +464,26 @@ else
   record scope-gate-workflow .github/workflows/ct-scope-gate.yml already-present
 fi
 
+# `replaced` (D1+D6): `drifted` says only that the bundle on disk does not
+# match what this release ships — a fact about the tree. Whether THIS run
+# then rewrote it is a separate fact, carried in its own field, so a caller
+# does not have to infer from `--force` alone whether the tree actually
+# changed.
 if [ ! -f "$GATE_BUNDLE" ]; then
   mkdir -p "$GATE_DIR"
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
   say "created $GATE_BUNDLE"
-  record scope-gate-bundle .github/ct/scope-check.js created
+  record scope-gate-bundle .github/ct/scope-check.js created replaced=true
 elif cmp -s "$HERE/dist/scope-check.js" "$GATE_BUNDLE"; then
   say "$GATE_BUNDLE matches the bundle this release ships, not overwritten"
-  record scope-gate-bundle .github/ct/scope-check.js already-present
+  record scope-gate-bundle .github/ct/scope-check.js already-present replaced=false
 elif [ "$FORCE" -eq 1 ]; then
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
   say "updated $GATE_BUNDLE with the bundle this release ships (--force)"
-  record scope-gate-bundle .github/ct/scope-check.js drifted
+  record scope-gate-bundle .github/ct/scope-check.js drifted replaced=true
 else
   echo "warning: $GATE_BUNDLE does not match the bundle this release of the plugin ships. It is a GENERATED file, so the difference means this repo's copy comes from another release, not that somebody edited it. It matters: a copy vendored before #346 recognises \`## Contexto del epic\` and nothing else, so it fails the gate of every new issue over a section it cannot find, and no merge in the plugin's repository fixes it. To update it: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
-  record scope-gate-bundle .github/ct/scope-check.js drifted
+  record scope-gate-bundle .github/ct/scope-check.js drifted replaced=false
 fi
 
 if [ ! -f "$GATE_MODULE_TYPE" ]; then
@@ -1823,7 +1831,7 @@ mkdir -p "$CONTRATO_DIR"
 if [ ! -f "$CONTRATO_MD" ]; then
   emit_slices_contract > "$CONTRATO_MD"
   say "created $CONTRATO_MD (/ct-groom contract v$SLICES_CONTRACT_VERSION)"
-  record slices-contract "$REL_CONTRATO_MD" created "shippedVersion=$SLICES_CONTRACT_VERSION"
+  record slices-contract "$REL_CONTRATO_MD" created "shippedVersion=$SLICES_CONTRACT_VERSION" "replaced=true"
 else
   contrato_open=0; has_line "$SLICES_MARKER_OPEN" "$CONTRATO_MD" && contrato_open=1 || true
   contrato_close=0; has_line "$SLICES_MARKER_CLOSE" "$CONTRATO_MD" && contrato_close=1 || true
@@ -1840,27 +1848,39 @@ else
     # a replace is safe, but it does not change what gets reported.
     if [ "$found_version" -gt "$SLICES_CONTRACT_VERSION" ]; then
       echo "warning: the slices contract in $CONTRATO_MD is contract v$found_version, and this plugin only reaches v$SLICES_CONTRACT_VERSION — a newer plugin release seeded it. Not touched (downgrading it would lose what you already have). If /ct-groom does not behave as that file describes, the plugin is the out-of-date one: update it." >&2
-      record slices-contract "$REL_CONTRATO_MD" refused "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+      record slices-contract "$REL_CONTRATO_MD" refused "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
     elif [ "$found_version" -eq "$SLICES_CONTRACT_VERSION" ]; then
+      # `block_status = unknown` here means the content does NOT match what
+      # this version ships, even though the version line says it should. A
+      # PLAIN run (no --update-slices-contract) still says "up to date" and
+      # stays quiet about it — the version IS current and there is nothing to
+      # offer, so a warning here would be noise every session, exactly as a
+      # plain run over any other unrecognised-but-uninteresting block stays
+      # quiet. Only once an update is actually asked for does the mismatch
+      # become reportable — and, per D1+D6, it is `drifted` there (content
+      # differs from what this release ships), with `replaced` carrying the
+      # separate fact of whether this run rewrote the file.
       if [ "$UPDATE_SLICES_CONTRACT" -eq 1 ] && [ "$block_status" = unknown ]; then
         if [ "$FORCE" -eq 1 ]; then
           replace_slices_block "$CONTRATO_MD"
           echo "warning: the slices contract in $CONTRATO_MD already declared v$found_version but its content did not match what this plugin ships ($hash_note); it has been replaced with the current one because you asked for --force. If you had edits of your own in that file, they are gone now." >&2
+          record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=true"
         else
           echo "warning: the slices contract in $CONTRATO_MD already declares v$found_version (the current one), so there is no version update to do, but its content is NOT what this plugin emits ($hash_note). It may be an edit of your own, or a different variant published under the same version number. Nothing has been touched; --force would replace it with this plugin's v$SLICES_CONTRACT_VERSION block." >&2
+          record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
         fi
       else
         say "the slices contract is already in $CONTRATO_MD (contract v$found_version, up to date), not duplicated"
+        record slices-contract "$REL_CONTRATO_MD" already-present "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
       fi
-      record slices-contract "$REL_CONTRATO_MD" already-present "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
     elif [ "$UPDATE_SLICES_CONTRACT" -eq 1 ]; then
       if [ "$block_status" = pristine ]; then
         replace_slices_block "$CONTRATO_MD"
         say "slices contract updated in $CONTRATO_MD: contract v$found_version → v$SLICES_CONTRACT_VERSION (it was unedited)"
-        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=true"
       elif [ "$block_status" = unverifiable ] && [ "$FORCE" -eq 0 ]; then
         echo "warning: could not check whether the slices contract in $CONTRATO_MD is still exactly as ct-init left it: this machine has neither \`shasum\` nor \`sha256sum\`, and that check is the only thing standing between an update and overwriting edits of yours. Nothing has been touched — the block may be perfectly intact, it is simply not known. Install one of the two (coreutils brings \`sha256sum\`; \`shasum\` ships with perl) and retry, or pass --force if you are certain you have not edited that file." >&2
-        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
         exit 3
       elif [ "$FORCE" -eq 1 ]; then
         replace_slices_block "$CONTRATO_MD"
@@ -1869,10 +1889,10 @@ else
         else
           echo "warning: the slices contract in $CONTRATO_MD did not match any version this ct-init knows how to recognise ($hash_note) and has been overwritten with contract v$SLICES_CONTRACT_VERSION because you asked for --force. If you had edits of your own, they are gone now: recover them from version control." >&2
         fi
-        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=true"
       else
         echo "warning: the slices contract in $CONTRATO_MD is contract v$found_version (the current one is v$SLICES_CONTRACT_VERSION), but its content does not match any of the blocks this ct-init knows how to recognise ($hash_note). That may be (a) a hand edit, or (b) an intact block seeded by a plugin version whose hash this ct-init has no record of — from here there is NO way to tell them apart, so nothing has been touched in case it is (a). To settle it, look at the history of $CONTRATO_MD (\`git log -p -- $CONTRATO_MD\`): if it has not been touched since it was created, it is (b) — report it with that hash so it gets recorded, and in the meantime pass --force together with --update-slices-contract to adopt contract v$SLICES_CONTRACT_VERSION (if there WERE edits of yours, they are lost)." >&2
-        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
         exit 3
       fi
     else
@@ -1882,11 +1902,13 @@ else
         *) update_note="Its content does not match any block this ct-init recognises ($hash_note) — it may be an edit of yours or a version it has no record of, so the update will be refused without --force:" ;;
       esac
       echo "warning: the slices contract in $CONTRATO_MD is contract v$found_version, and this plugin ships v$SLICES_CONTRACT_VERSION — nothing is touched by default. $update_note bash $HERE/scripts/ct-init.sh $TARGET --update-slices-contract" >&2
-      record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
+      record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status" "replaced=false"
     fi
   else
     echo "warning: $CONTRATO_MD exists but does not carry the contract markers ($SLICES_MARKER_OPEN … $SLICES_MARKER_CLOSE); nothing is touched, so as not to tread on whatever is there. If you wanted this plugin's contract, move that file aside and run /ct-init again." >&2
-    record slices-contract "$REL_CONTRATO_MD" drifted "shippedVersion=$SLICES_CONTRACT_VERSION"
+    # No markers means nothing was compared: a refused artifact, not a
+    # drifted one — see docs/loop/ct-init.md's own sentence on the two.
+    record slices-contract "$REL_CONTRATO_MD" refused "shippedVersion=$SLICES_CONTRACT_VERSION" "replaced=false"
   fi
 fi
 

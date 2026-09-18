@@ -255,10 +255,10 @@ person reading a terminal.
   "exitCode": 0,
   "artifacts": [
     { "id": "state-md", "path": ".agent/STATE.md", "status": "created" },
-    { "id": "scope-gate-bundle", "path": ".github/ct/scope-check.js", "status": "drifted" },
+    { "id": "scope-gate-bundle", "path": ".github/ct/scope-check.js", "status": "drifted", "replaced": false },
     { "id": "plugin-install", "path": "", "status": "refused", "detail": "folder not trusted" },
     { "id": "slices-contract", "path": "docs/superpowers/SLICES-CONTRACT.md", "status": "drifted",
-      "foundVersion": 24, "shippedVersion": 26, "blockStatus": "pristine" }
+      "foundVersion": 24, "shippedVersion": 26, "blockStatus": "pristine", "replaced": false }
   ]
 }
 ```
@@ -275,12 +275,24 @@ person reading a terminal.
   - `created` — this run wrote the artifact because it was missing.
   - `already-present` — the artifact was already there and needed no change.
   - `drifted` — the artifact is there, but does not match what this release
-    would write, and was left alone (or replaced, only with `--force`; see
-    the drift table below for which class allows which).
+    would write (see the drift table below for which class allows which).
+    `drifted` says only that one fact — the content differs — never whether
+    this run then acted on it.
   - `refused` — this run declined to touch or check the artifact at all,
     for a reason it names (an out-of-date target, an untrusted folder, a
-    missing tool). A `refused` artifact is not a `drifted` one: nothing was
-    compared.
+    missing tool, a failed merge). A `refused` artifact is not a `drifted`
+    one: nothing was compared. `refused` is not limited to the `versioned`
+    and `install` classes — any class reports it when this run genuinely
+    could not act, because "could not act" is not a comparison either
+    (`claude-settings`, user-owned, reports it when `node` is missing or the
+    seeder failed).
+
+  A `drifted` artifact of the `generated` or `versioned` class also carries
+  a `replaced` boolean: `true` when this run rewrote the artifact (always
+  with `--force`), `false` when it left the mismatched content alone. The
+  status names the fact about the tree — content differs from what this
+  release ships — and `replaced` names the separate fact of what THIS run
+  did about it, so neither ever answers the other's question by itself.
 - `exitCode` mirrors the process exit code, filled in from an `EXIT` trap so
   the report still comes out, with everything recorded up to that point, even
   when the script exits early (a bad option, an unrecognised slices contract
@@ -308,8 +320,8 @@ run. Five classes, and what each one means for the status above:
 | Class | Artifacts | Policy |
 |---|---|---|
 | User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the execution spec template, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either) |
-| Generated | `.github/ct/scope-check.js` | byte-compared against the bundle this release ships; a mismatch reports `drifted`, and is only replaced with `--force` |
-| Versioned | the slices contract | its own doctrine of version numbers and pristine hashes, unchanged by this table; see "What is contract" above |
+| Generated | `.github/ct/scope-check.js` | byte-compared against the bundle this release ships; a mismatch reports `drifted`, replaced only with `--force`, and the `replaced` field says which happened |
+| Versioned | the slices contract | its own doctrine of version numbers and pristine hashes, unchanged by this table; see "What is contract" above. Also carries `replaced` on every `drifted` report |
 | Exempt by design | the loop section and the e2e-howto section, both inside `AGENTS.md` | never `drifted` — each is a template the repository owner fills in, so a changed body is correct use, not tampering |
 | Install | the plugin install step (`plugin-install`; not a file) | no content to byte-compare, so it never drifts; `refused` is its expected steady state on a folder nobody has trusted yet, never a defect |
 
