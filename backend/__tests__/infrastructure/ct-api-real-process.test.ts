@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 import { ActualHeadlessRuntime, Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
 import type { Refusal, StartedPlan } from './fixtures/ct-api-process.ts'
@@ -732,7 +733,7 @@ describe('ct-api entrypoint', () => {
   })
 
   it('both entrances use recorded calls and the runtime constructs no go or window client', async () => {
-    const runtime = await ActualHeadlessRuntime.prepared()
+    const runtime = await ActualHeadlessRuntime.prepared({ spec: EpicSpec.FROZEN })
     try {
       const port = await Entrypoint.listening(runtime.environment())
       await TheCoordinatingSession.recoveredBy(port)

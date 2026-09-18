@@ -7,6 +7,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { issuesQueryFor } from '../../../../plugin/scripts/gh-issues.js'
 import { RoleBytes } from '../../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../../plugin/scripts/state.js'
@@ -1222,12 +1223,32 @@ export class RunDriverMother {
       'if [ "$3" = "remote" ] && [ "$4" = "get-url" ]; then printf "%s\\n" "git@github.com:acme/widget.git"; exit 0; fi',
       `exec ${JSON.stringify(realGit)} "$@"`,
     ].join('\n') + '\n', { mode: 0o755 })
+    const [owner, name] = RunDriverMother.REPOSITORY.split('/')
+    const issuesArgv = (states: string[]): string[] => [
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${issuesQueryFor(states)}`, '-f', `owner=${owner}`, '-f', `name=${name}`,
+    ]
+    const issuePages = (nodes: object[]): object[] => [
+      { data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } },
+    ]
     await writeFile(join(this.bin, 'gh'), [
       '#!/usr/bin/env node',
       "const fs = require('node:fs')",
       "const path = require('node:path')",
       'const argv = process.argv.slice(2)',
       `const issueCreate = ${JSON.stringify(issueCreate)}`,
+      `const openIssuesArgv = ${JSON.stringify(issuesArgv(['OPEN']))}`,
+      `const closedIssuesArgv = ${JSON.stringify(issuesArgv(['CLOSED']))}`,
+      `const openIssuePages = ${JSON.stringify(issuePages([{
+        number: RunDriverMother.ISSUE,
+        title: 'Finite fixture',
+        body: '<!-- ct-order:1 -->',
+        state: 'OPEN',
+        stateReason: null,
+        milestone: null,
+        labels: { nodes: [{ name: 'status:ready' }] },
+      }]))}`,
+      `const closedIssuePages = ${JSON.stringify(issuePages([]))}`,
       "const equal = (expected) => JSON.stringify(argv) === JSON.stringify(expected)",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'gh.jsonl'), JSON.stringify(argv) + '\\n')",
       "if (equal(issueCreate)) console.log('https://github.com/acme/widget/issues/7')",
@@ -1243,6 +1264,8 @@ export class RunDriverMother {
       "else if (equal(['issue', 'edit', '7', '--repo', 'acme/widget', '--add-label', 'status:in-progress', '--remove-label', 'status:ready'])) {}",
       "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log(JSON.stringify([[{ number: 7, html_url: 'https://github.com/acme/widget/issues/7', title: 'Finite fixture', body: '<!-- ct-order:1 -->', milestone: null, labels: [{ name: 'status:ready' }] }]]))",
       "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log('[[]]')",
+      "else if (equal(openIssuesArgv)) console.log(JSON.stringify(openIssuePages))",
+      "else if (equal(closedIssuesArgv)) console.log(JSON.stringify(closedIssuePages))",
       "else if (equal(['api', 'repos/acme/widget/issues/7/comments', '--paginate', '--slurp'])) console.log('[[]]')",
       "else if ([",
       "  ['pr', 'list', '--repo', 'acme/widget', '--state', 'all', '--head', 'feat/7', '--json', 'number', '--limit', '1'],",
