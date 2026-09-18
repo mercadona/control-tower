@@ -62,3 +62,15 @@ Focused verification after extraction and source-check updates passed **1005 tes
 The mechanical before/after case-name comparison retains **199/199** original cases, with eight additional invocation/native cases. Artifact assertions that used to inspect only captured `git show` output now also inspect the actual verdict/metrics files, and the real commit test checks byte identity between the committed artifacts and disk.
 
 The first whole-plugin run passed 4401 cases and timed out in the unchanged historical ct-init upgrade scenario at 120000 ms. That exact scenario subsequently passed unchanged in isolation in 52.069 s. Host load was high again (five-minute average 61.44), so this run is retained as a failed integration attempt rather than a final acceptance measurement. No initializer code, assertions or timeout was modified.
+
+### Mutation evidence
+
+- After committing a clean tree, wiring the API's GitHub collaborator to `gh-wrong` made the real-HTTP story-routing and planning-entrance composition cases fail in the full backend suite. The source was restored byte-for-byte.
+- Moving `git reset -q` below the report's status measurement made **146 ct-step cases** fail at their read/mutation cut-point assertion in a full plugin run. The unrelated ct-init timeout also recurred and is recorded separately. Restoring reset-before-status returned the command source byte-for-byte to the committed version.
+- The process-tripwire boundary test starts a separate test runner whose test catches a forbidden spawn. The runner still fails, and the attempted child never creates its marker. The ordinary fast selection contains all 199 migrated cases and the new invocation cases, while excluding the marked native boundaries.
+
+### Main integration
+
+Merged #417's driver composition, routed its two new tool runners through the injected runtime, and retained its three Make entrypoint guarantees in `ct-api-make-real-process.test.ts`. The composition test also checks both recorded concrete prompt arguments. Backend typecheck and all 30 API-family cases pass after this integration.
+
+The frontend production build passes. A local full frontend test run under continued host contention failed six unchanged Home cases (element waits and 5000 ms deadlines); no frontend source or test was changed by this delivery. The corresponding frontend job on main run [35349131245](https://github.com/mercadona/control-tower/actions/runs/35349131245) passed. That main run's backend failed separately because the strict run-driver GitHub fixture had not learned the GraphQL request introduced by #415.

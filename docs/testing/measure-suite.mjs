@@ -32,6 +32,13 @@ class SuiteMeasurement {
   static run(argv) {
     const [reportPath, root = process.cwd(), mode = 'summary', afterPath] = argv
     const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+    if (mode === 'failure-summary') {
+      console.log(JSON.stringify(report.testResults.filter((file) => file.status === 'failed').map((file) => {
+        const failed = file.assertionResults.filter((test) => test.status === 'failed')
+        return { file: relative(root, file.name), failed: failed.length, example: failed[0]?.fullName, reason: String(failed[0]?.failureMessages?.[0] ?? file.message).slice(0, 400) }
+      }), null, 2))
+      return
+    }
     if (mode === 'compare') {
       const after = JSON.parse(readFileSync(afterPath, 'utf8'))
       const original = SuiteMeasurement.commandCases(report)
