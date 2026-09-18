@@ -1,0 +1,383 @@
+import { execFileSync, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { ClaudeCodeTranscript } from '../../../../plugin/scripts/claude-code-usage.js'
+import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
+
+export type StartedEntrypoint = {
+  port: number,
+  pid: number,
+  saidLater: () => string,
+  descendants: () => number[],
+  crash: () => Promise<void>,
+}
+
+export type Refusal = { status: number | null, said: string[] }
+export type StartedPlan = { agent: string, issue: { number: number } }
+export type CapturedLaunch = { argv: string[], prompt: string, pid: number }
+export type RecordedLaunch = {
+  agent: string,
+  issue: number,
+  call: { conversation: string, purpose: string, argv: string[] },
+  promptPath: string,
+  prompt: string,
+  captured: CapturedLaunch,
+}
+
+export class Entrypoint {
+  static readonly #PATH = join(
+    dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src', 'infrastructure', 'ct-api.ts'
+  )
+  static readonly #TIMEOUT_MS = 30_000
+  static readonly #spawned: ChildProcess[] = []
+
+  static startPlan(port: number, body: string = '{"id":"ABC-123"}'): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/start-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    })
+  }
+
+  static async killAll(): Promise<void> {
+    const pids = new Set<number>()
+    for (const child of Entrypoint.#spawned.splice(0)) {
+      for (const descendant of Entrypoint.descendantsOf(child.pid)) pids.add(descendant)
+      if (child.pid !== undefined) pids.add(child.pid)
+    }
+    await Promise.all([...pids].map((pid) => Entrypoint.killPid(pid)))
+  }
+
+  static descendantsOf(pid: number | undefined): number[] {
+    if (pid === undefined) return []
+    const direct = Entrypoint.#directChildrenOf(pid)
+
+    return direct.flatMap((child) => [child, ...Entrypoint.descendantsOf(child)])
+  }
+
+  static #directChildrenOf(pid: number): number[] {
+    try {
+      return execFileSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '')
+        .map(Number)
+    } catch {
+      return []
+    }
+  }
+
+  static alive(pid: number): boolean {
+    try {
+      process.kill(pid, 0)
+    } catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code === 'ESRCH') return false
+      throw failure
+    }
+
+    return true
+  }
+
+  static async killPid(pid: number): Promise<void> {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code === 'ESRCH') return
+      throw failure
+    }
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      if (!Entrypoint.alive(pid)) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error(`fixture process ${pid} did not exit within 5000ms`)
+  }
+
+  static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
+    const child = spawn(process.execPath, [Entrypoint.#PATH], {
+      env: { ...process.env, ...environment },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+    Entrypoint.#spawned.push(child)
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
+
+    return new Promise<Refusal>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`it never exited, and said ${JSON.stringify(stderr)}`)), Entrypoint.#TIMEOUT_MS
+      )
+      child.once('close', (status) => {
+        clearTimeout(timer)
+        resolve({ status, said: stderr.split('\n') })
+      })
+      child.once('error', reject)
+    })
+  }
+
+  static async listening(environment: NodeJS.ProcessEnv): Promise<number> {
+    return (await Entrypoint.started(environment)).port
+  }
+
+  static async started(environment: NodeJS.ProcessEnv): Promise<StartedEntrypoint> {
+    const child = spawn(process.execPath, [Entrypoint.#PATH], {
+      env: { ...process.env, ...environment },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    Entrypoint.#spawned.push(child)
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
+
+    return new Promise<StartedEntrypoint>((resolve, reject) => {
+      let stdout = ''
+      const timer = setTimeout(() => reject(new Error(`no port line in ${stdout}`)), Entrypoint.#TIMEOUT_MS)
+      child.stdout.on('data', (chunk) => {
+        stdout += String(chunk)
+        const end = stdout.indexOf('\n')
+        if (end === -1) return
+        clearTimeout(timer)
+        const pid = child.pid
+        if (pid === undefined) {
+          reject(new Error('the entrypoint bound a port without ever having a pid'))
+          return
+        }
+        resolve({
+          port: (JSON.parse(stdout.slice(0, end)) as { port: number }).port,
+          pid,
+          saidLater: () => stderr,
+          descendants: () => Entrypoint.descendantsOf(pid),
+          crash: () => Entrypoint.killPid(pid),
+        })
+      })
+      child.once('error', reject)
+    })
+  }
+
+  static async recovering(environment: NodeJS.ProcessEnv): Promise<StartedEntrypoint> {
+    const started = await Entrypoint.started(environment)
+    for (let waited = 0; waited < 60; waited += 1) {
+      if (started.saidLater().includes('plans in flight:')) break
+      await new Promise((wake) => setTimeout(wake, 100))
+    }
+
+    return started
+  }
+}
+
+export class TheCoordinatingSession {
+  static readonly #TRIES = 100
+  static readonly #WAIT_MS = 100
+
+  static async recoveredBy(port: number): Promise<{ status: string }> {
+    for (let tried = 0; tried < TheCoordinatingSession.#TRIES; tried += 1) {
+      const answered = await (await fetch(`http://127.0.0.1:${port}/coordinating-session`)).json() as { status: string }
+      if (answered.status !== 'none') return answered
+      await new Promise((wake) => setTimeout(wake, TheCoordinatingSession.#WAIT_MS))
+    }
+    throw new Error('the recorded conversation was never recovered')
+  }
+}
+
+export class ActualHeadlessRuntime {
+  static readonly REPOSITORY = 'acme/widget'
+  static readonly MILESTONE = 'Fixture milestone'
+  static readonly COORDINATOR = '22222222-2222-4222-8222-222222222222'
+  static readonly WRONG_AGENT = '33333333-3333-4333-8333-333333333333'
+  static readonly ISSUE_BODY_UNITS = ToolRunner.PIPE_BUFFER_BYTES * 32
+  static readonly #WAIT_TRIES = 100
+  static readonly #WAIT_MS = 100
+
+  readonly root: string
+  readonly state: string
+  readonly bin: string
+  readonly captures: string
+  readonly specSha: string
+
+  constructor(asked: { root: string, state: string, bin: string, captures: string, specSha: string }) {
+    this.root = asked.root
+    this.state = asked.state
+    this.bin = asked.bin
+    this.captures = asked.captures
+    this.specSha = asked.specSha
+  }
+
+  static async prepared(): Promise<ActualHeadlessRuntime> {
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-headless-runtime-'))
+    const root = join(base, 'checkout')
+    const state = join(base, 'config')
+    const bin = join(base, 'bin')
+    const captures = join(base, 'captures')
+    await Promise.all([mkdir(root), mkdir(state), mkdir(bin), mkdir(captures)])
+    ActualHeadlessRuntime.#git(root, 'init', '-q')
+    ActualHeadlessRuntime.#git(root, 'config', 'user.email', 'fixture@example.test')
+    ActualHeadlessRuntime.#git(root, 'config', 'user.name', 'Fixture')
+    await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
+    await writeFile(join(root, 'AGENTS.md'), '# Fixture\n')
+    await writeFile(
+      join(root, 'docs', 'superpowers', 'specs', '2026-01-01-fixture-execution.md'), ActualHeadlessRuntime.#spec()
+    )
+    ActualHeadlessRuntime.#git(root, 'add', '.')
+    ActualHeadlessRuntime.#git(root, 'commit', '-q', '-m', 'fixture baseline')
+    ActualHeadlessRuntime.#git(root, 'branch', '-M', 'main')
+    ActualHeadlessRuntime.#git(root, 'remote', 'add', 'origin', 'https://github.com/acme/widget.git')
+    ActualHeadlessRuntime.#git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    ActualHeadlessRuntime.#git(root, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    const specSha = execFileSync('git', [
+      '-C', root, 'hash-object', 'docs/superpowers/specs/2026-01-01-fixture-execution.md',
+    ], { encoding: 'utf8' }).trim()
+    await ActualHeadlessRuntime.#executables(bin)
+    await ActualHeadlessRuntime.#coordinator(state, root)
+    return new ActualHeadlessRuntime({ root, state, bin, captures, specSha })
+  }
+
+  environment(): NodeJS.ProcessEnv {
+    return {
+      CT_API_PORT: '0',
+      CLAUDE_CONFIG_DIR: this.state,
+      SHELL: '/bin/sh',
+      PATH: `${this.bin}:${process.env.PATH}`,
+      CT_REAL_GIT: execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim(),
+      CT_FIXTURE_CAPTURES: this.captures,
+      CT_FIXTURE_SPEC_SHA: this.specSha,
+    }
+  }
+
+  async launches(expected: number): Promise<RecordedLaunch[]> {
+    for (let tried = 0; tried < ActualHeadlessRuntime.#WAIT_TRIES; tried += 1) {
+      const names = await readdir(this.captures)
+      if (names.length === expected) return await this.#recorded(names)
+      await new Promise((resolve) => setTimeout(resolve, ActualHeadlessRuntime.#WAIT_MS))
+    }
+    throw new Error(`the ${expected} plan launches were not captured before the deadline`)
+  }
+
+  launchFor(started: StartedPlan, launches: RecordedLaunch[]): RecordedLaunch {
+    const matching = launches.filter((launch) => launch.issue === started.issue.number)
+    if (matching.length !== 1) {
+      throw new Error(`expected one plan launch for issue ${started.issue.number}, got ${matching.length}`)
+    }
+    const launch = matching[0]
+    const sessionAt = launch.captured.argv.indexOf('--session-id')
+    const launchedAgent = launch.captured.argv[sessionAt + 1]
+    if (sessionAt < 0 || launchedAgent !== started.agent || launch.agent !== started.agent
+      || launch.call.conversation !== started.agent) {
+      throw new Error(`launch identity differs from response agent ${started.agent}`)
+    }
+    if (launch.call.purpose !== 'plan' || launch.call.argv.join('\0') !== launch.captured.argv.join('\0')
+      || launch.captured.prompt !== launch.promptPath || launch.prompt.length === 0) {
+      throw new Error(`launch evidence differs from the recorded plan call for ${started.agent}`)
+    }
+    return launch
+  }
+
+  async remove(): Promise<void> {
+    await rm(dirname(this.root), { recursive: true, force: true })
+  }
+
+  async #recorded(names: string[]): Promise<RecordedLaunch[]> {
+    const harness = join(this.state, 'control-tower', 'harness')
+    const launches: RecordedLaunch[] = []
+    for (const name of names) {
+      const captured = JSON.parse(await readFile(join(this.captures, name), 'utf8')) as CapturedLaunch
+      const agent = name.replace(/\.json$/, '')
+      const dispatch = JSON.parse(
+        await readFile(join(harness, agent, 'dispatch.json'), 'utf8')
+      ) as { issue: { number: number } }
+      const callsRoot = join(harness, agent, 'calls')
+      const callNames = await readdir(callsRoot)
+      if (callNames.length !== 1) throw new Error(`expected one recorded call for ${agent}, got ${callNames.length}`)
+      const callRoot = join(callsRoot, callNames[0])
+      launches.push({
+        agent,
+        issue: dispatch.issue.number,
+        call: JSON.parse(await readFile(join(callRoot, 'call.json'), 'utf8')) as RecordedLaunch['call'],
+        promptPath: join(callRoot, 'prompt.md'),
+        prompt: await readFile(join(callRoot, 'prompt.md'), 'utf8'),
+        captured,
+      })
+    }
+    return launches
+  }
+
+  static #git(cwd: string, ...argv: string[]): void {
+    execFileSync('git', argv, { cwd, stdio: 'ignore' })
+  }
+
+  static #spec(): string {
+    return [
+      '# Fixture milestone — Execution spec',
+      '',
+      '**Fecha de congelación:** 2026-09-16',
+      '**Estado:** CONGELADA',
+      '',
+      '## Hipótesis del experimento',
+      '',
+      '**The bet:** the fixture proves both entrances.',
+      '',
+      '**How we will know it failed:** either entrance does not launch.',
+      '',
+      '**Anti-scope — what this epic does NOT do:** no network calls.',
+      '',
+      '## Decisiones congeladas',
+      '',
+      '- **D-1 · Fixture decision** — both entrances use recorded calls.',
+      '  *(Procedencia: hablada — fixture contract.)*',
+      '',
+      '## Tabla de slices',
+      '',
+      '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |',
+      '|---|-------|------|---------|-----|--------|-----------|------|------|------|-------|',
+      '| 1 | Fixture slice | backend | fixture delivery | – | fixture accepted | – | fixture | backend | !plan | fixture signal |',
+      '',
+    ].join('\n')
+  }
+
+  static async #coordinator(state: string, root: string): Promise<void> {
+    const recorded = join(state, 'control-tower', 'coordinating-session')
+    await mkdir(recorded, { recursive: true })
+    await writeFile(join(recorded, 'conversation.json'), `${JSON.stringify({
+      conversation: ActualHeadlessRuntime.COORDINATOR,
+      repo: ActualHeadlessRuntime.REPOSITORY,
+      root,
+    }, null, 2)}\n`)
+    const transcript = join(state, ClaudeCodeTranscript.FOLDER, ClaudeCodeTranscript.folderFor(root))
+    await mkdir(transcript, { recursive: true })
+    await writeFile(
+      join(transcript, `${ActualHeadlessRuntime.COORDINATOR}${ClaudeCodeTranscript.EXTENSION}`), '{"type":"user"}\n'
+    )
+  }
+
+  static async #executables(bin: string): Promise<void> {
+    await writeFile(join(bin, 'git'), [
+      '#!/bin/sh',
+      'if [ "$3" = "fetch" ]; then exit 0; fi',
+      'exec "$CT_REAL_GIT" "$@"',
+    ].join('\n') + '\n', { mode: 0o755 })
+    await writeFile(join(bin, 'claude'), [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs')",
+      "const path = require('node:path')",
+      'const argv = process.argv.slice(2)',
+      "if (argv[0] === '-p') {",
+      "  const at = argv.indexOf('--session-id')",
+      '  const id = argv[at + 1]',
+      '  fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${id}.json`), '
+      + 'JSON.stringify({ argv, prompt: process.env.CT_CALL_PROMPT, pid: process.pid }))',
+      '}',
+      'setInterval(() => {}, 1000)',
+    ].join('\n') + '\n', { mode: 0o755 })
+    await writeFile(join(bin, 'gh'), [
+      '#!/usr/bin/env node',
+      'const argv = process.argv.slice(2)',
+      `const issue = { number: 42, html_url: 'https://github.com/acme/widget/issues/42', title: '#1 Fixture slice', body: 'x'.repeat(${ActualHeadlessRuntime.ISSUE_BODY_UNITS}) + '\\n<!-- ct-order:1 -->', milestone: { number: 1, title: 'Fixture milestone' }, labels: [{ name: 'status:ready' }] }`,
+      "if (argv[0] === 'issue' && argv[1] === 'create') console.log('https://github.com/acme/widget/issues/41')",
+      "else if (argv[0] === 'issue' && argv[1] === 'view') { const number = Number(argv[2]); console.log(JSON.stringify({ number, title: number === 42 ? '#1 Fixture slice' : 'Loose fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: number === 42 ? { title: 'Fixture milestone' } : null })) }",
+      "else if (argv[0] === 'issue' && argv[1] === 'list') console.log(JSON.stringify([{ number: 42, url: issue.html_url, title: issue.title, labels: issue.labels, state: 'OPEN', body: '<!-- ct-order:1 -->' }]))",
+      "else if (argv[0] === 'api' && argv[1].includes('/contents/')) console.log(JSON.stringify({ sha: process.env.CT_FIXTURE_SPEC_SHA }))",
+      "else if (argv[0] === 'api' && argv[1] === 'repos/acme/widget/issues') console.log(JSON.stringify(argv.includes('state=closed') ? [[]] : [[issue]]))",
+      "else console.log('{}')",
+    ].join('\n') + '\n', { mode: 0o755 })
+  }
+}
