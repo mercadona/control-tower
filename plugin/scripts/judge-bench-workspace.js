@@ -14,9 +14,14 @@ export class BenchWorkspace {
     cpSync(benchCase.repoDirectory, directory, { recursive: true })
     const paths = new RunPaths({ issue: benchCase.issue, task: benchCase.task })
     mkdirSync(join(directory, paths.runDirectory), { recursive: true })
-    writeFileSync(join(directory, paths.brief), benchCase.brief + yardstick)
-    writeFileSync(join(directory, paths.reviewPackage), benchCase.reviewPackage)
+    writeFileSync(join(directory, paths.judgeBrief), benchCase.brief)
+    writeFileSync(join(directory, paths.reviewPackage), BenchWorkspace.#packageWith(benchCase.reviewPackage, yardstick))
     return directory
+  }
+
+  static #packageWith(reviewPackage, yardstick) {
+    const [header, token, ...rest] = reviewPackage.split('\n')
+    return [header, token, yardstick, ...rest].join('\n')
   }
 
   verdictWrittenAt(path) {

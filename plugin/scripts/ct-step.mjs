@@ -583,10 +583,11 @@ function nextVerb() {
       break
     case STEPS.JUDGE: {
       const packagePath = writeReviewPackage()
+      const judgeBrief = writeJudgeBrief()
       const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
       out(`DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`)
       out(`  - the review package: ${packagePath}`)
-      out(`  - the task's brief: ${join(workDir, `task-${run.task}-brief.md`)}`)
+      out(`  - the task's brief: ${judgeBrief}`)
       out(`  - the logs of the controls, ALREADY green, in case it wants them: ${run.lastControlsLog ?? '(none)'}`)
       out(`  - that it write its verdict to: ${verdictPath}`)
       // The `review_token` is NOT asked of it: this program writes it when it
@@ -726,11 +727,11 @@ function nextVerb() {
 // measuring against nothing, and in silence that does not differ from a
 // conforming item.
 //
-// Branch reconciliation, Task 9: it is shared by `writeBrief` (the brief of
-// the implementer and of the judge) and `writeReconcileReviewPackage` (the
-// reconciler's package) — one single read and one single abort message, instead
-// of two copies which it already warned diverge (see JUDGE_TOOLS in
-// step-contracts.js).
+// Branch reconciliation, Task 9: it is shared by `writeBrief` (the
+// implementer's brief), `writeReviewPackage` (the judge's package, by path) and
+// `writeReconcileReviewPackage` (the reconciler's package) — one single read and
+// one single abort message, instead of two copies which it already warned
+// diverge (see JUDGE_TOOLS in step-contracts.js).
 function loadCtYardstick() {
   const ctDocs = PluginYardstick.FILES.map((name) => {
     const path = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, name)
@@ -764,17 +765,28 @@ function repoYardstickSection(artifactName) {
   }
 }
 
+// The task as `task-brief` extracts it from the plan: the desired end state,
+// the plan's yardstick and the task's own markers. It is the part the
+// implementer and the judge read alike; what each one gets appended differs.
+function writeTaskBody(path) {
+  try {
+    execFileSync(join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief'),
+      ['--with-plan-context', planPath, String(run.task), path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (e) {
+    die(`the brief of task ${run.task} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
+  }
+}
+
+// THE IMPLEMENTER'S BRIEF: the task, then the ct yardstick PASTED — the
+// implementer is asked to write against it and does not depend on remembering
+// to open it (`selective-hearing`) —, then the repo's yardstick, then the
+// advice.
 function writeBrief() {
   const brief = join(workDir, `task-${run.task}-brief.md`)
   // It is checked before calling `task-brief` so as not to leave a brief on
   // disk that nobody is going to use.
   const ctDocs = loadCtYardstick()
-  try {
-    execFileSync(join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief'),
-      ['--with-plan-context', planPath, String(run.task), brief], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-  } catch (e) {
-    die(`the brief of task ${run.task} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
-  }
+  writeTaskBody(brief)
   appendFileSync(brief, PluginYardstick.composeSection(ctDocs))
   appendFileSync(brief, repoYardstickSection('the brief'))
   // H9: the advice for the third attempt, inside the brief and not on a loose
@@ -782,6 +794,20 @@ function writeBrief() {
   // message says so itself—, so an approach announced outside it is an approach
   // that depends on the session copying it. It goes AT THE END, after the
   // yardstick: it is the last thing decided about this task.
+  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+  return brief
+}
+
+// THE JUDGE'S BRIEF (#111): the same task, the same repo yardstick and the
+// same advice, WITHOUT the ct documents pasted — its review package already
+// lists them by path (`## Vara de ct`) and the judge has `Read`. Until this
+// existed the judge was handed the implementer's brief and read the yardstick
+// twice, once pasted and once by path: some 43 KB of context on the most
+// expensive call of the loop, per task, for nothing.
+function writeJudgeBrief() {
+  const brief = join(workDir, `task-${run.task}-judge-brief.md`)
+  writeTaskBody(brief)
+  appendFileSync(brief, repoYardstickSection("the judge's brief"))
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
   return brief
 }

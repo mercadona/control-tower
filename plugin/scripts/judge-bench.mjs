@@ -104,14 +104,15 @@ class CtYardstick {
   static read(pluginRoot) {
     const documents = PluginYardstick.FILES.map((name) => {
       try {
-        return { name, content: readFileSync(join(pluginRoot, PluginYardstick.DIRECTORY, name), 'utf8') }
+        const path = join(pluginRoot, PluginYardstick.DIRECTORY, name)
+        return { name, path, content: readFileSync(path, 'utf8') }
       } catch {
         return { name, content: null }
       }
     })
     const missing = PluginYardstick.missingDocuments(documents)
     if (missing.length) throw new Error(`ct's yardstick cannot be read: ${missing.join(', ')} is missing or empty in ${join(pluginRoot, PluginYardstick.DIRECTORY)}`)
-    return PluginYardstick.composeSection(documents)
+    return PluginYardstick.composePathSection(documents)
   }
 }
 
