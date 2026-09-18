@@ -1184,8 +1184,9 @@ export class RunDriverMother {
   }
 
   async #initialize(conflicting: boolean): Promise<void> {
+    await fs.mkdir(this.checkout)
     await Promise.all([
-      fs.mkdir(this.checkout), fs.mkdir(this.state), fs.mkdir(this.bin), fs.mkdir(this.captures),
+      fs.mkdir(this.state), fs.mkdir(this.bin), fs.mkdir(this.captures),
       fs.mkdir(dirname(join(this.checkout, RunDriverMother.PLAN)), { recursive: true }),
       fs.mkdir(join(this.checkout, '.agent'), { recursive: true }),
     ])
