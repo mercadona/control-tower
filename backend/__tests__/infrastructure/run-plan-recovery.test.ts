@@ -41,7 +41,10 @@ import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
+import type { ChangesAsked, Delivered } from '../../src/infrastructure/review-watch.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
+import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
+import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
 import { RunJournal, type JournalEntry } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
@@ -897,6 +900,76 @@ describe('RunPlanRecovery projection', () => {
       reviews.stop({ issue: watch.issue.number, repository: watch.repository })
       if (!firstRead.settled) firstRead.resolve({ changes: [] })
       if (!secondRead.settled) secondRead.resolve({ changes: [] })
+      await Barrier.turn()
+    }
+  })
+
+  it('a change asked while a fix ran is delivered once when the watcher comes back', async () => {
+    const tested = new ProjectionScenario()
+    const watch = tested.watches[0]
+    const A = new ChangeAsked({ id: 'IC_kwDOAAAAAAABAAAA', text: 'first change', askedAt: '2026-09-17T09:05:00.000Z' })
+    const B = new ChangeAsked({ id: 'IC_kwDOAAAAAAABBBBB', text: 'second change', askedAt: '2026-09-17T09:10:00.000Z' })
+    const answers: ChangesAsked[] = [{ changes: [] }, { changes: [A] }, { changes: [A, B] }]
+    let readIndex = 0
+    const reviewed: Delivered[] = []
+    const deliveredA = new Barrier<void>()
+    const deliveredB = new Barrier<void>()
+    let sleeps = 0
+    const blockedSleeps: Barrier<void>[] = []
+    const reviews = new ReviewWatch({
+      asked: async () => {
+        const answer = answers[readIndex]
+        readIndex += 1
+        return answer
+      },
+      review: async (params) => {
+        reviewed.push(params)
+        if (params.requestId === A.id) deliveredA.resolve()
+        if (params.requestId === B.id) deliveredB.resolve()
+      },
+      sleep: async () => {
+        sleeps += 1
+        if (sleeps === 2 || sleeps === 4) {
+          const barrier = new Barrier<void>()
+          blockedSleeps.push(barrier)
+          return barrier.promise
+        }
+      },
+      stderr: () => {},
+      label: 'run recovery review',
+      log: new MemoryReviewLog(),
+    })
+    const recovery = new RunPlanRecovery({
+      legacy: tested.legacy,
+      records: tested.records,
+      calls: tested.calls,
+      transport: tested.transport,
+      machine: tested.machine,
+      journal: tested.journal,
+      agents: tested.agents,
+      checkouts: tested.checkouts,
+      activePlans: tested.activePlans,
+      reviews,
+      nowMs: () => RecoveryMother.NOW,
+    })
+
+    try {
+      await recovery.recover()
+      await Barrier.bounded(deliveredA.promise)
+
+      const fix = tested.add(watch, 'fix', A.id, { completion: null, owned: true })
+      await recovery.recover()
+
+      tested.transport.histories.set(watch.agent, [
+        RecoveryMother.recorded(fix, 'fix', RecoveryMother.completion(fix)),
+      ])
+      await recovery.recover()
+      await Barrier.bounded(deliveredB.promise)
+
+      expect(reviewed.map((entry) => entry.requestId)).toEqual([A.id, B.id])
+    } finally {
+      reviews.stop({ issue: watch.issue.number, repository: watch.repository })
+      for (const barrier of blockedSleeps) barrier.resolve()
       await Barrier.turn()
     }
   })
