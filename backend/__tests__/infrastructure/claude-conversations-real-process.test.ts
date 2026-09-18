@@ -22,6 +22,7 @@ class TerminalDouble implements Terminal {
 class Governed {
   static readonly ID = new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
   static readonly PROMPT_PATH = '/tmp/state with spaces/phase-prompt.md'
+  static readonly PLUGIN_ROOT = "/opt/plugins with spaces/Pedro's code/control-tower/plugin"
 
   static conversation(): CoordinatingConversation {
     return new CoordinatingConversation({
@@ -55,6 +56,7 @@ class TheOpeningCommand {
       shell: '/bin/sh',
       env: {},
       claudeDirectory: '/home/someone/.claude',
+      pluginRoot: Governed.PLUGIN_ROOT,
       listNames: (): string[] => [],
       readText: (): string => { throw new Error('no transcript recorded') },
       newId: (): string => conversation.id.text,
@@ -79,7 +81,11 @@ class AClaudeThatPrintsItsArguments {
   static argumentsOf(command: string, { path, promptPath }: { path: string, promptPath: string }): string[] {
     const printed = execFileSync('/bin/sh', ['-c', command], {
       encoding: 'utf8',
-      env: { PATH: path, [ClaudeConversations.PROMPT_VARIABLE]: promptPath },
+      env: {
+        PATH: path,
+        [ClaudeConversations.PROMPT_VARIABLE]: promptPath,
+        [ClaudeConversations.PLUGIN_ROOT_VARIABLE]: Governed.PLUGIN_ROOT,
+      },
     })
 
     return printed.split('\n').filter((given) => given !== '')
@@ -87,7 +93,7 @@ class AClaudeThatPrintsItsArguments {
 }
 
 describe('ClaudeConversations against a real shell', () => {
-  it('sends the opening sentence to claude as one argument when the prompt path has spaces', async () => {
+  it('sends the opening sentence and the plugin root to claude as one argument each when both paths carry spaces and a single quote', async () => {
     const conversation = Governed.conversation()
     const path = await AClaudeThatPrintsItsArguments.onThePath()
 
@@ -103,6 +109,8 @@ describe('ClaudeConversations against a real shell', () => {
       'auto',
       '--model',
       ClaudeConversations.MODEL,
+      ClaudeConversations.PLUGIN_DIR_FLAG,
+      Governed.PLUGIN_ROOT,
       `Read the file at ${Governed.PROMPT_PATH} and do exactly what it says.`,
     ])
     await rm(path, { recursive: true, force: true })

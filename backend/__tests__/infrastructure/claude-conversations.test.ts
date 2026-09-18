@@ -61,6 +61,7 @@ class Governed {
   static readonly ID = new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
   static readonly PROMPT_PATH = '/repo/governed-checkout/.agent/coordinating-session/phase-prompt.md'
   static readonly CLAUDE_DIRECTORY = '/home/someone/.claude'
+  static readonly PLUGIN_ROOT = "/Users/someone/Pedro's code/control-tower/plugin"
   static readonly HOOKS_URL = 'http://127.0.0.1:4600/session-hooks'
 
   static conversation(id: ConversationId = Governed.ID): CoordinatingConversation {
@@ -72,6 +73,7 @@ type OverridableCollaborators = Partial<{
   shell: string | undefined,
   env: NodeJS.ProcessEnv,
   claudeDirectory: string,
+  pluginRoot: string,
   listNames: (path: string) => string[],
   readText: (path: string) => string,
   newId: () => string,
@@ -113,6 +115,7 @@ class Adapter {
       shell: overrides.shell ?? '/bin/zsh',
       env: overrides.env ?? { PATH: '/usr/bin' },
       claudeDirectory: overrides.claudeDirectory ?? Governed.CLAUDE_DIRECTORY,
+      pluginRoot: overrides.pluginRoot ?? Governed.PLUGIN_ROOT,
       listNames: overrides.listNames ?? ((): string[] => []),
       readText: overrides.readText ?? ((): string => { throw new Error('no transcript recorded') }),
       newId: overrides.newId ?? ((): string => Governed.ID.text),
@@ -149,10 +152,37 @@ describe('ClaudeConversations', () => {
     expect(call.argv).toEqual([
       PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
       `exec claude --session-id ${Governed.ID.text} --permission-mode auto --model opus ` +
+        '--plugin-dir "$CT_PLUGIN_ROOT" ' +
         '"Read the file at $CT_PHASE_PROMPT and do exactly what it says."',
     ])
     expect(call.options.env[ClaudeConversations.PROMPT_VARIABLE]).toBe(Governed.PROMPT_PATH)
     expect(call.argv.join(' ')).not.toContain(Governed.PROMPT_PATH)
+  })
+
+  it('loads the plugin for the session it starts, so the phase skill resolves', () => {
+    const { conversations, spawn } = Adapter.readyToOpen()
+    const conversation = Governed.conversation()
+
+    conversations.start({ conversation, promptPath: Governed.PROMPT_PATH })
+
+    const [call] = spawn.calls
+    expect(call.argv).toEqual([
+      '-il', '-c',
+      `exec claude --session-id ${conversation.id.text} ` +
+        '--permission-mode auto --model opus --plugin-dir "$CT_PLUGIN_ROOT" ' +
+        '"Read the file at $CT_PHASE_PROMPT and do exactly what it says."',
+    ])
+  })
+
+  it('leaves the plugin root in the environment and never in the command', () => {
+    const { conversations, spawn } = Adapter.readyToOpen()
+    const conversation = Governed.conversation()
+
+    conversations.start({ conversation, promptPath: Governed.PROMPT_PATH })
+
+    const [call] = spawn.calls
+    expect(call.options.env[ClaudeConversations.PLUGIN_ROOT_VARIABLE]).toBe(Governed.PLUGIN_ROOT)
+    expect(call.argv.join(' ')).not.toContain(Governed.PLUGIN_ROOT)
   })
 
   it('resumes a recorded conversation instead of opening a new one', () => {
@@ -164,7 +194,8 @@ describe('ClaudeConversations', () => {
     const [call] = spawn.calls
     expect(call.argv).toEqual([
       PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
-      `exec claude --resume ${conversation.id.text} --permission-mode auto --model opus`,
+      `exec claude --resume ${conversation.id.text} --permission-mode auto --model opus ` +
+        '--plugin-dir "$CT_PLUGIN_ROOT"',
     ])
     expect(Object.keys(call.options.env)).not.toContain(ClaudeConversations.PROMPT_VARIABLE)
   })

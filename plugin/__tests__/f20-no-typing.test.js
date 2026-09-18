@@ -327,7 +327,7 @@ describe('F20/H3 — the division of roles lives in the state, not only in a kic
   })
 
   it('the template of the main checkout declares the OPPOSITE role: coordinator', () => {
-    const tpl = readFileSync(join(here, '..', 'skills', 'state-template', 'STATE.template.md'), 'utf8')
+    const tpl = readFileSync(join(here, '..', 'templates', 'STATE.template.md'), 'utf8')
     expect(tpl).toMatch(/^role: "coordinador/m)
     expect(tpl).toMatch(/NO implementas slices aquí/)
   })

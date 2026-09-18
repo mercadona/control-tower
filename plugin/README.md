@@ -85,7 +85,7 @@ Then, **once per repo you want to govern**:
 /ct-init
 ```
 
-The scaffolder leaves `.agent/STATE.md`, `.agent/conventions.md`, the slice table contract in `docs/superpowers/CONTRATO-SLICES.md`, a short section in `AGENTS.md` that links to it, and the `.gitignore` rules. It plans nothing: filling in the repo's real commands (build, test, lint, CI) in `AGENTS.md` is up to you.
+The scaffolder leaves `.agent/STATE.md`, `.agent/conventions.md`, the slice table contract (`docs/superpowers/SLICES-CONTRACT.md` on a fresh repo; `docs/superpowers/CONTRATO-SLICES.md`, kept in place, on one that already had that legacy name), a short section in `AGENTS.md` that links to it, and the `.gitignore` rules. It plans nothing: filling in the repo's real commands (build, test, lint, CI) in `AGENTS.md` is up to you.
 
 If `/ct-init` warns that the repo **already came with its own conventions** —another claim protocol, another worktrees path, another state file—, the plugin does not resolve that: choosing which one rules is a decision of yours.
 
@@ -100,7 +100,7 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 
 | Command | What it does | Mutates |
 |---|---|---|
-| **`/ct-init`** | Prepares a repo for the loop: the state, the slice contract in `docs/superpowers/CONTRATO-SLICES.md`, a short section in `AGENTS.md`, the `.gitignore`. Detects conventions of the repo's own that contradict the loop. | the local repo |
+| **`/ct-init`** | Prepares a repo for the loop: the state, the slice contract (`docs/superpowers/SLICES-CONTRACT.md`, or the legacy `docs/superpowers/CONTRATO-SLICES.md` where it already existed), a short section in `AGENTS.md`, the `.gitignore`. Detects conventions of the repo's own that contradict the loop. | the local repo |
 | **`/ct-groom`** | Reads the slice table of the **frozen** spec and creates the milestone, the labels, the issues and the entries in the Project. Idempotent by existence; it detects divergence but **does not apply it** without `--reconcile`. | GitHub |
 | **`/ct-next`** | Chooses the next dispatchable slice (order, merged dependencies, no token collision, with a `--cap` gap available), claims it, creates worktree and branch, seeds the state and launches the agent **verifying that it really started**. | GitHub + disk |
 | **`/ct-status`** | Answers in one go: what is in flight, what has been delivered and what is residue. **It does not write a single time** — there is a test that checks it by looking at the real `argv` `gh` was called with. | nothing |
@@ -297,7 +297,7 @@ And one level further up, in the repo and **outside** what is distributed (the m
 
 ### The superpowers fork
 
-The skills under `skills/` (except `state-template`, our own) are a fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see [`skills/LICENSE-superpowers`](skills/LICENSE-superpowers)), invocable as `control-tower-loop:<name>`. The 11 that were really used were forked, measured over 2,704 transcripts.
+The skills under `skills/` are a fork of **superpowers 6.0.3** (Jesse Vincent, MIT — see [`skills/LICENSE-superpowers`](skills/LICENSE-superpowers)), invocable as `control-tower-loop:<name>`. The 11 that were really used were forked, measured over 2,704 transcripts.
 
 **Three seams are rewritten and are not trampled in a cherry-pick** (`__tests__/skills-fork.test.js` watches over them):
 

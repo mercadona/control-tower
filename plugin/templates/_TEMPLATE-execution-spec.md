@@ -78,8 +78,10 @@ rationale that each slice's plan needs and cannot deduce.>
 
 ## Tabla de slices
 
-<!-- THE FULL CONTRACT OF THIS TABLE lives in `docs/superpowers/CONTRATO-SLICES.md`
-     in this very repo (/ct-init seeds it and versions it): which columns
+<!-- THE FULL CONTRACT OF THIS TABLE lives in `docs/superpowers/SLICES-CONTRACT.md`
+     of this very repo (the legacy `docs/superpowers/CONTRATO-SLICES.md`, kept
+     in place, if this repo already had that name) (/ct-init seeds it and
+     versions it): which columns
      /ct-groom reads, what each one generates, what aborts and what /ct-next
      does with whatever you write here. Read it before filling in the table —
      the summary below is a reminder of the traps, not the contract.

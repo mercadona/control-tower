@@ -71,7 +71,7 @@ describe("the fork's scope — the 11 skills of F31 §5, with their attribution"
 })
 
 describe('the fork is closed — nothing points outside control-tower-loop', () => {
-  // A single sweep of ALL of skills/ (state-template included): the old
+  // A single sweep of ALL of skills/: the old
   // namespace and the two skills that were not forked cannot appear in any
   // file, not even in the ones that do not mention them today. The one
   // exemption: FORK.md, whose job is precisely to NAME what was discarded so

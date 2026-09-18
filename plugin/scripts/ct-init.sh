@@ -36,7 +36,7 @@ done
 
 mkdir -p "$TARGET/.agent"
 if [ ! -f "$TARGET/.agent/STATE.md" ]; then
-  cp "$HERE/skills/state-template/STATE.template.md" "$TARGET/.agent/STATE.md"
+  cp "$HERE/templates/STATE.template.md" "$TARGET/.agent/STATE.md"
   echo "creado $TARGET/.agent/STATE.md"
 elif grep -qE '^[[:space:]]*blocked[[:space:]]*:' "$TARGET/.agent/STATE.md"; then
   echo "STATE.md ya existe, no se pisa"
@@ -62,24 +62,7 @@ fi
 # between.
 CONVENTIONS_MD="$TARGET/.agent/conventions.md"
 if [ ! -f "$CONVENTIONS_MD" ]; then
-  cat > "$CONVENTIONS_MD" <<'EOF'
-# La vara de este repo — los documentos de reglas del código
-
-<!-- Lo lee ct-step DIRECTO y lo pega en el brief de cada tarea: el
-     implementador escribe con esto delante y el juez bloquea citándolo.
-     Es una propiedad del REPO, no de ningún epic: se declara UNA vez aquí,
-     no en el §3 de cada plan de slice.
-     OJO: no es .agent/conventions-ack.md (acuses de señales de colisión de
-     protocolo del loop) — este fichero declara CÓMO se escribe código aquí. -->
-
-Rules to obey (una ruta por línea, entre backticks; tiene que poder leerse):
-
-- (ninguna declarada todavía — sustituye esta línea al declarar la primera)
-
-Skills (nombre de skill, no ruta):
-
-- (ninguna)
-EOF
+  cp "$HERE/templates/conventions.template.md" "$CONVENTIONS_MD"
   echo "creado $CONVENTIONS_MD"
 else
   echo "conventions.md ya existe, no se pisa"
@@ -264,7 +247,7 @@ fi
 
 if [ ! -f "$GATE_MODULE_TYPE" ]; then
   mkdir -p "$GATE_DIR"
-  printf '{\n  "type": "module"\n}\n' > "$GATE_MODULE_TYPE"
+  cp "$HERE/templates/gate-package.template.json" "$GATE_MODULE_TYPE"
   echo "created $GATE_MODULE_TYPE"
 elif grep -q '"type"[[:space:]]*:[[:space:]]*"module"' "$GATE_MODULE_TYPE"; then
   echo "$GATE_MODULE_TYPE already parses the gate as ESM, not overwritten"
@@ -303,21 +286,7 @@ fi
 
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
-  cat > "$AGENTS_MD" <<'EOF'
-# AGENTS.md
-<!-- Guía durable del repo (≤150 líneas). Procedimientos → Skills. -->
-## Project overview
-## Setup commands
-## Build, test & lint
-## Code style & conventions
-## Project layout
-## Workflow: 1 issue = 1 slice = 1 session
-## Commit & PR rules
-## Security & data handling
-## Do NOT touch
-## Gotchas
-## Skills (load on demand)
-EOF
+  cp "$HERE/templates/AGENTS.template.md" "$AGENTS_MD"
   echo "creado $AGENTS_MD"
 else
   echo "AGENTS.md ya existe, no se pisa"
@@ -699,6 +668,22 @@ ce38a280a7cbd18ff6e09b852e20dfeff93b855c05a00c2fcaea0818addadc1f  v25, 601 lines
 
 # emit_slices_contract: the block, in a single place (both the "it does not
 # exist, it gets added" path and the "--update-slices-contract" one use it).
+#
+# EXEMPTION FROM THE TEMPLATE-FILE NORMALISATION: every other seeded text in
+# this script moved to a file under plugin/templates/ (see the templates/
+# directory and the six cp calls this script now makes). This heredoc did NOT
+# move, on purpose. The reason is narrower than "keep it simple": the ledger's
+# PAST proof (SLICES_PRISTINE_HASHES above) stays valid however this text is
+# stored, because it walks this SCRIPT's git blobs, not a template file's. What
+# would break is the proof for every FUTURE hash — a new pristine block would
+# then live in a template file's blob history instead of this script's — and
+# five tests read this script's own source as their oracle for the contract's
+# content (ct-init.test.js, e2e-agents-md.test.js, f20-no-typing.test.js,
+# f18-what-disappears.test.js, f35-account-resolution-removed.test.js). Moving
+# the text would relocate the evidence those tests depend on. A heredoc already
+# gives byte-identity, which is the actual goal here; uniformity with the other
+# five moved texts is not the goal. Do not move this one in a future round
+# without first re-pointing every one of those tests at the new location.
 emit_slices_contract() {
   cat <<'EOF'
 <!-- ct-init:slices-contract -->
@@ -1331,23 +1316,7 @@ EOF
 # (see the comment next to E2E_MARKER_OPEN, further down, where it is used):
 # this is a TEMPLATE, not a contract of the plugin's.
 emit_e2e_howto() {
-  cat <<'EOF'
-<!-- ct-init:e2e-howto -->
-## Cómo se atraviesa este repo (e2e)
-
-<!-- Rellena esto UNA vez. Lo lee el agente de un slice cuya fila declara
-     recorridos en la columna E2E de la tabla de slices. Si está sin
-     rellenar, el agente marca sus recorridos como "no-verificado" y NO se
-     inventa cómo levantar el repo. -->
-
-- Levantar:
-- Listo cuando:
-- Plazo:              (opcional; por defecto 60 segundos)
-- Tirar:
-- Herramientas:
-- Fuera de límites:
-<!-- /ct-init:e2e-howto -->
-EOF
+  cat "$HERE/templates/e2e-howto.template.md"
 }
 
 # sha256_of: the file's hash, with whichever binary is there (macOS brings
@@ -1542,34 +1511,7 @@ emit_loop_section() {
 }
 
 emit_loop_section_body() {
-  cat <<'EOF'
-<!-- ct-init:loop -->
-## Control Tower loop
-
-Este repo lo gobierna el loop Control Tower: **un issue = un slice = una sesión**.
-
-- **Comandos de este repo** (rellénalos una vez): build `…` · test `…` · lint `…`.
-- **La vara de este repo** —los documentos de reglas del código que `ct-step`
-  pega en el brief de cada tarea— se declara en `.agent/conventions.md`. La vara
-  de ct viaja con el plugin y manda donde las dos hablen de lo mismo; donde ct
-  calla, la del repo obliga entera.
-- **El estado de un slice despachado es `.agent/SLICE.md`**, el de SU worktree
-  (ignorado por git, nunca producto). `.agent/STATE.md` es el de la sesión
-  coordinadora del checkout principal y un slice no lo toca. Si te quedas
-  parado, escribe `blocked: {reason, unblock}` en tu `SLICE.md` y PARA.
-- **Cada slice trabaja en `.worktrees/<n>` sobre `feat/<n>`**, y su claim
-  (`status:ready` → `status:in-progress`) lo hace `/ct-next` en código: no
-  muevas esas labels a mano. Al abrir el PR, `Closes #N` en el cuerpo.
-- **Lo que no llega al cuerpo del issue no llega al agente**: no recibe el spec.
-- **El formato de la tabla de slices —el contrato con `/ct-groom`— está en
-  [`docs/superpowers/CONTRATO_BASENAME_PLACEHOLDER`](docs/superpowers/CONTRATO_BASENAME_PLACEHOLDER)**:
-  qué columnas lee, qué genera cada una y qué hace `/ct-next` con ellas. Es lo
-  que lee quien escribe un spec para este repo. Lo mantiene `/ct-init`, lleva su
-  propia versión y no se edita a mano.
-- **Cómo se levanta este repo** para atravesarlo de punta a punta: la sección
-  «Cómo se atraviesa este repo (e2e)», más abajo. Rellénala una vez.
-<!-- /ct-init:loop -->
-EOF
+  cat "$HERE/templates/loop-section.template.md"
 }
 
 # --- The contract, in its own file -----------------------------------------
@@ -1614,7 +1556,7 @@ else
           echo "aviso: el contrato de slices de $CONTRATO_MD no coincidía con ninguna versión que este ct-init sepa reconocer ($hash_note) y se ha sobrescrito con el contrato v$SLICES_CONTRACT_VERSION porque lo pediste con --force. Si había ediciones tuyas, ya no están: recupéralas del control de versiones." >&2
         fi
       else
-        echo "aviso: el contrato de slices de $CONTRATO_MD es del contrato v$found_version (el actual es v$SLICES_CONTRACT_VERSION), pero su contenido no coincide con ninguno de los bloques que este ct-init sabe reconocer ($hash_note). Eso puede ser (a) una edición a mano, o (b) un bloque intacto sembrado por una versión del plugin cuyo hash este ct-init no lleva registrado — desde aquí NO hay forma de distinguirlas, así que no se toca nada por si es (a). Para salir de dudas, mira el historial de $CONTRATO_MD (\`git log -p -- docs/superpowers/CONTRATO-SLICES.md\`): si no se ha tocado desde que se creó, es (b) — repórtalo con ese hash para que quede registrado, y mientras tanto pasa --force junto a --update-slices-contract para adoptar el contrato v$SLICES_CONTRACT_VERSION (si SÍ había ediciones tuyas, se pierden)." >&2
+        echo "aviso: el contrato de slices de $CONTRATO_MD es del contrato v$found_version (el actual es v$SLICES_CONTRACT_VERSION), pero su contenido no coincide con ninguno de los bloques que este ct-init sabe reconocer ($hash_note). Eso puede ser (a) una edición a mano, o (b) un bloque intacto sembrado por una versión del plugin cuyo hash este ct-init no lleva registrado — desde aquí NO hay forma de distinguirlas, así que no se toca nada por si es (a). Para salir de dudas, mira el historial de $CONTRATO_MD (\`git log -p -- $CONTRATO_MD\`): si no se ha tocado desde que se creó, es (b) — repórtalo con ese hash para que quede registrado, y mientras tanto pasa --force junto a --update-slices-contract para adoptar el contrato v$SLICES_CONTRACT_VERSION (si SÍ había ediciones tuyas, se pierden)." >&2
         exit 3
       fi
     else
