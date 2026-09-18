@@ -228,7 +228,7 @@ class TheRecoveryOffer {
   static readonly AFTER_THE_FIRST_PRESS_MS = 8_000
   static readonly AFTER_THE_SECOND_PRESS_MS = 4_000
 
-  static async pressedOn(crashed: ABackendThatCrashed): Promise<number> {
+  static async pressedOn(crashed: ABackendThatCrashed): Promise<{ status: number, code: string, detail: string }> {
     const plan = crashed.after.onlyPlan()
     const answered = await fetch(`http://127.0.0.1:${crashed.secondLife.port}/recover-plan`, {
       method: 'POST',
@@ -237,10 +237,13 @@ class TheRecoveryOffer {
         repo: ActualHeadlessRuntime.REPOSITORY, issue: plan.plan.issue.number, agent: plan.plan.agent,
       }),
     })
-    const said = await answered.text()
-    if (JSON.parse(said).agent !== plan.plan.agent) throw new Error(`the recovery answered for another agent: ${said}`)
+    const said = JSON.parse(await answered.text()) as { code?: string, detail?: string, agent?: string }
 
-    return answered.status
+    return {
+      status: answered.status,
+      code: said.code ?? `accepted for ${said.agent}`,
+      detail: said.detail ?? 'nothing refused',
+    }
   }
 
   static async waited(milliseconds: number): Promise<void> {
@@ -249,16 +252,21 @@ class TheRecoveryOffer {
 }
 
 class WhatPressingTheRecoveryChanges {
+  static readonly #UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g
+
   static async of(asked: {
     crashed: ABackendThatCrashed,
-    presses: readonly number[],
+    presses: readonly { status: number, code: string, detail: string }[],
     settled: ALifeOfTheBackend,
   }): Promise<Record<string, string>> {
     const was = asked.crashed.after.onlyPlan()
     const now = asked.settled.onlyPlan()
 
     return {
-      everyPress: [...new Set(asked.presses)].join(' and '),
+      everyPress: [...new Set(asked.presses.map((press) => `${press.status} ${press.code}`))].join(' and '),
+      everyRefusal: [...new Set(asked.presses.map(
+        (press) => press.detail.replace(WhatPressingTheRecoveryChanges.#UUID, '<call>')
+      ))].join(' and '),
       phase: `${was.phase} then ${now.phase}`,
       recoveryOffered: `${was.recovery?.action} then ${now.recovery?.action}`,
       diagnostic: was.diagnostic === now.diagnostic ? 'the one it already had' : 'a new one',
@@ -365,7 +373,8 @@ describe('a crash of the backend with work in flight', () => {
         dispatchedPlanPhase: 'planning then uncertain',
         dispatchedPlanDiagnostic: 'incomplete call <call> is not owned by this API process; '
           + 'plan call <call> is incomplete within its recorded deadline',
-        dispatchedPlanRecovery: 'observe: plan call <call> is incomplete within its recorded deadline',
+        dispatchedPlanRecovery: 'inspect: incomplete call <call> is not owned by this API process; '
+          + 'plan call <call> is incomplete within its recorded deadline',
         dispatchedPlanWorker: 'orphaned and still running',
         dispatchedPlanAgentProcess: 'orphaned and still running',
         dispatchRecord: 'on-disk',
@@ -380,7 +389,7 @@ describe('a crash of the backend with work in flight', () => {
     }
   }, 120_000)
 
-  it('accepts the recovery as often as it is pressed and leaves the plan exactly as uncertain as it found it', async () => {
+  it('refuses the recovery as often as it is pressed, naming the ownership the crash took away', async () => {
     const runtime = await ActualHeadlessRuntime.prepared()
     let owned: TheProcessesTheBackendOwned | null = null
     try {
@@ -395,9 +404,11 @@ describe('a crash of the backend with work in flight', () => {
       expect(await WhatPressingTheRecoveryChanges.of({
         crashed, presses, settled: await ALifeOfTheBackend.readBy(crashed.secondLife.port),
       })).toEqual({
-        everyPress: '202',
+        everyPress: '400 recover-plan-conflict',
+        everyRefusal: 'plan call <call> is incomplete within its recorded deadline; '
+          + 'the planner is not owned by this API process',
         phase: 'uncertain then uncertain',
-        recoveryOffered: 'observe then observe',
+        recoveryOffered: 'inspect then inspect',
         diagnostic: 'the one it already had',
         orphanWorker: 'still running',
         orphanAgent: 'still running',

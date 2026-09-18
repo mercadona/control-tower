@@ -62,6 +62,12 @@ export class PlanRecoveryNotRead extends PlanRecoveryFailure {}
 
 export class PlanRecoveryNotUnderstood extends PlanRecoveryFailure {}
 
+export class RunFailure extends PlanFailure {}
+
+export class RunNotAdvanced extends RunFailure {}
+
+export class RunNotUnderstood extends RunFailure {}
+
 export class PlanCleanupFailure extends PlanFailure {}
 
 export class PlanCleanupNotFound extends PlanCleanupFailure {}

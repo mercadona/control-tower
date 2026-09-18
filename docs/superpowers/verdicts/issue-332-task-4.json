@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 4,
+  "task_name": "Resolve dispatch material from real plugin output",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Reviewed the complete task-4 diff against the fresh brief. CtRunMachine.dispatch resolves the matching successful recorded receipt without launching the oracle. RunDispatch supplies material for implement, judge, advise, slice-judge and prepared reconciliation, and refuses unsupported E2E and slice-agent fallback material. Resolution reads existing plugin files and seals their identities and bytes before returning. This satisfies task 4's material-resolution objective.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact required test, 'real oracle material reaches the dispatch without rewritten bytes', obtains unchanged CLI output, reads its input files before resolution, compares resolved paths and bytes to those originals, and repeats the byte comparison on replay. Its input and assertion match the brief's before/after requirement.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The specified RunDispatch fields, constructor, role/response unions, dispatch method and journal material/seal methods are present. The seal has exactly version, paths, sha256, role, argv and response. Input order is retained; ordinary paths are literal, only the declared verdict field is expanded as a glob, matches are sorted and the original glob is retained. Replay re-reads inputs and compares the entire seal. The previous different-verb ambiguity is resolved: RunConsumingCommand.#lines collects every line with the shared consuming prefix without filtering by verb. Both structured() and edits() first require a single line, then validate the expected verb and manifest identity; structured response paths must also match the separately announced destination. Conflicting material is rejected before journal.seal.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The diff imports plugin STEPS, RoleBytes, schemas and tool/model constants, parses agent definitions and uses toClaudeAgents. Reconciliation carries edits and the printed consuming command without an invented schema. It introduces no successor table, retry policy, activation switch, live model invocation, plugin modification, telemetry rewrite or change to the protected legacy graph. Later transport and admission wiring are outside this task's objective.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Applied the complete travelling convention text embedded in the authorized brief, the repository instructions and backend conventions, with local RoleBytes, AgentDefinition, HeadlessFiles and RunJournal source as relevant exemplars. The denied external convention directory was not retried or proxied; no essential convention evidence is missing because the brief supplies it. English TypeScript, methods on types, infrastructure-owned filesystem/protocol parsing and immutable publication follow those rules. Closed vocabulary: roles, input kinds, responses and effects use explicit unions; unknown external step strings are rejected rather than silently assigned a role. Raw map as the return value of logic: aggregate results use DispatchMaterial, RunDispatchResolution and RunDispatch; input/response records have explicit typed variants and the material map is serialized at the journal boundary. Two fields that have to agree: consuming argv and responsePath are constructed together behind a private constructor, separately announced destinations are checked at entry, and the parallel paths/hash arrays are explicitly required by the seal contract; no absence sentinel or redundant activation flag is added. An error named for where it happens: no new exception family is introduced; unreadable material uses RunNotUnderstood and journal publication retains the existing failure distinction. The real-process producer tests are expressly required by this task and carry the repository's real-process filename marker.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The complete diff adds a new test file and removes or weakens no pre-existing test, assertion or case.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production code performs parsing, role-file resolution, byte hashing, destination validation and immutable sealing. The fixture obtains supported-role output through the unchanged ct-step CLI in temporary repositories; synthetic model reports/verdicts are explicitly used only to progress that producer. It does not hand-compose the packages under review. The two different-verb regressions prepend contradictory consuming instructions to real implement and reconciliation output, invoke CtRunMachine.dispatch, and assert both RunNotUnderstood and the absence of a material seal. Reverting to per-verb filtering would let those dispatches resolve, failing the rejection assertions. Oracle/git runners also throw if dispatch resolution tries to invoke them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Changes in all four declared files serve dispatch material resolution, shared consuming-command validation, material sealing or the required real-producer and recovery regressions. Fixture allocation cleanup and absence-preserving environment restoration address the retained advice. There is no plan amendment, plugin edit, feature flag, historical evidence rewrite or future transport implementation in the reviewed diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The added behavioral assertions exercise production resolution and refusal paths, including both different-verb consuming-command conflicts, literal/glob handling, malformed definitions and changed/missing replay inputs. Fixtures use temporary local repositories and a local bare origin, without live models, network dependencies, clock assertions or synchronization sleeps. Partial setup allocations are cleaned on failure, successful repositories are registered for afterEach cleanup, and TMPDIR/PATH restoration preserves absent keys as absent and saved strings as present in finally paths. The fixture-cleanup regression directly measures those helper guarantees. Assessment covers the mandatory deterministic, isolated and real-behavior properties; no finer skill-based finding is made. Controls are accepted as supplied green in task-4-controls-4.log and were not rerun.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "7944374eb2153510a2a9a1f7714288d21dbedd7d0c0b190af195f9c78729a39a"
+  }
+}

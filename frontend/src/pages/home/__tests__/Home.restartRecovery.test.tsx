@@ -81,7 +81,7 @@ describe(RestartedBackendMother.CAPTURE, () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps the stored plan, names the call the restarted backend no longer owns, and offers to recover it', async () => {
+  it('keeps the stored plan, names the call the restarted backend no longer owns, and offers to look again', async () => {
     ThePageBeforeTheCrash.stored()
     backendRecovering(RestartedBackendMother.disownedPlan())
 
@@ -92,7 +92,7 @@ describe(RestartedBackendMother.CAPTURE, () => {
       phase: 'planning then Aviso: No se puede confirmar el estado de implementación',
       diagnostic: 'the one the backend gave',
       planNamed: `${RestartedBackendMother.REPO}#${RestartedBackendMother.ISSUE} · ${RestartedBackendMother.AGENT}`,
-      offer: 'Recuperar trabajo',
+      offer: 'Reintentar recuperación',
       implementButton: 'withdrawn',
       discardButton: 'offered',
       planStream: 'not opened',

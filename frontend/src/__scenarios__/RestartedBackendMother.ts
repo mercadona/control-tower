@@ -14,11 +14,9 @@ class RestartedBackendMother {
   static readonly CHECKOUT =
     '/private/var/folders/tb/x9xhh8dn1zncbhkqmdt69xyr0000gp/T/ct-api-headless-runtime-VvJljg/checkout'
   static readonly WORKTREE = `${RestartedBackendMother.CHECKOUT}/.worktrees/${RestartedBackendMother.ISSUE}`
-  static readonly DETAIL =
-    `plan call ${RestartedBackendMother.CALL} is incomplete within its recorded deadline`
   static readonly DIAGNOSTIC =
     `incomplete call ${RestartedBackendMother.CALL} is not owned by this API process; `
-    + RestartedBackendMother.DETAIL
+    + `plan call ${RestartedBackendMother.CALL} is incomplete within its recorded deadline`
 
   static request(): { id: null, repo: string, path: string } {
     return { id: null, repo: RestartedBackendMother.REPO, path: RestartedBackendMother.CHECKOUT }
@@ -49,7 +47,7 @@ class RestartedBackendMother {
           diagnostic: RestartedBackendMother.DIAGNOSTIC,
           request: RestartedBackendMother.request(),
           plan: RestartedBackendMother.plan(),
-          recovery: { action: 'observe', detail: RestartedBackendMother.DETAIL },
+          recovery: { action: 'inspect', detail: RestartedBackendMother.DIAGNOSTIC },
         }],
       }),
     }

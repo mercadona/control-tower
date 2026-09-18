@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 1,
+  "task_name": "Drive opaque oracle instructions through application ports",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "DriveRun reads establishment before any planning or publication, opens the machine after the required absent-path preparation, and conducts only returned instructions through ExecuteRunInstruction. Calls await perform before advance; commands advance directly; terminal instructions cause no port effect. The conversation-keyed promise map coalesces concurrent execution and is released in finally on success or failure. The supplied controls log records successful typecheck and both application suites; those controls were not rerun.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test feeds command judge-before-implementation, call implementation-after-judge, then command review-after-implementation. Its literal trace assertion checks establishment, planner wait, publication, opening, and precisely the instructed advance/perform effects in that nonstandard order.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "RunWork, RunInstruction and the frozen RunEstablishment vocabulary match the declared contracts. Both abstract ports expose the exact methods and return types in the canonical plan section 5. Instruction construction copies and freezes the discriminated value and rejects empty or whitespace-only tickets/details. Both parameter objects are immutable, dependencies match the task, and RunFailure has the two specified causes under PlanFailure. Refused oracle detail is preserved verbatim, including diagnostic exit-code text.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The task introduces no local successor table, durable phase, retry policy or task-number interpretation. Established and unreadable establishment paths do not wait for planning or publish. Independently verified the publication-error correction: only PlanProgressNotRead is translated, while every other thrown value is rethrown unchanged; the new TypeError sentinel test asserts reference identity and no machine opening. Plugin and legacy graph files are absent from the diff. Admission, adapters, runtime flags and recovery projections belong to subsequent tasks and are not obligations of this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The new modules use English, erasable TypeScript, named constructor injection and the existing layer layout. The conductor/step separation and immutable parameters follow the applicable conventions; promise coalescing follows ContinuePlan. The four defects.md rules were checked individually: closed vocabulary — instruction kinds and establishment are closed unions with explicit branches and no catch-all; raw map as the return value of logic — application results are void or RunInstruction, with RunWork confined to its typed value object's construction; two fields that have to agree — no redundant phase flag or absence sentinel is introduced; errors named for where rather than what happens — RunNotAdvanced and RunNotUnderstood distinguish the specified failure causes under RunFailure. No concrete pattern defect found.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The diff adds a new test file and removes or weakens no pre-existing assertion, case or test.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The real DriveRun and ExecuteRunInstruction produce the observed sequencing, refusal, coalescing and publication behavior. Port doubles provide oracle answers and record received effects; they do not implement the driver. Throwing collaborators make unwanted planner/publication access observable, and the publication sentinel assertion measures the production catch boundary.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All seven changed files and their additions serve task 1's driver, instruction execution, ports, value validation, exception family and application tests. No plan amendment, plugin edit, frontend change, telemetry implementation or future-task adapter appears in this package.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The added tests are deterministic and isolated: they use per-test doubles and traces, immutable shared values and an explicit deferred promise, with no real clock, network, filesystem access or sleep. Assertions measure production effects, propagated errors, immutable copies and rejected invalid values. The required cases cover nonstandard oracle order, preparation failure, concurrent coalescing and retry after refusal, exact refusal diagnostics, and established/unreadable establishment bypass. The new publication regression would fail if the unexpected-error wrapping were restored. Review is limited to the three required test properties; no finer skill-based test-quality finding is asserted.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "0182d87c7774c98e9a7e96b2bb01b91904b90becce34f3763a7df79a8c6e4925"
+  }
+}

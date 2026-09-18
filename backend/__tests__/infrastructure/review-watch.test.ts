@@ -476,6 +476,76 @@ describe('ReviewWatch', () => {
     wakeReplacement()
     await newDelivery
   })
+
+  it('a_resumed_watch_hands_over_a_change_that_arrived_while_it_was_stopped_instead_of_baselining_it_away', async () => {
+    const soundings: ChangesAsked[] = [
+      { changes: [] },
+      { changes: [WatchDouble.A_CHANGE] },
+      { changes: [WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE] },
+    ]
+    let asked = 0
+    let slept = 0
+    const reviewed: Delivered[] = []
+    const watch = new ReviewWatch({
+      asked: async () => {
+        const answer = soundings[asked]
+        asked += 1
+        return answer
+      },
+      review: async (params) => { reviewed.push(params) },
+      sleep: async () => {
+        slept += 1
+        if (slept === 2 || slept === 4) watch.stop(WatchDouble.STOPPING)
+      },
+      stderr: () => {},
+      label: WatchDouble.LABEL,
+      log: new MemoryReviewLog(),
+    })
+
+    await watch.startRecovered(WatchDouble.SUBJECT)
+    await watch.startRecovered(WatchDouble.SUBJECT)
+
+    expect(asked).toBe(3)
+    expect(reviewed.map(({ changes }) => changes)).toEqual([
+      WatchDouble.A_CHANGE.text, WatchDouble.ANOTHER_CHANGE.text,
+    ])
+  })
+
+  it('a_watch_stopped_before_its_baseline_finished_takes_a_baseline_again_instead_of_resuming_from_nothing', async () => {
+    let readFirstBaseline!: (read: ChangesAsked) => void
+    let readSecondBaseline!: (read: ChangesAsked) => void
+    const baselines = [
+      new Promise<ChangesAsked>((resolve) => { readFirstBaseline = resolve }),
+      new Promise<ChangesAsked>((resolve) => { readSecondBaseline = resolve }),
+    ]
+    let asked = 0
+    const reviewed: Delivered[] = []
+    const watch = new ReviewWatch({
+      asked: async () => {
+        const next = baselines[asked]
+        asked += 1
+        return next
+      },
+      review: async (params) => { reviewed.push(params) },
+      sleep: async () => {},
+      stderr: () => {},
+      label: WatchDouble.LABEL,
+      log: new MemoryReviewLog(),
+    })
+
+    const first = watch.startRecovered(WatchDouble.SUBJECT)
+    watch.stop(WatchDouble.STOPPING)
+    readFirstBaseline({ changes: [WatchDouble.A_CHANGE] })
+    await first
+
+    const second = watch.startRecovered(WatchDouble.SUBJECT)
+    watch.stop(WatchDouble.STOPPING)
+    readSecondBaseline({ changes: [WatchDouble.A_CHANGE] })
+    await second
+
+    expect(asked).toBe(2)
+    expect(reviewed).toEqual([])
+  })
 })
 
 describe('ReviewWatch telling two plans apart', () => {

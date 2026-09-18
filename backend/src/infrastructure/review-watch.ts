@@ -30,6 +30,7 @@ export class ReviewWatch {
   readonly label: string
   readonly log: ReviewLog
   readonly live: Map<string, Set<string>>
+  readonly baselined: Map<string, Set<string>>
 
   constructor({ asked, review, sleep, stderr, label, log }: {
     asked: ReviewAsked,
@@ -46,6 +47,7 @@ export class ReviewWatch {
     this.label = label
     this.log = log
     this.live = new Map()
+    this.baselined = new Map()
   }
 
   static #keyFor(repository: RepositoryName, issueNumber: number): string {
@@ -62,10 +64,13 @@ export class ReviewWatch {
 
   #start(watch: PlanWatch, recovered: boolean): Promise<void> {
     const key = ReviewWatch.#keyFor(watch.repository, watch.issue.number)
-    const attended = new Set<string>()
+    const carried = this.baselined.get(key)
+    const attended = new Set(carried ?? [])
     this.live.set(key, attended)
+    const recovering = recovered && carried === undefined
+    if (!recovering) this.baselined.set(key, attended)
 
-    return this.#follow(watch, key, attended, recovered).catch((cause: Error) => {
+    return this.#follow(watch, key, attended, recovering).catch((cause: Error) => {
       if (!this.#isCurrent(key, attended)) return
       this.live.delete(key)
       this.#warn(watch, `is no longer watched: ${cause.message}`)
@@ -105,6 +110,7 @@ export class ReviewWatch {
       if (!this.#isCurrent(key, attended)) return false
       attended.add(change.id)
     }
+    this.baselined.set(key, attended)
 
     return true
   }

@@ -11,7 +11,7 @@ import { PlanRecovery } from '../domain/policies/plan-recovery.ts'
 import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import { RecoveryCall } from '../domain/value-objects/recovery-call.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
-import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
+import { CallInvocation, type ClaudeCalls } from './claude-calls.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { PlanAgentBrief } from './plan-agent-brief.ts'
 import type { RecordedCall } from './recorded-call.ts'
@@ -19,7 +19,6 @@ import type { RecordedCall } from './recorded-call.ts'
 type CallMode = 'initial' | 'resume'
 
 export class ClaudePlanCalls extends PlanCalls {
-  static readonly OPENING = `Read the file at $${CallDescriptor.PROMPT_VARIABLE} and do exactly what it says.`
   static readonly ALLOWED_TOOLS = 'Read,Glob,Grep,Edit,Write,Bash,Skill,Agent'
   static readonly PERMISSION_MODE = 'acceptEdits'
 
@@ -142,7 +141,6 @@ export class ClaudePlanCalls extends PlanCalls {
       '--model', ClaudeConversations.MODEL,
       ClaudeConversations.PLUGIN_DIR_FLAG, this.pluginRoot,
       mode === 'resume' ? '--resume' : '--session-id', conversation,
-      ClaudePlanCalls.OPENING,
     ]
   }
 

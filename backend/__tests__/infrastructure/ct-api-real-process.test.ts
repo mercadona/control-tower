@@ -471,6 +471,34 @@ describe('ct-api entrypoint', () => {
     expect(port).toBeGreaterThan(0)
   })
 
+  it('existing entrypoints start without an activation setting', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-entrypoint-settings-'))
+    try {
+      const port = await Entrypoint.makeStart({
+        CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, CT_HARVEST_BQ_TABLE: '', SHELL: '/bin/sh',
+      })
+
+      expect(port).toBeGreaterThan(0)
+    } finally {
+      Entrypoint.killAll()
+      await RunFileFixture.remove(state)
+    }
+  }, 60_000)
+
+  it('run-backend omits an absent Claude configuration directory', async () => {
+    const command = await Entrypoint.makeRunBackendCommand()
+
+    expect(command).toBe('CT_API_PORT=8787  CT_HARVEST_BQ_TABLE= node backend/src/infrastructure/ct-api.ts')
+  })
+
+  it('run-backend preserves an explicitly configured Claude directory', async () => {
+    const command = await Entrypoint.makeRunBackendCommand('/tmp/ct-explicit-config')
+
+    expect(command).toBe(
+      'CT_API_PORT=8787 CLAUDE_CONFIG_DIR=/tmp/ct-explicit-config CT_HARVEST_BQ_TABLE= node backend/src/infrastructure/ct-api.ts',
+    )
+  })
+
   it('a_freshly_started_backend_lists_no_session_because_nothing_has_been_asked_of_it_yet', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0', SHELL: '/bin/sh' })
 
