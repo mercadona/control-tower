@@ -26,7 +26,7 @@ describe('PlanAgentBrief', () => {
   })
 
   it('names the skill that writes the plan instead of describing the shape of one', () => {
-    expect(errand()).toContain('control-tower-loop:writing-plans-prescriptive')
+    expect(errand()).toContain('control-tower-loop:ct-writing-plans-prescriptive')
   })
 
   it('interpolates the absolute path of dispatch check because the plugin token stays literal in plain text', () => {

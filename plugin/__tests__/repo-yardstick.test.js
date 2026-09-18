@@ -58,12 +58,12 @@ describe('CONVENTIONS_FILE does not diverge from the texts that cite it', () => 
     expect(read('prompts', 'task-implementer.md')).toContain(CONVENTIONS_FILE)
   })
 
-  it('skills/writing-plans-prescriptive/SKILL.md names it', () => {
-    expect(read('skills', 'writing-plans-prescriptive', 'SKILL.md')).toContain(CONVENTIONS_FILE)
+  it('skills/ct-writing-plans-prescriptive/SKILL.md names it', () => {
+    expect(read('skills', 'ct-writing-plans-prescriptive', 'SKILL.md')).toContain(CONVENTIONS_FILE)
   })
 
-  it('skills/writing-plans-prescriptive/plan-template.md names it', () => {
-    expect(read('skills', 'writing-plans-prescriptive', 'plan-template.md')).toContain(CONVENTIONS_FILE)
+  it('skills/ct-writing-plans-prescriptive/plan-template.md names it', () => {
+    expect(read('skills', 'ct-writing-plans-prescriptive', 'plan-template.md')).toContain(CONVENTIONS_FILE)
   })
 
   it('commands/ct-init.md names it', () => {

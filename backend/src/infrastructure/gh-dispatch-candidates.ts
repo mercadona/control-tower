@@ -1,4 +1,4 @@
-import { flattenIssuePages, realIssuesOnly } from '../../../plugin/scripts/gh-issues.js'
+import { issuesQueryFor, normalizeGraphqlIssues } from '../../../plugin/scripts/gh-issues.js'
 import { buildDispatchInput, mapGhIssue } from '../../../plugin/scripts/gh-issue-map.js'
 import { collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
 import { resolveGatesForAgent } from '../../../plugin/scripts/gates.js'
@@ -13,7 +13,7 @@ type GhMilestone = Readonly<{ number: number, title: string }>
 type GhLabel = Readonly<{ name: string }>
 type GhOpenIssue = Readonly<{
   number: number,
-  html_url: string,
+  url: string,
   title: string,
   body: string,
   milestone: GhMilestone | null,
@@ -90,11 +90,30 @@ export class GhDispatchCandidates extends DispatchCandidates {
     this.gh = gh
   }
 
+  static readonly #QUERIES: Readonly<Record<'open' | 'closed', string>> = Object.freeze({
+    open: issuesQueryFor(['OPEN']),
+    closed: issuesQueryFor(['CLOSED']),
+  })
+
   static #argv(repository: RepositoryName, state: 'open' | 'closed'): string[] {
+    const [owner, name] = repository.text.split('/')
     return [
-      'api', `repos/${repository.text}/issues`, '--method', 'GET',
-      '-f', `state=${state}`, '-f', 'per_page=100', '--paginate', '--slurp',
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${GhDispatchCandidates.#QUERIES[state]}`,
+      '-f', `owner=${owner}`, '-f', `name=${name}`,
     ]
+  }
+
+  static #isIssuePage(page: unknown): boolean {
+    if (page === null || typeof page !== 'object') return false
+    const nodes = new GhPayload(page, 'page').value('data')
+    if (nodes === null || typeof nodes !== 'object') return false
+    const repository = new GhPayload(nodes, 'page.data').value('repository')
+    if (repository === null || typeof repository !== 'object') return false
+    const issues = new GhPayload(repository, 'page.data.repository').value('issues')
+    if (issues === null || typeof issues !== 'object') return false
+
+    return Array.isArray(new GhPayload(issues, 'page.data.repository.issues').value('nodes'))
   }
 
   static #milestone(source: GhPayload): GhMilestone | null {
@@ -126,11 +145,11 @@ export class GhDispatchCandidates extends DispatchCandidates {
     } catch {
       throw new DispatchNotUnderstood(`gh printed non-json ${state} issue pages: ${JSON.stringify(printed)}`)
     }
-    if (!Array.isArray(parsed) || parsed.some((page) => !Array.isArray(page))) {
+    if (!Array.isArray(parsed) || parsed.some((page) => !GhDispatchCandidates.#isIssuePage(page))) {
       throw new DispatchNotUnderstood(`gh printed malformed ${state} issue pages: ${JSON.stringify(parsed)}`)
     }
 
-    return realIssuesOnly(flattenIssuePages(parsed))
+    return normalizeGraphqlIssues(parsed)
   }
 
   static #openIssues(printed: string): GhOpenIssue[] {
@@ -139,7 +158,7 @@ export class GhDispatchCandidates extends DispatchCandidates {
       const source = new GhPayload(value, context)
       return Object.freeze({
         number: source.positiveInteger('number'),
-        html_url: source.nonEmptyText('html_url'),
+        url: source.nonEmptyText('url'),
         title: source.text('title'),
         body: source.nullableText('body') ?? '',
         milestone: GhDispatchCandidates.#milestone(source),
@@ -152,13 +171,12 @@ export class GhDispatchCandidates extends DispatchCandidates {
     return GhDispatchCandidates.#entries(printed, 'closed').map((value, index) => {
       const context = `closed issue ${index}`
       const source = new GhPayload(value, context)
-      const stateReason = source.nullableText('state_reason')
       return Object.freeze({
         number: source.positiveInteger('number'),
         body: source.nullableText('body') ?? '',
         milestone: GhDispatchCandidates.#milestone(source),
         labels: GhDispatchCandidates.#labels(source),
-        stateReason: stateReason === null ? null : stateReason.toUpperCase(),
+        stateReason: source.nullableText('stateReason'),
       })
     })
   }
@@ -224,6 +242,6 @@ export class GhDispatchCandidates extends DispatchCandidates {
       throw new DispatchNotUnderstood(`the plugin selected an issue absent from the open issue table: ${selected.n}`)
     }
 
-    return new PlanIssue({ number: raw.number, url: raw.html_url })
+    return new PlanIssue({ number: raw.number, url: raw.url })
   }
 }

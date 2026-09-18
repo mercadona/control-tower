@@ -1,5 +1,5 @@
 ---
-name: writing-plans-prescriptive
+name: ct-writing-plans-prescriptive
 description: Use when dispatched for a Control Tower slice, before touching production code — turns the issue into a prescriptive plan that closes every decision, leaves the bodies to TDD, and passes plan-contract validation
 ---
 
@@ -278,5 +278,5 @@ to hold for Task 1 and easy to lose by Task 6; step 5 is what keeps them in view
 ## Execution handoff
 
 With the plan committed and the `plan` gate closed, continue with
-control-tower-loop:subagent-driven-development: its "Have implementation plan?" diamond finds
+control-tower-loop:ct-subagent-driven-development: its "Have implementation plan?" diamond finds
 the plan and dispatches a fresh subagent per task, starting with none of your context.

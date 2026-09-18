@@ -770,7 +770,7 @@ function writeBrief() {
   // disk that nobody is going to use.
   const ctDocs = loadCtYardstick()
   try {
-    execFileSync(join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief'),
+    execFileSync(join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief'),
       ['--with-plan-context', planPath, String(run.task), brief], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (e) {
     die(`the brief of task ${run.task} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
@@ -1757,7 +1757,7 @@ const isMachineryPath = (path) => LOOP_ARTIFACT_PATTERNS.some((pat) => matchesPa
 
 // The extractor of one section of the plan by its literal heading, up to the
 // next heading of equal or lesser level — the same criterion as
-// `extract_section` of `skills/subagent-driven-development/scripts/task-brief`
+// `extract_section` of `skills/ct-subagent-driven-development/scripts/task-brief`
 // (bash/awk), rewritten here because the reconciliation package is pasted by
 // `reconcileVerb` directly, with no such script in between.
 //

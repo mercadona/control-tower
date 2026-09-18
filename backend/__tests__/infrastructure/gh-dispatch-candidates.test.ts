@@ -6,22 +6,24 @@ import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../../src/domain/exceptions.ts'
 import { TOKEN_HOLDING_STATUSES } from '../../../plugin/scripts/dispatch.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 
 type RawIssue = {
   number: number,
-  html_url: string,
+  url: string,
   title: string,
   body: string,
-  milestone: { number: number, title: string } | null,
-  labels: { name: string }[],
-  state_reason?: string | null,
+  state: 'OPEN' | 'CLOSED',
+  stateReason: string | null,
+  milestone: { number: number, title: string, description: string | null } | null,
+  labels: { nodes: { name: string }[] },
 }
 
 class CandidateMother {
   static readonly REPOSITORY = new RepositoryName('mercadona/control-tower-plugin')
   static readonly TARGET = 'CT370'
-  static readonly TARGET_MILESTONE = Object.freeze({ number: 370, title: CandidateMother.TARGET })
-  static readonly OTHER_MILESTONE = Object.freeze({ number: 369, title: 'CT369' })
+  static readonly TARGET_MILESTONE = Object.freeze({ number: 370, title: CandidateMother.TARGET, description: null })
+  static readonly OTHER_MILESTONE = Object.freeze({ number: 369, title: 'CT369', description: null })
 
   static issue({
     number,
@@ -31,39 +33,52 @@ class CandidateMother {
     touches = [],
     dependencies = [],
     gates = ['none'],
-    stateReason,
-    htmlUrl = `https://github.com/mercadona/control-tower-plugin/issues/${number}`,
+    stateReason = null,
+    url = `https://github.com/mercadona/control-tower-plugin/issues/${number}`,
   }: {
     number: number,
     order: number,
     status?: string,
-    milestone?: { number: number, title: string },
+    milestone?: { number: number, title: string, description: string | null },
     touches?: string[],
     dependencies?: number[],
     gates?: string[],
-    stateReason?: string,
-    htmlUrl?: string,
+    stateReason?: string | null,
+    url?: string,
   }): RawIssue {
     const dependencySection = dependencies.length === 0
       ? ''
       : `\n## Dependencias\n${dependencies.map((dependency) => `- merge-after #${dependency}`).join('\n')}`
     return {
       number,
-      html_url: htmlUrl,
+      url,
       title: `Slice ${order}`,
       body: `<!-- ct-order:${order} -->${dependencySection}`,
+      state: stateReason === null ? 'OPEN' : 'CLOSED',
+      stateReason,
       milestone,
-      labels: [
+      labels: { nodes: [
         { name: `status:${status}` },
         ...touches.map((touch) => ({ name: `touches:${touch}` })),
         ...gates.map((gate) => ({ name: `gate:${gate}` })),
-      ],
-      ...(stateReason === undefined ? {} : { state_reason: stateReason }),
+      ] },
     }
   }
 
+  static page(nodes: RawIssue[], hasNextPage: boolean): Record<string, unknown> {
+    return { data: { repository: { issues: { nodes, pageInfo: { hasNextPage, endCursor: hasNextPage ? 'cursor' : null } } } } }
+  }
+
   static pages(issues: RawIssue[]): string {
-    return JSON.stringify([issues.slice(0, 2), issues.slice(2)])
+    return JSON.stringify([CandidateMother.page(issues.slice(0, 2), true), CandidateMother.page(issues.slice(2), false)])
+  }
+
+  static listing(states: string[]): string[] {
+    return [
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${issuesQueryFor(states)}`,
+      '-f', 'owner=mercadona', '-f', 'name=control-tower-plugin',
+    ]
   }
 }
 
@@ -107,7 +122,7 @@ class GhDouble {
 }
 
 describe('GhDispatchCandidates', () => {
-  it('table order beats issue number while dependencies and outside holders still block', async () => {
+  it('table order beats issue number while dependencies and outside holders still block, read over GraphQL in two states', async () => {
     const gh = GhDouble.listing([
       CandidateMother.issue({ number: 10, order: 1, dependencies: [99] }),
       CandidateMother.issue({ number: 20, order: 2, touches: ['api'] }),
@@ -126,10 +141,7 @@ describe('GhDispatchCandidates', () => {
       number: 500,
       url: 'https://github.com/mercadona/control-tower-plugin/issues/500',
     })
-    expect(gh.calls).toEqual([
-      ['api', 'repos/mercadona/control-tower-plugin/issues', '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp'],
-      ['api', 'repos/mercadona/control-tower-plugin/issues', '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp'],
-    ])
+    expect(gh.calls).toEqual([CandidateMother.listing(['OPEN']), CandidateMother.listing(['CLOSED'])])
   })
 
   it('in review releases cap but retains tokens', async () => {
@@ -168,7 +180,7 @@ describe('GhDispatchCandidates', () => {
   it('not planned closure does not satisfy a dependency', async () => {
     const gh = GhDouble.listing(
       [CandidateMother.issue({ number: 11, order: 2, dependencies: [1] })],
-      [CandidateMother.issue({ number: 10, order: 1, status: 'closed', stateReason: 'not_planned' })],
+      [CandidateMother.issue({ number: 10, order: 1, status: 'closed', stateReason: 'NOT_PLANNED' })],
     )
 
     const refusal = await gh.next().catch((cause) => cause)
@@ -208,6 +220,10 @@ describe('GhDispatchCandidates', () => {
       GhDouble.output(0, '{"broken":true}'),
       GhDouble.output(0, CandidateMother.pages([])),
     ]).next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
+    await expect(new GhDouble([
+      GhDouble.output(0, JSON.stringify([{ data: { repository: null } }])),
+      GhDouble.output(0, CandidateMother.pages([])),
+    ]).next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
   })
 
   it('explicit plan gates are not bypassed', async () => {
@@ -223,13 +239,13 @@ describe('GhDispatchCandidates', () => {
 
   it('empty issue urls are malformed payloads that retain the offending value', async () => {
     const gh = GhDouble.listing([
-      CandidateMother.issue({ number: 11, order: 1, htmlUrl: '' }),
+      CandidateMother.issue({ number: 11, order: 1, url: '' }),
     ])
 
     const refusal = await gh.next().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(DispatchNotUnderstood)
-    expect(refusal.message).toContain('html_url')
+    expect(refusal.message).toContain('url')
     expect(refusal.message).toContain('""')
   })
 

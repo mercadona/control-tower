@@ -23,7 +23,7 @@ const CONVERSATION = new CoordinatingConversation({ id: CONVERSATION_ID, reposit
 
 const PROMPT = PhasePrompt.brainstorming({ story: null, comment: null, repository: REPOSITORY, root: CHECKOUT_ROOT })
 const PROMPT_TEXT = [
-  'Invoke the skill control-tower-loop:brainstorming.',
+  'Invoke the skill control-tower-loop:ct-brainstorming.',
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
   PhasePrompt.FREEZE_IS_NOT_YOURS,
   PhasePrompt.RECOVERY_CAPABILITIES,

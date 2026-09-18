@@ -377,7 +377,7 @@ export const E2E_SCHEMA = Object.freeze({
 
 // `Skill` is here because the implementer's rubric
 // (`prompts/task-implementer.md`) no longer carries the TDD cycle inside it: it
-// orders it to load `control-tower-loop:test-driven-development`, the copy the
+// orders it to load `control-tower-loop:ct-test-driven-development`, the copy the
 // plugin ships. Without this tool that first line is impossible to obey and the
 // implementer is left without the craft the rubric delegates.
 export const IMPLEMENTER_TOOLS = 'Read, Write, Edit, Grep, Glob, Bash, Skill'
@@ -391,7 +391,7 @@ export const IMPLEMENTER_TOOLS = 'Read, Write, Edit, Grep, Glob, Bash, Skill'
 // obeying that line.
 //
 // Fixed, and not scaled by complexity as seam 5 of the fork asks
-// (`skills/subagent-driven-development/SKILL.md`, "Model Selection"): that skill
+// (`skills/ct-subagent-driven-development/SKILL.md`, "Model Selection"): that skill
 // no longer drives here —`scripts/kickoff.js` says so—, and whoever would pick
 // the tier per task would be the same session that saves the money. The floor is
 // fixed on purpose.
