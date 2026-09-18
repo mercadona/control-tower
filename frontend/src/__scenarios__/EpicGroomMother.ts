@@ -121,6 +121,12 @@ const groomSessionOpened = () => ({
     `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 
+const groomAskTyped = () => ({
+  status: 202,
+  body: `{"status":"typed","target":"${TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+    `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
+})
+
 const unrecognisedStatus = () => ({ status: 200, body: '{"status":"something-nobody-declared"}' })
 
 const notFromThePage = () => ({
@@ -177,6 +183,7 @@ export const EpicGroomMother = {
   reslicedWithoutKey,
   reslicingPublished,
   groomSessionOpened,
+  groomAskTyped,
   unrecognisedStatus,
   notFromThePage,
   planChanged,

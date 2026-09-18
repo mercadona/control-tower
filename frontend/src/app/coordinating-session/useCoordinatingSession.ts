@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 import {
-  CloseOutcome, CoordinatingSessionOutcome, LiveSessionRef, OpenedCoordinatingSession, OpenOutcome,
+  CloseOutcome, CoordinatingSessionOutcome, LiveAsk, LiveSessionRef, OpenedCoordinatingSession, OpenOutcome,
 } from 'app/coordinating-session/CoordinatingSession.types'
 import { GroomSessionOutcome } from 'app/epic-groom/EpicGroom.types'
 import { EpicGroomClient } from 'app/epic-groom/client'
@@ -19,6 +19,15 @@ type PendingClose = { target: string; conversation: string; sessionId: string | 
 
 const CONNECTING: CoordinatingSessionRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 2000
+const askStateOf = (held: HeldSnapshot | null): LiveAsk | null => {
+  if (held === null || held.outcome.kind !== 'live') return null
+  const reported = held.outcome.timeline.at(-1)?.kind ?? null
+  if (reported === 'waiting-for-permission') return 'awaiting-permission'
+  if (held.outcome.attention.status === 'working') return 'working'
+
+  return reported === 'completed' ? 'ready' : 'turn-not-finished'
+}
+
 const BLOCKED_OPENING: OpenOutcome = {
   kind: 'refused',
   code: 'coordinating-session-opening',
@@ -31,6 +40,7 @@ type CoordinatingLifecycle = {
   blocksOpening: boolean
   operationBusy: boolean
   target: string | null
+  liveAsk: LiveAsk | null
   opened: OpenedCoordinatingSession | null
   closeError: string | null
   closing: boolean
@@ -177,6 +187,13 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     return current.phase !== 'read' || current.kind !== 'none' || current.operation !== 'idle'
   }, [])
 
+  const askableNow = useCallback((): boolean => {
+    if (mutationRef.current || openingRef.current !== 'idle' || closingRef.current) return false
+    const held = heldRef.current
+
+    return held?.outcome.kind === 'live' && held.outcome.operation === 'idle'
+  }, [])
+
   const adopt = useCallback((opened: OpenedCoordinatingSession) => {
     const outcome: HeldOutcome = {
       kind: 'live',
@@ -220,7 +237,9 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     runOpening(() => CoordinatingSessionClient.open(submission)), [runOpening])
 
   const openGroom = useCallback((key: string, target: string) =>
-    runOpening(() => EpicGroomClient.openSession(key, target)), [runOpening])
+    askableNow()
+      ? EpicGroomClient.openSession(key, target)
+      : runOpening(() => EpicGroomClient.openSession(key, target)), [askableNow, runOpening])
 
   const close = useCallback(async (): Promise<CloseOutcome | null> => {
     const snapshot = heldRef.current
@@ -294,6 +313,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     blocksOpening,
     operationBusy,
     target: held?.outcome.target ?? null,
+    liveAsk: askStateOf(held),
     opened,
     closeError,
     closing,

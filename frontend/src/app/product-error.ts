@@ -1,6 +1,10 @@
 const MESSAGES: Readonly<Record<string, string>> = {
   'coordinating-session-already-live': 'Ya hay una sesión coordinadora en marcha.',
   'coordinating-session-opening': 'La sesión coordinadora todavía se está abriendo.',
+  'coordinating-session-working': 'La sesión coordinadora está trabajando. Espera a que termine el turno y vuelve a intentarlo.',
+  'coordinating-session-awaiting-permission': 'La sesión coordinadora está esperando un permiso en su terminal. Respóndelo y vuelve a intentarlo.',
+  'coordinating-session-turn-not-finished': 'No se sabe qué está mostrando la terminal de la sesión. Espera a que termine un turno y vuelve a intentarlo.',
+  'coordinating-session-not-live': 'La sesión coordinadora ya no está viva. Abre otra para seguir.',
   'coordinating-session-busy': 'La sesión coordinadora está realizando otra operación. Inténtalo de nuevo cuando termine.',
   'coordinating-session-target-changed': 'La sesión coordinadora ha cambiado. Actualiza la página antes de volver a intentarlo.',
   'malformed-id': 'El ticket no tiene un formato válido.',

@@ -13,6 +13,11 @@ import {
 import {
   OpenGroomSession, OpenGroomSessionParams, GroomSessionOpened,
 } from '../../src/application/actions/open-groom-session.ts'
+import {
+  AskGroomReview, AskGroomReviewParams, GroomReviewAsk, GroomReviewAsked,
+} from '../../src/application/actions/ask-groom-review.ts'
+import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
+import { CoordinatingOperation } from '../../src/infrastructure/coordinating-sessions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
@@ -27,6 +32,8 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
+import { JsonBody } from '../../src/infrastructure/http.ts'
 
 class OpenGroomSessionSpy extends OpenGroomSession {
   readonly asked: OpenGroomSessionParams[]
@@ -66,6 +73,35 @@ class OpenGroomSessionSpy extends OpenGroomSession {
   }
 }
 
+class AskGroomReviewSpy extends AskGroomReview {
+  readonly asked: AskGroomReviewParams[]
+  readonly answer: () => Promise<GroomReviewAsked>
+
+  constructor(answer: () => Promise<GroomReviewAsked>) {
+    super({ specs: new EpicSpecs(), liveSessions: new LiveSessions() })
+    this.asked = []
+    this.answer = answer
+  }
+
+  static asking(): AskGroomReviewSpy {
+    return new AskGroomReviewSpy(async () => GroomReviewAsked.asked())
+  }
+
+  static withNoSpec(): AskGroomReviewSpy {
+    return new AskGroomReviewSpy(async () => GroomReviewAsked.noSpec())
+  }
+
+  static withNoPty(): AskGroomReviewSpy {
+    return new AskGroomReviewSpy(async () => { throw new LiveSessionNotLive(Mother.SESSION.id) })
+  }
+
+  async execute(params: AskGroomReviewParams): Promise<GroomReviewAsked> {
+    this.asked.push(params)
+
+    return this.answer()
+  }
+}
+
 class LiveSessionsDouble extends LiveSessions {
   find(id: string): LiveSession | null {
     return id === Mother.SESSION.id ? Mother.SESSION : null
@@ -74,6 +110,12 @@ class LiveSessionsDouble extends LiveSessions {
   watch(): LiveSessionStream {
     return { printed: '', stop: (): void => {} }
   }
+}
+
+class RecordsDouble extends ConversationRecords {
+  async appendTimelineEvent(_asked: {
+    conversation: CoordinatingConversation, event: SessionTimelineEvent,
+  }): Promise<void> {}
 }
 
 class Keys {
@@ -106,7 +148,12 @@ class Mother {
 
   static registry(): CoordinatingSessions {
     return new CoordinatingSessions({
-      liveSessions: new LiveSessionsDouble(), stderr: (): void => {}, newTarget: () => Mother.NEXT_TARGET,
+      liveSessions: new LiveSessionsDouble(),
+      stderr: (): void => {},
+      newTarget: () => Mother.NEXT_TARGET,
+      records: new RecordsDouble(),
+      newId: () => 'timeline-event',
+      now: () => '2026-09-15T10:00:00.000Z',
     })
   }
 
@@ -136,6 +183,42 @@ class Mother {
     return held
   }
 
+  static readonly PERMISSION_QUESTION = 'Claude needs your permission to use Bash'
+
+  static liveWith(
+    attention: SessionAttention, timeline: readonly SessionTimelineEvent[] = Mother.TIMELINE
+  ): CoordinatingSessions {
+    const held = Mother.registry()
+    held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
+      state: CoordinatingSessionState.LIVE,
+      conversation: Mother.CONVERSATION,
+      session: Mother.SESSION,
+      attention,
+    }), timeline)
+
+    return held
+  }
+
+  static event(kind: typeof TimelineEventKind[keyof typeof TimelineEventKind]): SessionTimelineEvent {
+    return new SessionTimelineEvent({ id: `event-${kind}`, kind, at: '2026-09-15T10:00:00.000Z', detail: null })
+  }
+
+  static completed(): CoordinatingSessions {
+    return Mother.liveWith(SessionAttention.waiting(null), [Mother.event(TimelineEventKind.COMPLETED)])
+  }
+
+  static awaitingPermission(): CoordinatingSessions {
+    return Mother.liveWith(
+      SessionAttention.waiting(Mother.PERMISSION_QUESTION),
+      [Mother.event(TimelineEventKind.WAITING_FOR_PERMISSION)],
+    )
+  }
+
+  static resumed(): CoordinatingSessions {
+    return Mother.liveWith(SessionAttention.waiting(null), [Mother.event(TimelineEventKind.RESUMED)])
+  }
+
   static failedClose(): CoordinatingSessions {
     const held = Mother.live()
     const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
@@ -149,9 +232,14 @@ class RunningApi {
   static readonly #started: Server[] = []
   static readonly PATH = GroomSessionRoute.PATH
 
-  static async listening(held: CoordinatingSessions, open: OpenGroomSession, key: GateKey): Promise<number> {
+  static async listening(
+    held: CoordinatingSessions,
+    open: OpenGroomSession,
+    key: GateKey,
+    ask: AskGroomReview = AskGroomReviewSpy.asking(),
+  ): Promise<number> {
     const app = express()
-    app.post(RunningApi.PATH, Browsers.turnAwayForeign, GroomSessionRoute.opening(held, open, key))
+    app.post(RunningApi.PATH, Browsers.turnAwayForeign, GroomSessionRoute.opening(held, open, key, ask))
     app.all(RunningApi.PATH, GroomSessionRoute.refuseOtherMethods)
     const server = createServer(app)
     await new Promise<void>((resolve, reject) => {
@@ -178,8 +266,9 @@ class RunningApi {
     open: OpenGroomSession,
     headers: Record<string, string> = {},
     target: string | null = Mother.TARGET,
+    ask: AskGroomReview = AskGroomReviewSpy.asking(),
   ): Promise<Response> {
-    const port = await RunningApi.listening(held, open, Keys.minted())
+    const port = await RunningApi.listening(held, open, Keys.minted(), ask)
 
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
       method: 'POST',
@@ -187,8 +276,44 @@ class RunningApi {
     })
   }
 
+  static async withHooks(held: CoordinatingSessions, ask: AskGroomReview): Promise<number> {
+    const app = express()
+    app.post(
+      SessionHooksRoute.PATH, JsonBody.demandDeclared, JsonBody.reader(), SessionHooksRoute.handledBy(held)
+    )
+    app.post(
+      RunningApi.PATH, Browsers.turnAwayForeign, GroomSessionRoute.opening(held, OpenGroomSessionSpy.opening(), Keys.minted(), ask)
+    )
+    const server = createServer(app)
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => {
+        server.removeListener('error', reject)
+        resolve()
+      })
+    })
+    RunningApi.#started.push(server)
+
+    return (server.address() as AddressInfo).port
+  }
+
+  static async reportingHook(port: number, payload: Record<string, unknown>): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${SessionHooksRoute.PATH}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  static async pressing(port: number): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { [GateKey.HEADER]: Keys.MINTED, [CoordinatingSessionTarget.HEADER]: Mother.TARGET },
+    })
+  }
+
   static async getting(held: CoordinatingSessions, open: OpenGroomSession): Promise<Response> {
-    const port = await RunningApi.listening(held, open, Keys.minted())
+    const port = await RunningApi.listening(held, open, Keys.minted(), AskGroomReviewSpy.asking())
 
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`)
   }
@@ -267,28 +392,173 @@ describe('GroomSessionRoute', () => {
     expect(open.asked).toEqual([])
   })
 
-  it('a press while a coordinating conversation is live is refused as already live', async () => {
+  it('a press reaches the live conversation that finished its turn, and opens nothing', async () => {
     const open = OpenGroomSessionSpy.opening()
+    const ask = AskGroomReviewSpy.asking()
+    const held = Mother.completed()
 
-    const response = await RunningApi.posting(Mother.live(), open, { [GateKey.HEADER]: Keys.MINTED })
+    const response = await RunningApi.posting(held, open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask)
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({
+      status: 'typed',
+      target: Mother.TARGET,
+      conversation: Mother.CONVERSATION.id.text,
+      repo: Mother.REPOSITORY.text,
+      root: Mother.ROOT.text,
+      session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
+    })
+    expect(ask.asked).toEqual([new AskGroomReviewParams({
+      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION,
+    })])
+    expect(open.asked).toEqual([])
+    expect(held.held()?.target).toBe(Mother.TARGET)
+    expect(held.held()?.conversation).toBe(Mother.CONVERSATION)
+    expect(held.operation()).toBe(CoordinatingOperation.IDLE)
+  })
+
+  it('a press while the live conversation is working is refused, and nothing is typed into its turn', async () => {
+    const open = OpenGroomSessionSpy.opening()
+    const ask = AskGroomReviewSpy.asking()
+
+    const response = await RunningApi.posting(
+      Mother.live(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask
+    )
 
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({
-      code: GroomSessionOutcome.ALREADY_LIVE,
-      detail: 'a coordinating conversation is already live: it has to end before the groom conversation opens',
+      code: GroomSessionOutcome.WORKING,
+      detail: 'the coordinating conversation is working: what is typed now would land in the middle of its turn',
+    })
+    expect(ask.asked).toEqual([])
+    expect(open.asked).toEqual([])
+  })
+
+  it('a press while the live conversation waits for a permission is refused, and answers no prompt for it', async () => {
+    const open = OpenGroomSessionSpy.opening()
+    const ask = AskGroomReviewSpy.asking()
+
+    const response = await RunningApi.posting(
+      Mother.awaitingPermission(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: GroomSessionOutcome.AWAITING_PERMISSION,
+      detail: 'the coordinating conversation is waiting for a permission: '
+        + 'what is typed now would answer that prompt instead of asking for the review',
+    })
+    expect(ask.asked).toEqual([])
+    expect(open.asked).toEqual([])
+  })
+
+  it('a permission prompt that carried no message still refuses the ask', async () => {
+    const ask = AskGroomReviewSpy.asking()
+    const held = Mother.completed()
+    const port = await RunningApi.withHooks(held, ask)
+
+    const reported = await RunningApi.reportingHook(port, {
+      session_id: Mother.CONVERSATION.id.text,
+      hook_event_name: 'Notification',
+      notification_type: 'permission_prompt',
+    })
+    const response = await RunningApi.pressing(port)
+
+    expect(reported.status).toBe(202)
+    expect(held.held()?.attention).toEqual(SessionAttention.waiting(null))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: GroomSessionOutcome.AWAITING_PERMISSION,
+      detail: 'the coordinating conversation is waiting for a permission: '
+        + 'what is typed now would answer that prompt instead of asking for the review',
+    })
+    expect(ask.asked).toEqual([])
+  })
+
+  it('a completed turn reported by the hook opens the ask, and a permission prompt closes it again', async () => {
+    const ask = AskGroomReviewSpy.asking()
+    const held = Mother.live()
+    const port = await RunningApi.withHooks(held, ask)
+
+    await RunningApi.reportingHook(port, {
+      session_id: Mother.CONVERSATION.id.text, hook_event_name: 'Stop',
+    })
+    const afterTheTurn = await RunningApi.pressing(port)
+    await RunningApi.reportingHook(port, {
+      session_id: Mother.CONVERSATION.id.text,
+      hook_event_name: 'Notification',
+      notification_type: 'permission_prompt',
+      message: Mother.PERMISSION_QUESTION,
+    })
+    const afterThePrompt = await RunningApi.pressing(port)
+
+    expect(afterTheTurn.status).toBe(202)
+    expect(await afterTheTurn.json()).toMatchObject({ status: 'typed' })
+    expect(afterThePrompt.status).toBe(409)
+    expect(await afterThePrompt.json()).toMatchObject({ code: GroomSessionOutcome.AWAITING_PERMISSION })
+    expect(ask.asked).toHaveLength(1)
+  })
+
+  it('a live conversation that has reported no finished turn is refused rather than typed into', async () => {
+    const ask = AskGroomReviewSpy.asking()
+
+    const response = await RunningApi.posting(
+      Mother.resumed(), OpenGroomSessionSpy.opening(), { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: GroomSessionOutcome.TURN_NOT_FINISHED,
+      detail: 'the coordinating conversation has not reported finishing a turn: '
+        + 'what its terminal is showing now is unknown',
+    })
+    expect(ask.asked).toEqual([])
+  })
+
+  it('a press whose pty is already gone is refused as not live', async () => {
+    const open = OpenGroomSessionSpy.opening()
+
+    const response = await RunningApi.posting(
+      Mother.completed(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, AskGroomReviewSpy.withNoPty()
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: GroomSessionOutcome.NOT_LIVE,
+      detail: 'the coordinating conversation is no longer live: nothing was typed into it',
     })
     expect(open.asked).toEqual([])
   })
 
-  it('a failed closure still refuses opening a groom terminal', async () => {
+  it('a press on a live conversation whose checkout carries no spec is refused as no-epic-spec', async () => {
     const open = OpenGroomSessionSpy.opening()
 
     const response = await RunningApi.posting(
-      Mother.failedClose(), open, { [GateKey.HEADER]: Keys.MINTED }
+      Mother.completed(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, AskGroomReviewSpy.withNoSpec()
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: GroomSessionOutcome.NO_EPIC_SPEC,
+      detail: 'no execution spec exists in this checkout to talk about',
+    })
+    expect(open.asked).toEqual([])
+  })
+
+  it('a failed closure refuses both the ask and a new groom terminal', async () => {
+    const open = OpenGroomSessionSpy.opening()
+    const ask = AskGroomReviewSpy.asking()
+
+    const response = await RunningApi.posting(
+      Mother.failedClose(), open, { [GateKey.HEADER]: Keys.MINTED }, Mother.TARGET, ask
     )
 
     expect(response.status).toBe(409)
-    expect(await response.json()).toMatchObject({ code: GroomSessionOutcome.ALREADY_LIVE })
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.BUSY,
+      detail: 'the coordinating session is close-failed: wait for it to settle before acting',
+    })
+    expect(ask.asked).toEqual([])
     expect(open.asked).toEqual([])
   })
 

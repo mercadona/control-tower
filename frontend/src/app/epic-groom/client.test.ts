@@ -41,6 +41,14 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     })
   })
 
+  it('an ask typed into the live conversation reads as typed, not as a session it opened', async () => {
+    answerWith(EpicGroomMother.groomAskTyped())
+
+    const outcome = await EpicGroomClient.openSession(EpicGroomMother.KEY, EpicGroomMother.TARGET)
+
+    expect(outcome).toEqual({ kind: 'typed' })
+  })
+
   it('a wait that names no pull request reads as a wait with none, not as unavailable', async () => {
     answerWith(EpicGroomMother.awaitingPublicationWithNoPullRequest())
 

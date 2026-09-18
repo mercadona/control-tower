@@ -20,6 +20,7 @@ const TARGET_HEADER = 'x-coordinating-target'
 const ACTED_STATUS = 200
 const OPENED_STATUS = 202
 const GROOMING_STATUS = 'grooming'
+const TYPED_STATUS = 'typed'
 const PUBLISHED_STATUS = 'published'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -225,7 +226,9 @@ const openSession = async (key: string, target: string): Promise<GroomSessionOut
     return { kind: 'unconfirmed' }
   }
   if (response.status === OPENED_STATUS) {
-    if (!isRecord(body) || body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
+    if (!isRecord(body)) return { kind: 'unconfirmed' }
+    if (body.status === TYPED_STATUS) return { kind: 'typed' }
+    if (body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
     const opened = CoordinatingSessionClient.openedIn(body)
 
     return opened === null ? { kind: 'unconfirmed' } : { kind: 'opened', opened }

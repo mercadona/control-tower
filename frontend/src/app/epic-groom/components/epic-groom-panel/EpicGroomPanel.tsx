@@ -1,6 +1,8 @@
+import { LiveAsk } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 import { useGatePresses } from 'app/epic-groom/useGatePresses'
+import { useAskRead } from 'app/epic-groom/useAskRead'
 import { useMergedReslicing } from 'app/epic-groom/useMergedReslicing'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
@@ -13,6 +15,15 @@ const GROOMING = 'Ejecutando el groom'
 const OPEN_SESSION = 'Revisar el slicing con la sesión'
 const OPENING_SESSION = 'Abriendo la sesión'
 const SESSION_OPENED = 'Sesión del groom abierta: habla con ella en el panel de sesiones.'
+const ASK_SENT = 'Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.'
+const ASK_READ = 'La sesión ha leído la petición: habla con ella en el panel de sesiones.'
+const SENDING_ASK = 'Enviando la petición'
+const SESSION_WORKING =
+  'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.'
+const SESSION_AWAITING_PERMISSION =
+  'La sesión está esperando un permiso en su terminal: respóndelo y vuelve a intentarlo.'
+const SESSION_TURN_UNKNOWN =
+  'No se sabe qué está mostrando la terminal de la sesión: espera a que termine un turno.'
 const SESSION_UNCONFIRMED_TITLE = 'No se ha podido confirmar la apertura de la sesión'
 const SESSION_UNCONFIRMED_DETAIL = 'Mira el panel de sesiones: puede estar abierta.'
 const RESLICING_UNCONFIRMED_TITLE = 'No se ha podido confirmar la publicación del nuevo slicing'
@@ -65,15 +76,19 @@ const EpicGroomPanelLabels = {
 
 type EpicGroomPanelProps = {
   target: string | null
+  liveAsk: LiveAsk | null
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<import('app/epic-groom/EpicGroom.types').GroomSessionOutcome>
 }
 
-const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: EpicGroomPanelProps) => {
-  const presses = useGatePresses({ target, openingBlocked, operationBusy, openSession })
+const EpicGroomPanel = ({ target, liveAsk, openingBlocked, operationBusy, openSession }: EpicGroomPanelProps) => {
+  const askBlocked = liveAsk === null ? openingBlocked : liveAsk !== 'ready'
+  const presses = useGatePresses({ target, askBlocked, operationBusy, openSession })
   const { acted, refusal, session, reslicing } = presses
-  const isReviewingTheSlicing = session?.kind === 'opened' || refusal?.kind === 'unconfirmed'
+  const askWasRead = useAskRead(session, liveAsk)
+  const isReviewingTheSlicing =
+    session?.kind === 'opened' || session?.kind === 'typed' || refusal?.kind === 'unconfirmed'
   const read = useEpicGroom(isReviewingTheSlicing, target)
   const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
   useMergedReslicing({ read, operationBusy, press: (planFingerprint) => presses.groom(gateKey, planFingerprint) })
@@ -141,9 +156,18 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
         description={RESLICING_UNCONFIRMED_DETAIL}
       />
     ) : null
+  const askNotice = liveAsk === 'working' ? (
+    <p className="epic-groom-panel__ask-blocked">{SESSION_WORKING}</p>
+  ) : liveAsk === 'awaiting-permission' ? (
+    <p className="epic-groom-panel__ask-blocked">{SESSION_AWAITING_PERMISSION}</p>
+  ) : liveAsk === 'turn-not-finished' ? (
+    <p className="epic-groom-panel__ask-blocked">{SESSION_TURN_UNKNOWN}</p>
+  ) : null
   const sessionNotice =
     session?.kind === 'opened' ? (
       <p className="epic-groom-panel__session-opened">{SESSION_OPENED}</p>
+    ) : session?.kind === 'typed' ? (
+      <p className="epic-groom-panel__ask-sent">{askWasRead ? ASK_READ : ASK_SENT}</p>
     ) : session?.kind === 'refused' ? (
       <Banner type="error" role="alert" title={session.error} />
     ) : session?.kind === 'unconfirmed' ? (
@@ -200,12 +224,15 @@ const EpicGroomPanel = ({ target, openingBlocked, operationBusy, openSession }: 
             </a>
           </>
         )}
-        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || target === null || isPressing || openingBlocked || operationBusy}>
-          {presses.pressed === 'session' ? OPENING_SESSION : OPEN_SESSION}
+        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || target === null || isPressing || askBlocked || operationBusy}>
+          {presses.pressed === 'session'
+            ? (liveAsk === null ? OPENING_SESSION : SENDING_ASK)
+            : OPEN_SESSION}
         </Button>
         <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
+        {askNotice}
         {sessionNotice}
         {gateNotice}
         {sessionNeeded}

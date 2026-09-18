@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { LiveAsk } from 'app/coordinating-session/CoordinatingSession.types'
 import { GroomSessionOutcome } from 'app/epic-groom/EpicGroom.types'
 import {
   EPIC_GROOM_GATE_HEADING,
@@ -24,12 +25,13 @@ const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' 
 
 type GateSequenceProps = {
   target: string | null
+  liveAsk: LiveAsk | null
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
 }
 
-const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
+const GateSequence = ({ target, liveAsk, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
   const specFreezeRead = useSpecFreeze(target)
   const epicGroomRead = useEpicGroom(false, target)
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
@@ -77,6 +79,7 @@ const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: Ga
       >
         <EpicGroomPanel
           target={target}
+          liveAsk={liveAsk}
           openingBlocked={openingBlocked}
           operationBusy={operationBusy}
           openSession={openSession}

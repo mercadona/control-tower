@@ -25,6 +25,7 @@ export type ReslicingOutcome =
   | { kind: 'unconfirmed' }
 export type GroomSessionOutcome =
   | { kind: 'opened'; opened: OpenedCoordinatingSession }
+  | { kind: 'typed' }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'unconfirmed' }
 export type EpicGroomAskOutcome =

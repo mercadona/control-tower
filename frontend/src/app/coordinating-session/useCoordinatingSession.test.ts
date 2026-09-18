@@ -152,19 +152,46 @@ describe('useCoordinatingSession', () => {
     expect(fetching.mock.calls.some(([input, init]) => input === '/coordinating-session' && init !== undefined)).toBe(true)
   })
 
-  it('a known live session synchronously blocks groom opening but not current-work eligibility', async () => {
-    const fetching = vi.fn(async () => response(CoordinatingSessionMother.working()))
+  it('a known live session takes the groom ask itself while a second opening stays blocked', async () => {
+    const fetching = vi.fn(async (input: string | URL | Request) => String(input) === '/groom-session'
+      ? response(EpicGroomMother.groomAskTyped())
+      : response(CoordinatingSessionMother.completed()))
     vi.stubGlobal('fetch', fetching)
     const { result } = renderHook(() => useCoordinatingSession())
     await waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
 
     await act(async () => {
-      expect(await result.current.openGroom(EpicGroomMother.KEY, EpicGroomMother.TARGET)).toMatchObject({ kind: 'refused' })
+      expect(await result.current.openGroom(EpicGroomMother.KEY, EpicGroomMother.TARGET)).toEqual({ kind: 'typed' })
     })
 
+    expect(fetching).toHaveBeenCalledWith('/groom-session', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
+    })
+    expect(result.current.liveAsk).toBe('ready')
+    expect(result.current.target).toBe(CoordinatingSessionMother.TARGET)
     expect(result.current.blocksOpening).toBe(true)
     expect(result.current.operationBusy).toBe(false)
-    expect(fetching).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a finished turn', CoordinatingSessionMother.completed, 'ready'],
+    ['a running turn', CoordinatingSessionMother.working, 'working'],
+    ['a permission prompt', CoordinatingSessionMother.waiting, 'awaiting-permission'],
+    ['a permission prompt with no message', CoordinatingSessionMother.awaitingPermissionWithNoMessage, 'awaiting-permission'],
+  ])('reads %s as the ask state the gate needs', async (_what, answer, expected) => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(answer())))
+    const { result } = renderHook(() => useCoordinatingSession())
+
+    await waitFor(() => expect(result.current.liveAsk).toBe(expected))
+  })
+
+  it('reports no ask state while no live session is held', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response(CoordinatingSessionMother.ended())))
+    const { result } = renderHook(() => useCoordinatingSession())
+
+    await waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
+    expect(result.current.liveAsk).toBe(null)
   })
 
   it('adopts a successful opening immediately and starts fresh reconciliation', async () => {

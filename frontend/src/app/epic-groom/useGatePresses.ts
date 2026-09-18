@@ -22,12 +22,12 @@ const NOTHING: Pressed = 'none'
 
 const useGatePresses = ({
   target,
-  openingBlocked,
+  askBlocked,
   operationBusy,
   openSession,
 }: {
   target: string | null
-  openingBlocked: boolean
+  askBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
 }): GatePresses => {
@@ -41,7 +41,7 @@ const useGatePresses = ({
   const held = (what: Pressed, gateKey: string | null): boolean => {
     if (
       gateKey === null || target === null || pressing.current !== NOTHING || operationBusy ||
-      (what === 'session' && openingBlocked)
+      (what === 'session' && askBlocked)
     ) return false
     pressing.current = what
     setPressed(what)

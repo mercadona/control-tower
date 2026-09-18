@@ -637,6 +637,7 @@ const Home = () => {
           <GateSequence
             key={coordinatingSession.target ?? NO_COORDINATING_TARGET}
             target={coordinatingSession.target}
+            liveAsk={coordinatingSession.liveAsk}
             openingBlocked={coordinatingSession.blocksOpening}
             operationBusy={coordinatingSession.operationBusy}
             openSession={coordinatingSession.openGroom}

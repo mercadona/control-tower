@@ -5,10 +5,17 @@ import { GateKey } from './gate-key.ts'
 import { PlanCollapse } from './start-plan-route.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { GroomSessionOpening, OpenGroomSessionParams } from '../application/actions/open-groom-session.ts'
-import { HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation } from './coordinating-sessions.ts'
-import { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import { AskGroomReviewParams, GroomReviewAsk } from '../application/actions/ask-groom-review.ts'
+import {
+  HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState, OpeningReservation,
+} from './coordinating-sessions.ts'
+import { SessionAttention, AttentionStatus } from '../domain/value-objects/session-attention.ts'
+import { TimelineEventKind } from '../domain/value-objects/session-timeline-event.ts'
+import type { TimelineEventKindValue } from '../domain/value-objects/session-timeline-event.ts'
+import { LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions, OpeningReservationValue } from './coordinating-sessions.ts'
+import type { AskGroomReview, GroomReviewAsked } from '../application/actions/ask-groom-review.ts'
 import type { GroomSessionOpened, OpenGroomSession } from '../application/actions/open-groom-session.ts'
 
 export const GroomSessionOutcome = Object.freeze({
@@ -18,6 +25,10 @@ export const GroomSessionOutcome = Object.freeze({
   NO_EPIC_SPEC: 'no-epic-spec',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
+  WORKING: 'coordinating-session-working',
+  AWAITING_PERMISSION: 'coordinating-session-awaiting-permission',
+  TURN_NOT_FINISHED: 'coordinating-session-turn-not-finished',
+  NOT_LIVE: 'coordinating-session-not-live',
 } as const)
 
 export type GroomSessionOutcomeValue = (typeof GroomSessionOutcome)[keyof typeof GroomSessionOutcome]
@@ -46,12 +57,25 @@ export class GroomSessionRoute {
   static readonly PATH = '/groom-session'
   static readonly METHODS = 'POST'
   static readonly #STATUS = 'grooming'
+  static readonly #TYPED = 'typed'
+  static readonly #WORKING_DETAIL =
+    'the coordinating conversation is working: what is typed now would land in the middle of its turn'
+  static readonly #AWAITING_PERMISSION_DETAIL =
+    'the coordinating conversation is waiting for a permission: '
+    + 'what is typed now would answer that prompt instead of asking for the review'
+  static readonly #TURN_NOT_FINISHED_DETAIL =
+    'the coordinating conversation has not reported finishing a turn: '
+    + 'what its terminal is showing now is unknown'
+  static readonly #NOT_LIVE_DETAIL =
+    'the coordinating conversation is no longer live: nothing was typed into it'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL =
     'no coordinating session is held: there is no checkout to open the groom conversation in'
   static readonly #NO_EPIC_SPEC_DETAIL = 'no execution spec exists in this checkout to talk about'
 
-  static opening(held: CoordinatingSessions, open: OpenGroomSession, key: GateKey): RequestHandler {
+  static opening(
+    held: CoordinatingSessions, open: OpenGroomSession, key: GateKey, ask: AskGroomReview
+  ): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
       if (!key.holds(request.get(GateKey.HEADER))) {
         Answer.refuse(response, 403, GroomSessionOutcome.NOT_FROM_THE_PAGE, GroomSessionRoute.#NOT_FROM_THE_PAGE_DETAIL)
@@ -59,6 +83,10 @@ export class GroomSessionRoute {
       }
       const holding = CoordinatingSessionTarget.admitted(request, response, held)
       if (holding === null) return
+      if (holding.state === CoordinatingSessionState.LIVE) {
+        await GroomSessionRoute.#askTheLiveOne(held, ask, response, holding)
+        return
+      }
       const reserved = held.reserve()
       if (reserved.outcome !== OpeningReservation.RESERVED) {
         Answer.refuseAs(response, GroomSessionRefusal.of(reserved.outcome))
@@ -66,6 +94,71 @@ export class GroomSessionRoute {
       }
       await GroomSessionRoute.#accept(held, open, response, holding)
     }
+  }
+
+  static async #askTheLiveOne(
+    held: CoordinatingSessions, ask: AskGroomReview, response: Response, holding: HeldCoordinatingSession
+  ): Promise<void> {
+    if (held.operation() !== CoordinatingOperation.IDLE) {
+      Answer.refuse(
+        response,
+        409,
+        CoordinatingSessionTarget.BUSY,
+        `the coordinating session is ${held.operation()}: wait for it to settle before acting`,
+      )
+      return
+    }
+    const reported = GroomSessionRoute.#lastReportedBy(held)
+    if (reported === TimelineEventKind.WAITING_FOR_PERMISSION) {
+      Answer.refuse(
+        response, 409, GroomSessionOutcome.AWAITING_PERMISSION, GroomSessionRoute.#AWAITING_PERMISSION_DETAIL
+      )
+      return
+    }
+    if (holding.attention === null || holding.attention.status === AttentionStatus.WORKING) {
+      Answer.refuse(response, 409, GroomSessionOutcome.WORKING, GroomSessionRoute.#WORKING_DETAIL)
+      return
+    }
+    if (reported !== TimelineEventKind.COMPLETED) {
+      Answer.refuse(
+        response, 409, GroomSessionOutcome.TURN_NOT_FINISHED, GroomSessionRoute.#TURN_NOT_FINISHED_DETAIL
+      )
+      return
+    }
+    let asked: GroomReviewAsked
+    try {
+      asked = await ask.execute(new AskGroomReviewParams({
+        repository: holding.conversation.repository,
+        root: holding.conversation.root,
+        session: holding.session!,
+      }))
+    } catch (cause) {
+      if (cause instanceof LiveSessionNotLive) {
+        Answer.refuse(response, 409, GroomSessionOutcome.NOT_LIVE, GroomSessionRoute.#NOT_LIVE_DETAIL)
+        return
+      }
+      if (!(cause instanceof PlanFailure)) throw cause
+      Answer.refuseAs(response, PlanCollapse.of(cause))
+      return
+    }
+    if (asked.outcome === GroomReviewAsk.NO_SPEC) {
+      Answer.refuse(response, 400, GroomSessionOutcome.NO_EPIC_SPEC, GroomSessionRoute.#NO_EPIC_SPEC_DETAIL)
+      return
+    }
+    Answer.send(response, 202, {
+      status: GroomSessionRoute.#TYPED,
+      target: holding.target,
+      conversation: holding.conversation.id.text,
+      repo: holding.conversation.repository.text,
+      root: holding.conversation.root.text,
+      session: { id: holding.session!.id, name: holding.session!.name },
+    })
+  }
+
+  static #lastReportedBy(held: CoordinatingSessions): TimelineEventKindValue | null {
+    const timeline = held.timeline()
+
+    return timeline.length === 0 ? null : timeline[timeline.length - 1].kind
   }
 
   static async #accept(
