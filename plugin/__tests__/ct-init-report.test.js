@@ -4,10 +4,10 @@
 // __tests__/ct-init.test.js carries a deliberately red test
 // (SLICES_PRISTINE_HASHES) that nothing here should brush against.
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, appendFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync, appendFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -216,5 +216,25 @@ describe('ct-init.sh --json', () => {
     // report `created` here — the fake actually ran and actually "installed".
     expect(byId(report)['plugin-install'].status).toBe('created')
     rmSync(dir, { recursive: true, force: true })
+  })
+
+  // D3: bash 3.2 (still /bin/bash on stock macOS) treats an empty array as
+  // unbound under `set -u`. A target that fails before a single artifact is
+  // recorded must still print well-formed JSON with an empty `artifacts`
+  // array, exactly as the docs promise — not blow up on the report itself.
+  it('D3: on /bin/bash, a target that fails before recording anything still emits JSON with artifacts: []', () => {
+    // A read-only parent makes `mkdir -p "$TARGET/.agent"` — the very first
+    // thing ct-init.sh does — fail before a single `record` call runs, on
+    // any OS, without depending on a machine-specific unwritable path.
+    const readOnlyParent = mkTarget()
+    chmodSync(readOnlyParent, 0o500)
+    const target = join(readOnlyParent, 'target-repo')
+    const result = spawnSync('/bin/bash', [script, target, '--json'], { encoding: 'utf8', env: TEST_ENV })
+    const lines = result.stdout.split('\n').filter((l) => l.length > 0)
+    expect(lines).toHaveLength(1)
+    const report = JSON.parse(lines[0])
+    expect(report.artifacts).toEqual([])
+    chmodSync(readOnlyParent, 0o700)
+    rmSync(readOnlyParent, { recursive: true, force: true })
   })
 })

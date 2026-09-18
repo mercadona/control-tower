@@ -214,7 +214,7 @@ fi
 emit_report() {
   local exit_code="$1"
   local body="" first=1 item
-  for item in "${REPORT_ARTIFACTS[@]}"; do
+  for item in "${REPORT_ARTIFACTS[@]+"${REPORT_ARTIFACTS[@]}"}"; do
     if [ "$first" -eq 1 ]; then first=0; else body="${body},"; fi
     body="${body}${item}"
   done
