@@ -21,6 +21,16 @@ const groomScript = join(root, 'scripts', 'ct-groom.mjs')
 const fakeGhDir = join(root, '__tests__', 'fixtures', 'fake-gh-bin')
 const fakeGhEnv = { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` }
 
+// The same criterion as fakeGhEnv above, for `claude`. Since the install step
+// landed, every `bash ct-init.sh` in this file spawns `node ct-install.mjs`,
+// which spawns the real `claude plugin list` and `claude plugin install` —
+// ninety-six times per run, against the developer's own plugin registry, and
+// on a machine where the marketplace resolves it would install for real.
+// ct-install.mjs reads CT_CLAUDE_BIN, and the ninety-six spawns here pass no
+// `env` of their own, so assigning it once here reaches every one of them; the
+// two that do pass one spread `process.env` into it and inherit this as well.
+process.env.CT_CLAUDE_BIN = join(root, '__tests__', 'fixtures', 'fake-claude-install-bin', 'claude')
+
 // extractWorkedExample: pulls out the markdown table block under "An example
 // that parses as is" from the contract seeded by ct-init.sh — the same lines
 // that start with "|", contiguous, up to the first line that does not start
