@@ -22,7 +22,7 @@ export class Yardstick {
   static #DISGUISED =
     /^(?:export\s+)?(?:const|let|var)\s+[\w$]+\s*=\s*(?:async\s*)?(?:\(|[\w$]+\s*=>|function\b)/
   static #IDENTIFIER = /[A-Za-z_$][\w$]*/g
-  static #TEST_NAME = /^\s*(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])((?:\\.|(?!\1).)*)\1/
+  static #TEST_NAME = /^\s*(?:(?:describe|it|test)(?:\.\w+(?:\(.*\))?)?|\]\s*\)|`)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/
   static #INVERTED_MARKS = ['¿', '¡']
 
   static filesUnder(root: string, directory: string = root): string[] {

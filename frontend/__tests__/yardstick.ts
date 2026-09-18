@@ -24,7 +24,7 @@ const DEFAULT_EXPORT_REQUIRED_BY_TOOLING = ['vite.config.ts']
 const DEFAULT_EXPORT = /^\s*export\s+default\b/
 const CLIMBING_IMPORT = /^\s*import\s[^'"]*['"]\.\.\//
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g
-const TEST_NAME = /^\s*(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])((?:\\.|(?!\1).)*)\1/
+const TEST_NAME = /^\s*(?:(?:describe|it|test)(?:\.\w+(?:\(.*\))?)?|\]\s*\)|`)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/
 const INVERTED_MARKS = ['¿', '¡']
 
 const filesUnder = (root: string, directory = root): string[] =>

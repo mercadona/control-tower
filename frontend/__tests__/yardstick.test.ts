@@ -99,6 +99,14 @@ describe('every file under frontend keeps being born conforming', () => {
     expect(Yardstick.foreignTestNamesInSource("it('a plain english name', () => {})")).toEqual([])
   })
 
+  it('the test name detector reads a parameterised test whose table sits between the call and its name', () => {
+    expect(Yardstick.foreignTestNamesInSource("describe.each([[1, 2]])('la fila %s', () => {})")).toEqual([1])
+    expect(Yardstick.foreignTestNamesInSource("it.each(rows)('el servidor responde a %s', () => {})")).toEqual([1])
+    expect(Yardstick.foreignTestNamesInSource("it.each([['a']])('an english name for %s', () => {})")).toEqual([])
+    expect(Yardstick.foreignTestNamesInSource(["describe.each([", "  ['a', 1],", "])('la fila %s', () => {})"].join('\n'))).toEqual([3])
+    expect(Yardstick.foreignTestNamesInSource("it('a plain english name', () => expect(f('la respuesta')).toBe(1))")).toEqual([])
+  })
+
   it('should cover the word list the backend declares so the two copies cannot drift apart', () => {
     const missing = backendWords().filter((word) => !Yardstick.SPANISH_WORDS.includes(word))
     expect(missing).toEqual([])

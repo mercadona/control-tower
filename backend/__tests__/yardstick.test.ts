@@ -74,6 +74,29 @@ describe('every file under backend keeps being born conforming', () => {
     expect(Yardstick.foreignTestNamesInSource("it('a plain english name', () => {})")).toEqual([])
   })
 
+  it('the_test_name_detector_reads_a_parameterised_test_whose_table_sits_between_the_call_and_its_name', () => {
+    expect(Yardstick.foreignTestNamesInSource("describe.each([[1, 2]])('la fila %s', () => {})")).toEqual([1])
+    expect(Yardstick.foreignTestNamesInSource("it.each(rows)('el servidor responde a %s', () => {})")).toEqual([1])
+    expect(Yardstick.foreignTestNamesInSource("test.each([{ a: f(1) }])('la respuesta con %s', () => {})")).toEqual([1])
+    expect(Yardstick.foreignTestNamesInSource("it.each([['a']])('an english name for %s', () => {})")).toEqual([])
+  })
+
+  it('the_test_name_detector_reads_the_name_that_closes_a_table_spread_over_several_lines', () => {
+    const source = [
+      'describe.each([',
+      "  ['a', 1],",
+      "  ['b', 2],",
+      "])('la fila %s vale %d', () => {})",
+    ].join('\n')
+
+    expect(Yardstick.foreignTestNamesInSource(source)).toEqual([4])
+  })
+
+  it('the_test_name_detector_still_takes_the_first_argument_as_the_name_and_never_a_string_inside_the_body', () => {
+    expect(Yardstick.foreignTestNamesInSource("it('a plain english name', () => expect(f('la respuesta')).toBe(1))")).toEqual([])
+    expect(Yardstick.foreignTestNamesInSource("it.only('a plain english name', () => f('el servidor'))")).toEqual([])
+  })
+
   it('the_word_list_covers_the_one_the_root_guard_declares_so_the_two_copies_cannot_drift_apart', () => {
     const missing = Subjects.rootGuardWords().filter((word) => !Yardstick.SPANISH_WORDS.includes(word))
 
