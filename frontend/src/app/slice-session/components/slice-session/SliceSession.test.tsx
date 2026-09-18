@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
 import { SliceSession } from './SliceSession'
 
@@ -115,12 +116,30 @@ describe('SliceSession', () => {
     expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
   })
 
+  it('a run that has delivered without opening a pull request yet offers no field', async () => {
+    stubFetch({ progress: ImplementProgressMother.delivered() })
+    renderSession()
+
+    expect(await screen.findByText('Entregado')).toBeInTheDocument()
+    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
+    expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+  })
+
+  it('a slice already fixing what its review asked still offers the field, because its pull request is open', async () => {
+    stubFetch({ progress: ImplementProgressMother.fixing() })
+    renderSession()
+
+    expect(await screen.findByLabelText(FIELD_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: SEND_LABEL })).toBeInTheDocument()
+  })
+
   it('the field appears when the pull request opens under a slice that was implementing', async () => {
     vi.useFakeTimers()
     stubFetch({ progress: SliceSessionMother.progress(), then: SliceSessionMother.inReview() })
     renderSession()
 
     await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByText(/Tarea 3 de 7/)).toBeInTheDocument()
     expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
 
     await act(async () => vi.advanceTimersByTimeAsync(3000))
