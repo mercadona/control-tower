@@ -55,8 +55,15 @@ describe('PluginInstaller checks before it ever installs', () => {
   it('a plugin of the same name at another marketplace does not count as installed', () => {
     const cli = new FakeCli({
       list: [ClaudeAnswers.list([{ id: 'control-tower-loop@other-marketplace' }])],
+      install: [ClaudeAnswers.installFailed({ failureCode: 'not_found', message: 'Plugin "control-tower-loop" not found in marketplace "control-tower".' })],
     })
-    expect(new PluginInstaller(cli).run('/repo').status).toBe(PluginInstallOutcome.ALREADY_PRESENT)
+    // A plugin of the same name at a DIFFERENT marketplace is not this
+    // plugin — the marketplace is what the pinned `ref` in
+    // `.claude/settings.json` identifies. The installer must still attempt
+    // the install (never skip it as already-present) and only then, given
+    // this fake's answers, report `refused`.
+    expect(new PluginInstaller(cli).run('/repo').status).toBe(PluginInstallOutcome.REFUSED)
+    expect(cli.calls.map((call) => call.args[1])).toEqual(['list', 'install'])
   })
 })
 

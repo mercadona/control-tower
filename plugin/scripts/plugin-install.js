@@ -107,7 +107,12 @@ export class PluginInstaller {
       throw new ClaudeCliUnavailable(`claude plugin list --json did not print JSON: ${failure.message}`)
     }
     if (!Array.isArray(parsed)) throw new ClaudeCliUnavailable('claude plugin list --json did not print an array')
-    return parsed.some((entry) => typeof entry?.id === 'string' && entry.id.split('@')[0] === ControlTowerPlugin.PLUGIN_NAME)
+    // The full id, not just the plugin name before `@`: a plugin of the same
+    // name from a DIFFERENT marketplace is not this plugin (D5). The pinned
+    // `ref` in `.claude/settings.json` is what identifies the marketplace
+    // this repo trusts, and `ControlTowerPlugin.id` already names the one
+    // exact id ("control-tower-loop@control-tower") that means this plugin.
+    return parsed.some((entry) => entry?.id === ControlTowerPlugin.id)
   }
 
   static #reasonFrom(ran) {

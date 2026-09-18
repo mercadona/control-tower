@@ -362,7 +362,10 @@ same way it seeds `.claude/settings.json`:
 - It checks first whether the plugin is already installed at any scope for
   the config directory in play, via `claude plugin list --json`, so a run
   where the plugin is already loaded (as it is when `/ct-init` runs as a
-  slash command) does not reinstall it needlessly.
+  slash command) does not reinstall it needlessly. The match is on the FULL
+  id, `control-tower-loop@control-tower` — a plugin of the same name from a
+  different marketplace does not count, because the marketplace is what the
+  pinned `ref` in `.claude/settings.json` identifies as this plugin.
 - **It verifies with `claude plugin list --json` afterwards**, and it claims
   no more than "the plugin is installed". There is no way to prove, from a
   scaffolder run, that a *skill* resolves — that needs a session to actually
