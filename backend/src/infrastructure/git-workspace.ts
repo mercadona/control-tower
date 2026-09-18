@@ -579,9 +579,6 @@ export class GitWorkspace extends Workspace {
     root: CheckoutRoot,
   }): Promise<SownWorkspace> {
     const slice = await this.#sliceFor(issue, repository)
-    if (slice.gates.includes('plan')) {
-      throw new WorkspaceNotPrepared(`issue #${issue.number} declares the plan gate and cannot be prepared`)
-    }
     const base = await this.#declaredBase(root.text)
     await this.#fetch(root.text, base)
     const cut = await this.#verifiedCut(root.text, base)

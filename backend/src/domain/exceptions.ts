@@ -33,8 +33,6 @@ export class PlanStoryNotRead extends PlanStoryFailure {}
 
 export class PlanStoryNotUnderstood extends PlanStoryFailure {}
 
-export class PlanGoNotAnswered extends PlanIssueFailure {}
-
 export class PlanAgentFailure extends PlanFailure {}
 
 export class PlanAgentNotLaunched extends PlanAgentFailure {}
@@ -111,10 +109,6 @@ export class PlanStatusFailure extends PlanFailure {}
 export class PlanStatusNotRead extends PlanStatusFailure {}
 
 export class PlanStatusNotUnderstood extends PlanStatusFailure {}
-
-export class GoFailure extends PlanFailure {}
-
-export class GoNotRecorded extends GoFailure {}
 
 export class HarvestFailure extends PlanFailure {}
 

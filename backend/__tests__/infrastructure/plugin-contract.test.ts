@@ -1,12 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { describe, it, expect } from 'vitest'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BigQueryTable } from '../../../plugin/scripts/bigquery-load.js'
-import { readGoCommitment, goPath } from '../../../plugin/scripts/go-registry.js'
-import { matchesGo } from '../../../plugin/scripts/go-response.js'
-import { controlTowerDir } from '../../../plugin/scripts/run-metrics.js'
 import { LOOP_STATUS_LABELS } from '../../../plugin/scripts/groom.js'
 import { STATUS_LADDER } from '../../../plugin/scripts/harvest.js'
 import {
@@ -14,138 +10,23 @@ import {
 } from '../../../plugin/scripts/run-machine.js'
 import { StepSeal } from '../../../plugin/scripts/dispatch-gate.js'
 import { extractTasks } from '../../../plugin/scripts/plan-tasks.js'
-import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
 import { GhPlanIssues, PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RunFileProgress } from '../../src/infrastructure/run-file-progress.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.ts'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import type { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 
-type GoCommitment = { missing?: unknown, error?: unknown, commitment?: string }
-
-class PluginGoRegistry {
-  static readonly read = readGoCommitment as unknown as
-    (asked: { repo: string, issue: number, configDir: string }) => GoCommitment
-
-  static readonly pathFor = goPath as unknown as
-    (asked: { repo: string, issue: number, configDir: string, home: string }) => string
-
-  static readonly stateRootIn = controlTowerDir as unknown as
-    (asked: { configDir: string | null, home: string }) => string
-}
-
 class PluginRunMachine {
   static stepped(...asked: Parameters<typeof after>): Exclude<ReturnType<typeof after>, void> {
     return after(...asked) as Exclude<ReturnType<typeof after>, void>
   }
 }
-
-class Both {
-  static ISSUE = 33
-  static REPOSITORY = new RepositoryName('jjponz/repo-pulse')
-  static FILL = 127
-
-  readonly configDir: string
-
-  constructor(configDir: string) {
-    this.configDir = configDir
-  }
-
-  static async inATemporaryHome() {
-    return new Both(await mkdtemp(join(tmpdir(), 'ct-go-contract-')))
-  }
-
-  async remove() {
-    await rm(this.configDir, { recursive: true, force: true })
-  }
-
-  async mint() {
-    const registry = new DiskGoRegistry({
-      random: (bytes: number) => Buffer.alloc(bytes, Both.FILL),
-      write: async (path: string, text: string) => {
-        await mkdir(dirname(path), { recursive: true })
-        await writeFile(path, text)
-      },
-      root: join(this.configDir, 'control-tower'),
-    })
-
-    return registry.mint({ issueNumber: Both.ISSUE, repository: Both.REPOSITORY })
-  }
-
-  readBack() {
-    return PluginGoRegistry.read({
-      repo: Both.REPOSITORY.text, issue: Both.ISSUE, configDir: this.configDir,
-    })
-  }
-}
-
-describe('the two halves of the go the plugin reads', () => {
-  let both: Both | null = null
-
-  afterEach(async () => {
-    if (both !== null) await both.remove()
-    both = null
-  })
-
-  it('the_release_gate_of_the_plugin_reads_the_commitment_this_backend_wrote', async () => {
-    both = await Both.inATemporaryHome()
-
-    const nonce = await both.mint()
-    const read = both.readBack()
-
-    expect(read.missing).toBeUndefined()
-    expect(read.error).toBeUndefined()
-    expect(read.commitment).toBe(DiskGoRegistry.commitmentOf(nonce))
-  })
-
-  it('the_release_gate_of_the_plugin_matches_the_comment_this_backend_sends', async () => {
-    both = await Both.inATemporaryHome()
-
-    const nonce = await both.mint()
-    const commented = GhPlanIssues.goBodyFor(nonce)
-
-    expect(matchesGo(commented, both.readBack().commitment)).toBe(true)
-  })
-})
-
-describe('the directory both halves write the go into', () => {
-  const HOME = '/home/someone'
-
-  it('the_state_root_this_backend_resolves_is_the_one_the_plugin_computes_for_the_same_environment', () => {
-    const asked = [{}, { [Invocation.CONFIG_VARIABLE]: '/elsewhere/cfg' }]
-
-    const ours = asked.map((environment) => Invocation.stateRootIn(environment, HOME))
-    const theirs = asked.map((environment) => PluginGoRegistry.stateRootIn({
-      configDir: environment[Invocation.CONFIG_VARIABLE] || null, home: HOME,
-    }))
-
-    expect(ours).toEqual(theirs)
-  })
-
-  it('the_whole_path_of_the_registry_is_the_one_the_release_gate_opens', () => {
-    const environment = { [Invocation.CONFIG_VARIABLE]: '/elsewhere/cfg' }
-
-    const root = Invocation.stateRootIn(environment, HOME)
-    if (root === null) throw new Error(`${Invocation.CONFIG_VARIABLE} is absolute here, so a state root is always resolved`)
-
-    const ours = DiskGoRegistry.pathFor({
-      issueNumber: Both.ISSUE,
-      repository: Both.REPOSITORY,
-      root,
-    })
-
-    expect(ours).toBe(PluginGoRegistry.pathFor({
-      repo: Both.REPOSITORY.text, issue: Both.ISSUE, configDir: '/elsewhere/cfg', home: HOME,
-    }))
-  })
-})
 
 describe('the status labels this backend writes and the plugin reads', () => {
   it('both_ends_of_the_claim_are_labels_the_loop_declares_instead_of_names_invented_here', () => {

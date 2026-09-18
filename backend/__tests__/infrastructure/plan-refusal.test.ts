@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse,
 } from '../../src/infrastructure/start-plan-route.ts'
-import { ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
+import { SliceMessageCollapse } from '../../src/infrastructure/slice-message-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
@@ -41,19 +41,19 @@ describe('PlanRefusal', () => {
 describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
-    'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
+    'PlanProgressFailure', 'PlanStatusFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
     'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
     'RunFailure',
   ]
 
-  const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
+  const ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE = SliceMessageCollapse.declaredFailures()
 
   const startingAPlan = ([name, thrown]: [string, { prototype: object }]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&
     !FAMILIES.includes(name) &&
-    !RESUMING_AN_AGENT.includes(name) &&
+    !ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStatusFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&

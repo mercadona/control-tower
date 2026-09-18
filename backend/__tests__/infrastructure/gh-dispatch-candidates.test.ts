@@ -226,15 +226,15 @@ describe('GhDispatchCandidates', () => {
     ]).next()).rejects.toBeInstanceOf(DispatchNotUnderstood)
   })
 
-  it('explicit plan gates are not bypassed', async () => {
+  it('a slice that declares the plan gate is dispatched instead of stopping the chain in silence', async () => {
     const gh = GhDouble.listing([
       CandidateMother.issue({ number: 11, order: 1, gates: ['plan'] }),
     ])
 
-    const refusal = await gh.next().catch((cause) => cause)
-
-    expect(refusal).toBeInstanceOf(DispatchNotAvailable)
-    expect(refusal.message).toContain('plan')
+    await expect(gh.next()).resolves.toEqual({
+      number: 11,
+      url: 'https://github.com/mercadona/control-tower-plugin/issues/11',
+    })
   })
 
   it('empty issue urls are malformed payloads that retain the offending value', async () => {

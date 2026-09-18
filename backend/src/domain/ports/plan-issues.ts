@@ -29,16 +29,6 @@ export class PlanIssues {
     )
   }
 
-  async answerGo({ issueNumber, repository, nonce }: {
-    issueNumber: number,
-    repository: RepositoryName,
-    nonce: string,
-  }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement answerGo({ issueNumber, repository, nonce }), asked for ${issueNumber} in ${repository}`
-    )
-  }
-
   async storyOf({ issueNumber, repository }: {
     issueNumber: number,
     repository: RepositoryName,

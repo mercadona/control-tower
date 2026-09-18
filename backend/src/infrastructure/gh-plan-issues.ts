@@ -22,7 +22,7 @@ import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
 import {
-  PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
+  PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed,
   PlanStatusNotRead, PlanStatusNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.ts'
 import { Gh } from './gh.ts'
@@ -50,7 +50,6 @@ export class GhPlanIssues extends PlanIssues {
   static IN_PROGRESS_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_PROGRESS)!
   static IN_REVIEW_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_REVIEW)!
   static READY_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.READY)!
-  static GO_TOKEN = '-OK'
   static #REF = /\/issues\/([1-9]\d*)\s*$/
 
   readonly gh: Gh
@@ -60,22 +59,6 @@ export class GhPlanIssues extends PlanIssues {
     super()
     this.gh = gh
     this.stderr = stderr
-  }
-
-  static goBodyFor(nonce: string): string {
-    return `${GhPlanIssues.GO_TOKEN} ${nonce}`
-  }
-
-  static goArgvFor({ issueNumber, repository, nonce }: {
-    issueNumber: number,
-    repository: RepositoryName,
-    nonce: string,
-  }): string[] {
-    return [
-      'issue', 'comment', String(issueNumber),
-      '--repo', repository.text,
-      '--body', GhPlanIssues.goBodyFor(nonce),
-    ]
   }
 
   static statusArgvFor({ issue, repository, adding, removing }: {
@@ -194,19 +177,6 @@ export class GhPlanIssues extends PlanIssues {
     }
 
     return named
-  }
-
-  async answerGo({ issueNumber, repository, nonce }: {
-    issueNumber: number,
-    repository: RepositoryName,
-    nonce: string,
-  }): Promise<void> {
-    const outcome = await this.gh.run(
-      GhPlanIssues.goArgvFor({ issueNumber, repository, nonce }), { safeToRepeat: false }
-    )
-    if (outcome.failed) {
-      throw new PlanGoNotAnswered(`${Gh.BIN} issue comment failed: ${outcome.stderr.trim()}`)
-    }
   }
 
   static storyArgvFor({ issueNumber, repository }: {
