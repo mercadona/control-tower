@@ -16,15 +16,24 @@
 // THE SLICE ITSELF LAUNCHES IT, ON DELIVERY. `dispatch-check.mjs --release`
 // starts it with `spawn(..., { detached: true }).unref()` right after moving the
 // issue to `status:in-review`, which is the EXACT instant at which there is an
-// open PR waiting for a human merge. Launching it earlier (at dispatch, next to
-// the `-OK` watcher) would mean putting a process to ask about a PR that does
-// not exist yet for as long as the implementation lasts.
+// open PR waiting for a human merge. Launching it earlier — at dispatch, which
+// is where the retired `-OK` watcher was launched — would mean putting a
+// process to ask about a PR that does not exist yet for as long as the
+// implementation lasts.
+//
+// A NOTE ON EVERY COMPARISON THAT FOLLOWS. This file explains its design by
+// contrasting it with `ct-watch-go.mjs`, the watcher of the `plan` gate's go,
+// and that watcher no longer exists: it retired with the whole protocol (A-3,
+// issue #434). The contrast is kept because the decisions below are not
+// obvious on their own and the sibling is what makes them legible — it is
+// history, not a description of what runs. Every sentence about it is in the
+// past tense for that reason.
 //
 // HOW IT LOCATES THE COORDINATOR: BY ITS DIRECTORY, NOT BY ITS NAME. The `-OK`
-// watcher looks for the slice's session by its TITLE, and it can because that
-// title is CALCULATED by the loop itself: `dispatch.js#cmuxSessionName` is a
-// pure function that `/ct-next` calls to create the workspace and that the
-// watcher calls to find it. One derivation, two consumers. And on top of that
+// watcher looked for the slice's session by its TITLE, and it could because
+// that title is CALCULATED by the loop itself: `dispatch.js#cmuxSessionName` is
+// a pure function that `/ct-next` calls to create the workspace and that the
+// watcher called to find it. One derivation, two consumers. And on top of that
 // `/ct-next` verifies with its sentinel that that session really started before
 // launching anything.
 //
@@ -62,19 +71,20 @@
 // fragile path is used (`cmux send` + `send-key`), and there is no sentinel that
 // proves the session received it. The only thing that is known is that the two
 // commands returned 0, and that is what the log says — not "the harvest has
-// started". It is exactly the same limit ct-watch-go.mjs accepts, for the same
+// started". It is exactly the same limit ct-watch-go.mjs accepted, for the same
 // reason: a real sentinel would demand that the coordinator wrote something,
 // that is, depending on the agent the line is delivered to.
 //
-// THE DELIBERATE DIVERGENCE FROM ct-watch-go.mjs, which is the only one, and is
-// no oversight: HERE IT DOES NOT DIE BECAUSE THE TARGET SESSION IS NOT THERE.
+// THE DELIBERATE DIVERGENCE FROM ct-watch-go.mjs, which was the only one, and
+// was no oversight: HERE IT DOES NOT DIE BECAUSE THE TARGET SESSION IS NOT
+// THERE.
 //
-// That one shuts down as soon as cmux answers that the slice's session does not
-// exist, and it is right to: without that session there is nothing to watch, and
-// a live process watching it would make it look as if the gate were still
-// covered. Here the absence of the coordinator does not mean the same thing,
-// because it is not evidence that the work has finished: the merge can still
-// arrive.
+// That one shut down as soon as cmux answered that the slice's session did not
+// exist, and it was right to: without that session there was nothing to watch,
+// and a live process watching it would have made it look as if the gate were
+// still covered. Here the absence of the coordinator does not mean the same
+// thing, because it is not evidence that the work has finished: the merge can
+// still arrive.
 //
 // WHAT THAT DIVERGENCE BUYS, AND WHAT IT DOES NOT — and the distinction is the
 // correction of a sentence this block used to say and that the episode of
@@ -98,8 +108,8 @@
 // deliver it to, it says so, it names the rule that was not met, and it exits
 // with 1. The warning is lost; it is not dressed up as delivered.
 //
-// WHAT IT DELIBERATELY DOES NOT HAVE, inherited from ct-watch-go and for its
-// reasons:
+// WHAT IT DELIBERATELY DOES NOT HAVE, inherited from ct-watch-go and kept for
+// the reasons that file gave:
 //
 //   - NEITHER A PIDFILE NOR A LIVENESS CHECK. A `--reopen` followed by a second
 //     `--release` gives birth to a second watcher; the first one expires. The
@@ -115,11 +125,12 @@
 //     consequence, not a second event worth waiting for separately.
 //
 // THE LOG IS OPENED BY THIS PROCESS, not by whoever launches it, and it goes
-// outside the repo (`~/.claude/control-tower/log/`), next to the telemetry and
-// the log of the `-OK` watcher. All three for the same reason written in
-// run-metrics.js: so that no `git add` of the slice puts it into the PR. IT
-// opens it because, when ct-next opened it on behalf of its watcher, the suite
-// ended up creating files in the real $HOME of whoever ran it.
+// outside the repo (`~/.claude/control-tower/log/`), next to the telemetry —
+// and, while the `-OK` watcher existed, next to its log too. All of them for
+// the same reason written in run-metrics.js: so that no `git add` of the slice
+// puts it into the PR. IT opens it because, when ct-next opened it on behalf of
+// its watcher, the suite ended up creating files in the real $HOME of whoever
+// ran it.
 // ============================================================================
 
 import { execFileSync } from 'node:child_process'
@@ -127,9 +138,9 @@ import { buildCmuxSendArgv, buildCmuxSendKeyArgv } from './dispatch.js'
 import { findWorkspaceByCwd } from './cmux.js'
 import { arg, sleep, plazo, openLog } from './watch-common.js'
 
-// A 60-second tick and a 48-hour deadline. The two numbers are different from
+// A 60-second tick and a 48-hour deadline. The two numbers were different from
 // the ones of the `-OK` watcher (30 s / 8 h) because the event is different:
-// that one covers a person being asleep, and this one covers a PR waiting for
+// that one covered a person being asleep, and this one covers a PR waiting for
 // review — which, in F33's measurement, is what consumes the most epic clock,
 // and is counted in days, not in hours. A slower tick costs nothing: the harvest
 // is not urgent to the second, and 48 h at one poll a minute is ~2880 calls to
@@ -218,9 +229,9 @@ const line = (pr) => `PR #${pr} of slice #${issue} is merged: the harvest of #${
 
 log(`watching the merge of ${repo} ${branch} (slice #${issue}) for the coordinator in ${coordinatorCwd} — tick ${pollMs} ms, deadline ${timeoutMs} ms`)
 
-// There is no initial snapshot to take, and that asymmetry with ct-watch-go is
-// real, not an oversight. There the window exists because an `-OK` inherited
-// from an earlier dispatch would start the work without anybody granting
+// There is no initial snapshot to take, and that asymmetry with ct-watch-go was
+// real, not an oversight. There the window existed because an `-OK` inherited
+// from an earlier dispatch would have started the work without anybody granting
 // permission. Here the event is nobody's answer but a fact of the repository,
 // and that fact does not expire: if the slice's branch ALREADY has a merged PR
 // on the first poll, the harvest is pending all the same and it has to be said.
