@@ -474,7 +474,7 @@ describe('ct-api entrypoint', () => {
   it('existing entrypoints start without an activation setting', async () => {
     const state = await mkdtemp(join(tmpdir(), 'ct-api-entrypoint-settings-'))
     try {
-      const port = await Entrypoint.makeStart({
+      const port = await Entrypoint.makeRunBackendWithoutReinstalling({
         CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, CT_HARVEST_BQ_TABLE: '', SHELL: '/bin/sh',
       })
 

@@ -316,7 +316,7 @@ the repo moves to the organisation:
 ## Development
 
 ```bash
-make run-frontend        # from the root: installs, builds dist/ and starts the backend serving it
+make start               # from the root: builds dist/ and serves it with the API — the whole app
 make dev-frontend        # vite on 5173 proxying to the API (run `make run-backend` first)
 make test-frontend
 ```

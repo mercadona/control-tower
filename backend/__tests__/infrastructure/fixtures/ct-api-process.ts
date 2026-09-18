@@ -123,8 +123,15 @@ export class Entrypoint {
     return (await Entrypoint.started(environment)).port
   }
 
-  static async makeStart(environment: NodeJS.ProcessEnv): Promise<number> {
-    const child = spawn('make', ['--silent', 'start'], {
+  static #asOverridesThatBeatALocalEnvFile(environment: NodeJS.ProcessEnv): string[] {
+    return Object.entries(environment).map(([name, value]) => `${name}=${value ?? ''}`)
+  }
+
+  static async makeRunBackendWithoutReinstalling(environment: NodeJS.ProcessEnv): Promise<number> {
+    const child = spawn('make', [
+      '--silent', '-o', 'install-backend', 'run-backend',
+      ...Entrypoint.#asOverridesThatBeatALocalEnvFile(environment),
+    ], {
       cwd: Entrypoint.#ROOT,
       env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -135,7 +142,7 @@ export class Entrypoint {
     return new Promise<number>((resolve, reject) => {
       let stdout = ''
       const timer = setTimeout(
-        () => reject(new Error(`make start did not print a port: ${stderr}`)), Entrypoint.#TIMEOUT_MS
+        () => reject(new Error(`make run-backend did not print a port: ${stderr}`)), Entrypoint.#TIMEOUT_MS
       )
       child.stdout.on('data', (chunk) => {
         stdout += String(chunk)
@@ -145,7 +152,7 @@ export class Entrypoint {
         resolve((JSON.parse(line) as { port: number }).port)
       })
       child.once('error', reject)
-      child.once('close', (code) => reject(new Error(`make start exited ${String(code)}: ${stderr}`)))
+      child.once('close', (code) => reject(new Error(`make run-backend exited ${String(code)}: ${stderr}`)))
     })
   }
 
