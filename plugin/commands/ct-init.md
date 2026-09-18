@@ -14,6 +14,13 @@ It is idempotent: it creates what is missing and does not tread on what is there
 | `2` | Unrecognised option | fix the invocation (`--update-slices-contract`, `--force`) |
 | `3` | `--update-slices-contract` was asked for and the block present is not recognised, or could not be hashed | pass the whole warning on, with the hash; `--force` only if the user confirms that block carries no work of theirs |
 
+`--json` prints ONE JSON object on stdout instead of the prose above — no other
+call needs to change. It names `ctInitVersion`, `configDir`, `exitCode`, and one
+`artifacts` entry per artifact this script can touch, always in the same fixed
+order, each with a `status` of `created`, `already-present`, `drifted` or
+`refused`. Use it when the caller is a program that has to act on what happened,
+not a person reading stdout.
+
 What falls to you afterwards:
 
 - **Pass on the one command it does not run.** `.claude/settings.json` declares this plugin, but a plugin whose source is a git repository is still installed once per machine: `claude plugin install control-tower-loop@control-tower --scope project`. The scaffolder prints it; say it to the user and do not run it yourself. Two more things they need to know and the scaffolder cannot do for them: the folder has to be **trusted** before a project's `extraKnownMarketplaces` takes effect, and `ct-scope-gate` only guards anything once it is a **required check** on the default branch.

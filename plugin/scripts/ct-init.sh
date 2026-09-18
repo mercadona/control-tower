@@ -26,20 +26,158 @@ shift || true
 #     state with a message of its own: nothing was compared there.
 UPDATE_SLICES_CONTRACT=0
 FORCE=0
+# --json (slice 4): report what happened on stdout as one JSON object instead
+# of prose. It changes nothing about WHAT this script does — only how it says
+# what it did. See the "machine-readable report" block below for the how.
+JSON_MODE=0
 for opt in "$@"; do
   case "$opt" in
     --update-slices-contract) UPDATE_SLICES_CONTRACT=1 ;;
     --force) FORCE=1 ;;
-    *) echo "opción no reconocida: $opt (uso: ct-init.sh <dir-repo> [--update-slices-contract] [--force])" >&2; exit 2 ;;
+    --json) JSON_MODE=1 ;;
+    *) echo "opción no reconocida: $opt (uso: ct-init.sh <dir-repo> [--update-slices-contract] [--force] [--json])" >&2; exit 2 ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# THE MACHINE-READABLE REPORT (slice 4) and THE DRIFT CLASSES (slice 5).
+#
+# `say`: every line this script used to print with a bare `echo` (the
+# "creado ...", "ya existe ...", "añadido ..." prose) goes through here
+# instead. In prose mode (the default) it is byte-for-byte the same `echo`
+# it replaces. In --json mode it is NOT prose ct-init prints on stdout any
+# more — stdout carries exactly one JSON object, emitted once, at the end —
+# so `say` sends the same line to stderr instead, where a human still sees it
+# if they redirect for it, but no program parsing stdout has to skip it.
+# Warnings that already went to stderr (the "aviso: ..." lines) are untouched
+# either way: they were never prose ON STDOUT, so --json's contract ("stdout
+# is JSON, nothing else") never applied to them.
+say() {
+  if [ "$JSON_MODE" -eq 1 ]; then
+    printf '%s\n' "$1" >&2
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# json_escape: our own values are literals and paths — no control characters,
+# only backslashes and double quotes can appear (a version string, a status
+# word, a POSIX-ish path). No `jq` needed for that.
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+
+REPORT_ARTIFACTS=()
+
+# record(): called ALONGSIDE every existing `say`/`echo` that reports what
+# happened to an artifact, never instead of it. `id` and `path` are always
+# literal (the fixed order comes from the order these calls appear in the
+# script, never from listing the filesystem); `path` is relative to the
+# target repo — this report names no absolute target path, so the same
+# inputs produce the same bytes on any machine. Extra fields (for the
+# slices contract: foundVersion, shippedVersion, blockStatus) are passed as
+# trailing `key=value` arguments; a value made only of digits is emitted as
+# a JSON number, anything else as a JSON string.
+record() {
+  local id="$1" path="$2" status="$3"
+  shift 3
+  local extra="" kv key val
+  for kv in "$@"; do
+    key="${kv%%=*}"
+    val="${kv#*=}"
+    if [[ "$val" =~ ^-?[0-9]+$ ]]; then
+      extra="${extra},\"${key}\":${val}"
+    else
+      extra="${extra},\"${key}\":\"$(json_escape "$val")\""
+    fi
+  done
+  REPORT_ARTIFACTS+=("{\"id\":\"$(json_escape "$id")\",\"path\":\"$(json_escape "$path")\",\"status\":\"$(json_escape "$status")\"${extra}}")
+}
+
+# The two account-independent facts the report names explicitly: this
+# plugin's own release, and the config directory CLAUDE_CONFIG_DIR resolves
+# to. Both are READ, not recomputed: ct-init-facts.mjs reuses
+# plugin-release.js (the same read seed-claude-settings.mjs already does) and
+# configuredDir() from run-metrics.js (the rule controlTowerDir() already
+# applies, the one backend/src/infrastructure/invocation.ts's configuredIn
+# also gives an empty CLAUDE_CONFIG_DIR). No third copy of either rule.
+#
+# Computed ONLY in --json mode: this is a second `node` process on top of
+# everything else this script already spawns, and nothing in prose mode ever
+# reads any of these variables — spawning it unconditionally would slow down
+# every ordinary run (and every test of one) for a report nobody asked for.
+CT_INIT_VERSION=''
+CONFIG_DIR_VALUE=''
+NODE_PRESENT=0
+SHASUM_PRESENT=0
+CLAUDE_PRESENT=0
+if [ "$JSON_MODE" -eq 1 ]; then
+  if command -v node >/dev/null 2>&1; then
+    NODE_PRESENT=1
+    FACTS_JSON="$(node "$HERE/scripts/ct-init-facts.mjs" 2>/dev/null || true)"
+    CT_INIT_VERSION="$(printf '%s' "$FACTS_JSON" | sed -n 's/.*"ctInitVersion":"\([^"]*\)".*/\1/p')"
+    CONFIG_DIR_VALUE="$(printf '%s' "$FACTS_JSON" | sed -n 's/.*"configDir":"\([^"]*\)".*/\1/p')"
+  fi
+  # Degraded fallback, ONLY when `node` itself is missing: the config
+  # directory rule is trivial enough to restate here as a last resort (an
+  # empty CLAUDE_CONFIG_DIR reads as unset, same as everywhere else), so that
+  # --json still emits a well-formed report instead of one with an empty
+  # configDir. The release version has no such fallback — there is no rule to
+  # restate, only a file to parse — so it stays empty and the report says so
+  # by being empty, never by guessing.
+  if [ -z "$CONFIG_DIR_VALUE" ]; then
+    if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+      CONFIG_DIR_VALUE="$CLAUDE_CONFIG_DIR"
+    else
+      CONFIG_DIR_VALUE="$HOME/.claude"
+    fi
+  fi
+
+  if command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1; then SHASUM_PRESENT=1; fi
+  if command -v claude >/dev/null 2>&1; then CLAUDE_PRESENT=1; fi
+fi
+
+# emit_report: the one JSON object, printed once, to stdout, and nothing
+# else. `exitCode` is filled in by the EXIT trap below, which is what lets
+# the report still come out — with everything recorded up to that point —
+# even when the script exits early (a bad option, an unrecognised slices
+# contract with no --force, …). No timestamp, no absolute target path: same
+# inputs (the target tree, this release, the flags, the machine facts named
+# above), same bytes.
+emit_report() {
+  local exit_code="$1"
+  local body="" first=1 item
+  for item in "${REPORT_ARTIFACTS[@]}"; do
+    if [ "$first" -eq 1 ]; then first=0; else body="${body},"; fi
+    body="${body}${item}"
+  done
+  printf '{"ctInitVersion":"%s","configDir":"%s","toolchain":{"node":%s,"shasum":%s,"claude":%s},"exitCode":%s,"artifacts":[%s]}\n' \
+    "$(json_escape "$CT_INIT_VERSION")" "$(json_escape "$CONFIG_DIR_VALUE")" \
+    "$([ "$NODE_PRESENT" -eq 1 ] && echo true || echo false)" \
+    "$([ "$SHASUM_PRESENT" -eq 1 ] && echo true || echo false)" \
+    "$([ "$CLAUDE_PRESENT" -eq 1 ] && echo true || echo false)" \
+    "$exit_code" "$body"
+}
+
+ct_init_exit_trap() {
+  local code="$1"
+  if [ "$JSON_MODE" -eq 1 ]; then
+    emit_report "$code"
+  fi
+}
+trap 'ct_init_exit_trap $?' EXIT
 
 mkdir -p "$TARGET/.agent"
 if [ ! -f "$TARGET/.agent/STATE.md" ]; then
   cp "$HERE/templates/STATE.template.md" "$TARGET/.agent/STATE.md"
-  echo "creado $TARGET/.agent/STATE.md"
+  say "creado $TARGET/.agent/STATE.md"
+  record state-md .agent/STATE.md created
 elif grep -qE '^[[:space:]]*blocked[[:space:]]*:' "$TARGET/.agent/STATE.md"; then
-  echo "STATE.md ya existe, no se pisa"
+  say "STATE.md ya existe, no se pisa"
+  record state-md .agent/STATE.md already-present
 else
   # F7: a STATE.md from before the `blocked` field still works (the hook reads
   # it as NOT blocked, which is the correct default reading), but whoever has
@@ -48,7 +186,8 @@ else
   # all of this. It is said ONCE, here, where the repo is being looked at on
   # purpose. The file is not touched: rewriting the STATE.md of a live repo
   # from a scaffolder would be worse than the problem.
-  echo "STATE.md ya existe, no se pisa — pero no declara el campo \`blocked\`, así que se lee como NO bloqueado. Si el trabajo de este repo se queda alguna vez bloqueado, añádelo a mano al frontmatter en vez de explicarlo dentro de \`next_action\`: blocked: {reason: \"por qué no se puede continuar\", unblock: \"qué haría falta\"} — el hook de SessionStart lo anuncia y suspende el next_action en toda sesión nueva."
+  say "STATE.md ya existe, no se pisa — pero no declara el campo \`blocked\`, así que se lee como NO bloqueado. Si el trabajo de este repo se queda alguna vez bloqueado, añádelo a mano al frontmatter en vez de explicarlo dentro de \`next_action\`: blocked: {reason: \"por qué no se puede continuar\", unblock: \"qué haría falta\"} — el hook de SessionStart lo anuncia y suspende el next_action en toda sesión nueva."
+  record state-md .agent/STATE.md already-present
 fi
 
 # .agent/conventions.md (§3.3, docs/prompt-juez-lo-que-queda.md): the
@@ -63,9 +202,11 @@ fi
 CONVENTIONS_MD="$TARGET/.agent/conventions.md"
 if [ ! -f "$CONVENTIONS_MD" ]; then
   cp "$HERE/templates/conventions.template.md" "$CONVENTIONS_MD"
-  echo "creado $CONVENTIONS_MD"
+  say "creado $CONVENTIONS_MD"
+  record conventions-md .agent/conventions.md created
 else
-  echo "conventions.md ya existe, no se pisa"
+  say "conventions.md ya existe, no se pisa"
+  record conventions-md .agent/conventions.md already-present
 fi
 
 # The execution spec's template. The flow after this bootstrap is
@@ -87,17 +228,29 @@ SPEC_TEMPLATE="$SPEC_TEMPLATE_DIR/_TEMPLATE-execution-spec.md"
 if [ ! -f "$SPEC_TEMPLATE" ]; then
   mkdir -p "$SPEC_TEMPLATE_DIR"
   cp "$HERE/templates/_TEMPLATE-execution-spec.md" "$SPEC_TEMPLATE"
-  echo "creado $SPEC_TEMPLATE"
+  say "creado $SPEC_TEMPLATE"
+  record spec-template docs/superpowers/specs/_TEMPLATE-execution-spec.md created
 else
   # Same doctrine as STATE.md and as the contract section in AGENTS.md: a
   # template that is already present may carry the repo's edits (sections of its
   # own, invariants of its own) and a scaffolder does not overwrite them on its
   # own initiative.
-  echo "_TEMPLATE-execution-spec.md ya existe, no se pisa"
+  say "_TEMPLATE-execution-spec.md ya existe, no se pisa"
+  record spec-template docs/superpowers/specs/_TEMPLATE-execution-spec.md already-present
 fi
 
 GITIGNORE="$TARGET/.gitignore"
+# GITIGNORE_EXISTED / GITIGNORE_CHANGED: the .gitignore rules are one
+# user-owned artifact for the report (create-if-absent, never compared), even
+# though they are seeded by several independent, idempotent rules below.
+# "created" means this run wrote something into it — the file itself, or any
+# rule that was missing; "already-present" means every rule this script cares
+# about was already there and nothing was written.
+GITIGNORE_EXISTED=1
+[ -f "$GITIGNORE" ] || GITIGNORE_EXISTED=0
+GITIGNORE_CHANGED=0
 touch "$GITIGNORE"
+if [ "$GITIGNORE_EXISTED" -eq 0 ]; then GITIGNORE_CHANGED=1; fi
 # It normalises a trailing newline BEFORE touching anything else: if the file
 # already has content but does not end in `\n` (e.g.
 # `printf 'node_modules/' > .gitignore`, with no trailing newline), a bash `>>`
@@ -111,6 +264,7 @@ touch "$GITIGNORE"
 # from an empty one.
 if [ -s "$GITIGNORE" ] && [ "$(tail -c1 "$GITIGNORE" | wc -l)" -eq 0 ]; then
   echo >> "$GITIGNORE"
+  GITIGNORE_CHANGED=1
 fi
 # .worktrees/: ct-next.mjs writes every slice worktree into
 # <repoRoot>/.worktrees/<n>, inside the checkout itself. If the target repo does
@@ -120,9 +274,10 @@ fi
 # as the rest of this script does not overwrite what already exists.
 if ! grep -qxF '.worktrees/' "$GITIGNORE"; then
   echo '.worktrees/' >> "$GITIGNORE"
-  echo "añadido .worktrees/ a $GITIGNORE"
+  say "añadido .worktrees/ a $GITIGNORE"
+  GITIGNORE_CHANGED=1
 else
-  echo ".worktrees/ ya está en $GITIGNORE, no se duplica"
+  say ".worktrees/ ya está en $GITIGNORE, no se duplica"
 fi
 
 # .agent/SLICE.md (F22): /ct-next seeds the slice's state there, inside the
@@ -139,9 +294,10 @@ fi
 # Idempotent by exact line, just like the .worktrees/ block above.
 if ! grep -qxF '.agent/SLICE.md' "$GITIGNORE"; then
   echo '.agent/SLICE.md' >> "$GITIGNORE"
-  echo "añadido .agent/SLICE.md a $GITIGNORE"
+  say "añadido .agent/SLICE.md a $GITIGNORE"
+  GITIGNORE_CHANGED=1
 else
-  echo ".agent/SLICE.md ya está en $GITIGNORE, no se duplica"
+  say ".agent/SLICE.md ya está en $GITIGNORE, no se duplica"
 fi
 
 # D-4 — ct-step's run state, and its working folder (briefs, logs of the
@@ -155,9 +311,10 @@ fi
 for regla in '.agent/run-*.json' '.agent/run-*/'; do
   if ! grep -qxF "$regla" "$GITIGNORE"; then
     echo "$regla" >> "$GITIGNORE"
-    echo "añadido $regla a $GITIGNORE"
+    say "añadido $regla a $GITIGNORE"
+    GITIGNORE_CHANGED=1
   else
-    echo "$regla ya está en $GITIGNORE, no se duplica"
+    say "$regla ya está en $GITIGNORE, no se duplica"
   fi
 done
 
@@ -186,11 +343,17 @@ done
 for rule in '.claude/worktrees/' '.claude/settings.local.json'; do
   if ! grep -qxF "$rule" "$GITIGNORE"; then
     echo "$rule" >> "$GITIGNORE"
-    echo "added $rule to $GITIGNORE"
+    say "added $rule to $GITIGNORE"
+    GITIGNORE_CHANGED=1
   else
-    echo "$rule is already in $GITIGNORE, not duplicated"
+    say "$rule is already in $GITIGNORE, not duplicated"
   fi
 done
+if [ "$GITIGNORE_CHANGED" -eq 1 ]; then
+  record gitignore .gitignore created
+else
+  record gitignore .gitignore already-present
+fi
 
 # Issue #376 — the scope gate. It was the one piece of the loop still installed
 # by hand: the workflow lived inside a fenced block of docs/loop/ct-scope-gate.md
@@ -227,32 +390,41 @@ GATE_MODULE_TYPE="$GATE_DIR/package.json"
 if [ ! -f "$GATE_WORKFLOW" ]; then
   mkdir -p "$(dirname "$GATE_WORKFLOW")"
   cp "$HERE/templates/ct-scope-gate.workflow.yml" "$GATE_WORKFLOW"
-  echo "created $GATE_WORKFLOW"
+  say "created $GATE_WORKFLOW"
+  record scope-gate-workflow .github/workflows/ct-scope-gate.yml created
 else
-  echo "$GATE_WORKFLOW already exists, not overwritten"
+  say "$GATE_WORKFLOW already exists, not overwritten"
+  record scope-gate-workflow .github/workflows/ct-scope-gate.yml already-present
 fi
 
 if [ ! -f "$GATE_BUNDLE" ]; then
   mkdir -p "$GATE_DIR"
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
-  echo "created $GATE_BUNDLE"
+  say "created $GATE_BUNDLE"
+  record scope-gate-bundle .github/ct/scope-check.js created
 elif cmp -s "$HERE/dist/scope-check.js" "$GATE_BUNDLE"; then
-  echo "$GATE_BUNDLE matches the bundle this release ships, not overwritten"
+  say "$GATE_BUNDLE matches the bundle this release ships, not overwritten"
+  record scope-gate-bundle .github/ct/scope-check.js already-present
 elif [ "$FORCE" -eq 1 ]; then
   cp "$HERE/dist/scope-check.js" "$GATE_BUNDLE"
-  echo "updated $GATE_BUNDLE with the bundle this release ships (--force)"
+  say "updated $GATE_BUNDLE with the bundle this release ships (--force)"
+  record scope-gate-bundle .github/ct/scope-check.js drifted
 else
   echo "warning: $GATE_BUNDLE does not match the bundle this release of the plugin ships. It is a GENERATED file, so the difference means this repo's copy comes from another release, not that somebody edited it. It matters: a copy vendored before #346 recognises \`## Contexto del epic\` and nothing else, so it fails the gate of every new issue over a section it cannot find, and no merge in the plugin's repository fixes it. To update it: bash $HERE/scripts/ct-init.sh $TARGET --force" >&2
+  record scope-gate-bundle .github/ct/scope-check.js drifted
 fi
 
 if [ ! -f "$GATE_MODULE_TYPE" ]; then
   mkdir -p "$GATE_DIR"
   cp "$HERE/templates/gate-package.template.json" "$GATE_MODULE_TYPE"
-  echo "created $GATE_MODULE_TYPE"
+  say "created $GATE_MODULE_TYPE"
+  record scope-gate-package .github/ct/package.json created
 elif grep -q '"type"[[:space:]]*:[[:space:]]*"module"' "$GATE_MODULE_TYPE"; then
-  echo "$GATE_MODULE_TYPE already parses the gate as ESM, not overwritten"
+  say "$GATE_MODULE_TYPE already parses the gate as ESM, not overwritten"
+  record scope-gate-package .github/ct/package.json already-present
 else
   echo "warning: $GATE_MODULE_TYPE exists and does not declare \`\"type\": \"module\"\`. The scope gate's bundle is ESM, so node will read it with whatever format that file decides and it will die on its first \`import\` — a required check red on every pull request, correct ones included. Nothing has been changed: add \`\"type\": \"module\"\` to it by hand." >&2
+  record scope-gate-package .github/ct/package.json already-present
 fi
 
 # Issue #376 — `.claude/settings.json`: the file that tells Claude Code which
@@ -271,6 +443,9 @@ fi
 # Same doctrine as those sweeps when `node` is not there: it is SAID. A silence
 # would be indistinguishable from "the plugin is wired up", which is the
 # expensive false negative here.
+CLAUDE_SETTINGS_PATH="$TARGET/.claude/settings.json"
+CLAUDE_SETTINGS_BEFORE=''
+if [ -f "$CLAUDE_SETTINGS_PATH" ]; then CLAUDE_SETTINGS_BEFORE="$(cat "$CLAUDE_SETTINGS_PATH")"; fi
 SETTINGS_STATUS=0
 SETTINGS_OUT=''
 if command -v node >/dev/null 2>&1; then
@@ -281,15 +456,28 @@ fi
 if [ "$SETTINGS_STATUS" -ne 0 ]; then
   echo "warning: $TARGET/.claude/settings.json could neither be seeded nor checked — the operation needs \`node\` and it could not be run (status $SETTINGS_STATUS). Do NOT read that as \"the plugin is declared\": without that file, whoever clones this repo receives no command, skill, agent or hook of this plugin, and that is indistinguishable from a repo nobody has initialised." >&2
 elif [ -n "$SETTINGS_OUT" ]; then
-  printf '%s\n' "$SETTINGS_OUT"
+  say "$SETTINGS_OUT"
 fi
+# claude-settings (user-owned: a merge, never a byte compare against a golden
+# copy). "created" means this run changed what is on disk — the file did not
+# exist, or the merge added something to it; "already-present" means it
+# already declared this plugin and nothing was written.
+CLAUDE_SETTINGS_STATUS=already-present
+if [ "$SETTINGS_STATUS" -eq 0 ]; then
+  CLAUDE_SETTINGS_AFTER=''
+  if [ -f "$CLAUDE_SETTINGS_PATH" ]; then CLAUDE_SETTINGS_AFTER="$(cat "$CLAUDE_SETTINGS_PATH")"; fi
+  if [ "$CLAUDE_SETTINGS_BEFORE" != "$CLAUDE_SETTINGS_AFTER" ]; then CLAUDE_SETTINGS_STATUS=created; fi
+fi
+record claude-settings .claude/settings.json "$CLAUDE_SETTINGS_STATUS"
 
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
   cp "$HERE/templates/AGENTS.template.md" "$AGENTS_MD"
-  echo "creado $AGENTS_MD"
+  say "creado $AGENTS_MD"
+  record agents-md AGENTS.md created
 else
-  echo "AGENTS.md ya existe, no se pisa"
+  say "AGENTS.md ya existe, no se pisa"
+  record agents-md AGENTS.md already-present
 fi
 
 # The "Formato de la tabla de slices" section (F2 — the contract with
@@ -1515,10 +1703,15 @@ emit_loop_section_body() {
 }
 
 # --- The contract, in its own file -----------------------------------------
+# CONTRATO_MD is one of two names (the current one, or the legacy Spanish
+# one an already bootstrapped repo may still carry) — the path recorded is
+# always relative to $TARGET, never absolute, per the report's own rule.
+REL_CONTRATO_MD="${CONTRATO_MD#"$TARGET"/}"
 mkdir -p "$CONTRATO_DIR"
 if [ ! -f "$CONTRATO_MD" ]; then
   emit_slices_contract > "$CONTRATO_MD"
-  echo "creado $CONTRATO_MD (contrato /ct-groom v$SLICES_CONTRACT_VERSION)"
+  say "creado $CONTRATO_MD (contrato /ct-groom v$SLICES_CONTRACT_VERSION)"
+  record slices-contract "$REL_CONTRATO_MD" created "shippedVersion=$SLICES_CONTRACT_VERSION"
 else
   contrato_open=0; has_line "$SLICES_MARKER_OPEN" "$CONTRATO_MD" && contrato_open=1 || true
   contrato_close=0; has_line "$SLICES_MARKER_CLOSE" "$CONTRATO_MD" && contrato_close=1 || true
@@ -1528,8 +1721,14 @@ else
     compute_slices_block_hash "$CONTRATO_MD"
     block_status="$(slices_block_status)"
     hash_note="hash del bloque presente: ${SLICES_BLOCK_HASH:-no calculable en esta máquina}"
+    # The status recorded below follows the VERSION comparison alone —
+    # `found_version` against `SLICES_CONTRACT_VERSION` — the same axis the
+    # existing "older plugin refuses to downgrade a newer artifact" branch
+    # already used; `block_status` still decides, exactly as before, whether
+    # a replace is safe, but it does not change what gets reported.
     if [ "$found_version" -gt "$SLICES_CONTRACT_VERSION" ]; then
       echo "aviso: el contrato de slices de $CONTRATO_MD es del contrato v$found_version, y este plugin solo llega a la v$SLICES_CONTRACT_VERSION — lo sembró una versión más nueva del plugin. No se toca (degradarlo sería perder lo que ya tienes). Si /ct-groom no se comporta como describe ese fichero, el desactualizado es el plugin: actualízalo." >&2
+      record slices-contract "$REL_CONTRATO_MD" refused "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
     elif [ "$found_version" -eq "$SLICES_CONTRACT_VERSION" ]; then
       if [ "$UPDATE_SLICES_CONTRACT" -eq 1 ] && [ "$block_status" = unknown ]; then
         if [ "$FORCE" -eq 1 ]; then
@@ -1539,14 +1738,17 @@ else
           echo "aviso: el contrato de slices de $CONTRATO_MD ya declara la v$found_version (la actual), así que no hay actualización de versión que hacer, pero su contenido NO es el que emite este plugin ($hash_note). Puede ser una edición tuya, o una variante distinta que se publicó con el mismo número de versión. No se toca nada; con --force se reemplazaría por el bloque v$SLICES_CONTRACT_VERSION de este plugin." >&2
         fi
       else
-        echo "contrato de slices ya está en $CONTRATO_MD (contrato v$found_version, al día), no se duplica"
+        say "contrato de slices ya está en $CONTRATO_MD (contrato v$found_version, al día), no se duplica"
       fi
+      record slices-contract "$REL_CONTRATO_MD" already-present "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
     elif [ "$UPDATE_SLICES_CONTRACT" -eq 1 ]; then
       if [ "$block_status" = pristine ]; then
         replace_slices_block "$CONTRATO_MD"
-        echo "contrato de slices actualizado en $CONTRATO_MD: contrato v$found_version → v$SLICES_CONTRACT_VERSION (estaba sin editar)"
+        say "contrato de slices actualizado en $CONTRATO_MD: contrato v$found_version → v$SLICES_CONTRACT_VERSION (estaba sin editar)"
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
       elif [ "$block_status" = unverifiable ] && [ "$FORCE" -eq 0 ]; then
         echo "aviso: no se ha podido comprobar si el contrato de slices de $CONTRATO_MD sigue tal cual lo dejó ct-init: esta máquina no tiene ni \`shasum\` ni \`sha256sum\`, y esa comprobación es lo único que impide pisar ediciones tuyas. No se toca nada — el bloque puede estar perfectamente intacto, simplemente no se sabe. Instala uno de los dos (coreutils trae \`sha256sum\`; \`shasum\` viene con perl) y repite, o pasa --force si te consta que ese fichero no lo has editado." >&2
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
         exit 3
       elif [ "$FORCE" -eq 1 ]; then
         replace_slices_block "$CONTRATO_MD"
@@ -1555,8 +1757,10 @@ else
         else
           echo "aviso: el contrato de slices de $CONTRATO_MD no coincidía con ninguna versión que este ct-init sepa reconocer ($hash_note) y se ha sobrescrito con el contrato v$SLICES_CONTRACT_VERSION porque lo pediste con --force. Si había ediciones tuyas, ya no están: recupéralas del control de versiones." >&2
         fi
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
       else
         echo "aviso: el contrato de slices de $CONTRATO_MD es del contrato v$found_version (el actual es v$SLICES_CONTRACT_VERSION), pero su contenido no coincide con ninguno de los bloques que este ct-init sabe reconocer ($hash_note). Eso puede ser (a) una edición a mano, o (b) un bloque intacto sembrado por una versión del plugin cuyo hash este ct-init no lleva registrado — desde aquí NO hay forma de distinguirlas, así que no se toca nada por si es (a). Para salir de dudas, mira el historial de $CONTRATO_MD (\`git log -p -- $CONTRATO_MD\`): si no se ha tocado desde que se creó, es (b) — repórtalo con ese hash para que quede registrado, y mientras tanto pasa --force junto a --update-slices-contract para adoptar el contrato v$SLICES_CONTRACT_VERSION (si SÍ había ediciones tuyas, se pierden)." >&2
+        record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
         exit 3
       fi
     else
@@ -1566,9 +1770,11 @@ else
         *) update_note="Su contenido no coincide con ningún bloque que este ct-init reconozca ($hash_note) — puede ser una edición tuya o una versión que no tiene registrada, así que la actualización se negará sin --force:" ;;
       esac
       echo "aviso: el contrato de slices de $CONTRATO_MD es del contrato v$found_version, y este plugin trae la v$SLICES_CONTRACT_VERSION — no se toca nada por defecto. $update_note bash $HERE/scripts/ct-init.sh $TARGET --update-slices-contract" >&2
+      record slices-contract "$REL_CONTRATO_MD" drifted "foundVersion=$found_version" "shippedVersion=$SLICES_CONTRACT_VERSION" "blockStatus=$block_status"
     fi
   else
     echo "aviso: $CONTRATO_MD existe pero no lleva los marcadores del contrato ($SLICES_MARKER_OPEN … $SLICES_MARKER_CLOSE); no se toca nada para no pisar lo que sea que haya ahí. Si querías el contrato de este plugin, mueve ese fichero y vuelve a correr /ct-init." >&2
+    record slices-contract "$REL_CONTRATO_MD" drifted "shippedVersion=$SLICES_CONTRACT_VERSION"
   fi
 fi
 
@@ -1596,7 +1802,7 @@ if [ "$has_open" -eq 1 ] && [ "$has_close" -eq 1 ]; then
   hash_note="hash del bloque presente: ${SLICES_BLOCK_HASH:-no calculable en esta máquina}"
   if [ "$UPDATE_SLICES_CONTRACT" -eq 1 ] && [ "$block_status" = pristine ]; then
     replace_slices_block "$AGENTS_MD" emit_loop_section
-    echo "el contrato de slices sale de $AGENTS_MD (estaba sin editar, contrato v$found_version): vive ahora en $CONTRATO_MD y en su sitio queda la sección corta del loop, que enlaza a él. El resto del fichero no se ha tocado."
+    say "el contrato de slices sale de $AGENTS_MD (estaba sin editar, contrato v$found_version): vive ahora en $CONTRATO_MD y en su sitio queda la sección corta del loop, que enlaza a él. El resto del fichero no se ha tocado."
   elif [ "$UPDATE_SLICES_CONTRACT" -eq 1 ] && [ "$FORCE" -eq 1 ]; then
     replace_slices_block "$AGENTS_MD" emit_loop_section
     echo "aviso: el contrato de slices que llevaba $AGENTS_MD se ha sustituido por la sección corta del loop porque lo pediste con --force, sin haber podido dar por bueno su contenido ($hash_note). El contrato vive ahora en $CONTRATO_MD. Si había ediciones tuyas en ese bloque, ya no están: recupéralas del control de versiones." >&2
@@ -1625,9 +1831,11 @@ fi
 # second copy of the same information, and that case already has its warning
 # above, with its remedy.
 if has_line "$LOOP_MARKER_OPEN" "$AGENTS_MD"; then
-  echo "sección del loop ya está en $AGENTS_MD, no se duplica"
+  say "sección del loop ya está en $AGENTS_MD, no se duplica"
+  record loop-section AGENTS.md already-present
 elif has_line "$SLICES_MARKER_OPEN" "$AGENTS_MD"; then
   : # the old contract is still inside; the warning above says how to get out of there
+  record loop-section AGENTS.md already-present
 else
   loop_crlf=0
   if [ -s "$AGENTS_MD" ] && file_is_crlf "$AGENTS_MD"; then loop_crlf=1; fi
@@ -1640,7 +1848,8 @@ else
   else
     emit_loop_section >> "$AGENTS_MD"
   fi
-  echo "añadida sección del loop (enlaza al contrato de slices) a $AGENTS_MD"
+  say "añadida sección del loop (enlaza al contrato de slices) a $AGENTS_MD"
+  record loop-section AGENTS.md created
 fi
 
 # The "Cómo se atraviesa este repo (e2e)" section — task 5 of "e2e al cierre
@@ -1667,7 +1876,8 @@ E2E_MARKER_OPEN='<!-- ct-init:e2e-howto -->'
 E2E_MARKER_CLOSE='<!-- /ct-init:e2e-howto -->'
 
 if has_line "$E2E_MARKER_OPEN" "$AGENTS_MD"; then
-  echo "sección de travesía e2e ya está en $AGENTS_MD, no se duplica"
+  say "sección de travesía e2e ya está en $AGENTS_MD, no se duplica"
+  record e2e-howto AGENTS.md already-present
 else
   # Just like replace_slices_block: if the AGENTS.md is already CRLF,
   # EVERYTHING that gets added (the extra newline, the blank line, and the
@@ -1688,7 +1898,8 @@ else
   else
     emit_e2e_howto >> "$AGENTS_MD"
   fi
-  echo "añadida sección de travesía e2e a $AGENTS_MD"
+  say "añadida sección de travesía e2e a $AGENTS_MD"
+  record e2e-howto AGENTS.md created
 fi
 
 # §3.12 (docs/prompt-juez-lo-que-queda.md): `reference-paths` proves that what
@@ -1711,7 +1922,7 @@ fi
 if [ "$YARDSTICK_STATUS" -ne 0 ]; then
   echo "could not sweep this repo for yardstick candidates (.agent/conventions.md): the check needs \`node\` and could not be run (status $YARDSTICK_STATUS). Do NOT read it as \"this repo has no written conventions\": nobody looked." >&2
 elif [ -n "$YARDSTICK_OUT" ]; then
-  printf '%s\n' "$YARDSTICK_OUT"
+  say "$YARDSTICK_OUT"
 fi
 
 # F11, part B: until now ct-init bootstrapped ON TOP OF whatever conventions

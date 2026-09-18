@@ -113,8 +113,18 @@ export const planSha256 = (text) => createHash('sha256').update(String(text ?? '
 // without it would be undebuggable— and the two things go to the same place for
 // the same reason. It is extracted instead of duplicating the `join`, and
 // `metricsPath` is still the one that decides the extension of ITS OWN.
-export function controlTowerDir({ configDir = null, home = null } = {}) {
-  return join(configDir || join(home || homedir(), '.claude'), 'control-tower')
+// configuredDir: the rule alone, with no `control-tower` suffix — reused by
+// `controlTowerDir` below and by `ct-init-facts.mjs` (the `--json` report of
+// `ct-init.sh` names the plain config directory, not this account's
+// control-tower state). An empty `CLAUDE_CONFIG_DIR` is treated as unset, the
+// same reading `backend/src/infrastructure/invocation.ts`'s `configuredIn`
+// gives it — two callers of one rule, never two copies of it.
+export function configuredDir({ configDir = null, home = null } = {}) {
+  return configDir || join(home || homedir(), '.claude')
+}
+
+export function controlTowerDir(opts = {}) {
+  return join(configuredDir(opts), 'control-tower')
 }
 
 // `log/` is ONE tenant of the folder, not the folder. Since F38 there is a
