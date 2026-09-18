@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { LiveAsk } from 'app/coordinating-session/CoordinatingSession.types'
 import { GroomSessionOutcome } from 'app/epic-groom/EpicGroom.types'
 import {
   EPIC_GROOM_GATE_HEADING,
@@ -13,6 +15,7 @@ import { CollapsableCard } from 'system-ui/collapsable-card'
 import './GateSequence.css'
 
 const PULL_REQUEST = 'Pull request'
+const NO_ROOM: CSSProperties = { display: 'none' }
 
 const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' }>): string => {
   const on = summary.on === null ? 'sin fecha' : `el ${summary.on}`
@@ -21,13 +24,14 @@ const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' 
 }
 
 type GateSequenceProps = {
-  target: string
+  target: string | null
+  liveAsk: LiveAsk | null
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
 }
 
-const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
+const GateSequence = ({ target, liveAsk, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
   const specFreezeRead = useSpecFreeze(target)
   const epicGroomRead = useEpicGroom(false, target)
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
@@ -54,8 +58,10 @@ const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: Ga
   const gate2DefaultExpanded = !isGate2Authorised
   const gate2Expanded = gate2ManualExpanded ?? gate2DefaultExpanded
 
+  const nothingToShow = gate1Summary.kind === 'hidden' && !isGate2Visible
+
   return (
-    <div className="gate-sequence">
+    <div className="gate-sequence" hidden={nothingToShow} style={nothingToShow ? NO_ROOM : undefined}>
       <CollapsableCard
         heading={SPEC_FREEZE_GATE_HEADING}
         subtitle={gate1Summary.kind === 'frozen' ? gate1Subtitle(gate1Summary) : undefined}
@@ -73,6 +79,7 @@ const GateSequence = ({ target, openingBlocked, operationBusy, openSession }: Ga
       >
         <EpicGroomPanel
           target={target}
+          liveAsk={liveAsk}
           openingBlocked={openingBlocked}
           operationBusy={operationBusy}
           openSession={openSession}

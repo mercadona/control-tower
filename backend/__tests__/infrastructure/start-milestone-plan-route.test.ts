@@ -197,6 +197,18 @@ class Mother {
     return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
   }
 
+  static closed(): CoordinatingSessions {
+    const sessions = Mother.coordinating()
+    const identity = {
+      conversation: '22222222-2222-4222-8222-222222222222',
+      target: '6d13bc52-740f-49f8-b128-15e597674f3a',
+    }
+    sessions.beginClose(identity)
+    sessions.finishClose(identity)
+
+    return sessions
+  }
+
   static groomed(state: typeof EpicGroomState.GROOMED | typeof EpicGroomState.AUTHORISED): EpicGroomRead {
     return new EpicGroomRead({
       state,
@@ -474,5 +486,40 @@ describe('StartPlanRoute milestone entrance', () => {
 
     controlled.finish()
     expect((await loose).status).toBe(202)
+  })
+})
+
+describe('StartPlanRoute and the closed coordinating checkout', () => {
+  const loosePlan = (path: string): string =>
+    JSON.stringify({ user_comment: 'plan this', repo: Mother.REPOSITORY.text, path })
+
+  it('forgets the closed coordinating checkout when the plan starts in another one', async () => {
+    const coordinatingSessions = Mother.closed()
+    const port = await RunningApi.listening({
+      startMilestonePlan: new StartMilestonePlanDouble(),
+      readEpicGroom: new ReadEpicGroomDouble(),
+      coordinatingSessions,
+      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
+    })
+
+    const response = await RunningApi.post(port, loosePlan('/another/checkout'))
+
+    expect(response.status).toBe(202)
+    expect(coordinatingSessions.gateCheckout()).toBe(null)
+  })
+
+  it('keeps the closed coordinating checkout when the plan starts in the same one', async () => {
+    const coordinatingSessions = Mother.closed()
+    const port = await RunningApi.listening({
+      startMilestonePlan: new StartMilestonePlanDouble(),
+      readEpicGroom: new ReadEpicGroomDouble(),
+      coordinatingSessions,
+      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
+    })
+
+    const response = await RunningApi.post(port, loosePlan(Mother.ROOT.text))
+
+    expect(response.status).toBe(202)
+    expect(coordinatingSessions.gateCheckout()?.conversation.root.text).toBe(Mother.ROOT.text)
   })
 })

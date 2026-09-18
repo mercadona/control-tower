@@ -54,8 +54,4 @@ export class CoordinatingSessionTarget {
 
     return held
   }
-
-  static stillCurrent(registry: CoordinatingSessions, held: HeldCoordinatingSession): boolean {
-    return registry.isCurrent(held)
-  }
 }

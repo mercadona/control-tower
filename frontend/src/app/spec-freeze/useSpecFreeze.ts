@@ -7,6 +7,11 @@ type SpecFreezeRead =
   | ({ phase: 'read' } & SpecFreezeOutcome)
 
 const CONNECTING: SpecFreezeRead = { phase: 'connecting' }
+const NAMES_NO_CHECKOUT = Symbol('the read names no checkout')
+
+const answeredFor = (outcome: SpecFreezeOutcome): string | null | typeof NAMES_NO_CHECKOUT =>
+  'target' in outcome ? outcome.target : NAMES_NO_CHECKOUT
+
 const POLL_INTERVAL_MS = 2000
 
 const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
@@ -19,10 +24,8 @@ const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
     const poll = async (): Promise<void> => {
       const outcome = await SpecFreezeClient.read()
       if (cancelled) return
-      if (
-        target !== null && outcome.kind !== 'none' && outcome.kind !== 'refused' &&
-        outcome.kind !== 'unavailable' && outcome.target !== target
-      ) {
+      const answered = answeredFor(outcome)
+      if (answered !== NAMES_NO_CHECKOUT && answered !== target) {
         setRead({ phase: 'read', kind: 'none' })
         timer = window.setTimeout(poll, POLL_INTERVAL_MS)
         return

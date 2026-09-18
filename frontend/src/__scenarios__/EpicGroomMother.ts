@@ -55,6 +55,12 @@ const groomable = () => ({
     `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":null,"key":"${KEY}"}`,
 })
 
+const groomableWithoutSession = () => ({
+  status: 200,
+  body: `{"status":"groomable","target":null,"milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+    `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":null,"key":"${KEY}"}`,
+})
+
 const groomableAfterReslicing = () => ({
   status: 200,
   body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
@@ -115,6 +121,12 @@ const groomSessionOpened = () => ({
     `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 
+const groomAskTyped = () => ({
+  status: 202,
+  body: `{"status":"typed","target":"${TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+    `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
+})
+
 const unrecognisedStatus = () => ({ status: 200, body: '{"status":"something-nobody-declared"}' })
 
 const notFromThePage = () => ({
@@ -159,6 +171,7 @@ export const EpicGroomMother = {
   issuesUncertain,
   groomable,
   groomableAcrossRepositories,
+  groomableWithoutSession,
   groomableWithoutKey,
   partiallyGroomed,
   groomed,
@@ -170,6 +183,7 @@ export const EpicGroomMother = {
   reslicedWithoutKey,
   reslicingPublished,
   groomSessionOpened,
+  groomAskTyped,
   unrecognisedStatus,
   notFromThePage,
   planChanged,

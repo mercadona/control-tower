@@ -3,6 +3,8 @@ export type Attention = {
   question: string | null
 }
 
+export type LiveAsk = 'ready' | 'working' | 'awaiting-permission' | 'turn-not-finished'
+
 export type LiveSessionRef = { id: string; name: string }
 
 export type CoordinatingOperation = 'idle' | 'recovering' | 'opening' | 'closing' | 'close-failed'

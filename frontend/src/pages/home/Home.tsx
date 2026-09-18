@@ -31,6 +31,7 @@ const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
 const TERMINAL_HEIGHT_LABEL = 'Alto de la terminal'
 const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
 const ACTIVE_PLANS_POLL_INTERVAL_MS = 2000
+const NO_COORDINATING_TARGET = 'no-coordinating-target'
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
@@ -634,15 +635,14 @@ const Home = () => {
             </WorkflowStep>
           )}
 
-          {coordinatingSession.target !== null && (
-            <GateSequence
-              key={coordinatingSession.target}
-              target={coordinatingSession.target}
-              openingBlocked={coordinatingSession.blocksOpening}
-              operationBusy={coordinatingSession.operationBusy}
-              openSession={coordinatingSession.openGroom}
-            />
-          )}
+          <GateSequence
+            key={coordinatingSession.target ?? NO_COORDINATING_TARGET}
+            target={coordinatingSession.target}
+            liveAsk={coordinatingSession.liveAsk}
+            openingBlocked={coordinatingSession.blocksOpening}
+            operationBusy={coordinatingSession.operationBusy}
+            openSession={coordinatingSession.openGroom}
+          />
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">

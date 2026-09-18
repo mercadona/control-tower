@@ -33,6 +33,7 @@ import type { RecoverPlan } from '../application/actions/recover-plan.ts'
 import type { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { OpenGroomSession } from '../application/actions/open-groom-session.ts'
+import type { AskGroomReview } from '../application/actions/ask-groom-review.ts'
 import type { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
@@ -124,6 +125,7 @@ export type ApiCollaborators = {
   recovery?: ActivePlanRecovering | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
+  askGroomReview?: AskGroomReview | null,
   closeCoordinatingSession?: CloseCoordinatingSession | null,
   coordinatingSessions?: CoordinatingSessions | null,
   readSpecFreeze?: ReadSpecFreeze | null,
@@ -191,6 +193,7 @@ export class ApiServer {
   readonly recovery: ActivePlanRecovering | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
+  readonly askGroomReview: AskGroomReview | null | undefined
   readonly closeCoordinatingSession: CloseCoordinatingSession | null | undefined
   readonly coordinatingSessions: CoordinatingSessions | null | undefined
   readonly readSpecFreeze: ReadSpecFreeze | null | undefined
@@ -212,7 +215,7 @@ export class ApiServer {
     port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementProgress, implementHistory,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null,
-    openCoordinatingSession, openGroomSession, closeCoordinatingSession, coordinatingSessions,
+    openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     sliceMessage, stderr, frontendRoot,
@@ -237,6 +240,7 @@ export class ApiServer {
     this.recovery = recovery
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession
+    this.askGroomReview = askGroomReview
     this.closeCoordinatingSession = closeCoordinatingSession
     this.coordinatingSessions = coordinatingSessions
     this.readSpecFreeze = readSpecFreeze
@@ -384,7 +388,9 @@ export class ApiServer {
     app.post(
       GroomSessionRoute.PATH,
       Browsers.turnAwayForeign,
-      GroomSessionRoute.opening(this.coordinatingSessions!, this.openGroomSession!, this.gateKey!)
+      GroomSessionRoute.opening(
+        this.coordinatingSessions!, this.openGroomSession!, this.gateKey!, this.askGroomReview!
+      )
     )
     app.all(GroomSessionRoute.PATH, GroomSessionRoute.refuseOtherMethods)
     app.post(

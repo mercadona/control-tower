@@ -7,6 +7,20 @@ const answerWith = (answer: { status: number; body: string }) =>
 describe('SpecFreezeClient', () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it('reads a frozen spec whose target is null as frozen with no session, not as unavailable', async () => {
+    answerWith(SpecFreezeMother.frozenWithoutSession())
+
+    const outcome = await SpecFreezeClient.read()
+
+    expect(outcome).toEqual({
+      kind: 'frozen',
+      target: null,
+      spec: SpecFreezeMother.SPEC,
+      on: SpecFreezeMother.ON,
+      pullRequest: SpecFreezeMother.PULL_REQUEST,
+    })
+  })
+
   it('reads a draft with its key and every finding the backend named', async () => {
     answerWith(SpecFreezeMother.draftWithMarker())
 

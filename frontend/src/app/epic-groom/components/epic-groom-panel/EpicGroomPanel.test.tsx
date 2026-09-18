@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
-import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
+import { LiveAsk, OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { EpicGroomClient } from 'app/epic-groom/client'
 import { EpicGroomPanel } from './EpicGroomPanel'
@@ -12,12 +12,13 @@ const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
 
 const renderPanel = (
   onSessionOpened: (opened: OpenedCoordinatingSession) => void = vi.fn(),
-  { openingBlocked = false, operationBusy = false } = {},
+  { openingBlocked = false, operationBusy = false, liveAsk = null as LiveAsk | null } = {},
 ) =>
   render(<EpicGroomPanel
     target={EpicGroomMother.TARGET}
     openingBlocked={openingBlocked}
     operationBusy={operationBusy}
+    liveAsk={liveAsk}
     openSession={async (key, target) => {
       const outcome = await EpicGroomClient.openSession(key, target)
       if (outcome.kind === 'opened') onSessionOpened(outcome.opened)
@@ -29,6 +30,112 @@ describe('EpicGroomPanel', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+
+  it('asks the live conversation that finished its turn, and claims only that the ask was sent', async () => {
+    const fetching = vi.fn(async (input: string | URL | Request) =>
+      String(input) === '/groom-session'
+        ? new Response(EpicGroomMother.groomAskTyped().body, { status: 202 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    renderPanel(vi.fn(), { openingBlocked: true, liveAsk: 'ready' })
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    expect(fetching).toHaveBeenNthCalledWith(2, '/groom-session', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
+    })
+    expect(
+      await screen.findByText('Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('La sesión ha leído la petición: habla con ella en el panel de sesiones.'))
+      .not.toBeInTheDocument()
+    expect(screen.queryByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'))
+      .not.toBeInTheDocument()
+  })
+
+  it('says the session read the ask when its attention moves to working, and keeps saying it after the turn', async () => {
+    const fetching = vi.fn(async (input: string | URL | Request) =>
+      String(input) === '/groom-session'
+        ? new Response(EpicGroomMother.groomAskTyped().body, { status: 202 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    const shown = renderPanel(vi.fn(), { openingBlocked: true, liveAsk: 'ready' })
+    await screen.findByRole('button', SESSION_BUTTON)
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+    await screen.findByText('Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.')
+
+    shown.rerender(<EpicGroomPanel
+      target={EpicGroomMother.TARGET}
+      openingBlocked
+      operationBusy={false}
+      liveAsk="working"
+      openSession={async (key, target) => EpicGroomClient.openSession(key, target)}
+    />)
+
+    expect(await screen.findByText('La sesión ha leído la petición: habla con ella en el panel de sesiones.'))
+      .toBeInTheDocument()
+
+    shown.rerender(<EpicGroomPanel
+      target={EpicGroomMother.TARGET}
+      openingBlocked
+      operationBusy={false}
+      liveAsk="ready"
+      openSession={async (key, target) => EpicGroomClient.openSession(key, target)}
+    />)
+
+    expect(screen.getByText('La sesión ha leído la petición: habla con ella en el panel de sesiones.'))
+      .toBeInTheDocument()
+  })
+
+  it('offers no ask while the live conversation is working, and says what to wait for', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { openingBlocked: true, liveAsk: 'working' })
+
+    expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByText(
+      'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.',
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it('offers no ask while nothing is known about the terminal of the live conversation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { openingBlocked: true, liveAsk: 'turn-not-finished' })
+
+    expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByText(
+      'No se sabe qué está mostrando la terminal de la sesión: espera a que termine un turno.',
+    )).toBeInTheDocument()
+  })
+
+  it('offers no ask while the live conversation waits for a permission, and says what to answer', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { openingBlocked: true, liveAsk: 'awaiting-permission' })
+
+    expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByText(
+      'La sesión está esperando un permiso en su terminal: respóndelo y vuelve a intentarlo.',
+    )).toBeInTheDocument()
+  })
+
+  it('keeps reading the checkout with no session held, offers no press and says what is missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomableWithoutSession().body, { status: 200 })))
+
+    render(<EpicGroomPanel target={null} liveAsk={null} openingBlocked operationBusy={false} openSession={vi.fn()} />)
+
+    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
+    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
+    expect(screen.getByRole('button', SESSION_BUTTON)).toBeDisabled()
+    expect(screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.')).toBeInTheDocument()
   })
 
   it('shows what the groom will create before anything is created', async () => {
@@ -183,6 +290,7 @@ describe('EpicGroomPanel', () => {
 
     shown.rerender(<EpicGroomPanel
       target={EpicGroomMother.TARGET}
+      liveAsk={null}
       openingBlocked={false}
       operationBusy={false}
       openSession={async (key, target) => EpicGroomClient.openSession(key, target)}

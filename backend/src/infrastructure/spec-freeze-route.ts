@@ -75,23 +75,23 @@ export class SpecFreezeRoute {
 
   static reading(held: CoordinatingSessions, read: ReadSpecFreeze, key: GateKey): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
-      const holding = held.held()
-      if (holding === null) {
+      const reading = held.gateCheckout()
+      if (reading === null) {
         Answer.send(response, 200, { status: 'none' })
         return
       }
       let outcome: SpecFreezeRead
       try {
         outcome = await read.execute(new ReadSpecFreezeParams({
-          root: holding.conversation.root,
-          repository: holding.conversation.repository,
+          root: reading.conversation.root,
+          repository: reading.conversation.repository,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       }
-      if (!CoordinatingSessionTarget.stillCurrent(held, holding)) {
+      if (!held.isCurrentCheckout(reading)) {
         Answer.send(response, 200, { status: 'none' })
         return
       }
@@ -100,7 +100,7 @@ export class SpecFreezeRoute {
         host: request.get('Host'),
         site: request.get(GateKey.SITE_HEADER),
       })
-      SpecFreezeRoute.#answerRead(response, outcome, minted, holding.target)
+      SpecFreezeRoute.#answerRead(response, outcome, minted, reading.target)
     }
   }
 
@@ -143,7 +143,9 @@ export class SpecFreezeRoute {
     }
   }
 
-  static #answerRead(response: Response, outcome: SpecFreezeRead, minted: string | null, target: string): void {
+  static #answerRead(
+    response: Response, outcome: SpecFreezeRead, minted: string | null, target: string | null
+  ): void {
     switch (outcome.state) {
       case SpecFreezeState.NO_SPEC:
         Answer.send(response, 200, { status: SpecFreezeState.NO_SPEC, target })

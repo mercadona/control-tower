@@ -24,13 +24,19 @@ const IMPLEMENTATION_HISTORY_NOT_READ: Answer = {
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
+const sequence = () => {
+  const found = document.querySelector('.gate-sequence')
+  if (found === null) throw new Error('no gate sequence found')
+  return found as HTMLElement
+}
+
 const gateToggle = (heading: string) => {
   const card = screen.getByRole('heading', { name: heading }).closest('.collapsable-card')
   if (card === null) throw new Error(`no card found for heading ${heading}`)
   return within(card as HTMLElement).getByRole('button', { name: /^(Expandir|Colapsar)$/ })
 }
 
-const stubGates = (specFreeze: Answer, epicGroom: Answer) => {
+const stubGates = (specFreeze: Answer, epicGroom: Answer, coordinating: Answer = CoordinatingSessionMother.ended()) => {
   const fetching = vi.fn(async (input: string | URL | Request) => {
     const path = String(input)
     if (path === '/spec-freeze') return responseFor(specFreeze)
@@ -38,7 +44,7 @@ const stubGates = (specFreeze: Answer, epicGroom: Answer) => {
     if (path === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.ended())
+    if (path === '/coordinating-session') return responseFor(coordinating)
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -49,6 +55,41 @@ const stubGates = (specFreeze: Answer, epicGroom: Answer) => {
 
 describe('Home and the gate sequence', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('takes no room on the page while neither gate has anything to say', async () => {
+    stubGates(SpecFreezeMother.none(), EpicGroomMother.none(), CoordinatingSessionMother.none())
+    openHome()
+
+    await vi.waitFor(() => expect(sequence().style.display).toBe('none'))
+    expect(sequence()).not.toBeVisible()
+    expect(screen.queryByRole('heading', { name: GATE_1_HEADING })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: GATE_2_HEADING })).not.toBeInTheDocument()
+  })
+
+  it('takes its room back as soon as one gate has something to say', async () => {
+    stubGates(SpecFreezeMother.frozen(), EpicGroomMother.groomable())
+    openHome()
+
+    await screen.findByRole('heading', { name: GATE_2_HEADING })
+    expect(sequence().style.display).toBe('')
+  })
+
+  it('keeps the gate sequence on the page when no coordinating session is held', async () => {
+    stubGates(
+      SpecFreezeMother.frozenWithoutSession(),
+      EpicGroomMother.groomableWithoutSession(),
+      CoordinatingSessionMother.none(),
+    )
+    openHome()
+
+    await screen.findByRole('heading', { name: GATE_2_HEADING })
+    expect(screen.getByRole('heading', { name: GATE_1_HEADING })).toBeInTheDocument()
+    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
+    expect(
+      screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.'),
+    ).toBeInTheDocument()
+  })
 
   it('renders a frozen gate 1 collapsed and a groomable gate 2 expanded', async () => {
     stubGates(SpecFreezeMother.frozen(), EpicGroomMother.groomable())

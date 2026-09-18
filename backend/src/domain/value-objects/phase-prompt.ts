@@ -64,6 +64,10 @@ export class PhasePrompt {
     ].join('\n'))
   }
 
+  oneLine(): string {
+    return this.text.split('\n').join(' ')
+  }
+
   static #roleOf({ repository, root }: { repository: RepositoryName, root: CheckoutRoot }): string {
     return `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`
   }

@@ -1109,12 +1109,21 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ## `POST /groom-session`
 
-Gate 2's way into the conversation. It opens the coordinating session in the
-**groom** phase: `PhasePrompt.groom` writes a prompt that invokes the plugin's
-own `control-tower-loop:ct-groom` skill, names the milestone and its frozen
-spec, and tells the session that the issues are not its to create and that a
-change to the slicing is an edit of §9 which this program publishes. No
-worktree is cut and no branch is created.
+Gate 2's way into the conversation, by either of two roads. The prompt is the
+same on both: `PhasePrompt.groom` invokes the plugin's own
+`control-tower-loop:ct-groom` skill, names the milestone and its frozen spec,
+and tells the session that the issues are not its to create and that a change
+to the slicing is an edit of §9 which this program publishes. No worktree is
+cut and no branch is created.
+
+Which road depends on the conversation this backend holds:
+
+- **no live conversation** — an `ended` or `unresumable` one, or a failed
+  closure — opens a new conversation in the groom phase and answers
+  `status: grooming` with the target it minted;
+- **a live conversation** is asked instead: the prompt is typed into its
+  terminal as one line and submitted, and the answer is `status: typed`. No
+  second conversation is opened and the held target does not change.
 
 **Request** — no body. The checkout and the repository are the ones the
 coordinating session this backend holds already names, so nothing is sent.
@@ -1133,7 +1142,61 @@ conversation supplies the checkout; it is never silently retargeted.
 
 The opened conversation becomes the one `GET /coordinating-session` answers,
 live and `working`: there is one coordinating session and the groom phase takes
-its place, which is why a live conversation has to end before this door opens.
+its place.
+
+The ask into a live conversation answers the target and conversation that were
+already held:
+
+```json
+{"status":"typed","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
+ "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
+ "repo":"owner/name","root":"/repo/checkout",
+ "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
+```
+
+`typed` says what happened and nothing more: the bytes were written to the
+terminal. It is not a claim that the session read them. The evidence of the
+read is the session's own `UserPromptSubmit` hook, which arrives at
+`POST /session-hooks` and moves the attention of `GET /coordinating-session` to
+`working`; until it does, the page says the ask was sent and not that the review
+is under way.
+
+**Only a conversation that has finished its turn is asked**, and it takes two
+witnesses to say so: the `attention` of `GET /coordinating-session` and the kind
+of the last event on its timeline. Both are reported by the session's own hooks
+at `POST /session-hooks`, and the ask needs `waiting` and `completed`. Anything
+else is refused rather than queued:
+
+- the last event is `waiting-for-permission` — a permission prompt is on
+  screen. What is typed there answers that prompt, and the submit key accepts
+  it. A press meant to ask for a review would grant a permission nobody
+  granted, which is the one outcome this door must never have. This is checked
+  first, whatever the attention says.
+- `working` — a turn is running. Bytes typed now land in the middle of it, and
+  the attention can also be stale: a session interrupted on a tool call is
+  still reported as working, so there is no way to tell from here what the
+  terminal is showing. A resumed conversation is reported as working too, for
+  the same reason.
+- anything else — the conversation has never reported finishing a turn, so what
+  its terminal is showing is unknown, and the answer is
+  `coordinating-session-turn-not-finished`.
+
+**Why the state and not the message.** `waiting` alone cannot carry this
+decision, and neither can the text of the question. A `Notification` whose
+`notification_type` is `permission_prompt` but which carries no `message` is
+projected as `waiting(null)` — the same value `Stop` produces for a finished
+turn — because the message is optional in the payload and blank text reads as
+absent. One value would then mean two opposite things, one of them safe to type
+into and the other a permission waiting to be accepted. The timeline records
+`waiting-for-permission` as its own kind either way, so the state is what
+decides. The rule is an allow-list, not a deny-list: an event kind this door
+does not recognise refuses instead of typing.
+
+Queuing was the alternative and it is not this door's decision: a pending
+message needs an artefact of its own, a drain at a step boundary and a recovery
+after a restart — the shape #423 describes for the run driver — and no queue can
+be drained safely into a permission prompt anyway. Refusing says the truth with
+what the hooks already report.
 
 **Refusals**
 
@@ -1141,8 +1204,12 @@ its place, which is why a live conversation has to end before this door opens.
 |---|---|---|
 | 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
 | 400 | `coordinating-session-target-changed` | the target header is missing, malformed, stale, or no longer held |
-| 400 | `coordinating-session-busy` | recovery, opening, closing, or a failed close owns the lifecycle slot |
-| 409 | `coordinating-session-already-live` | a conversation is live: it has to end first |
+| 400 | `coordinating-session-busy` | recovery, opening or closing owns the lifecycle slot |
+| 409 | `coordinating-session-busy` | a failed close owns the slot of the live conversation |
+| 409 | `coordinating-session-working` | the live conversation is in the middle of a turn |
+| 409 | `coordinating-session-awaiting-permission` | the last event of the live conversation is `waiting-for-permission` |
+| 409 | `coordinating-session-turn-not-finished` | the live conversation has reported no finished turn |
+| 409 | `coordinating-session-not-live` | the terminal of the live conversation is gone; nothing was typed |
 | 409 | `coordinating-session-opening` | another opening is in flight |
 | 400 | `no-epic-spec` | no execution spec exists in this checkout to talk about |
 | 400 | `conversation-not-started` | `claude` could not be spawned in the checkout |
@@ -1217,13 +1284,15 @@ The cabin polls it to draw gate 1's panel.
 
 **200 OK** — four shapes, told apart by `status`.
 
-No coordinating session is held, so there is nothing to freeze:
+No checkout is known, so there is nothing to read: no coordinating conversation
+was ever held, or the one that was closed has been superseded by a plan started
+in another checkout:
 
 ```json
 {"status":"none"}
 ```
 
-A session is held, but the checkout carries no execution spec under
+The checkout is known, but it carries no execution spec under
 `docs/superpowers/specs/`:
 
 ```json
@@ -1275,6 +1344,13 @@ since have merged or closed.
 Every non-`none` answer names the target captured before the read began. If
 that target changes while the query is running, the delayed answer is
 `{"status":"none"}` and carries no key or stale authority.
+
+`target` is `null` when the answer describes the checkout of a conversation that
+has been closed: the read still reports what the checkout and GitHub say, and
+`POST /spec-freeze` has no target to carry, so it refuses with
+`coordinating-session-target-changed` until a session is opened again. A plan
+started in another checkout forgets that closed one, and the read goes back to
+`{"status":"none"}`.
 
 **Refusals**
 
@@ -1464,13 +1540,19 @@ The cabin polls it to draw gate 2's panel.
 
 **200 OK** — ten shapes, told apart by `status`.
 
-No coordinating session is held, so there is nothing to groom:
+No checkout is known, so there is nothing to read: no coordinating conversation
+was ever held, or the one that was closed has been superseded by a plan started
+in another checkout:
 
 ```json
 {"status":"none"}
 ```
 
-A session is held, but the checkout carries no execution spec — the same absence `GET
+`target` is `null` when the answer describes the checkout of a closed
+conversation. The read is the same; the presses of gate 2 refuse with
+`coordinating-session-target-changed`, because they have no target to carry.
+
+The checkout is known, but it carries no execution spec — the same absence `GET
 /spec-freeze` answers with `no-spec`:
 
 ```json

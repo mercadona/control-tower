@@ -1,5 +1,5 @@
 import classNames from 'classnames'
-import { createElement, HTMLAttributes, ReactNode, useId, useState } from 'react'
+import { createElement, CSSProperties, HTMLAttributes, ReactNode, useId, useState } from 'react'
 import { Button } from 'system-ui/button'
 import './CollapsableCard.css'
 
@@ -18,6 +18,7 @@ interface CollapsableCardProps extends Omit<HTMLAttributes<HTMLElement>, 'onTogg
 
 const COLLAPSE = 'Colapsar'
 const EXPAND = 'Expandir'
+const NO_ROOM: CSSProperties = { display: 'none' }
 
 const ChevronIcon = ({ isExpanded }: { isExpanded: boolean }) => (
   <svg
@@ -40,6 +41,8 @@ const CollapsableCard = ({
   children,
   contentId,
   className,
+  hidden,
+  style,
   ...rest
 }: CollapsableCardProps) => {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
@@ -63,7 +66,12 @@ const CollapsableCard = ({
   )
 
   return (
-    <section {...rest} className={classNames('collapsable-card', className)}>
+    <section
+      {...rest}
+      hidden={hidden}
+      style={hidden === true ? { ...style, ...NO_ROOM } : style}
+      className={classNames('collapsable-card', className)}
+    >
       <div className="collapsable-card__header">
         {headingElement}
         <Button

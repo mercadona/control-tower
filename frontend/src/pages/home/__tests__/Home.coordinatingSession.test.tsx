@@ -299,13 +299,79 @@ describe('Home and the coordinating session', () => {
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
   })
 
-  it('mounts no gate readers until the lifecycle owns an authoritative target', async () => {
+  it('gate 2 offers no ask while the live conversation is working, and says what to wait for', async () => {
+    const fetching = backendHolding(CoordinatingSessionMother.working())
+    fetching.mockImplementation((input: string | URL | Request) => {
+      if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
+      if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
+      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
+      if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
+      if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
+      if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    openHome()
+
+    expect(await screen.findByRole('button', { name: 'Revisar el slicing con la sesión' })).toBeDisabled()
+    expect(screen.getByText(
+      'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.',
+    )).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
+  })
+
+  it('gate 2 offers no ask while a permission prompt that carried no message is on screen', async () => {
+    const fetching = backendHolding(CoordinatingSessionMother.awaitingPermissionWithNoMessage())
+    fetching.mockImplementation((input: string | URL | Request) => {
+      if (input === '/coordinating-session') {
+        return Promise.resolve(responseFor(CoordinatingSessionMother.awaitingPermissionWithNoMessage()))
+      }
+      if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
+      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
+      if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
+      if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
+      if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    openHome()
+
+    expect(await screen.findByRole('button', { name: 'Revisar el slicing con la sesión' })).toBeDisabled()
+    expect(screen.getByText(
+      'La sesión está esperando un permiso en su terminal: respóndelo y vuelve a intentarlo.',
+    )).toBeInTheDocument()
+  })
+
+  it('gate 2 asks the live conversation that finished its turn, and claims only that the ask was sent', async () => {
+    const fetching = backendHolding(CoordinatingSessionMother.completed())
+    fetching.mockImplementation((input: string | URL | Request) => {
+      if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.completed()))
+      if (input === '/groom-session') return Promise.resolve(responseFor(EpicGroomMother.groomAskTyped()))
+      if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
+      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
+      if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
+      if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
+      if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    openHome()
+    const ask = await screen.findByRole('button', { name: 'Revisar el slicing con la sesión' })
+    await vi.waitFor(() => expect(ask).toBeEnabled())
+
+    fireEvent.click(ask)
+
+    expect(await screen.findByText('Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.'))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
+  })
+
+  it('reads both gates of the checkout with no coordinating session held', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.none())
 
     openHome()
     await screen.findByRole('button', { name: 'Arrancar brainstorming' })
 
-    expect(fetching.mock.calls.some(([input]) => input === '/spec-freeze')).toBe(false)
-    expect(fetching.mock.calls.some(([input]) => input === '/epic-groom')).toBe(false)
+    await vi.waitFor(() => {
+      expect(fetching.mock.calls.some(([input]) => input === '/spec-freeze')).toBe(true)
+      expect(fetching.mock.calls.some(([input]) => input === '/epic-groom')).toBe(true)
+    })
   })
 })

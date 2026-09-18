@@ -448,8 +448,10 @@ describe('ct-api entrypoint', () => {
       status: 'none', operation: 'idle',
     })
     expect(await TheCoordinatingSessionEndpoint.brainstormingsOf(firstPort)).toBe(0)
-    expect(await (await fetch(`http://127.0.0.1:${firstPort}/spec-freeze`)).json()).toEqual({ status: 'none' })
-    expect(await (await fetch(`http://127.0.0.1:${firstPort}/epic-groom`)).json()).toEqual({ status: 'none' })
+    expect(await (await fetch(`http://127.0.0.1:${firstPort}/spec-freeze`)).json())
+      .toEqual({ status: 'no-spec', target: null })
+    expect(await (await fetch(`http://127.0.0.1:${firstPort}/epic-groom`)).json())
+      .toEqual({ status: 'no-spec', target: null })
     expect(fixture.checkoutSnapshot()).toEqual(beforeClose)
     expect(unrelated.exitCode).toBeNull()
     expect(() => process.kill(unrelated.pid!, 0)).not.toThrow()

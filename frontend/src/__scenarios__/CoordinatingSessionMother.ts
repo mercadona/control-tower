@@ -24,6 +24,14 @@ const WAITING_TIMELINE = [
   ...WORKING_TIMELINE,
   { id: 'event-3', kind: 'waiting-for-permission' as const, at: WAITING_AT, detail: QUESTION },
 ]
+const COMPLETED_TIMELINE = [
+  ...WORKING_TIMELINE,
+  { id: 'event-3', kind: 'completed' as const, at: WAITING_AT, detail: null },
+]
+const SILENT_WAITING_TIMELINE = [
+  ...WORKING_TIMELINE,
+  { id: 'event-3', kind: 'waiting-for-permission' as const, at: WAITING_AT, detail: null },
+]
 const REPEATED_WAITING_TIMELINE = [
   ...WORKING_TIMELINE,
   { id: 'event-3', kind: 'waiting-for-permission' as const, at: WAITING_AT, detail: QUESTION },
@@ -96,6 +104,22 @@ const working = () => ({
     `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"working","question":null},` +
     `"timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
+})
+
+const completed = () => ({
+  status: 200,
+  body:
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"waiting","question":null},` +
+    `"timeline":${JSON.stringify(COMPLETED_TIMELINE)}}`,
+})
+
+const awaitingPermissionWithNoMessage = () => ({
+  status: 200,
+  body:
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"waiting","question":null},` +
+    `"timeline":${JSON.stringify(SILENT_WAITING_TIMELINE)}}`,
 })
 
 const waiting = () => ({
@@ -185,6 +209,8 @@ export const CoordinatingSessionMother = {
   unresumableRead,
   endedRead,
   working,
+  completed,
+  awaitingPermissionWithNoMessage,
   waiting,
   unresumable,
   ended,

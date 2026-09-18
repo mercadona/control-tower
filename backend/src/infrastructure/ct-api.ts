@@ -53,6 +53,7 @@ import { RecoverPlan } from '../application/actions/recover-plan.ts'
 import { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
+import { AskGroomReview } from '../application/actions/ask-groom-review.ts'
 import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
@@ -637,6 +638,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
     })
+    const askGroomReview = new AskGroomReview({ specs: epicSpecs, liveSessions, admission: coordinatingSessions })
     const epicBranch = new GitEpicBranch({ run: git })
     const gateKey = new GateKey({ random: randomBytes })
     const readSpecFreeze = new ReadSpecFreeze({ specs: epicSpecs, branch: epicBranch, pullRequests })
@@ -716,6 +718,7 @@ class CtApi {
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
       openGroomSession,
+      askGroomReview,
       closeCoordinatingSession,
       coordinatingSessions,
       readSpecFreeze,

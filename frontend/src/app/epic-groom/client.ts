@@ -20,6 +20,7 @@ const TARGET_HEADER = 'x-coordinating-target'
 const ACTED_STATUS = 200
 const OPENED_STATUS = 202
 const GROOMING_STATUS = 'grooming'
+const TYPED_STATUS = 'typed'
 const PUBLISHED_STATUS = 'published'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -66,6 +67,12 @@ const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null =>
 const keyOf = (body: Record<string, unknown>): string | null =>
   typeof body.key === 'string' ? body.key : null
 
+const namesACheckout = (body: Record<string, unknown>): boolean =>
+  typeof body.target === 'string' || body.target === null
+
+const targetOf = (body: Record<string, unknown>): string | null =>
+  typeof body.target === 'string' ? body.target : null
+
 const promotedOf = (body: Record<string, unknown>): number[] =>
   Array.isArray(body.promoted) && body.promoted.every((issue) => typeof issue === 'number')
     ? body.promoted
@@ -74,15 +81,16 @@ const promotedOf = (body: Record<string, unknown>): number[] =>
 const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (!isRecord(body)) return { kind: 'unavailable' }
   if (body.status === 'none') return { kind: 'none' }
-  if (typeof body.target !== 'string') return { kind: 'unavailable' }
-  if (body.status === 'no-spec') return { kind: 'no-spec', target: body.target }
-  if (body.status === 'draft') return { kind: 'draft', target: body.target }
+  if (!namesACheckout(body)) return { kind: 'unavailable' }
+  const target = targetOf(body)
+  if (body.status === 'no-spec') return { kind: 'no-spec', target }
+  if (body.status === 'draft') return { kind: 'draft', target }
   if (body.status === 'awaiting-publication') {
-    return { kind: 'awaiting-publication', target: body.target, pullRequest: pullRequestOf(body) }
+    return { kind: 'awaiting-publication', target, pullRequest: pullRequestOf(body) }
   }
-  if (body.status === 'resliced') return { kind: 'resliced', target: body.target, key: keyOf(body) }
+  if (body.status === 'resliced') return { kind: 'resliced', target, key: keyOf(body) }
   if (body.status === 'issues-uncertain' && typeof body.milestone === 'string' && typeof body.reason === 'string') {
-    return { kind: 'issues-uncertain', target: body.target, milestone: body.milestone, reason: body.reason }
+    return { kind: 'issues-uncertain', target, milestone: body.milestone, reason: body.reason }
   }
   if (
     body.status === 'groomable' &&
@@ -93,7 +101,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     typeof body.planFingerprint === 'string'
   ) {
     return {
-      kind: 'groomable', target: body.target, milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
+      kind: 'groomable', target, milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
       planFingerprint: body.planFingerprint,
       reslicing: pullRequestAt(body, 'reslicing'),
       key: keyOf(body),
@@ -109,15 +117,15 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     isEpicIssues(body.issues)
   ) {
     return {
-      kind: 'partially-groomed', target: body.target, milestone: body.milestone, plan: body.plan.issues,
+      kind: 'partially-groomed', target, milestone: body.milestone, plan: body.plan.issues,
       planFingerprint: body.planFingerprint, issues: body.issues, key: keyOf(body),
     }
   }
   if (body.status === 'groomed' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
-    return { kind: 'groomed', target: body.target, milestone: body.milestone, issues: body.issues, key: keyOf(body) }
+    return { kind: 'groomed', target, milestone: body.milestone, issues: body.issues, key: keyOf(body) }
   }
   if (body.status === 'authorised' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
-    return { kind: 'authorised', target: body.target, milestone: body.milestone, issues: body.issues }
+    return { kind: 'authorised', target, milestone: body.milestone, issues: body.issues }
   }
   return { kind: 'unavailable' }
 }
@@ -218,7 +226,9 @@ const openSession = async (key: string, target: string): Promise<GroomSessionOut
     return { kind: 'unconfirmed' }
   }
   if (response.status === OPENED_STATUS) {
-    if (!isRecord(body) || body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
+    if (!isRecord(body)) return { kind: 'unconfirmed' }
+    if (body.status === TYPED_STATUS) return { kind: 'typed' }
+    if (body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
     const opened = CoordinatingSessionClient.openedIn(body)
 
     return opened === null ? { kind: 'unconfirmed' } : { kind: 'opened', opened }
