@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
@@ -7,6 +7,8 @@ import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshot, WORKFLOW_SNAPSHOT_KEY, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
+import { FakeEventSource } from './FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import {
   backendRecovering,
   openHome,
@@ -17,7 +19,9 @@ import {
   typeRepository,
   typeTicket,
 } from './helpers'
-import { FakeEventSource } from './FakeEventSource'
+
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 type RecoveredPhase = 'planning' | 'implementing' | 'uncertain'
 
@@ -80,7 +84,12 @@ const startPlanning = async () => {
 }
 
 describe('Home · restore workflow', () => {
+  beforeEach(() => {
+    FakeTerminal.install()
+    FakeFitAddon.install()
+  })
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
@@ -330,7 +339,7 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    await waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
     await waitFor(() => expect(fetching).toHaveBeenCalledWith('/active-plans'))
   })
 
@@ -352,7 +361,7 @@ describe('Home · restore workflow', () => {
     openHome()
 
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    await waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -804,7 +813,7 @@ describe('Home · restore workflow', () => {
     expect(screen.queryByRole('button', { name: /Continuar plan/ })).toBeNull()
   })
 
-  it('a coordinator opened by gate 2 invalidates discovery from the previous conversation', async () => {
+  it('a live coordinator blocks gate 2 from opening a second conversation', async () => {
     vi.useFakeTimers()
     const changes = HeadlessPlanMother.deferredChanges()
     const coordinating = CoordinatingSessionMother.working()
@@ -826,11 +835,8 @@ describe('Home · restore workflow', () => {
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     expect(changes.activeReadCount()).toBe(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revisar el slicing con la sesión' }))
-    await act(async () => vi.advanceTimersByTimeAsync(0))
-    await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
-
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Revisar el slicing con la sesión' })).toBeDisabled()
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => input === '/groom-session')).toHaveLength(0)
     expect(screen.queryByText('Plan arrancado')).toBeNull()
   })
 

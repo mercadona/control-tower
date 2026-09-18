@@ -2,7 +2,6 @@ import { CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
-import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
@@ -10,7 +9,6 @@ import { ImplementHistory } from 'app/implement-history/components/implement-his
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
-import { LiveSession } from 'app/sessions/Sessions.types'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -63,11 +61,11 @@ const Home = () => {
   const [candidates, setCandidates] = useState<ActivePlan[]>([])
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
-  const [openedSession, setOpenedSession] = useState<LiveSession | null>(null)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
-  const sessionsColumnCollapse = useSessionsColumnCollapse()
+  const coordinatingSession = useCoordinatingSession()
+  const sessionsColumnCollapse = useSessionsColumnCollapse(coordinatingSession.target)
   const sessionPanelRef = useRef<HTMLDivElement>(null)
   const terminalHeight = useSessionTerminalHeight(sessionPanelRef)
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
@@ -83,9 +81,11 @@ const Home = () => {
   const discardedPlansRef = useRef(new Set<string>())
   const uncertainActiveRef = useRef<ActivePlan | null>(null)
   const mountedRef = useRef(false)
-  const coordinatingSession = useCoordinatingSession()
-  const isCoordinatingSessionLive = coordinatingSession.phase === 'read' && coordinatingSession.kind === 'live'
-  const coordinatingConversation = isCoordinatingSessionLive ? coordinatingSession.conversation : null
+  const liveCoordinatingSession = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live'
+    ? coordinatingSession.read
+    : null
+  const isCoordinatingSessionLive = liveCoordinatingSession !== null
+  const coordinatingConversation = coordinatingSession.opened?.conversation ?? liveCoordinatingSession?.conversation ?? null
   const coordinatingConversationRef = useRef(coordinatingConversation)
 
   useEffect(() => {
@@ -254,15 +254,18 @@ const Home = () => {
     setExpandedSummary(isExpanded ? stage : null)
   }
 
-  const sessionOpened = useCallback((opened: OpenedCoordinatingSession) => {
+  const sessionOpened = useCallback(() => {
     recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
-    coordinatingConversationRef.current = opened.conversation
     setCandidates([])
     setBrainstormingUnreachable(false)
-    setOpenedSession(opened.session)
-    sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }, [])
+
+  useEffect(() => {
+    if (coordinatingSession.target !== null) {
+      sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    }
+  }, [coordinatingSession.target])
 
   const sessionUnreachable = useCallback(() => {
     setBrainstormingUnreachable(true)
@@ -297,6 +300,11 @@ const Home = () => {
     setExpandedSummary(null)
     setRequestFormVersion((version) => version + 1)
     WorkflowSnapshotStorage.remove()
+  }
+
+  const startAnotherPlan = () => {
+    if (coordinatingSession.blocksOpening) return
+    discardWorkflow()
   }
 
   const discardStaleWorkflow = () => {
@@ -484,7 +492,7 @@ const Home = () => {
             productName={workflow === null ? 'Control Tower' : undefined}
             breadcrumbs={workflow !== null ? <Breadcrumbs items={breadcrumbItems} /> : undefined}
             actions={showStartAnother ? (
-              <Button variant="secondary" onClick={discardWorkflow}>Arrancar otro plan</Button>
+              <Button variant="secondary" disabled={coordinatingSession.blocksOpening} onClick={startAnotherPlan}>Arrancar otro plan</Button>
             ) : undefined}
           />
         }
@@ -557,7 +565,8 @@ const Home = () => {
                 onInteraction={formInteracted}
                 isLocked={uncertainRequest !== null}
                 isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
-                isCoordinatingSessionLive={isCoordinatingSessionLive}
+                isCoordinatingSessionLive={coordinatingSession.occupied}
+                openSession={coordinatingSession.open}
                 request={uncertainRequest ?? undefined}
               />
             </WorkflowStep>
@@ -624,7 +633,15 @@ const Home = () => {
             </WorkflowStep>
           )}
 
-          <GateSequence onSessionOpened={sessionOpened} />
+          {coordinatingSession.target !== null && (
+            <GateSequence
+              key={coordinatingSession.target}
+              target={coordinatingSession.target}
+              openingBlocked={coordinatingSession.blocksOpening}
+              operationBusy={coordinatingSession.operationBusy}
+              openSession={coordinatingSession.openGroom}
+            />
+          )}
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">
@@ -680,7 +697,18 @@ const Home = () => {
                 className="home__terminal-pane"
                 style={{ '--home-terminal-height': `${terminalHeight.value}px` } as CSSProperties}
               >
-                <SessionsPanel opened={openedSession} />
+                <SessionsPanel
+                  coordinating={coordinatingSession.read}
+                  adopted={coordinatingSession.opened}
+                  closing={coordinatingSession.closing || (
+                    coordinatingSession.read.phase === 'read' &&
+                    coordinatingSession.read.kind !== 'unavailable' &&
+                    coordinatingSession.read.operation === 'closing'
+                  )}
+                  closeError={coordinatingSession.closeError}
+                  closedSessionIds={coordinatingSession.closedSessionIds}
+                  onClose={() => void coordinatingSession.close()}
+                />
               </div>
               <RowResizer
                 value={terminalHeight.value}
@@ -690,7 +718,7 @@ const Home = () => {
                 label={TERMINAL_HEIGHT_LABEL}
               />
               <div className="home__timeline-pane">
-                <CoordinatingSessionStatus read={coordinatingSession} />
+                <CoordinatingSessionStatus read={coordinatingSession.read} />
                 {showHistory && workflow !== null && (
                   <aside className="home__history" aria-label="Progreso de la implementación">
                     <ImplementHistory

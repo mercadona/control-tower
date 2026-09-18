@@ -3,6 +3,8 @@ import { userEvent } from '@testing-library/user-event'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { SpecFreezePanel } from './SpecFreezePanel'
 
+const renderPanel = () => render(<SpecFreezePanel target={SpecFreezeMother.TARGET} />)
+
 const FREEZE_BUTTON = { name: 'Congelar el spec' }
 
 describe('SpecFreezePanel', () => {
@@ -11,7 +13,7 @@ describe('SpecFreezePanel', () => {
   it('refuses the freeze while a clarification marker remains and shows the line the backend gave', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithMarker().body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(
       await screen.findByText('Marcador de clarificación sin resolver, línea 42: [NEEDS CLARIFICATION: which button?]'),
@@ -22,7 +24,7 @@ describe('SpecFreezePanel', () => {
   it('a frozen decision that does not say where it comes from is listed with its own copy, its line and its raw line', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithSourcelessDecision().body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(
       await screen.findByText(
@@ -35,7 +37,7 @@ describe('SpecFreezePanel', () => {
   it('lets the freeze go once no finding remains', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftReady().body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', FREEZE_BUTTON)).toBeEnabled()
   })
@@ -43,7 +45,7 @@ describe('SpecFreezePanel', () => {
   it('a spec with no hypothesis shows that finding and keeps the button disabled', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithMarker().body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(await screen.findByText('El spec no tiene sección «## Hipótesis»')).toBeInTheDocument()
     expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
@@ -56,14 +58,17 @@ describe('SpecFreezePanel', () => {
       .mockResolvedValueOnce(new Response(SpecFreezeMother.frozen().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<SpecFreezePanel />)
+    renderPanel()
     await screen.findByRole('button', FREEZE_BUTTON)
 
     await user.click(screen.getByRole('button', FREEZE_BUTTON))
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/spec-freeze', {
       method: 'POST',
-      headers: { 'x-gate-key': SpecFreezeMother.KEY },
+      headers: {
+        'x-gate-key': SpecFreezeMother.KEY,
+        'x-coordinating-target': SpecFreezeMother.TARGET,
+      },
     })
     expect(await screen.findByText(`Spec congelado el ${SpecFreezeMother.ON}.`)).toBeInTheDocument()
     expect(
@@ -77,7 +82,7 @@ describe('SpecFreezePanel', () => {
   it('without a key the button stays disabled and says where the gate opens from', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithoutKey().body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', FREEZE_BUTTON)).toBeDisabled()
     expect(
@@ -92,19 +97,19 @@ describe('SpecFreezePanel', () => {
       .mockResolvedValueOnce(new Response(SpecFreezeMother.notFromThePage().body, { status: 403 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<SpecFreezePanel />)
+    renderPanel()
     await screen.findByRole('button', FREEZE_BUTTON)
 
     await user.click(screen.getByRole('button', FREEZE_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(SpecFreezeMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
   })
 
   it('there is nothing to show while the checkout has no execution spec', async () => {
     const reading = vi.fn(async () => new Response(SpecFreezeMother.noSpec().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)
 
-    const { container } = render(<SpecFreezePanel />)
+    const { container } = renderPanel()
 
     await waitFor(() => expect(reading).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
@@ -114,16 +119,16 @@ describe('SpecFreezePanel', () => {
     const refused = SpecFreezeMother.refusedRead()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(refused.body, { status: refused.status })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(SpecFreezeMother.REFUSED_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se ha podido interpretar el spec del epic.')
   })
 
   it('a spec frozen by hand with no date still says so instead of blanking the cabin', async () => {
     const undated = SpecFreezeMother.frozenUndated()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(undated.body, { status: undated.status })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
 
     expect(await screen.findByText(/Spec congelado, sin fecha/)).toBeInTheDocument()
     expect(screen.getByText(/mergéalo para continuar al groom/)).toBeInTheDocument()
@@ -136,7 +141,7 @@ describe('SpecFreezePanel', () => {
     vi.stubGlobal('fetch', vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
       init?.method === 'POST' ? await pending : new Response(ready.body, { status: 200 })))
 
-    render(<SpecFreezePanel />)
+    renderPanel()
     const button = await screen.findByRole('button', { name: 'Congelar el spec' })
     await userEvent.click(button)
 
@@ -153,7 +158,7 @@ describe('SpecFreezePanel', () => {
         : new Response(ready.body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
 
-    render(<SpecFreezePanel />)
+    renderPanel()
     const button = await screen.findByRole('button', { name: 'Congelar el spec' })
     fireEvent.click(button)
     fireEvent.click(button)
@@ -161,5 +166,15 @@ describe('SpecFreezePanel', () => {
     await waitFor(() => expect(screen.getByText(/mergéalo para continuar al groom/)).toBeInTheDocument())
     const presses = fetching.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(presses).toHaveLength(1)
+  })
+
+  it('operation busy disables freeze and guards its handler', async () => {
+    const fetching = vi.fn(async () => new Response(SpecFreezeMother.draftReady().body))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<SpecFreezePanel target={SpecFreezeMother.TARGET} operationBusy />)
+
+    expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
+    expect(fetching).toHaveBeenCalledTimes(1)
   })
 })

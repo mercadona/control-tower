@@ -38,7 +38,7 @@ const stubGates = (specFreeze: Answer, epicGroom: Answer) => {
     if (path === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.none())
+    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.ended())
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -135,7 +135,7 @@ describe('Home and the gate sequence', () => {
 
     await screen.findByRole('heading', { name: GATE_2_HEADING })
     expect(gateToggle(GATE_2_HEADING)).toHaveAttribute('aria-expanded', 'true')
-    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.ISSUES_UNCERTAIN_REASON)
+    expect(await screen.findByText(EpicGroomMother.ISSUES_UNCERTAIN_REASON)).toBeInTheDocument()
   })
 
   it('reaches gate 2 primary action without gate 1 detail taking up the layout', async () => {

@@ -1,4 +1,6 @@
 import type { LiveSession } from '../value-objects/live-session.ts'
+import type { ConversationId } from '../value-objects/conversation-id.ts'
+import type { SessionClosure } from '../value-objects/session-closure.ts'
 
 export type LiveSessionStream = { readonly printed: string, readonly stop: () => void }
 
@@ -30,5 +32,25 @@ export class LiveSessions {
 
   resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
     throw new Error(`${this.constructor.name} must implement resize()`)
+  }
+
+  terminationEvidence({ conversation, target, session }: {
+    conversation: ConversationId, target: string, session: LiveSession | null,
+  }): SessionClosure {
+    throw new Error(
+      `${this.constructor.name} must implement terminationEvidence(), asked for ${conversation.text} ${target} ${session?.id ?? 'none'}`
+    )
+  }
+
+  async terminate(closure: SessionClosure): Promise<void> {
+    throw new Error(`${this.constructor.name} must implement terminate(), asked for ${closure.target}`)
+  }
+
+  async prepareTermination(closure: SessionClosure): Promise<SessionClosure> {
+    throw new Error(`${this.constructor.name} must implement prepareTermination(), asked for ${closure.target}`)
+  }
+
+  async confirmTermination(closure: SessionClosure): Promise<void> {
+    throw new Error(`${this.constructor.name} must implement confirmTermination(), asked for ${closure.target}`)
   }
 }

@@ -1,4 +1,5 @@
 const MILESTONE = 'The loop enters through brainstorming'
+const TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 const KEY = '7b1e9d3c5a2f8046b3d1e9c7a5f3082b6d4e2c0a8f6b4d2e0c8a6f4b2d0e8c6a'
 const PLAN_FINGERPRINT = '4c9e2a1d7f5b3068a2c4e6f81d3b5a7c9e0f2d4b6a8c1e3f5d7b9a0c2e4f6b81'
 const CHANGED_PLAN_FINGERPRINT = '81b6f4e2c0a8f6b4d2e0c8a6f4b2d0e8c6a4b2d0e8c6a4b2d0e8c6a4b2d0e8c6'
@@ -14,6 +15,7 @@ const READY_CHANNEL = { ...BACKLOG_CHANNEL, status: 'ready' }
 const PROMOTED = [348, 349]
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
 const GROOM_CONVERSATION = '9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f'
+const GROOM_TARGET = '69d8d78f-1f6f-47db-98c5-3a13b1710691'
 const GROOM_SESSION = { id: 'session-9', name: 'brainstorming' }
 const RESLICING_PULL_REQUEST = { number: 363, url: 'https://github.com/owner/name/pull/363' }
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
@@ -28,59 +30,59 @@ const READY_ISSUES_JSON = `[${JSON.stringify(READY_GATE)},${JSON.stringify(READY
 
 const none = () => ({ status: 200, body: '{"status":"none"}' })
 
-const noSpec = () => ({ status: 200, body: '{"status":"no-spec"}' })
+const noSpec = () => ({ status: 200, body: `{"status":"no-spec","target":"${TARGET}"}` })
 
-const draft = () => ({ status: 200, body: '{"status":"draft"}' })
+const draft = () => ({ status: 200, body: `{"status":"draft","target":"${TARGET}"}` })
 
 const awaitingPublication = () => ({
   status: 200,
-  body: `{"status":"awaiting-publication","pullRequest":${JSON.stringify(PULL_REQUEST)}}`,
+  body: `{"status":"awaiting-publication","target":"${TARGET}","pullRequest":${JSON.stringify(PULL_REQUEST)}}`,
 })
 
 const awaitingPublicationWithNoPullRequest = () => ({
   status: 200,
-  body: '{"status":"awaiting-publication","pullRequest":null}',
+  body: `{"status":"awaiting-publication","target":"${TARGET}","pullRequest":null}`,
 })
 
 const issuesUncertain = () => ({
   status: 200,
-  body: `{"status":"issues-uncertain","milestone":"${MILESTONE}","reason":${JSON.stringify(ISSUES_UNCERTAIN_REASON)}}`,
+  body: `{"status":"issues-uncertain","target":"${TARGET}","milestone":"${MILESTONE}","reason":${JSON.stringify(ISSUES_UNCERTAIN_REASON)}}`,
 })
 
 const groomable = () => ({
   status: 200,
-  body: `{"status":"groomable","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+  body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
     `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":null,"key":"${KEY}"}`,
 })
 
 const groomableAfterReslicing = () => ({
   status: 200,
-  body: `{"status":"groomable","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+  body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
     `"planFingerprint":"${PLAN_FINGERPRINT}","reslicing":${JSON.stringify(RESLICING_PULL_REQUEST)},` +
     `"key":"${KEY}"}`,
 })
 
 const groomableAcrossRepositories = () => ({
   status: 200,
-  body: `{"status":"groomable","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${SPREAD_PLAN_JSON}},` +
+  body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${SPREAD_PLAN_JSON}},` +
     `"planFingerprint":"${PLAN_FINGERPRINT}","key":"${KEY}"}`,
 })
 
 const groomableWithoutKey = () => ({
   status: 200,
-  body: `{"status":"groomable","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+  body: `{"status":"groomable","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
     `"planFingerprint":"${PLAN_FINGERPRINT}"}`,
 })
 
 const partiallyGroomed = () => ({
   status: 200,
-  body: `{"status":"partially-groomed","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
+  body: `{"status":"partially-groomed","target":"${TARGET}","milestone":"${MILESTONE}","plan":{"home":"${HOME}","issues":${PLAN_JSON}},` +
     `"planFingerprint":"${PLAN_FINGERPRINT}","issues":${JSON.stringify([BACKLOG_GATE])},"key":"${KEY}"}`,
 })
 
 const groomed = () => ({
   status: 200,
-  body: `{"status":"groomed","milestone":"${MILESTONE}","issues":${BACKLOG_ISSUES_JSON},"key":"${KEY}"}`,
+  body: `{"status":"groomed","target":"${TARGET}","milestone":"${MILESTONE}","issues":${BACKLOG_ISSUES_JSON},"key":"${KEY}"}`,
 })
 
 const groomedByThePress = () => ({
@@ -90,7 +92,7 @@ const groomedByThePress = () => ({
 
 const authorised = () => ({
   status: 200,
-  body: `{"status":"authorised","milestone":"${MILESTONE}","issues":${READY_ISSUES_JSON}}`,
+  body: `{"status":"authorised","target":"${TARGET}","milestone":"${MILESTONE}","issues":${READY_ISSUES_JSON}}`,
 })
 
 const promoted = () => ({
@@ -98,9 +100,9 @@ const promoted = () => ({
   body: `{"status":"authorised","milestone":"${MILESTONE}","issues":${READY_ISSUES_JSON},"promoted":${JSON.stringify(PROMOTED)}}`,
 })
 
-const resliced = () => ({ status: 200, body: `{"status":"resliced","key":"${KEY}"}` })
+const resliced = () => ({ status: 200, body: `{"status":"resliced","target":"${TARGET}","key":"${KEY}"}` })
 
-const reslicedWithoutKey = () => ({ status: 200, body: '{"status":"resliced"}' })
+const reslicedWithoutKey = () => ({ status: 200, body: `{"status":"resliced","target":"${TARGET}"}` })
 
 const reslicingPublished = () => ({
   status: 200,
@@ -109,7 +111,7 @@ const reslicingPublished = () => ({
 
 const groomSessionOpened = () => ({
   status: 202,
-  body: `{"status":"grooming","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+  body: `{"status":"grooming","target":"${GROOM_TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
     `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 
@@ -126,6 +128,7 @@ const planChanged = () => ({
 })
 
 export const EpicGroomMother = {
+  TARGET,
   MILESTONE,
   KEY,
   PLAN_FINGERPRINT,
@@ -142,6 +145,7 @@ export const EpicGroomMother = {
   PROMOTED,
   PULL_REQUEST,
   GROOM_CONVERSATION,
+  GROOM_TARGET,
   GROOM_SESSION,
   RESLICING_PULL_REQUEST,
   NOT_FROM_THE_PAGE_DETAIL,

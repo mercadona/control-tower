@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { realpathSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -60,11 +60,13 @@ class Entrypoint {
     })
   }
 
-  static killAll(): void {
+  static async killAll(): Promise<void> {
+    const pids = new Set<number>()
     for (const child of Entrypoint.#spawned.splice(0)) {
-      for (const descendant of Entrypoint.#descendantsOf(child.pid)) Entrypoint.#killed(descendant)
-      child.kill('SIGKILL')
+      for (const descendant of Entrypoint.#descendantsOf(child.pid)) pids.add(descendant)
+      if (child.pid !== undefined) pids.add(child.pid)
     }
+    await Promise.all([...pids].map((pid) => Entrypoint.killPid(pid)))
   }
 
   static #descendantsOf(pid: number | undefined): number[] {
@@ -86,12 +88,24 @@ class Entrypoint {
     }
   }
 
-  static #killed(pid: number): void {
+  static async killPid(pid: number): Promise<void> {
     try {
       process.kill(pid, 'SIGKILL')
-    } catch {
-      return
+    } catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code === 'ESRCH') return
+      throw failure
     }
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      try {
+        process.kill(pid, 0)
+      } catch (failure) {
+        if ((failure as NodeJS.ErrnoException).code === 'ESRCH') return
+        throw failure
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error(`fixture process ${pid} did not exit within 5000ms`)
   }
 
   static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
@@ -228,6 +242,134 @@ class AClaudeThatStaysOpen {
   }
 }
 
+class LifecycleFixture {
+  static readonly REPOSITORY = 'acme/widget'
+  static readonly READY = 'FAKE_CLAUDE_READY'
+  static readonly INPUT = 'typed-through-the-api'
+  static readonly #roots: string[] = []
+  static readonly #processes: ChildProcess[] = []
+
+  readonly base: string
+  readonly checkout: string
+  readonly config: string
+  readonly bin: string
+  readonly launches: string
+  readonly inputs: string
+  readonly pids: string
+
+  private constructor({ base, checkout, config, bin, launches, inputs, pids }: {
+    base: string, checkout: string, config: string, bin: string, launches: string, inputs: string, pids: string,
+  }) {
+    this.base = base
+    this.checkout = checkout
+    this.config = config
+    this.bin = bin
+    this.launches = launches
+    this.inputs = inputs
+    this.pids = pids
+  }
+
+  static async prepared(): Promise<LifecycleFixture> {
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-lifecycle-'))
+    LifecycleFixture.#roots.push(base)
+    const checkout = join(base, 'checkout')
+    const config = join(base, 'config')
+    const bin = join(base, 'bin')
+    const launches = join(base, 'launches.ndjson')
+    const inputs = join(base, 'inputs.txt')
+    const pids = join(base, 'pids.txt')
+    await Promise.all([mkdir(checkout), mkdir(config), mkdir(bin)])
+    LifecycleFixture.#git(checkout, 'init', '-q')
+    LifecycleFixture.#git(checkout, 'config', 'user.email', 'lifecycle@test')
+    LifecycleFixture.#git(checkout, 'config', 'user.name', 'Lifecycle Fixture')
+    LifecycleFixture.#git(checkout, 'remote', 'add', 'origin', 'git@github.com:acme/widget.git')
+    await writeFile(join(checkout, 'sentinel.txt'), 'committed sentinel\n')
+    LifecycleFixture.#git(checkout, 'add', 'sentinel.txt')
+    LifecycleFixture.#git(checkout, 'commit', '-q', '-m', 'fixture baseline')
+    await writeFile(join(checkout, 'sentinel.txt'), 'dirty sentinel must survive\n')
+    await writeFile(join(checkout, 'untracked.txt'), 'untracked work must survive\n')
+    await writeFile(join(bin, 'claude'), [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs')",
+      "fs.appendFileSync(process.env.CT_LIFECYCLE_LAUNCHES, JSON.stringify(process.argv.slice(2)) + '\\n')",
+      "fs.appendFileSync(process.env.CT_LIFECYCLE_PIDS, String(process.pid) + '\\n')",
+      `process.stdout.write('${LifecycleFixture.READY}\\n')`,
+      "process.stdin.setEncoding('utf8')",
+      "process.stdin.on('data', (text) => fs.appendFileSync(process.env.CT_LIFECYCLE_INPUTS, text))",
+      'setInterval(() => {}, 1000)',
+    ].join('\n') + '\n', { mode: 0o755 })
+    await writeFile(join(bin, 'fixture-shell'), [
+      '#!/bin/sh',
+      'while [ "$#" -gt 1 ]; do shift; done',
+      'exec /bin/sh -c "$1"',
+    ].join('\n') + '\n', { mode: 0o755 })
+
+    return new LifecycleFixture({ base, checkout, config, bin, launches, inputs, pids })
+  }
+
+  environment(): NodeJS.ProcessEnv {
+    return {
+      CT_API_PORT: '0',
+      CLAUDE_CONFIG_DIR: this.config,
+      SHELL: join(this.bin, 'fixture-shell'),
+      PATH: `${this.bin}:${process.env.PATH}`,
+      CT_LIFECYCLE_LAUNCHES: this.launches,
+      CT_LIFECYCLE_INPUTS: this.inputs,
+      CT_LIFECYCLE_PIDS: this.pids,
+    }
+  }
+
+  unrelatedProcess(): ChildProcess {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+    LifecycleFixture.#processes.push(child)
+    return child
+  }
+
+  async recordTranscript(conversation: string): Promise<void> {
+    const folder = ClaudeCodeTranscript.folderFor(this.checkout)
+    const directory = join(this.config, ClaudeCodeTranscript.FOLDER, folder)
+    await mkdir(directory, { recursive: true })
+    await writeFile(join(directory, `${conversation}${ClaudeCodeTranscript.EXTENSION}`), '{"type":"user"}\n')
+  }
+
+  async launchCount(): Promise<number> {
+    try {
+      return (await readFile(this.launches, 'utf8')).trim().split('\n').filter((line) => line !== '').length
+    } catch (failure) {
+      if ((failure as NodeJS.ErrnoException).code === 'ENOENT') return 0
+      throw failure
+    }
+  }
+
+  checkoutSnapshot(): { sentinel: string, status: string, diff: string } {
+    return {
+      sentinel: readFileSync(join(this.checkout, 'sentinel.txt'), 'utf8'),
+      status: execFileSync('git', ['-C', this.checkout, 'status', '--porcelain=v1'], { encoding: 'utf8' }),
+      diff: execFileSync('git', ['-C', this.checkout, 'diff', '--binary'], { encoding: 'utf8' }),
+    }
+  }
+
+  static async cleanAll(): Promise<void> {
+    const pids = LifecycleFixture.#processes.splice(0)
+      .map((child) => child.pid)
+      .filter((pid): pid is number => pid !== undefined)
+    for (const root of LifecycleFixture.#roots) {
+      try {
+        pids.push(...(await readFile(join(root, 'pids.txt'), 'utf8'))
+          .split('\n').filter((line) => line !== '').map(Number))
+      } catch (failure) {
+        if ((failure as NodeJS.ErrnoException).code !== 'ENOENT') throw failure
+      }
+    }
+    await Promise.all([...new Set(pids)].map((pid) => Entrypoint.killPid(pid)))
+    await Promise.all(LifecycleFixture.#roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  }
+
+  static #git(cwd: string, ...argv: string[]): void {
+    execFileSync('git', argv, { cwd, stdio: 'ignore' })
+  }
+}
+
 class ARecordedConversation {
   static readonly ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
   static readonly REPOSITORY = 'acme/widget'
@@ -294,6 +436,41 @@ class TheCoordinatingSessionEndpoint {
       { sessions: { name: string }[] }
 
     return listed.sessions.filter((session) => session.name === 'brainstorming').length
+  }
+
+  static close(port: number, conversation: string, target: string): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/coordinating-session/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation, target }),
+    })
+  }
+
+  static type(port: number, session: string, text: string): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/sessions/${session}/input`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+  }
+
+  static async waitsForOutput(port: number, session: string, token: string): Promise<void> {
+    const response = await fetch(`http://127.0.0.1:${port}/sessions/${session}/stream`)
+    const reader = response.body!.getReader()
+    let received = ''
+    try {
+      for (let read = 0; read < 20 && !received.includes(token); read += 1) {
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('session output timed out')), 5_000)),
+        ])
+        if (next.done) break
+        received += Buffer.from(next.value).toString('utf8')
+      }
+    } finally {
+      await reader.cancel().catch(() => {})
+    }
+    if (!received.includes(token)) throw new Error(`session output did not contain ${JSON.stringify(token)}`)
   }
 }
 
@@ -493,9 +670,86 @@ class ActualHeadlessRuntime {
 }
 
 describe('ct-api entrypoint', () => {
-  afterEach(() => {
-    Entrypoint.killAll()
+  afterEach(async () => {
+    await Entrypoint.killAll()
+    await LifecycleFixture.cleanAll()
   })
+
+  it('a session can be closed and replaced and stays closed after backend restart', async () => {
+    const fixture = await LifecycleFixture.prepared()
+    const unrelated = fixture.unrelatedProcess()
+    const environment = fixture.environment()
+    const firstPort = await Entrypoint.listening(environment)
+
+    const opened = await TheCoordinatingSessionEndpoint.open(
+      firstPort, LifecycleFixture.REPOSITORY, fixture.checkout
+    )
+    expect(opened.status).toBe(202)
+    const first = await opened.json() as {
+      conversation: string, target: string, session: { id: string },
+    }
+    await expect.poll(() => fixture.launchCount()).toBe(1)
+    await TheCoordinatingSessionEndpoint.waitsForOutput(firstPort, first.session.id, LifecycleFixture.READY)
+    expect(await TheCoordinatingSessionEndpoint.type(
+      firstPort, first.session.id, `${LifecycleFixture.INPUT}\r`
+    )).toHaveProperty('status', 202)
+    await expect.poll(async () => {
+      try {
+        return (await readFile(fixture.inputs, 'utf8')).includes(LifecycleFixture.INPUT)
+      } catch {
+        return false
+      }
+    }).toBe(true)
+    await fixture.recordTranscript(first.conversation)
+    const beforeClose = fixture.checkoutSnapshot()
+
+    const closed = await TheCoordinatingSessionEndpoint.close(firstPort, first.conversation, first.target)
+
+    expect(closed.status).toBe(200)
+    expect(await closed.json()).toEqual({
+      status: 'closed', conversation: first.conversation, target: first.target,
+    })
+    expect(await (await fetch(`http://127.0.0.1:${firstPort}/coordinating-session`)).json()).toEqual({
+      status: 'none', operation: 'idle',
+    })
+    expect(await TheCoordinatingSessionEndpoint.brainstormingsOf(firstPort)).toBe(0)
+    expect(await (await fetch(`http://127.0.0.1:${firstPort}/spec-freeze`)).json()).toEqual({ status: 'none' })
+    expect(await (await fetch(`http://127.0.0.1:${firstPort}/epic-groom`)).json()).toEqual({ status: 'none' })
+    expect(fixture.checkoutSnapshot()).toEqual(beforeClose)
+    expect(unrelated.exitCode).toBeNull()
+    expect(() => process.kill(unrelated.pid!, 0)).not.toThrow()
+
+    const sameBackendReplacement = await TheCoordinatingSessionEndpoint.open(
+      firstPort, LifecycleFixture.REPOSITORY, fixture.checkout
+    )
+    expect(sameBackendReplacement.status).toBe(202)
+    const second = await sameBackendReplacement.json() as {
+      conversation: string, target: string, session: { id: string },
+    }
+    expect(second.conversation).not.toBe(first.conversation)
+    expect(second.target).not.toBe(first.target)
+    await expect.poll(() => fixture.launchCount()).toBe(2)
+    await TheCoordinatingSessionEndpoint.waitsForOutput(firstPort, second.session.id, LifecycleFixture.READY)
+    expect((await TheCoordinatingSessionEndpoint.close(firstPort, second.conversation, second.target)).status).toBe(200)
+
+    await Entrypoint.killAll()
+    const restartedPort = await Entrypoint.listening(environment)
+    await expect.poll(async () => {
+      return await (await fetch(`http://127.0.0.1:${restartedPort}/coordinating-session`)).json()
+    }).toEqual({ status: 'none', operation: 'idle' })
+    expect(await fixture.launchCount()).toBe(2)
+
+    const replacementAfterRestart = await TheCoordinatingSessionEndpoint.open(
+      restartedPort, LifecycleFixture.REPOSITORY, fixture.checkout
+    )
+    expect(replacementAfterRestart.status).toBe(202)
+    const third = await replacementAfterRestart.json() as { conversation: string, target: string }
+    expect(third.conversation).not.toBe(second.conversation)
+    expect(third.target).not.toBe(second.target)
+    await expect.poll(() => fixture.launchCount()).toBe(3)
+    expect(fixture.checkoutSnapshot()).toEqual(beforeClose)
+    expect(() => process.kill(unrelated.pid!, 0)).not.toThrow()
+  }, 60_000)
 
   it('the_recovery_reads_the_transcript_under_the_configured_claude_directory', async () => {
     const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-config-'))
@@ -542,7 +796,7 @@ describe('ct-api entrypoint', () => {
 
     expect(answered.map((response) => response.status).sort()).toEqual([202, 409])
     expect(await TheCoordinatingSessionEndpoint.brainstormingsOf(port)).toBe(1)
-    Entrypoint.killAll()
+    await Entrypoint.killAll()
     await RunFileFixture.remove(checkout.base)
     await RunFileFixture.remove(config)
     await RunFileFixture.remove(claude.directory)
@@ -743,7 +997,7 @@ describe('ct-api entrypoint', () => {
       expect(() => runtime.launchFor(loose, launches.map((launch) => launch === looseLaunch ? mutated : launch)))
         .toThrow(/launch identity differs/)
     } finally {
-      Entrypoint.killAll()
+      await Entrypoint.killAll()
       await runtime.remove()
     }
   }, 60_000)
@@ -775,7 +1029,7 @@ describe('ct-api entrypoint', () => {
       await rm(go, { recursive: true })
       await requireGoAbsent()
     } finally {
-      Entrypoint.killAll()
+      await Entrypoint.killAll()
       await RunFileFixture.remove(state)
     }
   })

@@ -7,6 +7,7 @@ import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { FreezeSpec, FreezeSpecParams, FreezeOutcome } from '../application/actions/freeze-spec.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
+import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { ReadSpecFreeze, SpecFreezeRead } from '../application/queries/read-spec-freeze.ts'
 import type { FreezeFinding } from '../domain/value-objects/freeze-finding.ts'
@@ -90,12 +91,16 @@ export class SpecFreezeRoute {
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       }
+      if (!CoordinatingSessionTarget.stillCurrent(held, holding)) {
+        Answer.send(response, 200, { status: 'none' })
+        return
+      }
       const minted = key.forThePage({
         origin: request.get('Origin'),
         host: request.get('Host'),
         site: request.get(GateKey.SITE_HEADER),
       })
-      SpecFreezeRoute.#answerRead(response, outcome, minted)
+      SpecFreezeRoute.#answerRead(response, outcome, minted, holding.target)
     }
   }
 
@@ -107,11 +112,8 @@ export class SpecFreezeRoute {
         Answer.refuse(response, 403, SpecFreezeOutcome.NOT_FROM_THE_PAGE, SpecFreezeRoute.#NOT_FROM_THE_PAGE_DETAIL)
         return
       }
-      const holding = held.held()
-      if (holding === null) {
-        Answer.refuse(response, 400, SpecFreezeOutcome.NO_COORDINATING_SESSION, SpecFreezeRoute.#NO_COORDINATING_SESSION_DETAIL)
-        return
-      }
+      const holding = CoordinatingSessionTarget.admitted(request, response, held)
+      if (holding === null) return
       if (inFlight.reserve(holding.conversation.root.text) !== Reservation.RESERVED) {
         Answer.refuse(response, 409, SpecFreezeOutcome.FREEZE_IN_PROGRESS, SpecFreezeRoute.#FREEZE_IN_PROGRESS_DETAIL)
         return
@@ -141,14 +143,15 @@ export class SpecFreezeRoute {
     }
   }
 
-  static #answerRead(response: Response, outcome: SpecFreezeRead, minted: string | null): void {
+  static #answerRead(response: Response, outcome: SpecFreezeRead, minted: string | null, target: string): void {
     switch (outcome.state) {
       case SpecFreezeState.NO_SPEC:
-        Answer.send(response, 200, { status: SpecFreezeState.NO_SPEC })
+        Answer.send(response, 200, { status: SpecFreezeState.NO_SPEC, target })
         return
       case SpecFreezeState.DRAFT:
         Answer.send(response, 200, {
           status: SpecFreezeState.DRAFT,
+          target,
           spec: outcome.spec!.path,
           findings: outcome.findings.map(SpecFreezeRoute.#wireFindingOf),
           ...(minted === null ? {} : { key: minted }),
@@ -157,6 +160,7 @@ export class SpecFreezeRoute {
       case SpecFreezeState.FROZEN:
         Answer.send(response, 200, {
           status: SpecFreezeState.FROZEN,
+          target,
           spec: outcome.spec!.path,
           on: outcome.frozenOn,
           pullRequest: outcome.pullRequest,

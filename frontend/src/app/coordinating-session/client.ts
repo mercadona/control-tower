@@ -1,7 +1,9 @@
 import {
-  CoordinatingSessionOutcome, LiveSessionRef, OpenedCoordinatingSession, OpenOutcome, TimelineEvent, TimelineEventKind,
+  CloseOutcome, ClosureError, CoordinatingOperation, CoordinatingSessionOutcome, LiveSessionRef,
+  OpenedCoordinatingSession, OpenOutcome, TimelineEvent, TimelineEventKind,
 } from 'app/coordinating-session/CoordinatingSession.types'
 import { StartPlanSubmission } from 'app/start-plan/StartPlan.types'
+import { productError } from 'app/product-error'
 
 const TIMELINE_EVENT_KINDS: readonly TimelineEventKind[] = [
   'opened', 'resumed', 'unresumable', 'working', 'waiting-for-permission', 'completed', 'ended',
@@ -9,6 +11,8 @@ const TIMELINE_EVENT_KINDS: readonly TimelineEventKind[] = [
 
 const PATH = '/coordinating-session'
 const OPENED = 202
+const CLOSED = 200
+const OPERATIONS: readonly CoordinatingOperation[] = ['idle', 'recovering', 'opening', 'closing', 'close-failed']
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -35,6 +39,14 @@ const isTimelineEvent = (value: unknown): value is TimelineEvent =>
 
 const isTimeline = (value: unknown): value is TimelineEvent[] => Array.isArray(value) && value.every(isTimelineEvent)
 
+const isOperation = (value: unknown): value is CoordinatingOperation =>
+  typeof value === 'string' && OPERATIONS.includes(value as CoordinatingOperation)
+
+const closureErrorIn = (body: Record<string, unknown>): ClosureError | null =>
+  isRecord(body.closureError) && typeof body.closureError.code === 'string' && typeof body.closureError.detail === 'string'
+    ? { code: body.closureError.code, detail: body.closureError.detail }
+    : null
+
 const bodyFor = ({ id, userComment, repo, path }: StartPlanSubmission): Record<string, string> => ({
   ...(id !== null ? { id } : {}),
   ...(userComment !== null ? { user_comment: userComment } : {}),
@@ -44,10 +56,14 @@ const bodyFor = ({ id, userComment, repo, path }: StartPlanSubmission): Record<s
 
 const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
   if (!isRecord(body)) return { kind: 'unavailable' }
-  if (body.status === 'none') return { kind: 'none' }
+  if (body.status === 'none' && isOperation(body.operation)) return { kind: 'none', operation: body.operation }
   if (
     body.status === 'live' &&
+    isOperation(body.operation) &&
+    typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
+    typeof body.repo === 'string' &&
+    typeof body.root === 'string' &&
     typeof body.repo === 'string' &&
     typeof body.root === 'string' &&
     isLiveSessionRef(body.session) &&
@@ -56,29 +72,48 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
   ) {
     return {
       kind: 'live',
+      operation: body.operation,
+      target: body.target,
       conversation: body.conversation,
       repo: body.repo,
       root: body.root,
       session: body.session,
       attention: body.attention,
       timeline: body.timeline,
+      closureError: closureErrorIn(body),
     }
   }
   if (
     body.status === 'unresumable' &&
+    isOperation(body.operation) &&
+    typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
+    typeof body.repo === 'string' &&
+    typeof body.root === 'string' &&
     typeof body.detail === 'string' &&
     isTimeline(body.timeline)
   ) {
-    return { kind: 'unresumable', conversation: body.conversation, detail: body.detail, timeline: body.timeline }
+    return {
+      kind: 'unresumable', operation: body.operation, target: body.target, conversation: body.conversation,
+      repo: body.repo, root: body.root,
+      detail: body.detail, timeline: body.timeline, closureError: closureErrorIn(body),
+    }
   }
   if (
     body.status === 'ended' &&
+    isOperation(body.operation) &&
+    typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
+    typeof body.repo === 'string' &&
+    typeof body.root === 'string' &&
     typeof body.detail === 'string' &&
     isTimeline(body.timeline)
   ) {
-    return { kind: 'ended', conversation: body.conversation, detail: body.detail, timeline: body.timeline }
+    return {
+      kind: 'ended', operation: body.operation, target: body.target, conversation: body.conversation,
+      repo: body.repo, root: body.root,
+      detail: body.detail, timeline: body.timeline, closureError: closureErrorIn(body),
+    }
   }
   return { kind: 'unavailable' }
 }
@@ -94,22 +129,24 @@ const read = async (): Promise<CoordinatingSessionOutcome> => {
 }
 
 const openedIn = (body: unknown): OpenedCoordinatingSession | null =>
-  isRecord(body) && typeof body.conversation === 'string' && isLiveSessionRef(body.session)
-    ? { conversation: body.conversation, session: body.session }
+  isRecord(body) && typeof body.target === 'string' && typeof body.conversation === 'string' &&
+    typeof body.repo === 'string' && typeof body.root === 'string' && isLiveSessionRef(body.session)
+    ? { target: body.target, conversation: body.conversation, repo: body.repo, root: body.root, session: body.session }
     : null
 
 const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
   let response: Response
+  let body: unknown
   try {
     response = await fetch(PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyFor(submission)),
     })
+    body = await response.json()
   } catch {
     return { kind: 'backend-unreachable' }
   }
-  const body: unknown = await response.json()
   if (response.status === OPENED) {
     const opened = openedIn(body)
 
@@ -118,11 +155,35 @@ const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
   if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
     return { kind: 'backend-unreachable' }
   }
-  return { kind: 'refused', code: body.code, error: body.detail }
+  return { kind: 'refused', code: body.code, error: productError(body.code, body.detail) }
+}
+
+const close = async (conversation: string, target: string): Promise<CloseOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(`${PATH}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation, target }),
+    })
+    body = await response.json()
+  } catch {
+    return { kind: 'backend-unreachable' }
+  }
+  if (
+    response.status === CLOSED && isRecord(body) && body.status === 'closed' &&
+    body.conversation === conversation && body.target === target
+  ) return { kind: 'closed', conversation, target }
+  if (isRecord(body) && typeof body.code === 'string' && typeof body.detail === 'string') {
+    return { kind: 'refused', code: body.code, error: productError(body.code, body.detail) }
+  }
+  return { kind: 'backend-unreachable' }
 }
 
 export const CoordinatingSessionClient = {
   read,
   open,
+  close,
   openedIn,
 }

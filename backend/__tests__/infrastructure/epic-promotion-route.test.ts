@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net'
 import express from 'express'
 import { EpicPromotionRoute } from '../../src/infrastructure/epic-promotion-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
 import { PromoteEpic, PromoteEpicParams, EpicPromoted } from '../../src/application/actions/promote-epic.ts'
 import { EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
 import { ReadEpicGroom } from '../../src/application/queries/read-epic-groom.ts'
@@ -91,6 +92,8 @@ class LiveSessionsDouble extends LiveSessions {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly OLD_TARGET = 'f135ce89-e980-4fa3-a02d-44dd12228304'
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly HOME = Mother.REPOSITORY.text
   static readonly ROOT = new CheckoutRoot('/repo')
@@ -108,12 +111,21 @@ class Mother {
       liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
     })
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
       attention: SessionAttention.working(),
     }))
 
+    return held
+  }
+
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
     return held
   }
 
@@ -219,8 +231,13 @@ class RunningApi {
     return `http://127.0.0.1:${port}`
   }
 
-  static async posting(port: number, headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, { method: 'POST', headers })
+  static async posting(
+    port: number, headers: Record<string, string> = {}, target: string | null = Mother.TARGET
+  ): Promise<Response> {
+    return fetch(`${RunningApi.ownOrigin(port)}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { ...(target === null ? {} : { [CoordinatingSessionTarget.HEADER]: target }), ...headers },
+    })
   }
 
   static async other(port: number): Promise<Response> {
@@ -249,6 +266,24 @@ describe('EpicPromotionRoute', () => {
     expect(promote.asked).toEqual([])
   })
 
+  it.each([
+    ['missing', null],
+    ['malformed', 'not-a-uuid'],
+    ['stale', Mother.OLD_TARGET],
+  ])('a post with a %s coordinating target is refused before promotion', async (_kind, target) => {
+    const promote = PromoteEpicSpy.neverAsked()
+    const port = await RunningApi.listening(Mother.live(), promote, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED }, target)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
+    })
+    expect(promote.asked).toEqual([])
+  })
+
   it('the same post carrying the key answers the issues and which numbers it moved', async () => {
     const held = Mother.live()
     const promote = PromoteEpicSpy.answering(Mother.promoted([Mother.readyIssue()], [1]))
@@ -269,6 +304,17 @@ describe('EpicPromotionRoute', () => {
       }],
       promoted: [1],
     })
+  })
+
+  it('a failed closure keeps the matching epic promotion action eligible', async () => {
+    const promote = PromoteEpicSpy.answering(Mother.promoted([Mother.readyIssue()], [1]))
+    const port = await RunningApi.listening(Mother.failedClose(), promote, Keys.minted())
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(200)
+    expect(promote.asked).toHaveLength(1)
+    expect(promote.asked[0].root).toEqual(Mother.ROOT)
   })
 
   it('an epic with no issues is refused as no-epic-issues', async () => {
@@ -326,8 +372,8 @@ describe('EpicPromotionRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: 'no-coordinating-session',
-      detail: 'no coordinating session is held: there is nothing to promote',
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(promote.asked).toEqual([])
   })

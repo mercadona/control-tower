@@ -4,7 +4,12 @@ import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { FakeEventSource } from './FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openHome } from './helpers'
+
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 type Answer = { status: number; body: string }
 
@@ -35,14 +40,14 @@ const implementingPlan = () => ({
   },
 })
 
-const stubBackend = (activePlans: Answer) => {
+const stubBackend = (activePlans: Answer, coordinatingSession = CoordinatingSessionMother.ended()) => {
   const fetching = vi.fn(async (input: string | URL | Request) => {
     const path = String(input)
     if (path === '/spec-freeze') return responseFor(SpecFreezeMother.draftReady())
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
-    if (path === '/coordinating-session') return responseFor(CoordinatingSessionMother.none())
+    if (path === '/coordinating-session') return responseFor(coordinatingSession)
     if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
@@ -53,6 +58,12 @@ const stubBackend = (activePlans: Answer) => {
 }
 
 describe('Home and gate 1', () => {
+  beforeEach(() => {
+    FakeTerminal.install()
+    FakeFitAddon.install()
+    FakeEventSource.install()
+  })
+
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
@@ -69,7 +80,18 @@ describe('Home and gate 1', () => {
     const implementing = openHome()
 
     expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: HEADING })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: HEADING })).toBeInTheDocument()
     implementing.unmount()
+  })
+
+  it.each([
+    ['live', CoordinatingSessionMother.liveCloseFailed],
+    ['recovered-ended', CoordinatingSessionMother.endedCloseFailed],
+  ])('keeps spec freezing usable while a %s failed closure reserves session opening', async (_state, failed) => {
+    stubBackend(NO_ACTIVE_PLANS, failed())
+    openHome()
+
+    expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
   })
 })

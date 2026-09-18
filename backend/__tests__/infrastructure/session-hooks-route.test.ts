@@ -49,6 +49,7 @@ class RecordsDouble extends ConversationRecords {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
   static readonly CONVERSATION_ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId(Mother.CONVERSATION_ID),
@@ -61,6 +62,7 @@ class Mother {
   static held(attention: SessionAttention, records: ConversationRecords = new RecordsDouble()): CoordinatingSessions {
     const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {}, records })
     sessions.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,

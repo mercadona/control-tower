@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -56,13 +56,20 @@ const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDIN
 
 const stubFetchOpeningTheBrainstorming = () => {
   let sessions = SESSIONS
+  let opened = false
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(sessions)
-    if (url === '/coordinating-session' && init === undefined) return responseFor(NO_COORDINATING_SESSION)
+    if (url === `/sessions/${CoordinatingSessionMother.SESSION.id}/input`) {
+      return responseFor({ status: 202, body: JSON.stringify({ status: 'typed', id: CoordinatingSessionMother.SESSION.id }) })
+    }
+    if (url === '/coordinating-session' && init === undefined) {
+      return responseFor(opened ? CoordinatingSessionMother.working() : NO_COORDINATING_SESSION)
+    }
     if (url === '/coordinating-session') {
+      opened = true
       sessions = SESSIONS_WITH_THE_OPENED_ONE
       return responseFor(CoordinatingSessionMother.opened())
     }
@@ -82,8 +89,10 @@ describe('Home · sessions panel', () => {
   beforeEach(() => {
     FakeTerminal.install()
     FakeFitAddon.install()
+    FakeEventSource.install()
   })
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
     delete (Element.prototype as ScrollableElement).scrollIntoView
   })
@@ -131,18 +140,24 @@ describe('Home · sessions panel', () => {
     await waitFor(() => expect(lastTerminal().written).toEqual(['scrollback']))
   })
 
-  it('the brainstorming terminal appears as soon as the entrance opens it', async () => {
+  it('the brainstorming terminal is immediately closeable and accepts input as soon as the entrance opens it', async () => {
     const scrolling = stubScrollIntoView()
     stubFetchOpeningTheBrainstorming()
     const { user } = openHome()
 
     await openBrainstorming(user)
-    fireEvent.click(screen.getByRole('button', { name: 'Desplegar el panel' }))
 
     expect(await screen.findByRole('tab', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute(
       'aria-selected',
       'true',
     )
+    expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    const terminal = await waitFor(() => lastTerminal())
+    terminal.onDataHandler?.('pwd')
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      `/sessions/${CoordinatingSessionMother.SESSION.id}/input`,
+      expect.objectContaining({ method: 'POST' }),
+    ))
     expect(scrolling).toHaveBeenCalled()
   })
 

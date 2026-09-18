@@ -6,6 +6,7 @@ import { PromoteEpic, PromoteEpicParams } from '../application/actions/promote-e
 import { EpicGroomState } from '../application/queries/read-epic-groom.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
+import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { EpicGroomStateValue } from '../application/queries/read-epic-groom.ts'
 import type { EpicPromoted } from '../application/actions/promote-epic.ts'
@@ -82,13 +83,8 @@ export class EpicPromotionRoute {
         Answer.refuse(response, 403, EpicPromotionOutcome.NOT_FROM_THE_PAGE, EpicPromotionRoute.#NOT_FROM_THE_PAGE_DETAIL)
         return
       }
-      const holding = held.held()
-      if (holding === null) {
-        Answer.refuse(
-          response, 400, EpicPromotionOutcome.NO_COORDINATING_SESSION, EpicPromotionRoute.#NO_COORDINATING_SESSION_DETAIL
-        )
-        return
-      }
+      const holding = CoordinatingSessionTarget.admitted(request, response, held)
+      if (holding === null) return
       let promoted: EpicPromoted
       try {
         promoted = await promote.execute(new PromoteEpicParams({

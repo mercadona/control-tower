@@ -5,6 +5,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
 import { GroomSessionRoute, GroomSessionOutcome } from '../../src/infrastructure/groom-session-route.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
@@ -85,6 +86,9 @@ class Keys {
 }
 
 class Mother {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+  static readonly OLD_TARGET = 'f135ce89-e980-4fa3-a02d-44dd12228304'
+  static readonly NEXT_TARGET = 'f910a470-13f7-4956-b750-bef89f55dd6d'
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly CONVERSATION = new CoordinatingConversation({
@@ -101,12 +105,20 @@ class Mother {
   ]
 
   static registry(): CoordinatingSessions {
-    return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
+    return new CoordinatingSessions({
+      liveSessions: new LiveSessionsDouble(), stderr: (): void => {}, newTarget: () => Mother.NEXT_TARGET,
+    })
   }
 
   static ended(): CoordinatingSessions {
     const held = Mother.registry()
-    held.remember(HeldCoordinatingSession.ended(Mother.CONVERSATION))
+    held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
+      state: CoordinatingSessionState.ENDED,
+      conversation: Mother.CONVERSATION,
+      session: null,
+      attention: null,
+    }))
 
     return held
   }
@@ -114,12 +126,21 @@ class Mother {
   static live(): CoordinatingSessions {
     const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
       attention: SessionAttention.working(),
     }))
 
+    return held
+  }
+
+  static failedClose(): CoordinatingSessions {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'group still exists' })
     return held
   }
 }
@@ -153,11 +174,17 @@ class RunningApi {
   }
 
   static async posting(
-    held: CoordinatingSessions, open: OpenGroomSession, headers: Record<string, string> = {}
+    held: CoordinatingSessions,
+    open: OpenGroomSession,
+    headers: Record<string, string> = {},
+    target: string | null = Mother.TARGET,
   ): Promise<Response> {
     const port = await RunningApi.listening(held, open, Keys.minted())
 
-    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'POST', headers })
+    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
+      method: 'POST',
+      headers: { ...(target === null ? {} : { [CoordinatingSessionTarget.HEADER]: target }), ...headers },
+    })
   }
 
   static async getting(held: CoordinatingSessions, open: OpenGroomSession): Promise<Response> {
@@ -181,6 +208,7 @@ describe('GroomSessionRoute', () => {
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({
       status: 'grooming',
+      target: Mother.NEXT_TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
@@ -207,6 +235,25 @@ describe('GroomSessionRoute', () => {
     expect(open.asked).toEqual([])
   })
 
+  it.each([
+    ['missing', null],
+    ['malformed', 'not-a-uuid'],
+    ['stale', Mother.OLD_TARGET],
+  ])('a press with a %s coordinating target is refused before opening', async (_kind, target) => {
+    const open = OpenGroomSessionSpy.opening()
+
+    const response = await RunningApi.posting(
+      Mother.ended(), open, { [GateKey.HEADER]: Keys.MINTED }, target
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
+    })
+    expect(open.asked).toEqual([])
+  })
+
   it('a press with no coordinating session held is refused before the use case is asked', async () => {
     const open = OpenGroomSessionSpy.opening()
 
@@ -214,8 +261,8 @@ describe('GroomSessionRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: GroomSessionOutcome.NO_COORDINATING_SESSION,
-      detail: 'no coordinating session is held: there is no checkout to open the groom conversation in',
+      code: CoordinatingSessionTarget.CHANGED,
+      detail: 'the coordinating session target changed: refresh before acting',
     })
     expect(open.asked).toEqual([])
   })
@@ -233,12 +280,26 @@ describe('GroomSessionRoute', () => {
     expect(open.asked).toEqual([])
   })
 
+  it('a failed closure still refuses opening a groom terminal', async () => {
+    const open = OpenGroomSessionSpy.opening()
+
+    const response = await RunningApi.posting(
+      Mother.failedClose(), open, { [GateKey.HEADER]: Keys.MINTED }
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: GroomSessionOutcome.ALREADY_LIVE })
+    expect(open.asked).toEqual([])
+  })
+
   it('a checkout with no execution spec is refused as no-epic-spec and the opening reservation is released', async () => {
     const open = OpenGroomSessionSpy.withNoSpec()
     const held = Mother.ended()
     const port = await RunningApi.listening(held, open, Keys.minted())
     const press = (): Promise<Response> => fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
-      method: 'POST', headers: { [GateKey.HEADER]: Keys.MINTED },
+      method: 'POST', headers: {
+        [GateKey.HEADER]: Keys.MINTED, [CoordinatingSessionTarget.HEADER]: Mother.TARGET,
+      },
     })
 
     const refused = await press()
@@ -262,7 +323,9 @@ describe('GroomSessionRoute', () => {
     const held = Mother.ended()
     const port = await RunningApi.listening(held, open, Keys.minted())
     const press = (): Promise<Response> => fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
-      method: 'POST', headers: { [GateKey.HEADER]: Keys.MINTED },
+      method: 'POST', headers: {
+        [GateKey.HEADER]: Keys.MINTED, [CoordinatingSessionTarget.HEADER]: Mother.TARGET,
+      },
     })
 
     const refused = await press()

@@ -35,4 +35,18 @@ describe('useSessionsColumnCollapse', () => {
 
     expect(result.current.collapsed).toBe(true)
   })
+
+  it('a same-target poll preserves the collapse choice the person made', () => {
+    const { result, rerender } = renderHook(
+      ({ target }) => useSessionsColumnCollapse(target),
+      { initialProps: { target: 'target-a' } },
+    )
+    expect(result.current.collapsed).toBe(false)
+    act(() => result.current.toggle())
+    expect(result.current.collapsed).toBe(true)
+
+    rerender({ target: 'target-a' })
+
+    expect(result.current.collapsed).toBe(true)
+  })
 })

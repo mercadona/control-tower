@@ -1,4 +1,5 @@
 const SPEC = 'docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md'
+const TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 const KEY = '3f9c1a2b6d4e8f0c1a9b7d3e5f2c4a6b8d0e2f4a6c8b0d2e4f6a8c0b2d4e6f80'
 const ON = '2026-09-14'
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
@@ -18,34 +19,34 @@ const FINDINGS_JSON =
 
 const none = () => ({ status: 200, body: '{"status":"none"}' })
 
-const noSpec = () => ({ status: 200, body: '{"status":"no-spec"}' })
+const noSpec = () => ({ status: 200, body: `{"status":"no-spec","target":"${TARGET}"}` })
 
 const draftWithMarker = () => ({
   status: 200,
-  body: `{"status":"draft","spec":"${SPEC}","findings":${FINDINGS_JSON},"key":"${KEY}"}`,
+  body: `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":${FINDINGS_JSON},"key":"${KEY}"}`,
 })
 
 const draftWithoutKey = () => ({
   status: 200,
-  body: `{"status":"draft","spec":"${SPEC}","findings":${FINDINGS_JSON}}`,
+  body: `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":${FINDINGS_JSON}}`,
 })
 
 const draftReady = () => ({
   status: 200,
-  body: `{"status":"draft","spec":"${SPEC}","findings":[],"key":"${KEY}"}`,
+  body: `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":[],"key":"${KEY}"}`,
 })
 
 const draftWithSourcelessDecision = () => ({
   status: 200,
   body:
-    `{"status":"draft","spec":"${SPEC}","findings":[` +
+    `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":[` +
     `{"code":"${PROVENANCE_FINDING.code}","line":${PROVENANCE_FINDING.line},"detail":${JSON.stringify(PROVENANCE_FINDING.detail)}}` +
     `],"key":"${KEY}"}`,
 })
 
 const frozen = () => ({
   status: 200,
-  body: `{"status":"frozen","spec":"${SPEC}","on":"${ON}","pullRequest":{"number":${PULL_REQUEST.number},"url":"${PULL_REQUEST.url}"}}`,
+  body: `{"status":"frozen","target":"${TARGET}","spec":"${SPEC}","on":"${ON}","pullRequest":{"number":${PULL_REQUEST.number},"url":"${PULL_REQUEST.url}"}}`,
 })
 
 const notFreezable = () => ({
@@ -67,7 +68,7 @@ const refusedRead = () => ({
 
 const frozenUndated = () => ({
   status: 200,
-  body: `{"status":"frozen","spec":"${SPEC}","on":null,"pullRequest":null}`,
+  body: `{"status":"frozen","target":"${TARGET}","spec":"${SPEC}","on":null,"pullRequest":null}`,
 })
 
 export const SpecFreezeMother = {
@@ -75,6 +76,7 @@ export const SpecFreezeMother = {
   REFUSED_DETAIL,
   refusedRead,
   SPEC,
+  TARGET,
   KEY,
   ON,
   PULL_REQUEST,

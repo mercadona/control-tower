@@ -28,14 +28,15 @@ const findingLabel = (finding: FreezeFinding): string =>
 
 interface SpecFreezePanelProps {
   isGate2Actionable?: boolean
+  target: string
+  operationBusy?: boolean
 }
 
-const SpecFreezePanel = ({ isGate2Actionable = false }: SpecFreezePanelProps = {}) => {
-  const read = useSpecFreeze()
+const SpecFreezePanel = ({ isGate2Actionable = false, target, operationBusy = false }: SpecFreezePanelProps) => {
+  const read = useSpecFreeze(target)
   const [asked, setAsked] = useState<FreezeAskOutcome | null>(null)
   const [isFreezing, setIsFreezing] = useState(false)
   const isFreezingRef = useRef(false)
-
   const frozen = asked?.kind === 'frozen' ? asked : read.phase === 'read' && read.kind === 'frozen' ? read : null
 
   if (frozen !== null) {
@@ -64,16 +65,18 @@ const SpecFreezePanel = ({ isGate2Actionable = false }: SpecFreezePanelProps = {
 
   const { findings, key: gateKey } = read
   const isBlocked = findings.length > 0
-  const isDisabled = isBlocked || gateKey === null || isFreezing
+  const isDisabled = isBlocked || gateKey === null || isFreezing || operationBusy
 
   const freezeSpec = async () => {
-    if (gateKey === null || isFreezingRef.current) return
+    if (gateKey === null || operationBusy || isFreezingRef.current) return
     isFreezingRef.current = true
     setIsFreezing(true)
-    const answered = await SpecFreezeClient.freeze(gateKey)
-    isFreezingRef.current = false
-    setIsFreezing(false)
-    setAsked(answered)
+    try {
+      setAsked(await SpecFreezeClient.freeze(gateKey, target))
+    } finally {
+      isFreezingRef.current = false
+      setIsFreezing(false)
+    }
   }
 
   return (

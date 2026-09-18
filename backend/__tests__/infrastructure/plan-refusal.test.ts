@@ -44,7 +44,7 @@ describe('PlanCollapse', () => {
     'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
-    'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure',
+    'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -62,6 +62,7 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.WorkbenchFailure) &&
     !(thrown.prototype instanceof exceptions.PlanRecoveryFailure) &&
     !(thrown.prototype instanceof exceptions.PlanCleanupFailure)
+    && !(thrown.prototype instanceof exceptions.SessionClosureFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)

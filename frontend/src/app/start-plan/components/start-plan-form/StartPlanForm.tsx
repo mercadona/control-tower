@@ -1,5 +1,4 @@
 import { FormEvent, useRef, useState } from 'react'
-import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 import { OpenedCoordinatingSession, OpenOutcome } from 'app/coordinating-session/CoordinatingSession.types'
 import { LocalPath } from 'app/start-plan/LocalPath'
 import { RepositoryName } from 'app/start-plan/RepositoryName'
@@ -27,10 +26,14 @@ type StartPlanFormProps = {
   isLocked: boolean
   isMutationBlocked?: boolean
   isCoordinatingSessionLive?: boolean
+  openSession?: (submission: StartPlanSubmission) => Promise<OpenOutcome>
   request?: StartPlanRequest
 }
 
-const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false, isCoordinatingSessionLive = false, request }: StartPlanFormProps) => {
+const StartPlanForm = ({
+  onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false,
+  isCoordinatingSessionLive = false, openSession, request,
+}: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [userComment, setUserComment] = useState('')
   const [repository, setRepository] = useState('')
@@ -75,9 +78,15 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
       path: LocalPath.normalize(path),
     }
     const submitted: StartPlanRequest = { id: submission.id, userComment: submission.userComment, repo: submission.repo, path: submission.path }
-    const outcome = await CoordinatingSessionClient.open(submission)
-    isSendingRef.current = false
-    setIsSending(false)
+    let outcome: OpenOutcome
+    try {
+      outcome = await openSession?.(submission) ?? { kind: 'backend-unreachable' }
+    } catch {
+      outcome = { kind: 'backend-unreachable' }
+    } finally {
+      isSendingRef.current = false
+      setIsSending(false)
+    }
     if (outcome.kind === 'opened') {
       onOpened(outcome.opened, submitted)
       return
@@ -130,7 +139,7 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
         <Input
           placeholder={TicketKey.EXAMPLE}
           value={ticketKey}
-          disabled={isSending || isLocked || isMutationBlocked}
+          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
           autoComplete="off"
           onBlur={() => setTouched((current) => ({ ...current, ticket: true }))}
           onChange={(event) => {
@@ -143,7 +152,7 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
         <TextArea
           placeholder="Qué hay que planificar"
           value={userComment}
-          disabled={isSending || isLocked || isMutationBlocked}
+          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
           autoComplete="off"
           onChange={(event) => {
             onInteraction()
@@ -155,7 +164,7 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
         <Input
           placeholder={RepositoryName.EXAMPLE}
           value={repository}
-          disabled={isSending || isLocked || isMutationBlocked}
+          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
           autoComplete="off"
           onBlur={() => setTouched((current) => ({ ...current, repository: true }))}
           onChange={(event) => {
@@ -168,7 +177,7 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
         <Input
           placeholder={LocalPath.EXAMPLE}
           value={path}
-          disabled={isSending || isLocked || isMutationBlocked}
+          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
           autoComplete="off"
           onBlur={() => setTouched((current) => ({ ...current, path: true }))}
           onChange={(event) => {

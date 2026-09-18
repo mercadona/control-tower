@@ -5,6 +5,10 @@ export type Attention = {
 
 export type LiveSessionRef = { id: string; name: string }
 
+export type CoordinatingOperation = 'idle' | 'recovering' | 'opening' | 'closing' | 'close-failed'
+
+export type ClosureError = { code: string; detail: string }
+
 export type TimelineEventKind =
   | 'opened'
   | 'resumed'
@@ -22,23 +26,43 @@ export type TimelineEvent = {
 }
 
 export type CoordinatingSessionOutcome =
-  | { kind: 'none' }
+  | { kind: 'none'; operation: CoordinatingOperation }
   | {
       kind: 'live'
+      operation: CoordinatingOperation
+      target: string
       conversation: string
       repo: string
       root: string
       session: LiveSessionRef
       attention: Attention
       timeline: TimelineEvent[]
+      closureError: ClosureError | null
     }
-  | { kind: 'unresumable'; conversation: string; detail: string; timeline: TimelineEvent[] }
-  | { kind: 'ended'; conversation: string; detail: string; timeline: TimelineEvent[] }
+  | {
+      kind: 'unresumable'; operation: CoordinatingOperation; target: string; conversation: string
+      repo: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
+    }
+  | {
+      kind: 'ended'; operation: CoordinatingOperation; target: string; conversation: string
+      repo: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
+    }
   | { kind: 'unavailable' }
 
-export type OpenedCoordinatingSession = { conversation: string; session: LiveSessionRef }
+export type OpenedCoordinatingSession = {
+  target: string
+  conversation: string
+  repo: string
+  root: string
+  session: LiveSessionRef
+}
 
 export type OpenOutcome =
   | { kind: 'opened'; opened: OpenedCoordinatingSession }
+  | { kind: 'refused'; code: string; error: string }
+  | { kind: 'backend-unreachable' }
+
+export type CloseOutcome =
+  | { kind: 'closed'; conversation: string; target: string }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'backend-unreachable' }

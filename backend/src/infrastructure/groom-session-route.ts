@@ -7,6 +7,7 @@ import { PlanFailure } from '../domain/exceptions.ts'
 import { GroomSessionOpening, OpenGroomSessionParams } from '../application/actions/open-groom-session.ts'
 import { HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation } from './coordinating-sessions.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
+import { CoordinatingSessionTarget } from './coordinating-session-target.ts'
 import type { CoordinatingSessions, OpeningReservationValue } from './coordinating-sessions.ts'
 import type { GroomSessionOpened, OpenGroomSession } from '../application/actions/open-groom-session.ts'
 
@@ -56,14 +57,8 @@ export class GroomSessionRoute {
         Answer.refuse(response, 403, GroomSessionOutcome.NOT_FROM_THE_PAGE, GroomSessionRoute.#NOT_FROM_THE_PAGE_DETAIL)
         return
       }
-      const holding = held.held()
-      if (holding === null) {
-        Answer.refuse(
-          response, 400,
-          GroomSessionOutcome.NO_COORDINATING_SESSION, GroomSessionRoute.#NO_COORDINATING_SESSION_DETAIL
-        )
-        return
-      }
+      const holding = CoordinatingSessionTarget.admitted(request, response, held)
+      if (holding === null) return
       const reserved = held.reserve()
       if (reserved.outcome !== OpeningReservation.RESERVED) {
         Answer.refuseAs(response, GroomSessionRefusal.of(reserved.outcome))
@@ -94,6 +89,7 @@ export class GroomSessionRoute {
       return
     }
     held.remember(new HeldCoordinatingSession({
+      target: held.mintTarget(),
       state: CoordinatingSessionState.LIVE,
       conversation: opened.conversation!,
       session: opened.session!,
@@ -101,6 +97,7 @@ export class GroomSessionRoute {
     }), opened.timeline)
     Answer.send(response, 202, {
       status: GroomSessionRoute.#STATUS,
+      target: held.held()!.target,
       conversation: opened.conversation!.id.text,
       repo: opened.conversation!.repository.text,
       root: opened.conversation!.root.text,

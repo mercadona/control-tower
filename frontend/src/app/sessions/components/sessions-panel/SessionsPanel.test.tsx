@@ -79,6 +79,30 @@ describe('SessionsPanel', () => {
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
 
+  it('same-target coordinator polls preserve the tab the person chose', async () => {
+    const user = userEvent.setup()
+    const listed = JSON.stringify({ sessions: [
+      { id: 'a1', name: 'zsh' },
+      { id: 'b2', name: 'bash' },
+      CoordinatingSessionMother.SESSION,
+    ] })
+    vi.stubGlobal('fetch', answering(listed))
+    const adopted = {
+      target: CoordinatingSessionMother.TARGET,
+      conversation: CoordinatingSessionMother.CONVERSATION,
+      repo: CoordinatingSessionMother.REPO,
+      root: CoordinatingSessionMother.ROOT,
+      session: CoordinatingSessionMother.SESSION,
+    }
+    const { rerender } = render(<SessionsPanel adopted={adopted} />)
+    await user.click(await screen.findByRole('tab', { name: 'bash' }))
+
+    rerender(<SessionsPanel adopted={{ ...adopted, session: { ...adopted.session } }} />)
+
+    expect(screen.getByRole('tab', { name: 'bash' })).toHaveAttribute('aria-selected', 'true')
+    expect(FakeEventSource.last().url).toBe('/sessions/b2/stream')
+  })
+
   it('the chosen session is the only tab marked selected', async () => {
     vi.stubGlobal('fetch', answering(TWO_SESSIONS))
 

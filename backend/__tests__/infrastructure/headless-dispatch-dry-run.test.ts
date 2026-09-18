@@ -599,6 +599,7 @@ describe('headless dispatch dry run', () => {
       liveSessions: new CoordinatingLiveSessions(), stderr: () => {},
     })
     coordinating.remember(new HeldCoordinatingSession({
+      target: '6d13bc52-740f-49f8-b128-15e597674f3a',
       state: CoordinatingSessionState.LIVE,
       conversation: new CoordinatingConversation({
         id: new ConversationId('44444444-4444-4444-8444-444444444444'),

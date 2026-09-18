@@ -96,14 +96,15 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
     })
 
     const subscription = SessionsClient.watch(session.id, {
-      onOpened: () => { terminal.reset(); setState('streaming') },
-      onBytes: (bytes) => terminal.write(bytes),
-      onFailure: () => setState('unreadable'),
+      onOpened: () => { if (!cancelled) { terminal.reset(); setState('streaming') } },
+      onBytes: (bytes) => { if (!cancelled) terminal.write(bytes) },
+      onFailure: () => { if (!cancelled) setState('unreadable') },
       onRefused: () => {
+        if (cancelled) return
         setState('gone')
         onGoneRef.current()
       },
-      onUnreachable: () => setState('unreadable'),
+      onUnreachable: () => { if (!cancelled) setState('unreadable') },
     })
 
     return () => {

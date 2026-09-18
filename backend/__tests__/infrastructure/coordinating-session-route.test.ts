@@ -7,6 +7,7 @@ import {
 } from '../../src/application/actions/open-coordinating-session.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
+  CoordinatingOperation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
@@ -75,6 +76,7 @@ class Mother {
   })
 
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 
   static readonly OPENING_REQUEST =
     '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
@@ -90,12 +92,15 @@ class Mother {
   }
 
   static registry(): CoordinatingSessions {
-    return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
+    return new CoordinatingSessions({
+      liveSessions: new LiveSessionsDouble(), stderr: (): void => {}, newTarget: () => Mother.TARGET,
+    })
   }
 
   static live(attention: SessionAttention): CoordinatingSessions {
     const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
@@ -108,6 +113,7 @@ class Mother {
   static ended(): CoordinatingSessions {
     const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.ENDED,
       conversation: Mother.CONVERSATION,
       session: null,
@@ -120,6 +126,7 @@ class Mother {
   static unresumable(): CoordinatingSessions {
     const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
       state: CoordinatingSessionState.UNRESUMABLE,
       conversation: Mother.CONVERSATION,
       session: null,
@@ -207,7 +214,7 @@ afterEach(async () => {
 })
 
 describe('CoordinatingSessionRoute', () => {
-  it('answers 202 with the conversation and the session it opened', async () => {
+  it('reads and opening answers expose target and authoritative operation', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
     const held = Mother.registry()
 
@@ -219,6 +226,7 @@ describe('CoordinatingSessionRoute', () => {
     expect(await response.json()).toEqual({
       status: 'brainstorming',
       conversation: Mother.CONVERSATION.id.text,
+      target: Mother.TARGET,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
@@ -253,6 +261,7 @@ describe('CoordinatingSessionRoute', () => {
       code: 'coordinating-session-already-live',
       detail: 'a coordinating conversation is already live: it has to end before another one opens',
       conversation: Mother.CONVERSATION.id.text,
+      target: Mother.TARGET,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
     expect(open.asked).toEqual([])
@@ -283,6 +292,22 @@ describe('CoordinatingSessionRoute', () => {
     expect(await third.json()).toMatchObject({ code: 'coordinating-session-already-live' })
     expect(controlled.open.asked).toHaveLength(1)
   }, 10_000)
+
+  it('startup recovery reserves the coordinating slot before another process can open', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.registry()
+    held.beginRecovery()
+
+    const response = await RunningApi.post(open, held, Mother.OPENING_REQUEST)
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: 'coordinating-session-opening',
+      detail: 'a coordinating conversation is being opened: wait for it to be live and try again',
+    })
+    expect(open.asked).toEqual([])
+    expect(held.operation()).toBe(CoordinatingOperation.RECOVERING)
+  })
 
   it('a failed opening frees the next one', async () => {
     const open = OpenCoordinatingSessionSpy.refusing(
@@ -395,7 +420,7 @@ describe('CoordinatingSessionRoute', () => {
     const response = await RunningApi.get(held)
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: 'none' })
+    expect(await response.json()).toEqual({ status: 'none', operation: 'idle' })
   })
 
   it('answers the live conversation with its attention and its question', async () => {
@@ -406,6 +431,8 @@ describe('CoordinatingSessionRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'live',
+      operation: 'idle',
+      target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
@@ -423,6 +450,8 @@ describe('CoordinatingSessionRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'ended',
+      operation: 'idle',
+      target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
@@ -451,11 +480,44 @@ describe('CoordinatingSessionRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       status: 'unresumable',
+      operation: 'idle',
+      target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
       detail: 'claude code no longer holds this conversation: the coordinating session was not resumed',
       timeline: Mother.timelineJson(),
+    })
+  })
+
+  it('reports opening recovering closing and close-failed operations without losing the held target', async () => {
+    const opening = Mother.registry()
+    opening.reserve()
+    expect(await (await RunningApi.get(opening)).json()).toEqual({ status: 'none', operation: 'opening' })
+
+    const recovering = Mother.registry()
+    recovering.beginRecovery()
+    expect(await (await RunningApi.get(recovering)).json()).toEqual({ status: 'none', operation: 'recovering' })
+
+    const closing = Mother.live(SessionAttention.working())
+    closing.beginClose({ conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET })
+    closing.trackClose(
+      { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET },
+      new Promise(() => {}),
+    )
+    expect(await (await RunningApi.get(closing)).json()).toMatchObject({
+      status: 'live', operation: 'closing', target: Mother.TARGET,
+    })
+
+    closing.failClose(
+      { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET },
+      { code: 'session-not-terminated', detail: 'group still exists' },
+    )
+    expect(await (await RunningApi.get(closing)).json()).toMatchObject({
+      status: 'live',
+      operation: CoordinatingOperation.CLOSE_FAILED,
+      target: Mother.TARGET,
+      closureError: { code: 'session-not-terminated', detail: 'group still exists' },
     })
   })
 })

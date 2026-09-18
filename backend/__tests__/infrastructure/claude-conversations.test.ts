@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
 import { ClaudeConversations } from '../../src/infrastructure/claude-conversations.ts'
 import { Invocation } from '../../src/infrastructure/invocation.ts'
@@ -17,10 +17,27 @@ type RecordedSpawn = {
 }
 
 class TerminalDouble implements Terminal {
+  static readonly opened = new Set<TerminalDouble>()
+  readonly pid = 4101
+  #onExit: (() => void) | null = null
+
+  constructor() {
+    TerminalDouble.opened.add(this)
+  }
+
   onData(): void {}
-  onExit(): void {}
+  onExit(listener: () => void): void { this.#onExit = listener }
   write(): void {}
   resize(): void {}
+
+  exit(): void {
+    this.#onExit?.()
+    TerminalDouble.opened.delete(this)
+  }
+
+  static closeAll(): void {
+    for (const terminal of [...TerminalDouble.opened]) terminal.exit()
+  }
 }
 
 type RecordingSpawn = TerminalSpawn & { calls: RecordedSpawn[] }
@@ -78,7 +95,18 @@ class Adapter {
   }
 
   static #built(spawn: TerminalSpawn, overrides: OverridableCollaborators): ClaudeConversations {
-    const liveSessions = new PtyLiveSessions({ spawn, newId: () => 'terminal-1', stderr: (): void => {} })
+    const liveSessions = new PtyLiveSessions({
+      spawn,
+      newId: () => 'terminal-1',
+      stderr: (): void => {},
+      signal: (): void => {},
+      sleep: async (): Promise<void> => {},
+      now: () => 0,
+      termGraceMs: 1,
+      killGraceMs: 1,
+      pollMs: 1,
+      inspectProcessTable: async () => ' 4101  4101 Thu Sep 17 22:29:08 2026\n',
+    })
 
     return new ClaudeConversations({
       liveSessions,
@@ -94,6 +122,10 @@ class Adapter {
 }
 
 describe('ClaudeConversations', () => {
+  afterEach(() => {
+    TerminalDouble.closeAll()
+  })
+
   it('hands the session the resolved claude directory, so an empty one in its own environment does not reach it', () => {
     const { conversations, spawn } = Adapter.readyToOpen({
       env: { PATH: '/usr/bin', [Invocation.CONFIG_VARIABLE]: '' },

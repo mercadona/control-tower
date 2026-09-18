@@ -171,6 +171,24 @@ describe('SessionTerminal', () => {
     expect(lastTerminal().written).toEqual(['fresh'])
   })
 
+  it('late events from a disposed stream do not alter the replacement terminal', async () => {
+    const onGone = vi.fn()
+    const replacement = { id: 'b2', name: 'bash' }
+    const { rerender } = render(<SessionTerminal session={SESSION} onGone={onGone} />)
+    const oldStream = FakeEventSource.last()
+
+    rerender(<SessionTerminal session={replacement} onGone={onGone} />)
+    const replacementTerminal = lastTerminal()
+    oldStream.dropConnection()
+    oldStream.refuseBeforeOpen()
+    oldStream.dispatchEvent(new MessageEvent('message', { data: '{"bytes":"stale"}' }))
+    oldStream.dispatchEvent(new Event('open'))
+
+    expect(onGone).not.toHaveBeenCalled()
+    expect(replacementTerminal.written).toEqual([])
+    expect(screen.queryByText('No se puede leer esta sesión')).not.toBeInTheDocument()
+  })
+
   it('a proposed size other than the default posts it to resize on mount', async () => {
     FakeFitAddon.nextProposedDimensions = { cols: 120, rows: 40 }
     const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'resized', id: SESSION.id, cols: 120, rows: 40 }), { status: 202 }))

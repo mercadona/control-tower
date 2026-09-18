@@ -117,20 +117,29 @@ const openHome = () => {
   return { user: userEvent.setup(), unmount }
 }
 
+const editable = async (label: string | RegExp) => {
+  let field!: HTMLElement
+  await waitFor(() => {
+    field = screen.getByLabelText(label)
+    expect(field).toBeEnabled()
+  })
+  return field
+}
+
 const typeTicket = async (user: User, ticket: string) => {
-  await user.type(screen.getByLabelText('Ticket'), ticket)
+  await user.type(await editable('Ticket'), ticket)
 }
 
 const typeUserComment = async (user: User, comment: string) => {
-  await user.type(screen.getByLabelText('Qué quieres planificar'), comment)
+  await user.type(await editable('Qué quieres planificar'), comment)
 }
 
 const typeRepository = async (user: User, repository: string) => {
-  await user.type(screen.getByLabelText(/Repositorio/), repository)
+  await user.type(await editable(/Repositorio/), repository)
 }
 
 const typePath = async (user: User, path: string) => {
-  await user.type(screen.getByLabelText(/Ruta local/), path)
+  await user.type(await editable(/Ruta local/), path)
 }
 
 const pressStart = async (user: User) => {

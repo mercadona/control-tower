@@ -456,6 +456,7 @@ class LiveSessionsDouble extends LiveSessions {
 }
 
 class CoordinatingSessionFixture {
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
     repository: new RepositoryName('owner/name'),
@@ -469,6 +470,7 @@ class CoordinatingSessionFixture {
       liveSessions: new LiveSessionsDouble(CoordinatingSessionFixture.SESSION), stderr: () => undefined,
     })
     held.remember(new HeldCoordinatingSession({
+      target: CoordinatingSessionFixture.TARGET,
       state: CoordinatingSessionState.LIVE,
       conversation: CoordinatingSessionFixture.CONVERSATION,
       session: CoordinatingSessionFixture.SESSION,
@@ -1892,7 +1894,9 @@ describe('ApiServer', () => {
     const refused = await fetch(`http://127.0.0.1:${port}/spec-freeze`, { method: 'DELETE' })
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: 'no-spec' })
+    expect(await response.json()).toEqual({
+      status: 'no-spec', target: CoordinatingSessionFixture.TARGET,
+    })
     expect(readSpecFreeze.asked).toHaveLength(1)
     expect(refused.status).toBe(405)
     expect(refused.headers.get('allow')).toBe('GET, POST')

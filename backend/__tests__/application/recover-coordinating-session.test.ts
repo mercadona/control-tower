@@ -11,6 +11,9 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import { SessionTerminationPermissionDenied, SessionTerminationUnconfirmed } from '../../src/domain/exceptions.ts'
 
 class ConversationsDouble extends Conversations {
   resumableAnswer: boolean
@@ -69,12 +72,18 @@ class ConversationRecordsDouble extends ConversationRecords {
   answer: CoordinatingConversation | null
   appended: { conversation: CoordinatingConversation, event: SessionTimelineEvent }[]
   appendFailure: Error | null
+  closure: SessionClosure | null
+  recalledTimelines: number
+  completedClosures: SessionClosure[]
 
   constructor(answer: CoordinatingConversation | null) {
     super()
     this.answer = answer
     this.appended = []
     this.appendFailure = null
+    this.closure = null
+    this.recalledTimelines = 0
+    this.completedClosures = []
   }
 
   async recall(): Promise<CoordinatingConversation | null> {
@@ -82,7 +91,16 @@ class ConversationRecordsDouble extends ConversationRecords {
   }
 
   async recallTimeline(): Promise<readonly SessionTimelineEvent[]> {
+    this.recalledTimelines += 1
     return ConversationRecordsDouble.PRIOR
+  }
+
+  async recallClosure(): Promise<SessionClosure | null> {
+    return this.closure
+  }
+
+  async completeClosure(closure: SessionClosure): Promise<void> {
+    this.completedClosures.push(closure)
   }
 
   async appendTimelineEvent({ conversation, event }: {
@@ -90,6 +108,16 @@ class ConversationRecordsDouble extends ConversationRecords {
   }): Promise<void> {
     if (this.appendFailure !== null) throw this.appendFailure
     this.appended.push({ conversation, event })
+  }
+}
+
+class LiveSessionsDouble extends LiveSessions {
+  confirmed: SessionClosure[] = []
+  confirmationFailure: Error | null = null
+
+  async confirmTermination(closure: SessionClosure): Promise<void> {
+    this.confirmed.push(closure)
+    if (this.confirmationFailure !== null) throw this.confirmationFailure
   }
 }
 
@@ -102,6 +130,17 @@ class Mother {
   })
 
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
+  static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
+
+  static closure(status: 'requested' | 'closed', processGroup: number | null = 4102): SessionClosure {
+    return new SessionClosure({
+      conversation: Mother.ID,
+      target: Mother.TARGET,
+      session: processGroup === null ? null : Mother.SESSION.id,
+      processGroup,
+      status,
+    })
+  }
 }
 
 class Flow {
@@ -111,6 +150,7 @@ class Flow {
   conversations: ConversationsDouble
   sessionHooks: SessionHooksDouble
   records: ConversationRecordsDouble
+  liveSessions: LiveSessionsDouble
   newId: () => string
   now: () => string
   said: string[]
@@ -123,6 +163,7 @@ class Flow {
     this.conversations = new ConversationsDouble({ resumableAnswer: resumable, resumeAnswer: Mother.SESSION })
     this.sessionHooks = new SessionHooksDouble()
     this.records = new ConversationRecordsDouble(recorded)
+    this.liveSessions = new LiveSessionsDouble()
     this.newId = () => Flow.NEW_EVENT_ID
     this.now = () => Flow.NOW
     this.said = []
@@ -148,7 +189,7 @@ describe('RecoverCoordinatingSession', () => {
     expect(recovered.session).toBeNull()
   })
 
-  it('resumes the recorded conversation instead of opening a new one', async () => {
+  it('preserves normal recovery after an abnormal exit without a closure receipt', async () => {
     const flow = new Flow()
 
     const recovered = await flow.run()
@@ -157,6 +198,54 @@ describe('RecoverCoordinatingSession', () => {
     expect(recovered.conversation).toBe(Mother.CONVERSATION)
     expect(recovered.session).toBe(Mother.SESSION)
     expect(flow.conversations.started).toBe(0)
+    expect(flow.records.recalledTimelines).toBe(1)
+  })
+
+  it('never probes or resumes a cancelled conversation even when Claude still holds it', async () => {
+    const flow = new Flow()
+    flow.records.closure = Mother.closure(ClosureStatus.CLOSED)
+
+    const recovered = await flow.run()
+
+    expect(recovered.outcome).toBe(RecoveredConversation.NONE)
+    expect(flow.liveSessions.confirmed).toEqual([])
+    expect(flow.records.recalledTimelines).toBe(0)
+    expect(flow.conversations.resumed).toEqual([])
+    expect(flow.sessionHooks.installed).toEqual([])
+  })
+
+  it('restart closure retries use saved identities without a live terminal', async () => {
+    const absent = new Flow()
+    absent.records.closure = Mother.closure(ClosureStatus.REQUESTED)
+
+    const completed = await absent.run()
+
+    expect(completed.outcome).toBe(RecoveredConversation.NONE)
+    expect(absent.liveSessions.confirmed).toEqual([Mother.closure(ClosureStatus.REQUESTED)])
+    expect(absent.records.completedClosures).toEqual([Mother.closure(ClosureStatus.CLOSED)])
+    expect(absent.conversations.resumed).toEqual([])
+
+    const present = new Flow()
+    present.records.closure = Mother.closure(ClosureStatus.REQUESTED)
+    present.liveSessions.confirmationFailure = new SessionTerminationUnconfirmed('the recorded group still exists')
+
+    const interrupted = await present.run()
+
+    expect(interrupted.outcome).toBe(RecoveredConversation.INTERRUPTED)
+    expect(interrupted.closure).toEqual(Mother.closure(ClosureStatus.REQUESTED))
+    expect(present.records.recalledTimelines).toBe(0)
+    expect(present.records.completedClosures).toEqual([])
+    expect(present.conversations.resumed).toEqual([])
+    expect(present.sessionHooks.installed).toEqual([])
+
+    const denied = new Flow()
+    denied.records.closure = Mother.closure(ClosureStatus.REQUESTED)
+    const permission = new SessionTerminationPermissionDenied('saved group cannot be inspected')
+    denied.liveSessions.confirmationFailure = permission
+    const permissionInterrupted = await denied.run()
+    expect(permissionInterrupted.outcome).toBe(RecoveredConversation.INTERRUPTED)
+    expect(permissionInterrupted.failure).toBe(permission)
+    expect(denied.records.completedClosures).toEqual([])
   })
 
   it('appends a resumed event to the timeline it recalled and answers the whole history', async () => {
