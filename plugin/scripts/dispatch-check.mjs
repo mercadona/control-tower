@@ -32,9 +32,6 @@ import { checkPlans } from './plan-contract.js'
 import { deliveredRun } from './run-machine.js'
 import { extractE2eRuns, E2E_HEADING } from './gh-issue-map.js'
 import { controlTowerLogDir } from './run-metrics.js'
-import { matchesGo, GO_TOKEN } from './go-response.js'
-import { readGoCommitment } from './go-registry.js'
-import { gatesFromLabels } from './gates.js'
 import { SliceBase, BaseBranch } from './slice-base.js'
 import { DeliveryState } from './slice-collection.js'
 import { CollectionAction, CollectionOutcome, SliceCollector } from './slice-collector.js'
@@ -110,20 +107,20 @@ const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch
 //       WITHOUT mutating anything: the issue stays at status:in-progress) and
 //       of `--check-plan` (read-only mode so the agent can validate BEFORE
 //       committing). Like the 5, classifyClaimOutcome never sees it.
-//   9 = NEW (F38) — this slice's `plan` gate is NOT closed by a human: there
-//       is no comment carrying the go of THIS dispatch (`-OK <nonce>`), or
-//       the go of this dispatch is not registered, or it could not be
-//       checked. It comes only out of `--release`, which refuses without
-//       mutating anything. Like the 5, the 6, the 7 and the 8,
-//       classifyClaimOutcome never sees it.
+//   9 = RETIRED (A-3, issue #434) — it used to be the `plan` gate's go, and
+//       there is no longer a go: the whole protocol left the plugin, so
+//       `--release` has no ninth door. The number is NOT reused, and that is
+//       deliberate: an agent, a governed repository's CI or a harvest row
+//       from before the retirement can still be carrying it, and the same
+//       code meaning something else would make that reading silently wrong.
 //  10 = NEW (F20/harvest) — KEPT: `--collect` found the PR merged, but the
 //       worktree's tree has uncommitted changes or the local tip of
 //       `feat/<n>` is not the `headRefOid` that merged the PR. NOTHING is
 //       deleted and the reason is printed. "Merged" is not "nobody is
 //       touching that", and deleting a worktree is irreversible: when in
 //       doubt it is kept and said out loud. It comes only out of
-//       `--collect`; like the 5, the 6 and the 9, classifyClaimOutcome never
-//       sees it.
+//       `--collect`; like the 5 and the 6, classifyClaimOutcome never sees
+//       it.
 //  11 = NEW (F20/harvest into BigQuery) — `--collect --bq` read the slice's
 //       harvest and BigQuery REJECTED the row. NOTHING is deleted (the row
 //       travels before deleting precisely for this) and the reason `bq` gave
@@ -133,8 +130,8 @@ const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch
 //       permissions or schema. A single code for the two causes left the
 //       backend projecting the disk one onto both, and its reader staring at
 //       a healthy worktree.
-//       It comes only out of `--collect`; like the 5, the 6, the 9 and the
-//       10, classifyClaimOutcome never sees it.
+//       It comes only out of `--collect`; like the 5, the 6 and the 10,
+//       classifyClaimOutcome never sees it.
 // The text this file prints does NOT change in content (the same details,
 // including the manual `--release`/revert command) — it merely stops being
 // the ONLY source of truth for the caller's decision.
@@ -821,9 +818,10 @@ if (checkPlan) {
 //
 // IT IS LAUNCHED HERE, AND NOT IN `/ct-next`, because this is the EXACT
 // instant at which there is an open PR waiting for a human merge. Launching
-// it at dispatch —next to the `-OK` watcher, which is where it was first
-// considered— would put a process asking after a PR that does not yet exist
-// for the whole of the implementation.
+// it at dispatch —which is where it was first considered, next to the go
+// watcher that the `plan` gate's retirement took away— would put a process
+// asking after a PR that does not yet exist for the whole of the
+// implementation.
 //
 // IT IS LAUNCHED DETACHED (`detached` + `unref`) because it has to survive
 // this invocation finishing, and the slice's session being closed: the case
@@ -851,10 +849,11 @@ if (checkPlan) {
 // never find anyone to deliver the warning to, and would announce itself as
 // launched on top of that.
 //
-// CT_WATCH_MERGE_BIN follows the pattern of CT_WATCH_GO_BIN: it changes NO
+// CT_WATCH_MERGE_BIN follows the CT_ACCOUNT_*_DIR pattern: it changes NO
 // decision, only which program is launched. It exists so that the tests can
 // check that the watcher is launched with the right arguments without putting
-// a real process to poll GitHub for 48 hours.
+// a real process to poll GitHub for 48 hours. It is now the only watcher
+// double left: the go watcher's, CT_WATCH_GO_BIN, went with the protocol.
 // ============================================================================
 function launchMergeWatcher(n) {
   const warn = (reason) => errLine(`warning: the merge watcher of #${n} has not been launched (${reason}) — the slice is delivered and the issue is at status:in-review, but when you merge its PR you will have to gather the harvest by hand (or tell the coordinator).`)
@@ -986,100 +985,6 @@ if (release) {
       errLine(`warning: #${issue} carries the gate:e2e label but its body declares no "${E2E_HEADING}" section — there are no journeys to verify, so it is released all the same, but it is worth checking whether the section was lost when the issue was edited by hand.`)
     }
   }
-  // ==========================================================================
-  // F38 — THE GO GATE: THE `plan` GATE DOES NOT CLOSE BY ITSELF.
-  //
-  // THE DEFECT IT CLOSES. Since #32, answering `-OK` on the issue starts the
-  // session: it gave mechanical consequence to a GitHub comment. And the
-  // agent has `gh`. Its own limit said so (commands/ct-next.md): "it does not
-  // stop the agent itself from writing `-OK` on its own issue". With the
-  // `plan` gate implied by default on EVERY slice — as it was until D-14
-  // retired that default from `gatesForType` — the result was a gate the
-  // gated party could open, leaving on top of that
-  // the RECORD of a human review that never happened. Both halves are closed
-  // here: the go carries a nonce the agent cannot guess (go-response.js), and
-  // it IS A REQUIREMENT to release — before it was not a requirement for
-  // anything: an agent could ignore the whole gate and deliver anyway,
-  // because the kickoff that orders it to stop is a prompt and not a gate.
-  //
-  // WHY THIS GATE GOES LAST, and not next to the plan's one (exit 6). The
-  // order of this ladder is "which message must win", and a missing go means
-  // different things depending on the rest: with the run half done, asking
-  // after the go is noise about a slice that has not finished yet; with
-  // EVERYTHING green —the plan valid, the tasks committed, the Global green,
-  // the e2e covered— a missing go is no longer a "not yet", it is a whole
-  // body of work done without permission. That is when this message has to
-  // win, and that is where it is.
-  //
-  // AND IT GOES BEFORE THE WARNING ABOUT THE *UNVERIFIED* ONES for the same
-  // reason that warning goes before mutating: if the release is not going to
-  // happen, it is noise about a decision already taken.
-  //
-  // THE THREE WAYS OF NOT BEING ABLE TO ASSERT IT, and none of them releases:
-  // with no registered commitment, with the register unreadable, or without
-  // being able to read the comments. It is the doctrine of the exits 5/6/8
-  // above: this file does not declare clean what it has not been able to look
-  // at. The `!plan` waiver on the row DOES release, because then there is no
-  // gate to close — and it is read from the labels, which is where the waiver
-  // survives the kickoff.
-  // ==========================================================================
-  const ctHome = { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }
-  const register = readGoCommitment({ repo, issue, ...ctHome })
-  if (register.error) {
-    dieErr(`#${issue} is not released: the go of this dispatch is recorded at ${register.path} and could NOT be read (${register.error}). It is not asserted that the go is missing, only that it could not be checked. Fix it (permissions, or the file's content) or reissue one with \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. The issue is still at status:in-progress: nothing has been moved.`, 9)
-  }
-  if (register.missing) {
-    // With no register, the only way to know whether this slice WAS SUPPOSED
-    // to have a `plan` gate is its labels. A read failure here does not
-    // release: it would be the same assertion without having looked.
-    let labels = null
-    try { labels = labelsOf(issue) } catch (e) {
-      dieErr(`#${issue} is not released: the go of this dispatch is not recorded (${register.path} does not exist) and the issue's labels could not be read either (${e.message}) to find out whether this slice carries the \`plan\` gate. It is not asserted that it does not. Try again when \`gh\` answers. The issue is still at status:in-progress: nothing has been moved.`, 9)
-    }
-    // `gatesFromLabels` returns {gates, declared}: `declared` tells "this
-    // issue says it has no `plan` gate" apart from "this issue says nothing
-    // about its gates" (it predates gates existing, or it was made by hand).
-    // Only the FIRST releases. The second is not a waiver, it is a silence,
-    // and a silence does not close a gate — besides being the path an agent
-    // would open by deleting its own labels. It is fixed with one command and
-    // breaks nothing in flight.
-    const declaration = gatesFromLabels(labels)
-    if (!declaration.declared || declaration.gates.includes('plan')) {
-      const why = declaration.declared
-        ? 'this slice carries the `plan` gate'
-        : "this issue's labels declare NO gate at all (not even `gate:none`), so it cannot be asserted that it waives the `plan` one —silence is not a waiver—"
-      dieErr(`#${issue} is not released: ${why} and the go of this dispatch is NOT RECORDED (${register.path} does not exist), so there is nothing to check the issue's \`${GO_TOKEN}\` against. It happens when the slice was dispatched with a version older than the one that brought the nonce, or when that file was deleted. Reissue the go with \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`, ask for it to be answered on the issue and release again. The issue is still at status:in-progress: nothing has been moved.`, 9)
-    }
-  } else {
-    // THE SAME READ AS THE WATCHER (a plain `--json comments`, with
-    // `.comments` parsed here), not a different `-q`: two ways of asking for
-    // the same thing are two ways for one of them to return something else
-    // one day. It is the reason the e2e gate reuses `extractE2eRuns` instead
-    // of re-parsing.
-    let comments = null
-    try {
-      const parsed = JSON.parse(gh(['issue', 'view', String(issue), '--repo', repo, '--json', 'comments']))
-      comments = Array.isArray(parsed?.comments) ? parsed.comments : null
-    } catch {
-      comments = null
-    }
-    if (!Array.isArray(comments)) {
-      dieErr(`#${issue} is not released: the issue's comments could not be read (\`gh issue view --json comments\`), so the go of the \`plan\` gate could not be checked — it is not asserted that it is missing. Try again when \`gh\` answers. The issue is still at status:in-progress: nothing has been moved.`, 9)
-    }
-    // NO WINDOW on purpose, unlike the watcher: here any comment on the issue
-    // counts, because the nonce already does the work the snapshot of ids did
-    // there — a go from an earlier dispatch has a different nonce and does not
-    // match by construction.
-    const go = comments.find((c) => matchesGo(c?.body, register.commitment))
-    if (!go) {
-      dieErr(`#${issue} is not released: the \`plan\` gate is not closed — no comment on this issue carries the go of this dispatch. A person closes it by answering \`${GO_TOKEN} <nonce>\` with the nonce /ct-next printed on dispatching (it is not in your context, nor on the issue, nor in your worktree: it belongs to whoever reviews the plan, on purpose). If it has been lost, whoever dispatched reissues it with \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. The issue is still at status:in-progress: nothing has been moved.`, 9)
-    }
-    // WHO gave it, via stderr: the record of who authorised is worth more
-    // printed than stored, and it is the only signal that would give away a
-    // go granted by the very identity the agent runs as.
-    errLine(`gate \`plan\` closed: go of this dispatch given by ${go?.author?.login ? `@${go.author.login}` : 'an author gh did not return'}${go?.createdAt ? ` el ${go.createdAt}` : ''}.`)
-  }
-
   // THE *UNVERIFIED* ONES, SAID OUT LOUD. It is the state that releases a
   // slice WITHOUT having checked it —a docker that does not start, an expired
   // credential, the AGENTS.md section left unfilled—, and it delivers on

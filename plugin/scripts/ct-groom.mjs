@@ -54,7 +54,7 @@ import { ADDENDA } from './kickoff.js'
 // the single source of truth of which gates a slice has and of everything that
 // has to be said out loud about them (a gate the Tipo does not imply, a waiver,
 // an inert waiver, a token that does not exist).
-import { GATES, TYPE_GATES, resolveGates, resolveE2e, parseGateCell } from './gates.js'
+import { GATES, RETIRED_GATES, TYPE_GATES, resolveGates, resolveE2e, parseGateCell } from './gates.js'
 
 // `arg()` only returns a string when the flag really carries a value: if the
 // flag is the last token of argv, or the next token is itself another flag
@@ -636,6 +636,25 @@ function e2eInertWaiverAdvisory(n) {
   return `warning: slice #${n} waives the "e2e" gate with "!e2e" in the "Gate" column, but its row declares no journeys in the "E2E" column: the waiver does nothing (there was nothing to remove). It is said so that you are not left with the idea of having withdrawn a gate that was never there`
 }
 
+// retiredGateAdvisory (A-3, issue #434): a token that WAS a gate and is one no
+// longer. It sits next to the inert-waiver advisory because it is the same kind
+// of statement —"what you wrote produces nothing"— and it is a warning and not
+// an abort for the reason written in gates.js#RETIRED_GATES: every `!plan`
+// already frozen in a spec would otherwise refuse to groom, and the specs of
+// the repositories this plugin governs are not in this tree.
+//
+// It does NOT distinguish `plan` from `!plan`, because the parser does not
+// either: with the gate gone there is nothing left to ask for and nothing left
+// to waive. And it carries the retirement's own line rather than a text of its
+// own, so that whoever reads it learns what happens to their plan now — the
+// sentence lives in gates.js, next to the token, and this is one of its
+// readers. That is also why this text does not say "RETIRED" itself: the line
+// it interpolates opens with the word, and saying it twice in one sentence
+// reads as two statements about the same token.
+function retiredGateAdvisory(n, gate) {
+  return `warning: slice #${n} writes the "${gate}" gate in its "Gate" column, and that gate is ${RETIRED_GATES[gate]} The token produces nothing: no label, no line in the kickoff and nothing in the issue's body. It is not an error and nothing is refused (a spec frozen before the retirement stays groomable); take it out of the cell whenever you next touch that row`
+}
+
 for (const s of report.slices) {
   const g = resolveGates(s.type, s.gate, s.e2e)
   const typeRef = s.type && !isNoValueCell(s.type) ? `"${s.type}"` : '(no Tipo)'
@@ -660,6 +679,7 @@ for (const s of report.slices) {
     if (gate === 'e2e') { console.error(e2eInertWaiverAdvisory(s.n)); continue }
     console.error(`warning: slice #${s.n} waives the gate "${gate}", but its Tipo ${typeRef} does not imply that gate: the waiver does nothing (there was nothing to remove). It is said so that you are not left with the idea of having withdrawn a gate that was never there`)
   }
+  for (const gate of g.retired) console.error(retiredGateAdvisory(s.n, gate))
   for (const gate of g.redundant) {
     if (gate === 'e2e') { console.error(e2eRedundantAdvisory(s.n, s.gate)); continue }
     console.error(`warning: slice #${s.n} declares the gate "${gate}", which its Tipo ${typeRef} already implies — it is redundant, not an error: the result is the same with the "Gate" cell empty`)

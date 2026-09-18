@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, statSync, accessSync, constants as fsConstants, writeSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { tmpdir, homedir } from 'node:os'
@@ -9,11 +9,6 @@ import { planDispatch, parseRepoSlug, repoOfRemoteUrl, buildCmuxArgv, buildCmuxS
 import { renderKickoff, buildStateSeed, AGENT_BIN, ARCHITECT_MODEL } from './kickoff.js'
 import { Baseline, BaselineOutcome, BaselineResult, ShellBaselineRunner } from './baseline.js'
 import { parseStrictInt } from './argnum.js'
-import { resolveGatesForAgent } from './gates.js'
-import { GO_TOKEN, newGoNonce, goCommitment, goBody } from './go-response.js'
-import { writeGoCommitment } from './go-registry.js'
-import { emitGoNonce } from './go-channel.js'
-import { controlTowerLogDir } from './run-metrics.js'
 import { listCmuxWorkspaces, CMUX_QUERY_TIMEOUT_MS } from './cmux.js'
 import { shQuote } from './shquote.js'
 import {
@@ -56,9 +51,6 @@ const ctStepPath = join(dirname(fileURLToPath(import.meta.url)), 'ct-step.mjs')
 // there. The agent that writes the plan has to be able to open the yardstick's
 // documents by their path.
 const conventionsDir = join(dirname(fileURLToPath(import.meta.url)), '..', PluginYardstick.DIRECTORY)
-// The `-OK` watcher: it is launched detached after dispatching a slice with
-// the `plan` gate. See lanzarVigilanteDelGo.
-const ctWatchGoPath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch-go.mjs')
 
 // ============================================================================
 // D5, finding F (second half) — THE OUTPUT'S DESTINATION BREAKING CANNOT
@@ -673,102 +665,6 @@ function verifyCmuxLaunch(expectedTitle, expectedCwd) {
 //                    we ALSO cannot revert the claim: a revert with an agent
 //                    that starts three seconds late is worse than the residue.
 // ============================================================================
-// THE `-OK` WATCHER — one single go, and on the issue.
-//
-// The `plan` gate orders the agent to publish its plan as a comment on the
-// issue and STOP until a human answers. Until this round nobody read that
-// answer: work resumed when the person went to the cmux window and pushed the
-// session by hand. Which means the permission was given twice and the one that
-// counted was not the one that stays written.
-//
-// It is launched DETACHED (`detached` + `unref`) because it has to survive
-// this coordinator session being closed. If it only lived while somebody was
-// watching, it would be no use for the case that motivates all of this: in
-// F33's measurement, 54% of an epic's clock was a gate asked for at night,
-// waiting for somebody to wake up.
-//
-// ONLY IF THE SLICE CARRIES THE `plan` GATE. A slice that opted out (`!plan` in
-// the §9 table) does not stop to wait for anybody, so there is nothing to watch
-// and a process polling GitHub for eight hours for nothing is worse than its
-// absence.
-//
-// AND ONLY IF THE SLICE COUNTED AS LAUNCHED. The watcher's only handle is the
-// session's TITLE, so on the two paths that do not count —'not-found' (cmux
-// answered and there is no session with that title) and 'wrong-cwd' (there is
-// one, but in another directory, and the slice is noted in
-// `unverifiedLaunches`)— launching it was announcing «the session starts on
-// its own» in the very run that has just said that session cannot be located.
-// An adversarial review caught it, and the repo has a whole test file against
-// this class of message (`ct-next-honest-messages.test.js`).
-//
-// IT DOES NOT BREAK THE DISPATCH. It goes after the claim is resolved and the
-// slice counted as launched, and any failure here is WARNED about and carries
-// on: the work is already under way, and not being able to watch the go means
-// going back to the old mode —pushing by hand—, not losing the slice. It is
-// the same rule as the telemetry's `git add` in ct-step: the thermometer is not
-// part of the engine. That is why there is also an `error` handler: an
-// ASYNCHRONOUS `spawn` failure (EAGAIN, EMFILE) is not seen by the
-// `try/catch`, and with no handler it would be an unattended `'error'` that
-// would bring the whole of ct-next down — losing the batch's summary and its
-// exit code.
-//
-// THE LOG IS OPENED BY THE WATCHER, not by this function. When it was opened
-// here, the suite created directories and files in the real `$HOME` of whoever
-// ran it (the tests substitute the BINARY, not the disk) — exactly what
-// `__tests__/fixtures/hermetic-env.js` exists to prevent—, and on top of that
-// a descriptor was left unclosed per slice. Here only the path is computed, so
-// it can be said and passed along.
-//
-// CT_WATCH_GO_BIN follows the CT_ACCOUNT_*_DIR pattern: it changes NO decision,
-// only which program is launched. It exists so that the tests can check that
-// the watcher is launched with the right arguments without putting a real
-// process to poll GitHub for eight hours.
-// ============================================================================
-function launchGoWatcher(slice, sessionName) {
-  // The gates come out of the slice exactly as the issue mapped it:
-  // `resolveGatesForAgent` only looks at `gatesDeclared`/`gates`/`type`, and
-  // the normalisation `sliceForKickoff` does is of `ac`/`issue`/`epic`. This
-  // way it does not force the `plans` object to be widened.
-  if (!resolveGatesForAgent(slice).includes('plan')) return
-  const warnNotLaunched = (why) => console.error(`  warning: the ${GO_TOKEN} watcher of #${slice.n} has not been launched (${why}) — the slice is launched and the gate still stands, but you will have to push its session by hand after giving the go.`)
-  try {
-    const bin = process.env.CT_WATCH_GO_BIN || ctWatchGoPath
-    // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
-    // does NOT fail: the executable is always `node`, so the process is born,
-    // dies instantly with a module error, and without this check «watcher
-    // launched» was announced with a pid that no longer existed. It is the
-    // same class of defect F19/H1 closed in the dispatch —«cmux returned 0» is
-    // not «the command ran»— with even weaker evidence: here the only thing
-    // checked would be that `node` exists.
-    if (!existsSync(bin)) return warnNotLaunched(`the watcher's program does not exist: ${bin}`)
-    // THE NONCE IS DRAWN HERE AND NOWHERE ELSE (F38). This is the only process
-    // of the loop that runs in the session of whoever dispatches, so it is the
-    // only one that can hand them the nonce without writing it somewhere the
-    // agent reads. It is registered BEFORE launching the watcher: if the
-    // registration fails nothing is watched, because a watcher with no
-    // registered commitment would be a go that starts the work and that
-    // `--release` will not be able to honour afterwards.
-    const nonce = newGoNonce(randomBytes(4))
-    const goHash = goCommitment(nonce)
-    const ctHome = { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }
-    try {
-      writeGoCommitment({ repo, issue: slice.n, commitment: goHash, ...ctHome })
-    } catch (e) {
-      return warnNotLaunched(`the go of this dispatch could not be registered (${e.message}) — with no record, \`dispatch-check --release\` will refuse (exit 9) because it will not be able to check the go. Register one with \`node <plugin>/scripts/ct-go.mjs --issue ${slice.n} --repo ${repo} --session ${JSON.stringify(sessionName)}\` and give it the go it prints`)
-    }
-    const logPath = join(controlTowerLogDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }), `watch-go-${slice.n}.log`)
-    const child = spawn(process.execPath, [
-      bin, '--issue', String(slice.n), '--repo', repo, '--session', sessionName, '--go-hash', goHash, '--log', logPath,
-    ], { detached: true, stdio: 'ignore' })
-    child.on('error', (e) => warnNotLaunched(`fallo al arrancarlo: ${e.message}`))
-    child.unref()
-    console.log(`  ${GO_TOKEN} watcher of #${slice.n} launched (pid ${child.pid}) — when you answer the go on the issue, the session starts on its own. Log: ${logPath}`)
-    emitGoNonce(slice.n, nonce)
-  } catch (e) {
-    warnNotLaunched(e.message)
-  }
-}
-
 async function waitForLaunchSentinel(sentinelPath, expectedCwd, budgetMs = launchSentinelTimeoutMs) {
   const deadline = Date.now() + budgetMs
   // An ASYNCHRONOUS loop (not a synchronous `Atomics.wait` like the stubs'):
@@ -3851,12 +3747,6 @@ for (let idx = 0; idx < plans.length; idx++) {
   // resolvable. All that is left to decide is how much we know about the
   // WINDOW, which is a less important question and can no longer produce a
   // false "launched" on its own.
-  // The `-OK` watcher is only launched if this slice COUNTS as launched, and
-  // `launchedCount` is exactly that fact: the two branches that do not
-  // increment it ('wrong-cwd' and 'not-found') are the ones that record the
-  // slice in `unverifiedLaunches`, and in both of them the session's title
-  // —the watcher's only handle— is precisely what cmux has just denied.
-  const launchedBeforeVerifying = launchedCount
   if (launchCheck.status === 'confirmed') {
     console.log(`launched #${s.n} at ${wt} — verified: the cmux session is running in that directory, and the command really did get to run (start-up sentinel written by the shell itself, with $PWD=${sentinel.cwd} and \`claude\` resolvable).${resendNote}`)
     launchedCount++
@@ -3903,7 +3793,6 @@ for (let idx = 0; idx < plans.length; idx++) {
   // is kept as an idempotent one in case the flow above changed; it is not the
   // one that closes the window.)
   activeClaim = null
-  if (launchedCount > launchedBeforeVerifying) launchGoWatcher(s, name)
 }
 
 // D2 review, minor 1: ALL of this counting/exit-code block is exclusive to the

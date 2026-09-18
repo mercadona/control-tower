@@ -33,7 +33,6 @@ import { parseState } from '../scripts/state.js'
 // — account dirs + cmux/claude stubs, and the hygiene of cleaning up temporary
 // directories that can hang off a SIGKILL to an orphaned grandchild.
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { goEnv } from './fixtures/go-gate.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const stopHook = join(here, '..', 'dist', 'stop.js')
@@ -749,7 +748,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
     // cross-check, the happy path.
     const r = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--release', '--dry-run'], {
       cwd: wt, encoding: 'utf8',
-      env: { ...process.env, PATH: `${join(fixturesDir, 'fake-gh-bin')}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 1 }) },
+      env: { ...process.env, PATH: `${join(fixturesDir, 'fake-gh-bin')}:${process.env.PATH}` },
     })
     expect(r.status).toBe(0)
     rmSync(dir, { recursive: true, force: true })
@@ -828,7 +827,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
     // reading the body, not only for the mutation scenario.
     const r = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--release', '--dry-run'], {
       cwd: wt, encoding: 'utf8',
-      env: { ...process.env, PATH: `${join(fixturesDir, 'fake-gh-bin')}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 1 }) },
+      env: { ...process.env, PATH: `${join(fixturesDir, 'fake-gh-bin')}:${process.env.PATH}` },
     })
     expect(r.status).toBe(0)
     rmSync(dir, { recursive: true, force: true })

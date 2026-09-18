@@ -36,7 +36,6 @@ import { analyzeSlicesTable } from '../scripts/slices.js'
 import { buildLabels, buildIssueBody, groomPlan } from '../scripts/groom.js'
 import { mapGhIssue } from '../scripts/gh-issue-map.js'
 import { GATES, TYPE_GATES, resolveGates, gatesForType, gatesFromLabels, GATE_LABEL_NONE } from '../scripts/gates.js'
-import { GO_TOKEN } from '../scripts/go-response.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const groomScript = join(here, '..', 'scripts', 'ct-groom.mjs')
@@ -77,23 +76,22 @@ function dryRun(specText, extraArgs = []) {
 // 1. The vocabulary of gates: closed, and derived from what ALREADY existed.
 // ============================================================================
 describe('F21 — the vocabulary of gates', () => {
-  it('the gates that exist come out of the addenda that already imposed them, plus the deliberate addition of F-jjponz-1', () => {
+  it('the gates that exist come out of the addenda that already imposed them, plus the deliberate addition of the e2e one', () => {
     // `ui` imposed "gate de screenshot obligatorio"; `infra`, "apply solo tras
     // review". They are the two ONLY phrases of ADDENDA that demanded a human
-    // act; the rest are technical reminders. `plan` (F-jjponz-1) is the first
-    // gate ADDED through the route the doctrine of gates.js reserves for that:
-    // a deliberate act, with its kickoff text and its issue text (see
-    // gate-plan.test.js). No Tipo implies it. `e2e` (the "e2e al cierre del
-    // slice" feature) is the second: also deliberate, with its two texts, and
-    // no Tipo implies it either — it is DERIVED from the E2E column (see
+    // act; the rest are technical reminders. `e2e` (the "e2e al cierre del
+    // slice" feature) is the one gate ADDED through the route the doctrine of
+    // gates.js reserves for that: a deliberate act, with its two texts, and no
+    // Tipo implies it — it is DERIVED from the E2E column (see
     // gates.js#resolveGates), never from `Tipo`.
-    expect(Object.keys(GATES).sort()).toEqual(['apply', 'e2e', 'plan', 'visual'])
+    //
+    // There was a fourth, `plan` (F-jjponz-1): D-14 retired its universal
+    // default and A-3 (issue #434) retired the token itself into
+    // `RETIRED_GATES`, read tolerantly and written nowhere — see
+    // gate-plan.test.js.
+    expect(Object.keys(GATES).sort()).toEqual(['apply', 'e2e', 'visual'])
     expect(TYPE_GATES.ui).toEqual(['visual'])
     expect(TYPE_GATES.infra).toEqual(['apply'])
-    // D-14 retires F-jjponz-2's universal default: no `Tipo` implies `plan`
-    // any more (gatesForType always returned it; now it returns exactly the
-    // Tipo's own gates). A row still gets it by writing `plan` in its `Gate`
-    // column, same as any gate no Tipo implies.
     expect(gatesForType('backend')).toEqual([])
     expect(gatesForType('')).toEqual([])
     expect(gatesForType(undefined)).toEqual([])
@@ -268,14 +266,16 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
     expect(buildLabels(backendWithGate)).toContain('gate:visual')
   })
 
-  it('a slice with no technical gates and no declared `plan` carries `gate:none`; a row that writes `plan` still gets `gate:plan`', () => {
-    // D-14 retires the universal default: `bareBackend` (a `Tipo` with no
-    // technical gate, and an empty `Gate` cell) now resolves to no gates at
-    // all, exactly like the old `gate:none` case. `plan` has not left the
-    // vocabulary — a row that writes it in its `Gate` column still gets it.
+  it('a slice with no technical gates carries `gate:none`, and a row that writes `plan` carries it too', () => {
+    // D-14 retired the universal default: `bareBackend` (a `Tipo` with no
+    // technical gate, and an empty `Gate` cell) resolves to no gates at all.
+    // A-3 (issue #434) retired the token, so a row that still writes `plan`
+    // resolves to the SAME thing — the retired token produces no label of its
+    // own, and `gate:none` is what says so out loud.
     expect(buildLabels(bareBackend)).toContain(GATE_LABEL_NONE)
     expect(buildLabels(bareBackend)).not.toContain('gate:plan')
-    expect(buildLabels({ ...bareBackend, gate: 'plan' })).toContain('gate:plan')
+    expect(buildLabels({ ...bareBackend, gate: 'plan' })).not.toContain('gate:plan')
+    expect(buildLabels({ ...bareBackend, gate: 'plan' })).toContain(GATE_LABEL_NONE)
     expect(buildLabels(uiSlice)).not.toContain(GATE_LABEL_NONE)
   })
 
@@ -294,8 +294,9 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
     // line's own "(ninguno declarado)" satisfied on its own — so the assertion
     // passed without the gates section saying anything. With D-14, a `Tipo`
     // with no technical gate and nothing declared is already the (none) case;
-    // the `!plan` here is now an inert waiver over an already-empty set, and
-    // the section still has to say "(none)" out loud rather than fall silent.
+    // the `!plan` here names a RETIRED token (A-3), so it produces nothing at
+    // all, and the section still has to say "(none)" out loud rather than fall
+    // silent.
     expect(body).toContain('- (none) — this slice demands no human gate before merging.')
   })
 
@@ -412,7 +413,7 @@ describe('F21 — /ct-groom talks about the gates', () => {
     expect(res.stderr).toContain('visual')
     const plan = JSON.parse(res.stdout)
     // D-14: nothing is implied any more once `visual` is waived, so the row
-    // ends up with no gates at all — `gate:none`, not `gate:plan`.
+    // ends up with no gates at all — `gate:none`.
     expect(plan.issues[0].labels).toContain(GATE_LABEL_NONE)
     expect(plan.issues[0].labels).not.toContain('gate:visual')
   })
@@ -509,32 +510,8 @@ describe('F21 — the §9 contract documents the gates and the invariant', () =>
   })
 })
 
-// ---------------------------------------------------------------------------
-// THE TOKEN OF THE GO, TIED TO THE TWO TEXTS THAT EXPLAIN IT.
-//
-// Ever since a program reads the answer of the `plan` gate
-// (scripts/go-response.js + scripts/ct-watch-go.mjs), the token stopped being
-// prose: an exact `-OK` starts the work and anything else does not. Which is to
-// say that the gate's two texts —the one the AGENT reads and the one the HUMAN
-// reads— have to name the real token.
-//
-// Without this test the failure is the worst possible one and a silent one: the
-// token gets renamed in the code, the texts keep saying what they said before,
-// the person writes what they were told, and the work never starts without
-// anything failing.
-// ---------------------------------------------------------------------------
-describe('the token of the go travels in both texts of the `plan` gate', () => {
-  it('the kickoff of the agent names it', () => {
-    expect(GATES.plan.kickoff).toContain(GO_TOKEN)
-  })
-
-  it('the issue text names it, which is the one read by whoever has to write it', () => {
-    expect(GATES.plan.issue).toContain(GO_TOKEN)
-  })
-
-  it('and the kickoff says the agent must NOT poll the issue itself: that belongs to the watcher', () => {
-    // An agent that started looking at the issue on its own account would be
-    // watching its own gate, which is precisely what this division avoids.
-    expect(GATES.plan.kickoff).toMatch(/no sondees/i)
-  })
-})
+// The token of the go used to be pinned here, tied to the two texts of the
+// `plan` gate that explained it. A-3 (issue #434) retired the gate and the
+// whole protocol with it, so there is no token left to tie anything to: what
+// remains of that gate is in gate-plan.test.js, which pins that it produces
+// nothing.

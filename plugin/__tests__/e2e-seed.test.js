@@ -8,7 +8,7 @@ import { newRun } from '../scripts/run-machine.js'
 const slice = (e2e) => ({
   n: 5, issue: '#12', name: 'exposición', type: 'backend', entrega: '', gate: '–',
   deps: [], ac: ['x'], protected: '', area: ['core'], touches: [], e2e,
-  gates: ['plan', 'e2e'], gatesDeclared: true,
+  gates: ['e2e'], gatesDeclared: true,
 })
 
 describe('the seed carries the journeys', () => {

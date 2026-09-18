@@ -10,7 +10,7 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 |---|---|
 | Version | `0.58.0` <!-- x-release-please-version --> · slice table contract `v26` |
 | Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` · `/ct-harvest` |
-| Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
+| Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `visual` and `apply` gates a row can declare or a `Tipo` imply, and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
 | Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`ct-writing-plans-prescriptive`) |
 | Requirements | Node ≥ 24 · `gh` authenticated · `cmux` · git worktrees |
 | Licence | [MIT](LICENSE) |
@@ -117,7 +117,7 @@ Always start dry:
 
 ## `ct-step`: the sequence of the implementation, decided by a table
 
-Between the plan gate and the pull request there is a stretch that used to be
+Between the plan and the pull request there is a stretch that used to be
 driven by a chat session following `subagent-driven-development`: it dispatched
 one implementer per task, a reviewer behind it, and kept a ledger on disk so as
 not to lose its place when the conversation was compacted.
@@ -240,7 +240,7 @@ The principle that orders the whole design:
 
 **The exact format of each one is in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf)**, taken in every case from the function that emits it, not from a description.
 
-The slice's plan has a mechanical contract (`scripts/plan-contract.js`), and since F-jjponz-4 that contract narrows **what** a code block may carry: each one declares its role —`Current state` (the stretch that changes, checked verbatim against the repo), `Contract` (types, signatures, typed errors, constants that cannot be deduced), `Call site` (how the call is left in the consumer) or `Final text` (documentation)— with its budget of lines. The bodies of the modules and the test files **do not go in the plan**: the implementer writes them with TDD, and the configuration is described in prose. The reason is the `plan` gate: a plan of 74k characters that does not fit in a comment of the issue is not reviewed, it is skimmed — and what travels unreviewed is defects.
+The slice's plan has a mechanical contract (`scripts/plan-contract.js`), and since F-jjponz-4 that contract narrows **what** a code block may carry: each one declares its role —`Current state` (the stretch that changes, checked verbatim against the repo), `Contract` (types, signatures, typed errors, constants that cannot be deduced), `Call site` (how the call is left in the consumer) or `Final text` (documentation)— with its budget of lines. The bodies of the modules and the test files **do not go in the plan**: the implementer writes them with TDD, and the configuration is described in prose. The reason is that the plan is published as a comment on the issue and read there: a plan of 74k characters that does not fit in a comment is not read, it is skimmed — and what travels unread is defects.
 
 ### The 5 cell rules of the slice table
 
@@ -313,8 +313,8 @@ Written here because a stated limit is operable and an implicit one is not.
 
 - **The claim is not atomic.** The lock an issue is claimed with is GitHub labels, with no compare-and-swap. It is **reproduced and verified**, not suspected, that two dispatchers launched almost at the same time can claim the same token and both start. The mitigation is operational: **do not launch two `/ct-next` at once against the same repo.**
 - **Nothing watches the claims between invocations.** The claim is a label, with no heartbeat. And the evidence of life is local to the machine, so «abandoned» is never asserted, only «there is not a trace of it here».
-- **The gates are shown, not enforced — except `plan`.** The loop does not stop you merging with a gate left unclosed. The exception is the `plan` gate: since F38 its go is `-OK <nonce>` (one nonce per dispatch, drawn on dispatching and dictated only by the screen of whoever dispatches) and `dispatch-check --release` refuses with **exit 9** without it, so a slice whose plan nobody reviewed never reaches `in-review`.
-- **The go of the `plan` gate is not cryptography: agent and coordinator run with the same uid.** The nonce closes the *easy* forgery —the agent can no longer write its own permission with a `gh issue comment`, which is what it used to do and with a trace indistinguishable from the legitimate one— but a determined agent can touch the coordinator's private state, which is the same line behind which every other gate already stands: none of them survives an agent that rewrites the plugin that judges it. And by default the nonce comes out on `stdout`, that is, it protects against the **implementer** agent and not against the coordinator (with `CT_GO_CHANNEL=notify` it enters the context of neither). The complete closure demands a verifier that does not run under that uid —CI, or another identity—: named and unbuilt.
+- **The gates are shown, not enforced.** The loop does not stop you merging with a gate left unclosed.
+- **There is no human lever between the dispatch and the pull request.** The `plan` gate used to be one: the agent published its plan as a comment on the issue and stopped until a human answered `-OK <nonce>`, and `--release` refused (exit 9) without that go. A-3 (issue #434) retired the whole protocol — the plan is still published as a comment, and it is read rather than answered. What compensates is what was already there: the per-task judge, the slice judge over the accumulated diff, `--release` with its exits 5, 6, 7 and 8, and the merge, which stays a human act. The `plan` token itself is retired and not deleted (`gates.js#RETIRED_GATES`): a row that still writes `plan` or `!plan` produces nothing and `/ct-groom` says so instead of aborting, because every `!plan` already frozen in a spec would otherwise refuse to groom.
 - **The `e2e` report is forgeable.** Nothing stops an agent inventing the `stdout` of a command that never ran: the report is validated in its FORM (the fields the rubric demands for each journey), never in the truth of what it claims to have seen. The only thing that narrows it is that the declared command has to be reproducible — an invented output falls over as soon as somebody pastes it and really runs it.
 - **There is no transaction in the groom.** Once the validation is past, a network failure leaves what came before created. There is no rollback and no pretence that there is one: you get out of an abort halfway by running it again, not by cleaning up by hand.
 - **`--reconcile` is experimental** and it says so every time. The *detection* half (which never writes) is better understood than the *application* half.

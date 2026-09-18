@@ -486,48 +486,36 @@ describe('renderKickoff — the baseline is in the seed, not in an order to the 
   })
 })
 
-// The kickoff names only the gates the slice has (2026-09-11 plan) — line 276
-// used to be an UNCONDITIONAL element of the array: a slice whose resolved
-// gates left `plan` out still received "…con OK humano", a promise nothing
-// mechanical ever enforced (run-machine.js has no go step, and
-// dispatch-check --release only demands the go when the issue carries the
-// `plan` label). The three tests below pin the boundary the branch now cuts
-// at (`gates.includes('plan')`) and that the run-machine sequence itself
-// reaches the agent identically in both branches, out of one piece of text.
-describe('renderKickoff — the run-machine line names the human OK only when the slice carries the `plan` gate', () => {
+// The run-machine line has no branch left (A-3, issue #434). The 2026-09-11
+// plan gave it one —a slice that carried the `plan` gate was told to wait for
+// a human OK, one that did not was not— and the retirement of that gate took
+// the other side of the branch away with it: `resolveGatesForAgent` cannot
+// return a retired token, so the only reachable opening is the one that says
+// the machine starts right there.
+//
+// What is pinned here is the whole sentence and the absence of the promise: a
+// kickoff that told the agent to wait for an OK would be telling it to stop
+// for nobody, which is the defect the 2026-09-11 plan opened this line to
+// close and which the retirement makes unconditional.
+describe('renderKickoff — the run-machine line starts the machine, with no human OK to wait for', () => {
   const OPTS = { repo: 'o/r', dispatchCheckPath: '/x/dispatch-check.mjs', ctStepPath: '/x/ct-step.mjs', conventionsDir: '/plugin/conventions' }
 
-  it('a slice whose gates leave out `plan` is not told to wait for a human OK', () => {
+  it('the opening is the same whatever gates the slice carries, and it promises no OK', () => {
+    // The WHOLE sentence, not a substring of it: asserting from "la secuencia"
+    // onwards left `Con el plan commiteado,` uncovered, and an edit to those
+    // four words would have gone through green.
+    const OPENING = 'Con el plan commiteado, la secuencia de la implementación la dicta la máquina y arranca ahí mismo.'
+    for (const gates of [[], ['visual'], ['plan']]) {
+      const k = renderKickoff({ ...SLICE, gates, gatesDeclared: true }, OPTS)
+      expect(k, JSON.stringify(gates)).toContain(OPENING)
+      expect(k, JSON.stringify(gates)).not.toMatch(/OK humano/)
+    }
+  })
+
+  it('and it hands over to the run-machine sequence in the same piece of text', () => {
     const k = renderKickoff({ ...SLICE, gates: [], gatesDeclared: true }, OPTS)
-    // The WHOLE sentence the plan closed, not a substring of it: asserting
-    // from "la secuencia" onwards left `Con el plan commiteado,` uncovered,
-    // and an edit to those four words would have gone through green.
-    expect(k).toContain('Con el plan commiteado, la secuencia de la implementación la dicta la máquina y arranca ahí mismo.')
-    expect(k).not.toMatch(/OK humano/)
-  })
-
-  it('a slice that keeps the `plan` gate is still told the human OK opens the machine', () => {
-    // The `visual` gate alone (declared, no `plan`) is the negative control
-    // that test 1's empty array does not cover: an implementation that
-    // branched on `gates.length` instead of `gates.includes('plan')` would
-    // pass test 1 and fail here.
-    const withoutPlan = renderKickoff({ ...SLICE, gates: ['visual'], gatesDeclared: true }, OPTS)
-    expect(withoutPlan).not.toMatch(/OK humano/)
-    // D-14 retires the `Tipo`'s universal default: plain SLICE (backend, no
-    // declared gates) no longer falls back to `plan` on its own, so the row
-    // that wants it declares it explicitly.
-    const withPlan = renderKickoff({ ...SLICE, gates: ['plan'], gatesDeclared: true }, OPTS)
-    expect(withPlan).toContain("Con el plan commiteado y el gate 'plan' con OK humano")
-  })
-
-  it('both openings hand over to the same run-machine sequence, word for word', () => {
-    const withPlan = renderKickoff({ ...SLICE, gates: ['plan'], gatesDeclared: true }, OPTS)
-    const withoutPlan = renderKickoff({ ...SLICE, gates: [], gatesDeclared: true }, OPTS)
-    const runMachineLineOf = (k) => k.split('\n').find((line) => line.includes('la dicta la máquina'))
-    const tailOf = (line) => line.slice(line.indexOf('Pregunta el paso con'))
-    const tailWithPlan = tailOf(runMachineLineOf(withPlan))
-    const tailWithoutPlan = tailOf(runMachineLineOf(withoutPlan))
-    expect(tailWithPlan).toBe(tailWithoutPlan)
-    expect(tailWithPlan).toContain('ct-step slice-verdict')
+    const runMachineLine = k.split('\n').find((line) => line.includes('la dicta la máquina'))
+    expect(runMachineLine).toContain('Pregunta el paso con')
+    expect(runMachineLine).toContain('ct-step slice-verdict')
   })
 })

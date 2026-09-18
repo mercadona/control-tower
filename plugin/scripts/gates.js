@@ -35,7 +35,10 @@
 // token outside this map is rejected by /ct-groom before it writes anything
 // (see the validation in ct-groom.mjs), and the message names the whole
 // vocabulary: narrowing what the system accepts creates a new category of
-// refusal, and that category needs a voice of its own.
+// refusal, and that category needs a voice of its own. The one exception is a
+// token that USED to be in this map: see RETIRED_GATES, below — it produces
+// nothing either, and it is reported instead of refused, because a spec frozen
+// while it was a gate has to stay groomable.
 //
 // WHY THESE TWO GATES AND NOT OTHERS. They were not invented: they were
 // EXTRACTED from the only two sentences in ADDENDA that demanded a human act
@@ -90,22 +93,9 @@ export const GATES = {
     kickoff: 'GATE HUMANO `apply` (lo pide el spec para ESTE slice, esté o no en su `Tipo`): no apliques nada contra un entorno real (`apply`, `deploy`, un script ejecutado sobre datos de verdad) por tu cuenta. Deja el plan/dry-run en el PR y PARA: el apply lo autoriza un humano después de revisarlo.',
     issue: '**`apply`** — nothing is applied against a real environment until a human reviews the plan/dry-run the PR brings. The agent leaves the plan and stops.',
   },
-  plan: {
-    // The only gate that cuts in BEFORE implementing, not before merging: its
-    // value is in stopping while throwing the work away still costs nothing.
-    // That is why the text asks for the plan to be published as a COMMENT on
-    // the issue — the PR may not exist yet. F-jjponz-2 used to imply it BY
-    // DEFAULT in every slice; D-14 retires that default (see gatesForType,
-    // below) and leaves this entry in the vocabulary exactly as it was — a
-    // row asks for it the same way it asks for `visual` or `apply`, by
-    // writing `plan` in its `Gate` column, and the per-row waiver (`!plan`)
-    // is now inert, with the same noise as every waiver.
-    kickoff: 'GATE HUMANO `plan` (lo pide el spec para ESTE slice, escribiendo `plan` en la columna `Gate` de su fila): con el plan del slice escrito, validado con --check-plan y commiteado, publícalo como comentario del issue y PARA — no implementes nada hasta que un humano conteste el go en un comentario de ese issue. El go es `-OK <nonce>`, y el nonce lo sorteó la coordinadora al despacharte: vive fuera de este kickoff, del issue y de tu worktree, y por eso es un permiso que sólo un humano puede darte: no puedes fabricarlo, y `dispatch-check --release` se niega (exit 9) sin un go válido, así que saltarte este gate no te deja entregar, sólo te deja rehacer el trabajo. Un vigilante que lanzó la coordinadora está mirando el issue y te teclea la línea cuando el go llegue, así que PARAR de verdad es lo correcto: no sondees tú el issue ni te des el gate por cumplido. En el comentario que publicas, di que el go es `-OK` seguido del nonce que `/ct-next` imprimió al despachar, y que si se perdió lo reemite quien despachó: escrito así, quien lo lea sabe de dónde sacar el nonce — con el literal `<nonce>` como formato entero acabaría probando el `-OK` pelado, que no arranca nada. No lo cierras tú: lo cierra quien revisa el plan.',
-    issue: '**`plan`** — before implementing, a human has to review the slice\'s PLAN: the agent publishes it as a comment on this issue and stops. To give it the go, answer with a comment that is exactly `-OK <nonce>`, with the nonce /ct-next printed when it dispatched this slice (and nothing else: anything else starts nothing, on purpose). That nonce is not written in this issue because the agent reads the issue: it is the part of the permission it cannot manufacture, and without it `--release` refuses. If it has been lost, whoever dispatched reissues it with `scripts/ct-go.mjs`. What watches the issue is a process the coordinator launched on dispatching and that waits a few hours: if you answer much later it may have expired, and then the session has to be pushed by hand. The agent cannot give it as met.',
-  },
   e2e: {
     // The only gate whose CONTENT travels in a column of its own: the other
-    // three are a token that explains itself, and this one needs to say WHAT
+    // two are a token that explains itself, and this one needs to say WHAT
     // to walk through. That is why the text sends the agent to the issue's
     // section instead of describing a run: the run was written by a human when
     // freezing it, and it cannot be reproduced here without duplicating it.
@@ -120,6 +110,35 @@ export const GATES = {
   },
 }
 
+// RETIRED_GATES: the tokens that WERE gates and are read but never written.
+//
+// WHY A RETIRED LIST AND NOT A DELETION. `parseGateCell` validates the token
+// AFTER stripping the `!`, so taking `plan` out of the vocabulary altogether
+// would turn every `!plan` already written into an unknown token — and an
+// unknown token in the `Gate` column is a HARD abort of /ct-groom
+// (ct-groom.mjs). Nine rows of this repository's own last execution spec write
+// `!plan`, and the live specs of the repositories this plugin governs are not
+// in this tree: their groom would refuse for a reason that has nothing to do
+// with the work, and there is no way to fix them by merging.
+//
+// It is the shape #346 used for the milestone heading — read tolerantly, write
+// nothing — and it is the ONLY place either spelling lives: whoever finally
+// retires the token from the vocabulary of specs does it here, once.
+//
+// THE `!` IS IGNORED ON THESE TOKENS (see parseGateCell). With the gate gone
+// there is no longer a difference between asking for it and waiving it, so
+// `plan` and `!plan` both produce nothing at all — reporting the second as an
+// inert waiver would name a gate that no longer exists in order to say that
+// nothing was removed from it.
+//
+// The text is one line because its only reader is the /ct-groom advisory: it
+// has to say that the token was retired AND what happens instead, because
+// whoever wrote `plan` in that cell wanted their plan reviewed and needs to
+// know that it is still published.
+export const RETIRED_GATES = {
+  plan: 'retired: the plan is published as a comment on the issue and the run carries on — there is no longer a human go to wait for.',
+}
+
 // GATE_ORDER: canonical output order (labels, issue body, kickoff), so that
 // the same slice ALWAYS produces the same sequence — just as
 // groom.js#buildLabels fixes type → area → touches → status. An order that
@@ -127,6 +146,11 @@ export const GATES = {
 // dry-run and the drift detection unstable.
 const GATE_ORDER = Object.keys(GATES)
 const inGateOrder = (tokens) => GATE_ORDER.filter((g) => tokens.includes(g))
+// The retired tokens get their own order for the same reason: /ct-groom's
+// report has to come out in the same sequence whatever order the cell was
+// written in.
+const RETIRED_ORDER = Object.keys(RETIRED_GATES)
+const inRetiredOrder = (tokens) => RETIRED_ORDER.filter((g) => tokens.includes(g))
 
 // TYPE_GATES: which gates each `Tipo` implies, and therefore THE DEFAULT CASE
 // — a `Tipo: ui` still brings its screenshot gate along without anyone writing
@@ -139,13 +163,9 @@ export const TYPE_GATES = {
 }
 
 export function gatesForType(type) {
-  // D-14 — no `Tipo` implies `plan` any more: the go protocol behind it
-  // (`plugin/scripts/ct-go.mjs`, `ct-watch-go.mjs`, `go-channel.js`,
-  // `go-registry.js`, `go-response.js`, `dispatch-check.mjs`'s exit-9 ladder)
-  // is debt A-3, retired in later work, but the universal default that fed it
-  // is retired here. A row that wants the gate still gets it by writing
-  // `plan` in its `Gate` column, exactly like any gate `TYPE_GATES` does not
-  // imply — `resolveGates` already has that path.
+  // D-14 retired `plan`'s universal default here; A-3 (issue #434) retired the
+  // whole protocol behind it, and the token now lives in `RETIRED_GATES`. What
+  // this function returns is exactly the `Tipo`'s own gates and nothing else.
   return TYPE_GATES[typeof type === 'string' ? type.trim() : ''] ?? []
 }
 
@@ -185,7 +205,7 @@ function cleanGateToken(raw) {
 // slices.js classifies an empty cell.
 const NO_VALUE = new Set([...NO_VALUE_MARKERS, ''])
 
-// parseGateCell: raw `Gate` cell -> { add, waive, unknown }.
+// parseGateCell: raw `Gate` cell -> { add, waive, retired, unknown }.
 //
 // SYNTAX: comma-separated tokens. `visual` ADDS the gate; `!visual` WAIVES the
 // one the `Tipo` implies. `!` was chosen and not `-` because `-` is one of the
@@ -202,8 +222,9 @@ export function parseGateCell(cell) {
   const raw = String(cell ?? '').trim()
   const add = []
   const waive = []
+  const retired = []
   const unknown = []
-  if (NO_VALUE.has(cleanGateToken(raw))) return { add, waive, unknown }
+  if (NO_VALUE.has(cleanGateToken(raw))) return { add, waive, retired, unknown }
   for (const piece of raw.split(',')) {
     const trimmed = piece.trim()
     if (!trimmed) continue // empty cell between commas: there was never anything to report
@@ -215,10 +236,15 @@ export function parseGateCell(cell) {
     // discarding a badly written waiver is exactly the shape of failure this
     // round is after, in its smallest version.
     if (!token) { unknown.push(trimmed); continue }
+    // A RETIRED token is its own bucket, checked BEFORE the vocabulary and
+    // WITHOUT looking at `isWaiver`: `plan` and `!plan` both produce nothing
+    // at all. See RETIRED_GATES for why they are not simply unknown — every
+    // `!plan` already frozen in a spec would abort its groom.
+    if (Object.hasOwn(RETIRED_GATES, token)) { retired.push(token); continue }
     if (!Object.hasOwn(GATES, token)) { unknown.push(token); continue }
     ;(isWaiver ? waive : add).push(token)
   }
-  return { add, waive, unknown }
+  return { add, waive, retired, unknown }
 }
 
 // E2E_NONE_TOKENS: the POSITIVE declaration that this slice has nothing to
@@ -267,10 +293,13 @@ export function resolveE2e(cell) {
 //   - inertWaivers waivers of a gate the `Tipo` did not imply (they do
 //                  nothing; keeping quiet would leave the author believing
 //                  they removed something)
+//   - retired      tokens that WERE gates (RETIRED_GATES): they produce
+//                  nothing, and /ct-groom says so once instead of aborting —
+//                  a spec frozen before the retirement is still groomable
 //   - unknown      tokens outside the vocabulary (ct-groom.mjs rejects them)
 //   - contradictions  the same gate both asked for and waived in one cell
 export function resolveGates(type, cell, e2eCell) {
-  const { add, waive, unknown } = parseGateCell(cell)
+  const { add, waive, retired, unknown } = parseGateCell(cell)
   // The `e2e` gate does NOT come out of the `Gate` column: it is DERIVED from
   // the `E2E` column carrying some run. Written by hand there would be two
   // places saying the same thing, and two places drift; derived, there is no
@@ -295,6 +324,7 @@ export function resolveGates(type, cell, e2eCell) {
     waived: inGateOrder(waive.filter((g) => implied.includes(g))),
     redundant: inGateOrder(add.filter((g) => implied.includes(g) && !waiveSet.has(g))),
     inertWaivers: inGateOrder(waive.filter((g) => !implied.includes(g))),
+    retired: inRetiredOrder(retired),
     unknown,
     contradictions,
   }

@@ -526,8 +526,8 @@ export function buildCmuxSendKeyArgv({ workspace, key = 'Enter' }) {
 // It was a loose template inside ct-next.mjs's dispatch loop, and with one
 // consumer nothing happened. Now there are TWO: whoever creates the workspace
 // (`buildCmuxArgv({ name })`) and whoever looks it up to send it a line — the
-// resend of the start-up line, and as of this round the `-OK` watcher, which
-// runs in ANOTHER PROCESS and cannot inherit the variable.
+// resend of the start-up line, and the merge watcher, which runs in ANOTHER
+// PROCESS and cannot inherit the variable.
 //
 // And looking it up goes by exact title equality (`w.title === name`): there is
 // no stable identifier cmux returns when creating it that we could save, so the

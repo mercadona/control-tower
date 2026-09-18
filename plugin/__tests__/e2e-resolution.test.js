@@ -81,11 +81,11 @@ describe('the derived e2e gate', () => {
   })
 
   it('e2e goes LAST in the canonical order', () => {
-    expect(resolveGates('ui', 'apply, plan', 'un recorrido').gates).toEqual(['visual', 'apply', 'plan', 'e2e'])
+    expect(resolveGates('ui', 'apply', 'un recorrido').gates).toEqual(['visual', 'apply', 'e2e'])
   })
 
   it('the vocabulary includes e2e with its two texts', () => {
-    expect(Object.keys(GATES)).toEqual(['visual', 'apply', 'plan', 'e2e'])
+    expect(Object.keys(GATES)).toEqual(['visual', 'apply', 'e2e'])
     expect(GATES.e2e.kickoff).toMatch(/## E2E/)
     expect(GATES.e2e.kickoff).toMatch(/AGENTS\.md/)
     expect(GATES.e2e.issue).toMatch(/e2e/)

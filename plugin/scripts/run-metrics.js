@@ -16,8 +16,9 @@
 // `plan_sha256`. The plan is called `…/YYYY-MM-DD-issue-<n>-<slug>.md` and that
 // `issue-<n>-` is exactly how the `--release` gate finds it: the issue number IS
 // the parent plan's identity and there is no need to invent one. What it does
-// not cover is that a plan GETS REWRITTEN —after the gate, or after a rejection
-// in review—, and then two runs against two versions of the same file are
+// not cover is that a plan GETS REWRITTEN —after it is published as a comment
+// on the issue, or after a rejection in review—, and then two runs against two
+// versions of the same file are
 // indistinguishable precisely where they are going to be looked at most: the
 // before and after of changing a plan. The content hash is besides the idiom the
 // repo already uses for this very class of problem
@@ -109,7 +110,7 @@ export const planSha256 = (text) => createHash('sha256').update(String(text ?? '
 // it itself, after the checks. What the reason forbade was an implementer's
 // `git add` dragging it along, not it travelling.
 // The folder, apart from the row: since this round there is a second tenant that
-// is not telemetry —the log of the `-OK` watcher, which runs detached and
+// is not telemetry —the log of the merge watcher, which runs detached and
 // without it would be undebuggable— and the two things go to the same place for
 // the same reason. It is extracted instead of duplicating the `join`, and
 // `metricsPath` is still the one that decides the extension of ITS OWN.
@@ -127,12 +128,13 @@ export function controlTowerDir(opts = {}) {
   return join(configuredDir(opts), 'control-tower')
 }
 
-// `log/` is ONE tenant of the folder, not the folder. Since F38 there is a
-// second one that is not a trace but STATE —the go's commitment
-// (go-registry.js)—, and mixing it in with the logs would make «delete the log,
-// it takes up space» leave a slice in flight unreleased. It is separated at the
-// level above, and that is why the root's `join` is extracted instead of
-// duplicated.
+// `log/` is ONE tenant of the folder, not the folder. F38 added a second one
+// that was not a trace but STATE —the `plan` gate's go commitment— and mixing
+// it in with the logs would have made «delete the log, it takes up space»
+// leave a slice in flight unreleased. That tenant retired with its protocol
+// (A-3, issue #434); the separation is kept, because the reason to extract the
+// root's `join` instead of duplicating it does not depend on how many tenants
+// there are today.
 export function controlTowerLogDir(opts = {}) {
   return join(controlTowerDir(opts), 'log')
 }
