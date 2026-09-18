@@ -6,9 +6,9 @@ import { useCoordinatingSession } from 'app/coordinating-session/useCoordinating
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
-import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
+import { SliceSession } from 'app/slice-session/components/slice-session'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -623,11 +623,12 @@ const Home = () => {
                 />
               )}
               {restoredIsConfirmed && (
-                <ImplementProgress
+                <SliceSession
                   key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                   issue={workflow.plan.issue.number}
                   root={workflow.plan.root ?? workflow.request.path}
                   repo={workflow.plan.repo}
+                  agent={workflow.plan.agent}
                 />
               )}
             </WorkflowStep>
