@@ -19,8 +19,8 @@ export class RoleBytesMeasures {
 
 export class RoleBytes {
   static #TEST_DRIVEN_DEVELOPMENT = Object.freeze([
-    'skills/test-driven-development/SKILL.md',
-    'skills/test-driven-development/testing-anti-patterns.md',
+    'skills/ct-test-driven-development/SKILL.md',
+    'skills/ct-test-driven-development/testing-anti-patterns.md',
   ])
 
   static #NO_SKILL = Object.freeze([])

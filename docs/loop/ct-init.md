@@ -179,7 +179,7 @@ plugin is **not** copied in with it, and that is deliberate: a dispatched agent
 does not only read files. `ct-next.mjs` resolves absolute paths to
 `ct-step.mjs`, `dispatch-check.mjs` and `conventions/` from wherever the plugin
 is installed and types them into the agent's terminal, and the kickoff names the
-skill `control-tower-loop:writing-plans-prescriptive`, which only resolves when
+skill `control-tower-loop:ct-writing-plans-prescriptive`, which only resolves when
 the plugin is loaded. Copying the skills in would not finish that job; it would
 take the whole tree into every governed repository, kept in step by hand.
 

@@ -339,7 +339,7 @@ lines, and a remark about test quality is worth less than the paid round trip a
 
 **The finer half is measured with the text the implementer was given.** Before
 you report anything beyond the three above, load the skill
-`control-tower-loop:test-driven-development` with `Skill` — the copy this plugin
+`control-tower-loop:ct-test-driven-development` with `Skill` — the copy this plugin
 ships, and the same one the implementer was ordered to follow — and quote in
 `evidence` the sentence of it, or of the `testing-anti-patterns.md` reference it
 names, that the new test contradicts. A finding here is what you can pin to that

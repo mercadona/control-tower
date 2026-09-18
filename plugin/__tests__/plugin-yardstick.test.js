@@ -321,7 +321,7 @@ describe('the texts that teach the ct yardstick name it', () => {
   })
 
   it('the_writing_plans_prescriptive_skill_names_the_directory', () => {
-    expect(readFile('skills', 'writing-plans-prescriptive', 'SKILL.md')).toContain(`${PluginYardstick.DIRECTORY}/`)
+    expect(readFile('skills', 'ct-writing-plans-prescriptive', 'SKILL.md')).toContain(`${PluginYardstick.DIRECTORY}/`)
   })
 
   it('ct_judge_names_the_directory_inside_the_patrones_item', () => {

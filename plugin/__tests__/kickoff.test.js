@@ -264,8 +264,8 @@ describe('renderKickoff — F32, the two-level model (its own skills, plan first
     // kickoff no longer sends anyone to subagent-driven-development — it
     // forbids it explicitly.
     expect(k).toContain('/x/ct-step.mjs')
-    expect(k).not.toMatch(/sigue control-tower-loop:subagent-driven-development/)
-    expect(k).toContain('control-tower-loop:writing-plans-prescriptive')
+    expect(k).not.toMatch(/sigue control-tower-loop:ct-subagent-driven-development/)
+    expect(k).toContain('control-tower-loop:ct-writing-plans-prescriptive')
     expect(k).toContain('--check-plan')
     // With the colon on purpose: `docs/superpowers/plans/` (the
     // path-convention of the plans) can and must appear; the old plugin's
@@ -282,7 +282,7 @@ describe('renderKickoff — F32, the two-level model (its own skills, plan first
     // (writing-plans) has to appear BEFORE the conducting by ct-step — the
     // machine starts up on a committed plan (`--plan` is its first argument)
     // and with no plan there is no run.
-    expect(k.indexOf('control-tower-loop:writing-plans-prescriptive'))
+    expect(k.indexOf('control-tower-loop:ct-writing-plans-prescriptive'))
       .toBeLessThan(k.indexOf('/x/ct-step.mjs'))
   })
 

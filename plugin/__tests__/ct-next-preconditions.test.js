@@ -344,7 +344,7 @@ describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () =
   })
 
   // The session that gets launched is the ARCHITECT: it writes the slice's plan
-  // before any subagent exists. `skills/subagent-driven-development/SKILL.md`
+  // before any subagent exists. `skills/ct-subagent-driven-development/SKILL.md`
   // asks for the most capable model on architecture and design work, and in the
   // same section it asks for the model to be NAMED — «an omitted model inherits
   // your session's model … which silently defeats this section». Inherited, the

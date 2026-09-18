@@ -9,7 +9,7 @@ const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 class Template {
   static markdown() {
-    return readFileSync(join(PLUGIN_ROOT, 'skills', 'writing-plans-prescriptive', 'plan-template.md'), 'utf8')
+    return readFileSync(join(PLUGIN_ROOT, 'skills', 'ct-writing-plans-prescriptive', 'plan-template.md'), 'utf8')
   }
 }
 
