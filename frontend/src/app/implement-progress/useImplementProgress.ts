@@ -2,33 +2,33 @@ import { useEffect, useState } from 'react'
 import { ImplementProgressClient } from 'app/implement-progress/client'
 import { ImplementationProgressState, ImplementationStep, ImplementProgressOutcome } from 'app/implement-progress/ImplementProgress.types'
 
-type ImplementProgress =
+type ImplementProgressRead =
   | { phase: 'connecting' }
   | { phase: 'waiting' }
   | ({ phase: 'progress' } & ImplementationProgressState)
   | { phase: 'failed'; error: string }
   | { phase: 'unreachable' }
 
-const CONNECTING: ImplementProgress = { phase: 'connecting' }
+const CONNECTING: ImplementProgressRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 3000
 const AWAITING_REVIEWER_POLL_INTERVAL_MS = 15000
 
 const DELIVERY_STEPS: readonly ImplementationStep[] = [ImplementationStep.DELIVERED, ImplementationStep.IN_REVIEW, ImplementationStep.FIXING]
 
-const toProgress = (outcome: ImplementProgressOutcome): ImplementProgress => {
+const toProgress = (outcome: ImplementProgressOutcome): ImplementProgressRead => {
   if (outcome.kind === 'read') return { phase: 'progress', ...outcome.state }
   if (outcome.kind === 'not-read') return { phase: 'waiting' }
   if (outcome.kind === 'refused') return { phase: 'failed', error: outcome.error }
   return { phase: 'unreachable' }
 }
 
-const isAwaitingReviewer = (progress: ImplementProgress): boolean =>
+const isAwaitingReviewer = (progress: ImplementProgressRead): boolean =>
   progress.phase === 'progress' && DELIVERY_STEPS.includes(progress.step)
 
-const isFinal = (progress: ImplementProgress): boolean => progress.phase === 'failed'
+const isFinal = (progress: ImplementProgressRead): boolean => progress.phase === 'failed'
 
-const useImplementProgress = (issue: number, root: string, repo: string): ImplementProgress => {
-  const [progress, setProgress] = useState<ImplementProgress>(CONNECTING)
+const useImplementProgress = (issue: number, root: string, repo: string): ImplementProgressRead => {
+  const [progress, setProgress] = useState<ImplementProgressRead>(CONNECTING)
 
   useEffect(() => {
     setProgress(CONNECTING)
@@ -56,4 +56,4 @@ const useImplementProgress = (issue: number, root: string, repo: string): Implem
 }
 
 export { useImplementProgress }
-export type { ImplementProgress }
+export type { ImplementProgressRead }

@@ -1,12 +1,17 @@
 import { render, screen } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
+import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
 import { ImplementProgress } from './ImplementProgress'
 
 const answerWith = (answer: { status: number; body: string }) => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(answer.body, { status: answer.status })))
 }
 
-const renderProgress = () => render(<ImplementProgress issue={ImplementProgressMother.ISSUE} root={ImplementProgressMother.ROOT} repo={ImplementProgressMother.REPO} />)
+const Progress = () => (
+  <ImplementProgress progress={useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO)} />
+)
+
+const renderProgress = () => render(<Progress />)
 
 describe('ImplementProgress', () => {
   afterEach(() => vi.unstubAllGlobals())

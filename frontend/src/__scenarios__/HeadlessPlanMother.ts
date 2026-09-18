@@ -62,8 +62,8 @@ class HeadlessPlanMother {
   }
 
   static workflowOfSlice(issue: number): WorkflowSnapshot {
-    const { request, plan } = HeadlessPlanMother.slice(issue)
-    return { phase: 'implementing', request, plan }
+    const { phase, request, plan } = HeadlessPlanMother.slice(issue)
+    return { phase, request, plan }
   }
 
   static agentFor(issue: number): string {
@@ -82,7 +82,7 @@ class HeadlessPlanMother {
         branch: `feat/${issue}`,
         worktree: `${StartPlanMother.PATH}/.worktrees/${issue}`,
       },
-    }
+    } as const
   }
 
   private static active(phase: HeadlessPhase, recovery?: RecoveryAction): Answer {

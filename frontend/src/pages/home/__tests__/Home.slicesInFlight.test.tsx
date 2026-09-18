@@ -33,9 +33,12 @@ const backendFallsOver = () => {
   throw new TypeError('Failed to fetch')
 }
 
-const backendWith = ({ activePlans, message }: {
+const IMPLEMENT_PROGRESS = /^\/implement-progress\/(\d+)/
+
+const backendWith = ({ activePlans, message, progress = () => ImplementProgressMother.inReview() }: {
   activePlans: () => Answer
   message?: (issue: number) => Answer
+  progress?: (issue: number) => Answer
 }) => {
   const posted = vi.fn()
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -47,7 +50,8 @@ const backendWith = ({ activePlans, message }: {
     if (url === '/coordinating-session') return responseFor(OPENED_COORDINATING_SESSION)
     if (url === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
     if (url === '/epic-groom') return responseFor(NO_EPIC_GROOM)
-    if (url.startsWith('/implement-progress/')) return responseFor(ImplementProgressMother.progress())
+    const asProgress = IMPLEMENT_PROGRESS.exec(url)
+    if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
     if (url.startsWith('/implement-history/')) return responseFor(ImplementProgressMother.notRead())
     const asMessage = SLICE_MESSAGE.exec(url)
     if (asMessage !== null && init?.method === 'POST') {
@@ -98,12 +102,26 @@ describe('Home · the slices in flight', () => {
     expect(screen.queryByRole('heading', { name: /^Slice #/ })).toBeNull()
   })
 
+  it('the panel of a slice still implementing offers no field, while the one whose pull request is open does', async () => {
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
+      progress: (issue) => (issue === 7 ? ImplementProgressMother.progress() : ImplementProgressMother.inReview()),
+    })
+    openHome()
+
+    const implementing = await panelOf(7)
+    expect(await implementing.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
+    expect(implementing.queryByLabelText(MESSAGE_FIELD)).toBeNull()
+    const inReview = await panelOf(8)
+    expect(await inReview.findByLabelText(MESSAGE_FIELD)).toBeInTheDocument()
+  })
+
   it('delivers a message to the conversation of the panel it was typed in and to no other', async () => {
     const { posted } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
     const { user } = openHome()
 
     const panel = await panelOf(8)
-    await user.type(panel.getByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
+    await user.type(await panel.findByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
     await user.click(panel.getByRole('button', { name: SEND }))
 
     expect(await panel.findByText(DELIVERED_COPY)).toBeInTheDocument()
@@ -121,7 +139,7 @@ describe('Home · the slices in flight', () => {
     const { user } = openHome()
 
     const refused = await panelOf(7)
-    await user.type(refused.getByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
+    await user.type(await refused.findByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
     await user.click(refused.getByRole('button', { name: SEND }))
 
     expect(await refused.findByRole('alert')).toHaveTextContent(SliceSessionMother.NOT_DELIVERED_DETAIL)
@@ -173,6 +191,7 @@ describe('Home · the slices in flight', () => {
 
     inFlight = [7, 8]
     await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)

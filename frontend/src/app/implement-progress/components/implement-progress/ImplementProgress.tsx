@@ -1,5 +1,5 @@
 import { STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
-import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
+import type { ImplementProgressRead } from 'app/implement-progress/useImplementProgress'
 import { Banner } from 'system-ui/banner'
 import './ImplementProgress.css'
 
@@ -7,14 +7,9 @@ const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const WAITING_MESSAGE = 'Esperando a que arranque la implementación…'
 const CONNECTING_MESSAGE = 'Comprobando el progreso de la implementación…'
 
-type ImplementProgressProps = {
-  issue: number
-  root: string
-  repo: string
-}
+type ImplementProgressProps = { progress: ImplementProgressRead }
 
-const ImplementProgress = ({ issue, root, repo }: ImplementProgressProps) => {
-  const progress = useImplementProgress(issue, root, repo)
+const ImplementProgress = ({ progress }: ImplementProgressProps) => {
   const taskProgress = progress.phase === 'progress' && progress.task !== null
     ? progress.totalTasks === null
       ? `Tarea ${progress.task}`
