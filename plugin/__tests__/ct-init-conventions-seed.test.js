@@ -17,12 +17,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'ct-init.sh')
 
 describe('ct-init.sh seeds .agent/conventions.md', () => {
-  it('in an empty dir, it creates the file and announces it with "creado"', () => {
+  it('in an empty dir, it creates the file and announces it with "created"', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const path = join(dir, CONVENTIONS_FILE)
     expect(existsSync(path)).toBe(true)
-    expect(out).toMatch(/creado.*conventions\.md/)
+    expect(out).toMatch(/created.*conventions\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -32,7 +32,7 @@ describe('ct-init.sh seeds .agent/conventions.md', () => {
     writeFileSync(join(dir, CONVENTIONS_FILE), 'MÍO')
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
     expect(readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')).toBe('MÍO')
-    expect(out).toMatch(/conventions\.md ya existe, no se pisa/)
+    expect(out).toMatch(/conventions\.md already exists, not overwritten/)
     rmSync(dir, { recursive: true, force: true })
   })
 

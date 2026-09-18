@@ -3,11 +3,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ClaudeSettings, ControlTowerPlugin, SettingsNotUnderstood } from './claude-settings.js'
+import { pluginVersion } from './plugin-release.js'
 
 class Seeding {
   static HERE = dirname(fileURLToPath(import.meta.url))
+  static PLUGIN_ROOT = join(Seeding.HERE, '..')
   static SETTINGS = ['.claude', 'settings.json']
-  static MANIFEST = ['..', '.claude-plugin', 'plugin.json']
   static USAGE = 'usage: seed-claude-settings.mjs <dir-repo>'
 
   static fail(message) {
@@ -17,7 +18,7 @@ class Seeding {
 
   static get installedVersion() {
     try {
-      return JSON.parse(readFileSync(join(Seeding.HERE, ...Seeding.MANIFEST), 'utf8')).version
+      return pluginVersion(Seeding.PLUGIN_ROOT)
     } catch (failure) {
       return Seeding.fail(`could not read this plugin's own release (.claude-plugin/plugin.json): ${failure.message}`)
     }

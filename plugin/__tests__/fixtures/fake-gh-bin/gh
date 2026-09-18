@@ -474,16 +474,21 @@ function main() {
     return
   }
   if (argv[0] === 'api' && argv[1] === 'graphql') {
-    // The issue listing of /ct-groom (GROOM_ISSUES_QUERY). It is recognised by
-    // `states:[OPEN,CLOSED]`, unique to that query. It translates the SAME
-    // FAKE_GH_LIST_SEQUENCE that the REST `issues` branch served into the
-    // GraphQL shape (`--paginate --slurp` = an array of response objects, one
-    // per page), FILTERING OUT the items with `pull_request` — the real server
-    // never returns those through the issues connection, and that is precisely
-    // the point of the fix.
+    // The issue listing (issuesQueryFor, scripts/gh-issues.js): /ct-groom asks
+    // for `states:[OPEN,CLOSED]` in one sweep; /ct-next, /ct-status and
+    // dispatch-check ask for `states:[OPEN]` and `states:[CLOSED]` in two
+    // calls (#46). It translates the SAME FAKE_GH_LIST_SEQUENCE that the REST
+    // `issues` branch served —REST-shaped fixtures: `state_reason` in lower
+    // case, `milestone` with its number— into the GraphQL shape (`--paginate
+    // --slurp` = an array of response objects, one per page), FILTERING OUT the
+    // items with `pull_request` — the real server never returns those through
+    // the issues connection, and that is precisely the point of the fix. The
+    // sequencing by call counter is the one the REST branch had, so the tests
+    // that orchestrate one "open" call followed by one "closed" call keep
+    // working unchanged.
     // FAKE_GH_GRAPHQL_PAGE_SIZE splits the response into several pages to test
     // that the pagination loses no issues (review #45, point 4).
-    if (joined.includes('states:[OPEN,CLOSED]') || joined.includes('states: [OPEN, CLOSED]')) {
+    if (/states:\s*\[\s*(OPEN|CLOSED|OPEN,\s*CLOSED)\s*\]/.test(joined)) {
       const callIndex = nextCallIndex(process.env.FAKE_GH_COUNTER_FILE)
       const failAt = process.env.FAKE_GH_LIST_FAIL_AT !== undefined ? Number(process.env.FAKE_GH_LIST_FAIL_AT) : null
       if (failAt !== null && callIndex === failAt) {
@@ -499,12 +504,18 @@ function main() {
       // fixtures.
       const flat = (seq[Math.min(callIndex, seq.length - 1)] || []).flat()
       const issues = flat.filter((e) => !(e && Object.prototype.hasOwnProperty.call(e, 'pull_request')))
+      const stateReasonOf = (i) => {
+        if (typeof i.stateReason === 'string') return i.stateReason.toUpperCase()
+        if (typeof i.state_reason === 'string') return i.state_reason.toUpperCase()
+        return null
+      }
       const toNode = (i) => ({
         number: i.number,
         title: i.title,
         body: i.body,
         state: typeof i.state === 'string' ? i.state.toUpperCase() : i.state,
-        milestone: i.milestone ? { title: i.milestone.title } : null,
+        stateReason: stateReasonOf(i),
+        milestone: i.milestone ? { number: i.milestone.number, title: i.milestone.title, description: i.milestone.description } : null,
         labels: { nodes: (i.labels || []).map((l) => ({ name: typeof l === 'string' ? l : l.name })) },
       })
       const size = process.env.FAKE_GH_GRAPHQL_PAGE_SIZE ? Math.max(1, Number(process.env.FAKE_GH_GRAPHQL_PAGE_SIZE)) : Math.max(1, issues.length)

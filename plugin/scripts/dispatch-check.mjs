@@ -25,7 +25,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { detectCollisions, claimLost } from './claim.js'
-import { flattenIssuePages, realIssuesOnly } from './gh-issues.js'
+import { issuesQueryFor, normalizeGraphqlIssues } from './gh-issues.js'
 import { parseStrictInt } from './argnum.js'
 import { NEVER_IN_A_SLICE_PR, SLICE_REL_PATH } from './state-paths.js'
 import { checkPlans } from './plan-contract.js'
@@ -374,26 +374,27 @@ if (ghTimeoutRaw !== undefined) {
 }
 const gh = (a) => execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: GH_MAX_BUFFER, timeout: ghTimeoutMs, killSignal: 'SIGKILL' })
 const labelsOf = (n) => JSON.parse(gh(['issue', 'view', String(n), '--repo', repo, '--json', 'labels', '-q', '[.labels[].name]']))
-// Direct listing of open issues via the REST endpoint `gh api
-// repos/<repo>/issues` — NEVER the search index (`--search` / `gh search
-// issues`), which has indexing latency and might not yet reflect the label
-// another runner has just written. Nor `gh issue list --limit 200` (finding 2
-// of the final review): that endpoint returns newest first, so a fixed
-// `--limit` leaves out precisely the OLD issues — and a colliding
-// `in-progress` that falls outside this list makes
-// `detectCollisions`/`claimLost` fail OPEN (the lock stops blocking, instead
-// of failing closed). Instead we use real pagination (`--paginate --slurp`,
-// with no cap), reusing the same PR flattening/filtering helper as
-// ct-groom.mjs/ct-next.mjs (scripts/gh-issues.js) — that endpoint also
-// returns pull requests. All the collision and tie-breaking logic is still
-// entirely client-side in `claim.js`. per_page=100 (re-review): the REST
-// default is 30/page; with --paginate they all get fetched anyway, but
-// `allOpen()` is called TWICE per claim (collision + readback), so fewer
-// pages per call cuts the total round-trips by ~3x. 100 is the maximum this
-// endpoint admits.
-const allOpen = () => realIssuesOnly(flattenIssuePages(JSON.parse(
-  gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp']))))
-  .map((i) => ({ n: i.number, labels: (i.labels || []).map((l) => l.name) }))
+// Listing of open issues over GraphQL (issuesQueryFor, scripts/gh-issues.js)
+// — NEVER the REST `repos/<repo>/issues` (#46): that endpoint shares its
+// namespace with pull requests and shipped every PR of the repository with its
+// whole body, which in a large repository overflowed execFileSync's buffer
+// (ENOBUFS) — and a claim that cannot list the open issues cannot detect a
+// collision. NEVER the search index (`--search` / `gh search issues`) either,
+// which has indexing latency and might not yet reflect the label another
+// runner has just written. Nor `gh issue list --limit 200` (finding 2 of the
+// final review): that endpoint returns newest first, so a fixed `--limit`
+// leaves out precisely the OLD issues — and a colliding `in-progress` that
+// falls outside this list makes `detectCollisions`/`claimLost` fail OPEN (the
+// lock stops blocking, instead of failing closed). Real pagination
+// (`--paginate --slurp`, with no cap) instead. All the collision and
+// tie-breaking logic is still entirely client-side in `claim.js`.
+const OPEN_ISSUES_QUERY = issuesQueryFor(['OPEN'])
+const allOpen = () => {
+  const [owner, name] = repo.split('/')
+  return normalizeGraphqlIssues(JSON.parse(
+    gh(['api', 'graphql', '--paginate', '--slurp', '-f', `query=${OPEN_ISSUES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`])))
+    .map((i) => ({ n: i.number, labels: (i.labels || []).map((l) => l.name) }))
+}
 
 const manualReleaseHint = () => `gh issue edit ${issue} --repo ${repo} --add-label status:ready --remove-label status:in-progress`
 

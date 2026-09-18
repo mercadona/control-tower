@@ -628,7 +628,7 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
 })
 
 describe('dispatch-check — enumerating open issues with no fixed --limit (final review, finding 2)', () => {
-  it('allOpen() uses --paginate and never --limit', () => {
+  it('allOpen() lists the open issues over GraphQL, with --paginate and never --limit', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-dc-nolimit-'))
     const logFile = join(dir, 'gh-argv-log')
     const r = runReal(['3', '--repo', 'o/r'], {
@@ -641,7 +641,8 @@ describe('dispatch-check — enumerating open issues with no fixed --limit (fina
     rmSync(dir, { recursive: true, force: true })
     expect(log).toMatch(/--paginate/)
     expect(log).not.toMatch(/--limit/)
-    expect(log).toMatch(/state=open/)
+    expect(log).toMatch(/states:\[OPEN\]/)
+    expect(log).not.toMatch(/repos\/o\/r\/issues /)
   })
 })
 
