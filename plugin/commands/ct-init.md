@@ -23,6 +23,5 @@ What falls to you afterwards:
 - An `ATTENTION: this repo already had conventions of its own...` block on stderr (`[claim]`, `[worktrees]`, `[estado]`) is also passed on whole, with the evidence: choosing which one rules is the user's decision. Its outcome is a `señal: fecha — motivo` line in `.agent/conventions-ack.md`; tell them so, do not write it yourself.
 - «No se ha podido comprobar» (no `node`) is not «there is nothing»: say that too.
 - In `.agent/STATE.md` describe only the bootstrap: `task` `"Bootstrap Control Tower loop (ct-init)"`, `next_action` at `"(sin slice asignado)"`, `blocked` at `null`, `verify` empty. **Do not go looking for pending work**: the real `next_action` is seeded by `/ct-next` in the worktree's `.agent/SLICE.md`.
-- If the repository is not registered in `control-tower/tower/workspaces.*.yaml`, say so; do not register it yourself.
 
 Full reference —what each file seeds and why, the doctrine of the contract's versions and hashes, the `blocked` field, the acknowledgements—: `docs/loop/ct-init.md` in the plugin's repository.

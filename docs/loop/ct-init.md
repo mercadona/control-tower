@@ -132,8 +132,6 @@ thing). All three things are needed —signal, date and reason—; a line that d
 not parse is reported and silences **nothing**. Do not write the acknowledgement
 yourself: the decision is the user's, you tell them the way out exists.
 
-Lastly, if the repository is not registered in `control-tower/tower/workspaces.*.yaml`, say so; do not register it yourself.
-
 ## What is contract in the texts `/ct-init` seeds
 
 A later round moves the texts below out of `ct-init.sh` and into template
