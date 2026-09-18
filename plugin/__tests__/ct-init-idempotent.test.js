@@ -26,11 +26,16 @@ const NODE_LESS_TOOLS = [
   'touch', 'tail', 'wc', 'head', 'dirname', 'basename', 'pwd', 'shasum', 'cmp',
 ]
 
+// D2: without this, `plugin-install` spawns the REAL `claude` binary — see
+// fake-claude-install-bin/claude for what the stand-in does and why.
+const FAKE_CLAUDE_BIN = join(root, '__tests__', 'fixtures', 'fake-claude-install-bin', 'claude')
+const TEST_ENV = { ...process.env, CT_CLAUDE_BIN: FAKE_CLAUDE_BIN }
+
 function mkTarget() {
   return mkdtempSync(join(tmpdir(), 'ct-idem-'))
 }
 
-function runJson(dir, env) {
+function runJson(dir, env = TEST_ENV) {
   const out = execFileSync('bash', [script, dir, '--json'], { encoding: 'utf8', env })
   return JSON.parse(out)
 }
@@ -42,7 +47,7 @@ function nodeLessEnv(dir) {
     const found = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim()
     if (found) symlinkSync(found, join(binDir, tool))
   }
-  return { ...process.env, PATH: binDir }
+  return { ...TEST_ENV, PATH: binDir }
 }
 
 function snapshotTree(dir) {

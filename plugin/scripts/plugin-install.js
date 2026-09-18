@@ -7,8 +7,18 @@ export class ClaudeCli {
   static BINARY = 'claude'
   static TIMEOUT_MS = 60000
 
+  // `binary` defaults to the real CLI, so production behaviour is
+  // unchanged. ct-install.mjs is the one caller that may point it
+  // elsewhere, and only through the documented CT_CLAUDE_BIN environment
+  // variable — a test fake, never PATH tampering — so no test call ever
+  // reaches the real network or a developer's own plugin cache.
+  constructor(binary = ClaudeCli.BINARY) {
+    this.binary = binary
+    Object.freeze(this)
+  }
+
   run(args, cwd) {
-    return spawnSync(ClaudeCli.BINARY, args, {
+    return spawnSync(this.binary, args, {
       cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

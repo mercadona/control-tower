@@ -15,6 +15,12 @@ const script = join(root, 'scripts', 'ct-init.sh')
 const initScriptSrc = readFileSync(script, 'utf8')
 const CONTRACT_VERSION = Number(initScriptSrc.match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)[1])
 
+// D2: `claude plugin list --json` and `claude plugin install ... --json` run
+// for real inside ct-init.sh unless CT_CLAUDE_BIN points somewhere else — see
+// fake-claude-install-bin/claude for what the stand-in does and why.
+const FAKE_CLAUDE_BIN = join(root, '__tests__', 'fixtures', 'fake-claude-install-bin', 'claude')
+const TEST_ENV = { ...process.env, CT_CLAUDE_BIN: FAKE_CLAUDE_BIN }
+
 const ARTIFACT_IDS = [
   'state-md', 'conventions-md', 'spec-template', 'gitignore',
   'scope-gate-workflow', 'scope-gate-bundle', 'scope-gate-package',
@@ -25,9 +31,12 @@ function mkTarget() {
   return mkdtempSync(join(tmpdir(), 'ct-report-'))
 }
 
+function run(dir, extraArgs = [], opts = {}) {
+  return execFileSync('bash', [script, dir, ...extraArgs], { encoding: 'utf8', env: TEST_ENV, ...opts })
+}
+
 function runJson(dir, extraArgs = []) {
-  const out = execFileSync('bash', [script, dir, '--json', ...extraArgs], { encoding: 'utf8' })
-  return JSON.parse(out)
+  return JSON.parse(run(dir, ['--json', ...extraArgs]))
 }
 
 function byId(report) {
@@ -37,7 +46,7 @@ function byId(report) {
 describe('ct-init.sh --json', () => {
   it('prints exactly one line of JSON on stdout, nothing else', () => {
     const dir = mkTarget()
-    const out = execFileSync('bash', [script, dir, '--json'], { encoding: 'utf8' })
+    const out = run(dir, ['--json'])
     const lines = out.split('\n').filter((l) => l.length > 0)
     expect(lines).toHaveLength(1)
     expect(() => JSON.parse(lines[0])).not.toThrow()
@@ -80,7 +89,7 @@ describe('ct-init.sh --json', () => {
 
   it('a second run on the same directory reports every artifact as already-present, except plugin-install', () => {
     const dir = mkTarget()
-    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    run(dir)
     const report = runJson(dir)
     for (const artifact of report.artifacts) {
       if (artifact.id === 'plugin-install') {
@@ -106,11 +115,11 @@ describe('ct-init.sh --json', () => {
 
   it('--json emits no prose on stdout even when a warning fires on stderr', () => {
     const dir = mkTarget()
-    execFileSync('bash', [script, dir], { encoding: 'utf8' })
+    run(dir)
     // Force a stderr warning: the scope-gate bundle no longer matches this
     // release's bytes.
     appendFileSync(join(dir, '.github', 'ct', 'scope-check.js'), '\n// tampered\n')
-    const result = execFileSync('bash', [script, dir, '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    const result = run(dir, ['--json'], { stdio: ['ignore', 'pipe', 'pipe'] })
     const lines = result.split('\n').filter((l) => l.length > 0)
     expect(lines).toHaveLength(1)
     expect(() => JSON.parse(lines[0])).not.toThrow()
@@ -120,7 +129,7 @@ describe('ct-init.sh --json', () => {
   describe('the four drift classes', () => {
     it('user-owned: an edited scope-gate workflow is still reported already-present, never drifted', () => {
       const dir = mkTarget()
-      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      run(dir)
       const workflowPath = join(dir, '.github', 'workflows', 'ct-scope-gate.yml')
       writeFileSync(workflowPath, `${readFileSync(workflowPath, 'utf8')}\n# a governed repo's own edit\n`)
       const report = runJson(dir)
@@ -130,7 +139,7 @@ describe('ct-init.sh --json', () => {
 
     it('generated: a scope-gate bundle that no longer matches this release is reported drifted', () => {
       const dir = mkTarget()
-      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      run(dir)
       appendFileSync(join(dir, '.github', 'ct', 'scope-check.js'), '\n// a stale copy\n')
       const report = runJson(dir)
       expect(byId(report)['scope-gate-bundle'].status).toBe('drifted')
@@ -139,7 +148,7 @@ describe('ct-init.sh --json', () => {
 
     it('exempt: an e2e-howto section filled in by the user is reported already-present, never drifted', () => {
       const dir = mkTarget()
-      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      run(dir)
       const agentsPath = join(dir, 'AGENTS.md')
       const filled = readFileSync(agentsPath, 'utf8').replace(
         '<!-- ct-init:e2e-howto -->',
@@ -153,7 +162,7 @@ describe('ct-init.sh --json', () => {
 
     it('versioned: an older contract than this release ships is reported drifted, with foundVersion and shippedVersion', () => {
       const dir = mkTarget()
-      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      run(dir)
       const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
       writeFileSync(
         contractPath,
@@ -176,7 +185,7 @@ describe('ct-init.sh --json', () => {
 
     it('versioned: a NEWER contract than this release ships is refused, not drifted — an old plugin never downgrades', () => {
       const dir = mkTarget()
-      execFileSync('bash', [script, dir], { encoding: 'utf8' })
+      run(dir)
       const contractPath = join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md')
       const newerVersion = CONTRACT_VERSION + 500
       const original = [
@@ -197,5 +206,15 @@ describe('ct-init.sh --json', () => {
       expect(readFileSync(contractPath, 'utf8')).toBe(original)
       rmSync(dir, { recursive: true, force: true })
     })
+
+  })
+
+  it('D2: CT_CLAUDE_BIN is honoured — pointing it at a fake binary makes plugin-install install against that fake, never the real claude', () => {
+    const dir = mkTarget()
+    const report = runJson(dir)
+    // The fake binary starts with nothing installed, so plugin-install must
+    // report `created` here — the fake actually ran and actually "installed".
+    expect(byId(report)['plugin-install'].status).toBe('created')
+    rmSync(dir, { recursive: true, force: true })
   })
 })
