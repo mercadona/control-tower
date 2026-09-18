@@ -41,8 +41,8 @@ export function realIssuesOnly(entries) {
 //      `realIssuesOnly` threw away after downloading them (in a repo with
 //      thousands of PRs, that dead weight overflowed execFileSync's buffer →
 //      ENOBUFS and the command died before doing anything).
-//   2. ONLY the fields the loop uses are asked for (number/title/body/state/
-//      stateReason/milestone/labels), not the whole REST object (reactions,
+//   2. ONLY the fields the loop uses are asked for (number/url/title/body/
+//      state/stateReason/milestone/labels), not the whole REST object (reactions,
 //      user, assignees…).
 // The resulting set of issues is IDENTICAL to the one REST produced after
 // `realIssuesOnly`: same behaviour, a fraction of the bytes.
@@ -75,7 +75,7 @@ export function issuesQueryFor(states) {
     'query($endCursor:String,$owner:String!,$name:String!){',
     'repository(owner:$owner,name:$name){',
     `issues(first:100,after:$endCursor,states:[${states.join(',')}],orderBy:{field:CREATED_AT,direction:ASC}){`,
-    'nodes{ number title body state stateReason milestone{number title description} labels(first:50){nodes{name}} }',
+    'nodes{ number url title body state stateReason milestone{number title description} labels(first:50){nodes{name}} }',
     'pageInfo{ hasNextPage endCursor }',
     '} } }',
   ].join(' ')
@@ -100,6 +100,7 @@ export function normalizeGraphqlIssues(pages) {
     for (const n of nodes) {
       out.push({
         number: n.number,
+        url: n.url,
         title: n.title,
         body: n.body,
         state: typeof n.state === 'string' ? n.state.toLowerCase() : n.state,

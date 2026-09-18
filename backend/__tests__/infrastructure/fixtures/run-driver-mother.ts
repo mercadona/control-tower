@@ -7,6 +7,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { issuesQueryFor } from '../../../../plugin/scripts/gh-issues.js'
 import { RoleBytes } from '../../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../../plugin/scripts/state.js'
@@ -1229,6 +1230,7 @@ export class RunDriverMother {
       'const argv = process.argv.slice(2)',
       `const issueCreate = ${JSON.stringify(issueCreate)}`,
       "const equal = (expected) => JSON.stringify(argv) === JSON.stringify(expected)",
+      "const page = (nodes) => JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'gh.jsonl'), JSON.stringify(argv) + '\\n')",
       "if (equal(issueCreate)) console.log('https://github.com/acme/widget/issues/7')",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'labels', '-q', '[.labels[].name]'])) console.log(JSON.stringify(['status:in-progress']))",
@@ -1241,8 +1243,8 @@ export class RunDriverMother {
       "  fs.copyFileSync(argv[6], process.env.CT_FIXTURE_PUBLICATION)",
       "}",
       "else if (equal(['issue', 'edit', '7', '--repo', 'acme/widget', '--add-label', 'status:in-progress', '--remove-label', 'status:ready'])) {}",
-      "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log(JSON.stringify([[{ number: 7, html_url: 'https://github.com/acme/widget/issues/7', title: 'Finite fixture', body: '<!-- ct-order:1 -->', milestone: null, labels: [{ name: 'status:ready' }] }]]))",
-      "else if (equal(['api', 'repos/acme/widget/issues', '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp'])) console.log('[[]]')",
+      `else if (equal(['api', 'graphql', '--paginate', '--slurp', '-f', ${JSON.stringify(`query=${issuesQueryFor(['OPEN'])}`)}, '-f', 'owner=acme', '-f', 'name=widget'])) console.log(page([{ number: 7, url: 'https://github.com/acme/widget/issues/7', title: 'Finite fixture', body: '<!-- ct-order:1 -->', state: 'OPEN', stateReason: null, milestone: null, labels: { nodes: [{ name: 'status:ready' }] } }]))`,
+      `else if (equal(['api', 'graphql', '--paginate', '--slurp', '-f', ${JSON.stringify(`query=${issuesQueryFor(['CLOSED'])}`)}, '-f', 'owner=acme', '-f', 'name=widget'])) console.log(page([]))`,
       "else if (equal(['api', 'repos/acme/widget/issues/7/comments', '--paginate', '--slurp'])) console.log('[[]]')",
       "else if ([",
       "  ['pr', 'list', '--repo', 'acme/widget', '--state', 'all', '--head', 'feat/7', '--json', 'number', '--limit', '1'],",

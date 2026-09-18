@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { describe, expect, it } from 'vitest'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { ContinuePlan } from '../../src/application/actions/continue-plan.ts'
@@ -187,21 +188,13 @@ class ScriptedBoundaries {
   }
 
   readonly gh = async (argv: string[]): Promise<ProcessOutput> => {
-    const open = [
-      'api', `repos/${Rehearsal.REPOSITORY}/issues`, '--method', 'GET',
-      '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp',
-    ]
-    const closed = [
-      'api', `repos/${Rehearsal.REPOSITORY}/issues`, '--method', 'GET',
-      '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp',
-    ]
-    if (ScriptedBoundaries.same(argv, open)) {
+    if (ScriptedBoundaries.same(argv, Rehearsal.listing(['OPEN']))) {
       this.accept('gh', argv, null)
-      return ScriptedBoundaries.output(JSON.stringify([[Rehearsal.issue()]]))
+      return ScriptedBoundaries.output(Rehearsal.pages([Rehearsal.issueNode()]))
     }
-    if (ScriptedBoundaries.same(argv, closed)) {
+    if (ScriptedBoundaries.same(argv, Rehearsal.listing(['CLOSED']))) {
       this.accept('gh', argv, null)
-      return ScriptedBoundaries.output('[[]]')
+      return ScriptedBoundaries.output(Rehearsal.pages([]))
     }
     if (ScriptedBoundaries.same(argv, [
       'issue', 'view', String(Rehearsal.ISSUE), '--repo', Rehearsal.REPOSITORY,
@@ -341,6 +334,29 @@ class Rehearsal {
       milestone: { number: 1, title: Rehearsal.MILESTONE },
       labels: [{ name: 'status:ready' }, { name: 'gate:none' }],
     }
+  }
+
+  static listing(states: string[]): string[] {
+    const [owner, name] = Rehearsal.REPOSITORY.split('/')
+    return ['api', 'graphql', '--paginate', '--slurp', '-f', `query=${issuesQueryFor(states)}`, '-f', `owner=${owner}`, '-f', `name=${name}`]
+  }
+
+  static issueNode(): Record<string, unknown> {
+    const issue = Rehearsal.issue()
+    return {
+      number: issue.number,
+      url: issue.html_url,
+      title: issue.title,
+      body: issue.body,
+      state: 'OPEN',
+      stateReason: null,
+      milestone: { ...(issue.milestone as Record<string, unknown>), description: null },
+      labels: { nodes: issue.labels },
+    }
+  }
+
+  static pages(nodes: Record<string, unknown>[]): string {
+    return JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])
   }
 
   static issueView(): Record<string, unknown> {
