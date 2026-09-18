@@ -803,7 +803,7 @@
       <div class="phase-bar">
         <span class="pb-id">PHASE 1</span>
         <span class="pb-name">Design and freeze</span>
-        <span class="pb-note">milestone level · <code>control-tower-loop:brainstorming</code></span>
+        <span class="pb-note">milestone level · <code>control-tower-loop:ct-brainstorming</code></span>
       </div>
 
       <div class="strip">
@@ -966,7 +966,7 @@
         <div class="strip-rail"><span class="sid">S11</span><span class="chip chip-agent">Agent</span></div>
         <div class="strip-body">
           <h3>First act: the slice plan, against the real code</h3>
-          <p>The milestone's plan (<code>## Enfoque técnico</code>) comes before the table. The <strong>slice plan</strong> comes after, and it is written by the dispatched agent on starting up with <code>control-tower-loop:writing-plans</code> <strong>using the issue as the spec</strong>: its ACs in EARS, its <code>## Out of scope / Protected</code> and its <code>## Contexto del milestone</code> are exactly the input writing-plans asks for.</p>
+          <p>The milestone's plan (<code>## Enfoque técnico</code>) comes before the table. The <strong>slice plan</strong> comes after, and it is written by the dispatched agent on starting up with <code>control-tower-loop:ct-writing-plans</code> <strong>using the issue as the spec</strong>: its ACs in EARS, its <code>## Out of scope / Protected</code> and its <code>## Contexto del milestone</code> are exactly the input writing-plans asks for.</p>
           <p>It is saved in <code>docs/superpowers/plans/</code> and committed: <strong>it travels in the PR</strong>. With the plan written, the «is there a plan?» diamond of <code>subagent-driven-development</code> finds a plan and the skill re-engages whole.</p>
           <div class="io">
             <div><dt>Why here</dt><dd>It is written against the real code, at the right moment. A plan written in the spec would be a plan written blind.</dd></div>
@@ -978,7 +978,7 @@
         <div class="strip-rail"><span class="sid">S12</span><span class="chip chip-agent">Agent</span></div>
         <div class="strip-body">
           <h3>Implement: a subagent per task, TDD, two reviews</h3>
-          <p><code>control-tower-loop:subagent-driven-development</code> with TDD: a fresh subagent per task, review between tasks, fast iteration. The issue's <code>Acepta</code> are <strong>1:1 with tests</strong> — that is what the <code>## Acceptance criteria (EARS, 1:1 con tests)</code> heading means.</p>
+          <p><code>control-tower-loop:ct-subagent-driven-development</code> with TDD: a fresh subagent per task, review between tasks, fast iteration. The issue's <code>Acepta</code> are <strong>1:1 with tests</strong> — that is what the <code>## Acceptance criteria (EARS, 1:1 con tests)</code> heading means.</p>
           <p>What the agent does <strong>not</strong> do, said in the kickoff and not only in the skills: it does not merge the PR, it does not start the next slice, and <strong>it does not create new worktrees</strong> — the dispatcher already put the isolation in place.</p>
           <div class="io">
             <div><dt>If it gets blocked</dt><dd><code>blocked: {reason, unblock}</code> in <code>.agent/SLICE.md</code>, <strong>never as prose inside <code>next_action</code></strong>. The dispatcher reads that field and reports it with the reason the agent itself wrote.</dd></div>
@@ -1404,7 +1404,7 @@ Both spellings at once is reported, never chosen.</span>
 <span class="c">5.</span> Lee también "## Contexto del epic" y "## Contexto heredado". Si alguna está
    vacía o no aparece, no hay nada que heredar — no lo busques fuera del issue.
 <span class="c">6.</span> Primer acto, con el baseline verde: escribe el plan del slice con
-   control-tower-loop:writing-plans usando el issue como spec. Guárdalo en
+   control-tower-loop:ct-writing-plans usando el issue como spec. Guárdalo en
    docs/superpowers/plans/ y commitéalo: viaja en el PR.
 <span class="c">7.</span> Con el plan commiteado y el gate 'plan' con OK humano, conduce la implementación
    consultando ct-step (next → report → controls → juez ct-judge → verdict → commit;
@@ -1492,7 +1492,7 @@ blocked: null</code></pre>
         <pre><code># &lt;Feature&gt; Implementation Plan
 
 &gt; **For agentic workers:** REQUIRED SUB-SKILL: use control-tower-loop:subagent-driven-
-&gt; development (recommended) or control-tower-loop:executing-plans. Steps use `- [ ]`.
+&gt; development (recommended) or control-tower-loop:ct-executing-plans. Steps use `- [ ]`.
 
 **Goal:** &lt;one sentence&gt;
 **Architecture:** &lt;2-3 sentences&gt;

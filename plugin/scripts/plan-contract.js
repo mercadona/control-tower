@@ -540,7 +540,7 @@ export function checkPlans({ issue, candidates, readFile, readCitedFile }) {
       message:
         `there is no prescriptive plan for #${issue} among the candidates: a ` +
         `docs/superpowers/plans/YYYY-MM-DD-issue-${issue}-<slug>.md is missing. Write it with ` +
-        `control-tower-loop:writing-plans-prescriptive, validate it with --check-plan and commit it ` +
+        `control-tower-loop:ct-writing-plans-prescriptive, validate it with --check-plan and commit it ` +
         `(it travels in the PR). If it already exists in your working tree but is not committed, commit it.`,
     }
   }

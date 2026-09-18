@@ -5,7 +5,7 @@ import type { RepositoryName } from './repository-name.ts'
 import type { UserStory } from './user-story.ts'
 
 export class PhasePrompt {
-  static readonly BRAINSTORMING_SKILL = 'control-tower-loop:brainstorming'
+  static readonly BRAINSTORMING_SKILL = 'control-tower-loop:ct-brainstorming'
   static readonly GROOM_SKILL = 'control-tower-loop:ct-groom'
   static readonly FREEZE_IS_NOT_YOURS =
     'You never freeze the spec yourself: the state line and its date are written by gate 1 of the '

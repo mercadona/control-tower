@@ -1,5 +1,5 @@
 ---
-name: executing-plans
+name: ct-executing-plans
 description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
 ---
 
@@ -11,7 +11,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** If subagents are available (they are on Claude Code), use control-tower-loop:subagent-driven-development instead of this skill.
+**Note:** If subagents are available (they are on Claude Code), use control-tower-loop:ct-subagent-driven-development instead of this skill.
 
 ## The Process
 
@@ -33,7 +33,7 @@ For each task:
 
 After all tasks complete and verified:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use control-tower-loop:finishing-a-development-branch
+- **REQUIRED SUB-SKILL:** Use control-tower-loop:ct-finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
 
 ## When to Stop and Ask for Help
@@ -65,6 +65,6 @@ After all tasks complete and verified:
 ## Integration
 
 **Required workflow skills:**
-- **control-tower-loop:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
-- **control-tower-loop:writing-plans** - Creates the plan this skill executes
-- **control-tower-loop:finishing-a-development-branch** - Complete development after all tasks
+- **control-tower-loop:ct-using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **control-tower-loop:ct-writing-plans** - Creates the plan this skill executes
+- **control-tower-loop:ct-finishing-a-development-branch** - Complete development after all tasks

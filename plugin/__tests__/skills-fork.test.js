@@ -28,17 +28,17 @@ const SKILLS = join(ROOT, 'skills')
 // requesting-code-review (0 direct uses; its code-reviewer.md travels as a
 // file INSIDE subagent-driven-development) and using-superpowers (meta).
 const FORKED = [
-  'brainstorming',
-  'executing-plans',
-  'finishing-a-development-branch',
-  'receiving-code-review',
-  'subagent-driven-development',
-  'systematic-debugging',
-  'test-driven-development',
-  'using-git-worktrees',
-  'verification-before-completion',
-  'writing-plans',
-  'writing-skills',
+  'ct-brainstorming',
+  'ct-executing-plans',
+  'ct-finishing-a-development-branch',
+  'ct-receiving-code-review',
+  'ct-subagent-driven-development',
+  'ct-systematic-debugging',
+  'ct-test-driven-development',
+  'ct-using-git-worktrees',
+  'ct-verification-before-completion',
+  'ct-writing-plans',
+  'ct-writing-skills',
 ]
 
 function walk(dir) {
@@ -56,7 +56,7 @@ describe("the fork's scope — the 11 skills of F31 §5, with their attribution"
   })
 
   it('code-reviewer.md travels inside subagent-driven-development (orphan of requesting-code-review)', () => {
-    expect(existsSync(join(SKILLS, 'subagent-driven-development', 'code-reviewer.md'))).toBe(true)
+    expect(existsSync(join(SKILLS, 'ct-subagent-driven-development', 'code-reviewer.md'))).toBe(true)
   })
 
   it("upstream's MIT license travels with the fork", () => {
@@ -91,7 +91,7 @@ describe('the fork is closed — nothing points outside control-tower-loop', () 
 })
 
 describe('seam 1 — brainstorming ends in an execution spec + freeze, not in writing-plans', () => {
-  const skill = () => read('brainstorming', 'SKILL.md')
+  const skill = () => read('ct-brainstorming', 'SKILL.md')
 
   it('the terminal state is the execution spec in DRAFT and the request for the freeze', () => {
     expect(skill()).toContain('docs/superpowers/specs/')
@@ -142,12 +142,12 @@ describe('seam 1 — brainstorming ends in an execution spec + freeze, not in wr
 })
 
 describe('seam 2 — SDD with no plan writes the plan now, scoped to the issue', () => {
-  const skill = () => read('subagent-driven-development', 'SKILL.md')
+  const skill = () => read('ct-subagent-driven-development', 'SKILL.md')
 
   it('the "no plan" branch sends you to writing-plans-prescriptive with the issue as the spec', () => {
     const s = skill()
     expect(s).toContain('Write the plan now')
-    expect(s).toContain('control-tower-loop:writing-plans-prescriptive')
+    expect(s).toContain('control-tower-loop:ct-writing-plans-prescriptive')
     expect(s).toContain('scoped to the issue')
   })
 
@@ -162,21 +162,21 @@ describe('seam 2 — SDD with no plan writes the plan now, scoped to the issue',
 
 describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (a skill of our own)", () => {
   it('our own skill exists with its template', () => {
-    expect(existsSync(join(SKILLS, 'writing-plans-prescriptive', 'SKILL.md'))).toBe(true)
-    expect(existsSync(join(SKILLS, 'writing-plans-prescriptive', 'plan-template.md'))).toBe(true)
+    expect(existsSync(join(SKILLS, 'ct-writing-plans-prescriptive', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(SKILLS, 'ct-writing-plans-prescriptive', 'plan-template.md'))).toBe(true)
   })
 
   it('it is ours, not forked: outside the FORKED list', () => {
-    expect(FORKED).not.toContain('writing-plans-prescriptive')
+    expect(FORKED).not.toContain('ct-writing-plans-prescriptive')
   })
 
   it('SDD no longer names plain writing-plans as the destination of the "no plan" branch', () => {
-    const s = read('subagent-driven-development', 'SKILL.md')
-    expect(s).not.toMatch(/control-tower-loop:writing-plans[^-]/)
+    const s = read('ct-subagent-driven-development', 'SKILL.md')
+    expect(s).not.toMatch(/control-tower-loop:ct-writing-plans[^-]/)
   })
 
   it('the skill imposes the literalness and the naming convention the --release gate looks for', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).toContain('Current state (')
     expect(s).toContain('issue-<n>-')
     expect(s).toContain('--check-plan')
@@ -189,7 +189,7 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
   // both things: that you cite as normal, and that relabelling is not a way
   // out.
   it('it says where each citation is verified and forbids relabelling them to dodge the gate', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).toMatch(/base of the branch/i)
     expect(s).toMatch(/never relabel/i)
   })
@@ -201,20 +201,20 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
   // the agent writes plans the validator rejects and nobody knows which of the
   // two rules.
   it('it enumerates the four block roles', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
-    for (const rol of ['Current state (', 'Contract (', 'Call site (', 'Final text (']) {
-      expect(s).toContain(rol)
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
+    for (const role of ['Current state (', 'Contract (', 'Call site (', 'Final text (']) {
+      expect(s).toContain(role)
     }
   })
 
   it("its budgets are the validator's: the prose and the code cannot diverge", () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     const numbers = [...Object.values(ROLE_BUDGETS), CODE_BUDGETS.task, CODE_BUDGETS.chars]
     for (const n of numbers) expect(s).toContain(String(n))
   })
 
   it('it says every TASK fits on one A4 page, and that if it does not fit the task is two', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).toMatch(/one A4 page/i)
     expect(s).toMatch(/the task is two/i)
     // And it does not go back to asking for what the agent CANNOT do from a
@@ -223,13 +223,13 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
   })
 
   it('the dumping doctrine is no longer there', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).not.toMatch(/paste the code the plan shows/i)
     expect(s).not.toMatch(/complete final content/i)
   })
 
   it("it describes the brief ct-step really delivers, with the plan's yardstick", () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     const ctStep = readFileSync(join(ROOT, 'scripts', 'ct-step.js'), 'utf8')
     expect(ctStep).toContain('--with-plan-context')
     expect(s).toContain('--with-plan-context')
@@ -239,20 +239,20 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
   })
 
   it('it says configuration travels as prose and that a test travels as a name and an assertion', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).toMatch(/configuration travels as prose/i)
     expect(s).toMatch(/a test travels as two things/i)
   })
 
   it('it closes with the list of steps, and validates per task before going on', () => {
-    const s = read('writing-plans-prescriptive', 'SKILL.md')
+    const s = read('ct-writing-plans-prescriptive', 'SKILL.md')
     expect(s).toContain('## The steps, in order')
     expect(s).toMatch(/one todo per step/i)
     expect(s).toMatch(/One task at a time: write it, then run `--check-plan`/)
   })
 
   it('the skill and its template have a budget: growing forces a trim', () => {
-    const bytes = (f) => Buffer.byteLength(read('writing-plans-prescriptive', f))
+    const bytes = (f) => Buffer.byteLength(read('ct-writing-plans-prescriptive', f))
     // Cap raised from 16314 to 16604: it pays for restoring, inside SKILL.md,
     // the precedence rule with its two directions for whoever writes the plan.
     // That rule has no other durable copy — the kickoff is delivered once, in
@@ -369,7 +369,7 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
   })
 
   it('the template does not ask for the complete final state and its gaps name the roles', () => {
-    const t = read('writing-plans-prescriptive', 'plan-template.md')
+    const t = read('ct-writing-plans-prescriptive', 'plan-template.md')
     expect(t).not.toMatch(/the complete final state/i)
     expect(t).toContain('Contract (')
     expect(t).toContain('No code — ')
@@ -382,7 +382,7 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
 // not bodies, NO task is transcription: that shortcut would route to the
 // cheapest model precisely the link that now writes the code.
 describe('seam 5 — SDD no longer assumes the task carries the complete code', () => {
-  const skill = () => read('subagent-driven-development', 'SKILL.md')
+  const skill = () => read('ct-subagent-driven-development', 'SKILL.md')
 
   it('the "transcription" shortcut no longer exists', () => {
     // Fragile and DECLARED, same reason as seams 1 and 2: the new prose says
@@ -406,7 +406,7 @@ describe('seam 5 — SDD no longer assumes the task carries the complete code', 
 })
 
 describe('seam 3 — finishing-a-development-branch in a governed repo: PR + release + STOP', () => {
-  const skill = () => read('finishing-a-development-branch', 'SKILL.md')
+  const skill = () => read('ct-finishing-a-development-branch', 'SKILL.md')
 
   it('it detects the CT dispatch by .agent/SLICE.md and offers no menu', () => {
     // This used to check the two strings LOOSE, anywhere in the file: a decoy
@@ -436,7 +436,7 @@ describe("seam 6 — ct-step's implementer loads the fork's skill, not upstream'
 
   it("seam 6: the implementer loads the plugin's skill, not upstream's", () => {
     const p = prompt()
-    expect(p).toContain('control-tower-loop:test-driven-development')
+    expect(p).toContain('control-tower-loop:ct-test-driven-development')
     // A wide ban and not the literal `superpowers:`: what is watched is that
     // the implementer does not end up hanging from upstream by ANY route —
     // not the skill prefix, not a URL (github.com/obra/superpowers-skills),

@@ -8,6 +8,8 @@ Each JSON file records its source revision, Git version, Node version, platform,
 
 The final recording run passed 207 cases: the original 199 scenarios, three invocation checks and five retained executable/real-Git checks. Captures are produced only by the scenarios that use `StepScenario`; the other eight cases independently validate the real boundary. Captured fixture input includes the legacy scenarios' Spanish user text, filenames and external contract values verbatim. Program identifiers, diagnostics added by this change and test names are English.
 
+Main subsequently renamed the distributed skills in #422. `migrate-step-capture-paths.mjs` updates only the executable path in request keys and their ordering references, and records that migration in provenance. The original captured responses and file effects remain verbatim, including historical diff text.
+
 ## What replay asserts
 
 - Every reply is selected by invocation, binary, literal argv array and operational options. A single argument containing a space differs from two arguments.

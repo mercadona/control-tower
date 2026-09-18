@@ -6,7 +6,13 @@
     "platform": "darwin",
     "clock": "2026-09-18T00:00:00Z",
     "command": "vitest run --config ../docs/testing/record-step-conversations.config.mjs",
-    "commandSourceSha256": "c9b8350c56ab5615d790d6a599bae365708d151829e744087e145c00f0e6ee17"
+    "commandSourceSha256": "c9b8350c56ab5615d790d6a599bae365708d151829e744087e145c00f0e6ee17",
+    "requestPathMigration": {
+      "revision": "8425c55c",
+      "from": "skills/subagent-driven-development/scripts/task-brief",
+      "to": "skills/ct-subagent-driven-development/scripts/task-brief",
+      "responses": "Original captured responses and file effects retained verbatim."
+    }
   },
   "responses": {
     "cee7842a67a74ab422b966ab": {
@@ -964,7 +970,7 @@
                 "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
                 "[\"command 1\",\"git\",[\"rev-parse\",\"HEAD\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]"
               ],
-              "request": "[\"command 1\",\"$PLUGIN/skills/subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]"
+              "request": "[\"command 1\",\"$PLUGIN/skills/ct-subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]"
             }
           ],
           "reads": []
@@ -1008,7 +1014,7 @@
         "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
           "89cdbb01339f48cddef3ab46"
         ],
-        "[\"command 1\",\"$PLUGIN/skills/subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]": [
+        "[\"command 1\",\"$PLUGIN/skills/ct-subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]": [
           "134cafa8c5b7d2885dcb51a6"
         ]
       }
@@ -1026,7 +1032,7 @@
                 "[\"command 1\",\"git\",[\"rev-parse\",\"--show-toplevel\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]",
                 "[\"command 1\",\"git\",[\"rev-parse\",\"HEAD\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]"
               ],
-              "request": "[\"command 1\",\"$PLUGIN/skills/subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]"
+              "request": "[\"command 1\",\"$PLUGIN/skills/ct-subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]"
             }
           ],
           "reads": []
@@ -1070,7 +1076,7 @@
         "[\"command 1\",\"git\",[\"config\",\"user.email\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"],\"timeout\":120000,\"killSignal\":\"SIGKILL\",\"maxBuffer\":67108864}]": [
           "89cdbb01339f48cddef3ab46"
         ],
-        "[\"command 1\",\"$PLUGIN/skills/subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]": [
+        "[\"command 1\",\"$PLUGIN/skills/ct-subagent-driven-development/scripts/task-brief\",[\"--with-plan-context\",\"docs/superpowers/plans/plan.md\",\"1\",\"$TEMP0/.agent/run-4/task-1-brief.md\"],{\"cwd\":\"$TEMP0\",\"stdio\":[\"ignore\",\"pipe\",\"pipe\"]}]": [
           "134cafa8c5b7d2885dcb51a6"
         ]
       }

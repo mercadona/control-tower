@@ -6,7 +6,13 @@
     "platform": "darwin",
     "clock": "2026-09-18T00:00:00Z",
     "command": "vitest run --config ../docs/testing/record-step-conversations.config.mjs",
-    "commandSourceSha256": "c9b8350c56ab5615d790d6a599bae365708d151829e744087e145c00f0e6ee17"
+    "commandSourceSha256": "c9b8350c56ab5615d790d6a599bae365708d151829e744087e145c00f0e6ee17",
+    "requestPathMigration": {
+      "revision": "8425c55c",
+      "from": "skills/subagent-driven-development/scripts/task-brief",
+      "to": "skills/ct-subagent-driven-development/scripts/task-brief",
+      "responses": "Original captured responses and file effects retained verbatim."
+    }
   },
   "responses": {
     "cee7842a67a74ab422b966ab": {

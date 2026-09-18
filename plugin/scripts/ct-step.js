@@ -897,7 +897,7 @@ exits with 9 and says which one it is. The state lives in .agent/run-<issue>.jso
       const ctDocs = loadCtYardstick()
       try {
         execFileSync(
-          join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief'),
+          join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief'),
           ['--with-plan-context', planPath, String(run.task), brief],
           { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
         )
@@ -1995,7 +1995,7 @@ exits with 9 and says which one it is. The state lives in .agent/run-<issue>.jso
 
     // The extractor of one section of the plan by its literal heading, up to the
     // next heading of equal or lesser level — the same criterion as
-    // `extract_section` of `skills/subagent-driven-development/scripts/task-brief`
+    // `extract_section` of `skills/ct-subagent-driven-development/scripts/task-brief`
     // (bash/awk), rewritten here because the reconciliation package is pasted by
     // `reconcileVerb` directly, with no such script in between.
     //

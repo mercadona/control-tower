@@ -41,7 +41,7 @@ class InvocationMother {
       shell: { run: () => { throw new Error('This invocation must not run checks') } },
       scripts: { run: (argv) => {
         scripts.push(argv)
-        expect(argv).toEqual([join(io.pluginRoot, 'skills/subagent-driven-development/scripts/task-brief'), '--with-plan-context', 'plan.md', '1', join(root, '.agent/run-7/task-1-brief.md')])
+        expect(argv).toEqual([join(io.pluginRoot, 'skills/ct-subagent-driven-development/scripts/task-brief'), '--with-plan-context', 'plan.md', '1', join(root, '.agent/run-7/task-1-brief.md')])
         writeFileSync(argv.at(-1), '### Task 1 — do the work\n')
         return { code: 0, stdout: '', stderr: '' }
       } },
