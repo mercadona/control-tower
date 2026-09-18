@@ -1,7 +1,6 @@
 import { issuesQueryFor, normalizeGraphqlIssues } from '../../../plugin/scripts/gh-issues.js'
 import { buildDispatchInput, mapGhIssue } from '../../../plugin/scripts/gh-issue-map.js'
 import { collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
-import { resolveGatesForAgent } from '../../../plugin/scripts/gates.js'
 import { DispatchCandidates } from '../domain/ports/dispatch-candidates.ts'
 import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../domain/exceptions.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
@@ -232,10 +231,6 @@ export class GhDispatchCandidates extends DispatchCandidates {
     const selected = dispatch.selected[0]
     if (selected === undefined) {
       throw new DispatchNotAvailable(`the plugin did not select a slice: ${JSON.stringify(dispatch.blockReason)}`)
-    }
-    const gates = resolveGatesForAgent(selected)
-    if (gates.includes('plan')) {
-      throw new DispatchNotAvailable(`the selected slice declares the plugin plan gate: ${JSON.stringify(gates)}`)
     }
     const raw = openIssues.find((issue) => issue.number === selected.n)
     if (raw === undefined) {

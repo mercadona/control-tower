@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
-import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
@@ -26,7 +25,6 @@ class RequestVocabularies {
     return [
       ...Object.values(PlanRequestOutcome),
       ...Object.values(MilestonePlanOutcome),
-      ...Object.values(ImplementRequestOutcome),
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
@@ -86,7 +84,6 @@ class EveryCodeTheApiEmits {
     return [
       ...new Set(RequestVocabularies.codes()),
       ...PlanCollapse.declaredCodes(),
-      ...ImplementCollapse.declaredCodes(),
       ...ProgressCollapse.declaredCodes(),
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
