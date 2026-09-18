@@ -112,8 +112,9 @@ For each supported model dispatch the backend makes one recorded `--resume
 <agent>` call, identified by `run:<oracle-ticket>`, with the exact prepared file
 paths. The implementer receives the plugin's report schema and declared model
 and tools. Judge, advisor, slice-judge and reconciler calls receive the plugin's
-role files; the first four also receive their response schema, and judge roles
-receive their parsed plugin agent definition through `--agents` and `--agent`.
+role files. Implementer, judge, advisor and slice-judge calls receive their
+response schema. Reconciler calls return edits without a response schema.
+Judge roles receive their parsed plugin agent definition through `--agents` and `--agent`.
 Commands run through the dedicated tool adapter and do not create model calls.
 
 The currently supported model roles are implementer, task judge, advisor,

@@ -156,10 +156,28 @@ class Entrypoint {
     })
   }
 
-  static makeRunBackendCommand(): string {
-    return execFileSync('make', ['--dry-run', 'run-backend'], {
-      cwd: Entrypoint.#ROOT, encoding: 'utf8', timeout: Entrypoint.#TIMEOUT_MS,
-    })
+  static async makeRunBackendCommand(claudeConfigDirectory?: string): Promise<string> {
+    const cwd = await mkdtemp(join(tmpdir(), 'ct-api-make-run-backend-'))
+    const environment = { ...process.env }
+    delete environment.CLAUDE_CONFIG_DIR
+    delete environment.MAKEFLAGS
+    delete environment.MAKEOVERRIDES
+    const argv = [
+      '--dry-run', '-f', join(Entrypoint.#ROOT, 'Makefile'),
+      'CT_API_PORT=8787', 'CT_HARVEST_BQ_TABLE=',
+    ]
+    if (claudeConfigDirectory !== undefined) argv.push(`CLAUDE_CONFIG_DIR=${claudeConfigDirectory}`)
+    argv.push('run-backend')
+    try {
+      const output = execFileSync('make', argv, {
+        cwd, env: environment, encoding: 'utf8', timeout: Entrypoint.#TIMEOUT_MS,
+      })
+      const command = output.split('\n').find((line) => line.includes('node backend/src/infrastructure/ct-api.ts'))
+      if (command === undefined) throw new Error(`make run-backend did not print the backend invocation: ${output}`)
+      return command
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   }
 
   static async #started(environment: NodeJS.ProcessEnv): Promise<Started> {
@@ -847,14 +865,25 @@ describe('ct-api entrypoint', () => {
       })
 
       expect(port).toBeGreaterThan(0)
-      expect(Entrypoint.makeRunBackendCommand()).toMatch(
-        /CT_API_PORT=.* CLAUDE_CONFIG_DIR=.* CT_HARVEST_BQ_TABLE=.* node backend\/src\/infrastructure\/ct-api\.ts/,
-      )
     } finally {
       Entrypoint.killAll()
       await RunFileFixture.remove(state)
     }
   }, 60_000)
+
+  it('run-backend omits an absent Claude configuration directory', async () => {
+    const command = await Entrypoint.makeRunBackendCommand()
+
+    expect(command).toBe('CT_API_PORT=8787  CT_HARVEST_BQ_TABLE= node backend/src/infrastructure/ct-api.ts')
+  })
+
+  it('run-backend preserves an explicitly configured Claude directory', async () => {
+    const command = await Entrypoint.makeRunBackendCommand('/tmp/ct-explicit-config')
+
+    expect(command).toBe(
+      'CT_API_PORT=8787 CLAUDE_CONFIG_DIR=/tmp/ct-explicit-config CT_HARVEST_BQ_TABLE= node backend/src/infrastructure/ct-api.ts',
+    )
+  })
 
   it('a_freshly_started_backend_lists_no_session_because_nothing_has_been_asked_of_it_yet', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0', SHELL: '/bin/sh' })

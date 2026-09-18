@@ -752,7 +752,7 @@ Task controls and the final dossier carry evidence. No table row asserts live CL
 npm --prefix backend run typecheck
 npm --prefix backend test
 npm --prefix frontend test
-git diff --exit-code a1e9ee0a5490e0f6856469d8b1cbebe1b6ff23b6 HEAD -- plugin/
+git diff --exit-code a2d251547bca422f6d6987273b24ad114aba9a93 HEAD -- plugin/
 git diff --check
 ```
 
