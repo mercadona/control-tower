@@ -239,3 +239,141 @@ request, correct ones included. `/ct-init` writes `.github/ct/package.json` with
 `"type": "module"`: nearer than the repository's own, and the vendored path
 stays the one the workflow names. A `package.json` already there saying
 something else is reported, never rewritten.
+
+## The `--json` report
+
+`bash ct-init.sh <dir-repo> --json` prints exactly one JSON object on stdout,
+in place of the prose above, and nothing else goes to stdout in that mode. It
+is meant for a caller that has to act on what happened, such as CI, not for a
+person reading a terminal.
+
+```json
+{
+  "ctInitVersion": "0.57.0",
+  "configDir": "/Users/x/.claude",
+  "toolchain": { "node": true, "shasum": true, "claude": false },
+  "exitCode": 0,
+  "artifacts": [
+    { "id": "state-md", "path": ".agent/STATE.md", "status": "created" },
+    { "id": "scope-gate-bundle", "path": ".github/ct/scope-check.js", "status": "drifted" },
+    { "id": "plugin-install", "path": "", "status": "refused", "detail": "folder not trusted" },
+    { "id": "slices-contract", "path": "docs/superpowers/SLICES-CONTRACT.md", "status": "drifted",
+      "foundVersion": 24, "shippedVersion": 26, "blockStatus": "pristine" }
+  ]
+}
+```
+
+- `ctInitVersion`, `configDir` and `toolchain` name the machine facts that can
+  change what the run does, so a reader does not have to guess them from the
+  outcome. `toolchain.node`, `toolchain.shasum` and `toolchain.claude` say
+  whether each tool was found on the `PATH`, not whether it ran without error.
+- `artifacts` holds one entry per artifact this script can touch, always in
+  the same fixed order — the order these calls appear in the script, never a
+  filesystem listing. Each entry names an `id` and a `path` (relative to the
+  target repository; the report never names an absolute target path) and a
+  `status` of one of exactly four values:
+  - `created` — this run wrote the artifact because it was missing.
+  - `already-present` — the artifact was already there and needed no change.
+  - `drifted` — the artifact is there, but does not match what this release
+    would write, and was left alone (or replaced, only with `--force`; see
+    the drift table below for which class allows which).
+  - `refused` — this run declined to touch or check the artifact at all,
+    for a reason it names (an out-of-date target, an untrusted folder, a
+    missing tool). A `refused` artifact is not a `drifted` one: nothing was
+    compared.
+- `exitCode` mirrors the process exit code, filled in from an `EXIT` trap so
+  the report still comes out, with everything recorded up to that point, even
+  when the script exits early (a bad option, an unrecognised slices contract
+  with no `--force`).
+- **Determinism, stated exactly and no further:** the same inputs produce the
+  same bytes. The inputs are the target tree, the plugin release, the flags,
+  and the machine facts this report names explicitly (`configDir`, and
+  whether `node`, `shasum`/`sha256sum` and `claude` are on the `PATH`). There
+  is no timestamp and no absolute target path in the report for that reason.
+  This does not claim that two different machines, or two different releases,
+  produce the same report — only that the same machine, asked twice with the
+  same target and the same release, produces byte-identical output.
+- The yardstick sweep's list of candidates and a conventions conflict's
+  evidence are not artifacts and carry no `id`: they stay on stdout (or
+  stderr) as prose, in `--json` mode as much as in the default one, and a
+  caller that needs them still has to read that prose. Wrapping multi-line,
+  free-form sweep output into the JSON body would need `jq`-grade escaping in
+  bash for no reader that actually needs it structured.
+
+## Drift, per class
+
+Not every artifact this script seeds is compared the same way on a second
+run. Five classes, and what each one means for the status above:
+
+| Class | Artifacts | Policy |
+|---|---|---|
+| User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the execution spec template, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either) |
+| Generated | `.github/ct/scope-check.js` | byte-compared against the bundle this release ships; a mismatch reports `drifted`, and is only replaced with `--force` |
+| Versioned | the slices contract | its own doctrine of version numbers and pristine hashes, unchanged by this table; see "What is contract" above |
+| Exempt by design | the loop section and the e2e-howto section, both inside `AGENTS.md` | never `drifted` — each is a template the repository owner fills in, so a changed body is correct use, not tampering |
+| Install | the plugin install step (`plugin-install`; not a file) | no content to byte-compare, so it never drifts; `refused` is its expected steady state on a folder nobody has trusted yet, never a defect |
+
+`.github/workflows/ct-scope-gate.yml` and `.github/ct/package.json` look like
+they should be generated and byte-compared, the same way
+`.github/ct/scope-check.js` is. They are not, and the reason is not an
+oversight:
+
+- The workflow template pins neither the action it runs
+  (`actions/checkout@v4`) nor its runner (`ubuntu-latest`) by exact version,
+  while this repository's own CI pins every action by commit SHA. A governed
+  repository under an organisation policy that requires SHA-pinned actions
+  edits that file legitimately, to comply with a rule this plugin does not
+  set. Byte-comparing it would report that edit as `drifted` forever, and
+  `--force` would revert a compliance change the repository's owner made on
+  purpose.
+- `.github/ct/package.json` tolerates extra keys today: it only has to declare
+  `"type": "module"` for node to read the vendored bundle correctly, and a
+  repository is free to add other keys to that file. Byte-comparison would
+  flag those extra keys as drift, for a file that is doing its one job.
+
+A re-run from an **older** release, seeing a newer artifact than the one it
+would write, reports `refused`, not `drifted`: an old script must not offer to
+downgrade a repository that a newer one already touched.
+
+## The install step
+
+`.claude/settings.json` only **declares** the plugin; a plugin whose source is
+a git repository still has to be installed once per machine before `claude`
+resolves it. `/ct-init` now runs that install itself, guarded and reported the
+same way it seeds `.claude/settings.json`:
+
+- It runs `claude plugin install control-tower-loop@control-tower --scope
+  project -y` (the `-y` because `install` requires it when stdin is not a
+  TTY), through a small node wrapper, `scripts/ct-install.mjs`, guarded by
+  `command -v node` — its absence is reported, never read as success.
+- It checks first whether the plugin is already installed at any scope for
+  the config directory in play, via `claude plugin list --json`, so a run
+  where the plugin is already loaded (as it is when `/ct-init` runs as a
+  slash command) does not reinstall it needlessly.
+- **It verifies with `claude plugin list --json` afterwards**, and it claims
+  no more than "the plugin is installed". There is no way to prove, from a
+  scaffolder run, that a *skill* resolves — that needs a session to actually
+  start. So the report never says more than the install command's own
+  outcome.
+- **It never waits on a person.** Any ambiguity — no `claude` binary, the
+  folder not yet trusted, a non-zero exit, no network — is reported `refused`
+  with a named reason, under a fixed timeout, never blocked on a human
+  decision. On a genuinely clean slate,
+  `plugin-install` reporting `refused` with a reason such as "folder not
+  trusted" is the **correct** outcome, not a failure: the folder becomes
+  trusted through a decision this script does not take.
+
+Two limits are worth stating plainly, because leaving them implicit invites
+someone to assume the install covers more than it does:
+
+- **One install does not cover a dispatched agent.** `/ct-next` dispatches
+  slices under each agent's own account, separate from whichever account ran
+  `/ct-init`. A plugin installed for one account is not installed for
+  another, so a governed repository can still need the install run again, by
+  whoever's account is about to dispatch.
+- **Trusting the folder stays a person's job, on purpose.** The
+  non-interactive route would be writing `hasTrustDialogAccepted` into
+  Claude Code's own configuration directly — exactly the kind of route around
+  a control that CLAUDE.md forbids. So `/ct-init` reports `refused` instead of
+  trying to trust the folder for the user, and a person trusts it the normal
+  way, once, before re-running the install.

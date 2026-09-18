@@ -113,19 +113,30 @@ choosing which one rules is your decision, not the plugin's.
 your machine: it names this marketplace and this plugin, pinned at the release
 that wrote it (`ref: plugin-v<version>`, the tag every release already
 carries), so anyone who clones gets the same commands, skills, agents and hooks.
-Three things it cannot do for you, and it says so:
-
-```
-claude plugin install control-tower-loop@control-tower --scope project
-```
-
-run once per machine; **trust the folder**, because a project's marketplace only
-takes effect after that; and make `ct-scope-gate` a **required check** on the
-default branch, because until it is, the gate shows red and lets the merge
-through anyway.
+`/ct-init` also runs the install itself
+(`claude plugin install control-tower-loop@control-tower --scope project`) and
+verifies it, once per machine. Two things stay yours, and it says so: **trust
+the folder**, because a project's marketplace only takes effect after that —
+until then the install is reported as `refused`, not run; and make
+`ct-scope-gate` a **required check** on the default branch, because until it
+is, the gate shows red and lets the merge through anyway.
 
 Moving a repository to a newer plugin release is one line — the `ref` — and
 `/ct-init` reports the mismatch rather than changing it.
+
+The scaffolder underneath `/ct-init` is also a standalone script, with no
+plugin load needed to run it:
+
+```
+bash <clone>/plugin/scripts/ct-init.sh <target>
+```
+
+This is how a clean-slate repository gets bootstrapped in the first place, on
+a machine where nothing has the plugin loaded yet: `/ct-init` itself only
+resolves once a session has the plugin, and this script is what a governed
+repository's `.claude/settings.json` — one of the things it writes — is missing
+until a first run. Run it once from a clone of this repository against the
+repository you want to govern, then use `/ct-init` for every later run.
 
 ### What the environment needs
 
