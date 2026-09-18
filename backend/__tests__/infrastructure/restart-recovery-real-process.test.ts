@@ -97,13 +97,18 @@ class TheProcessesTheBackendOwned {
   }
 
   static of(life: StartedEntrypoint, launch: RecordedLaunch): TheProcessesTheBackendOwned {
-    const pids = life.descendants()
-    const commands = new Map(pids.map((pid) => [pid, TheProcessTable.commandOf(pid)]))
+    const running = life.descendants()
+      .map((pid) => ({ pid, command: TheProcessTable.commandOf(pid) }))
+      .filter((found) => found.command !== '')
     const agent = launch.captured.pid
-    const terminal = pids.find((pid) => commands.get(pid)?.includes(`--resume ${ActualHeadlessRuntime.COORDINATOR}`))
-    const worker = pids.find((pid) => commands.get(pid)?.includes(TheProcessesTheBackendOwned.WORKER))
-    if (terminal === undefined || worker === undefined || !pids.includes(agent) || pids.length !== 3) {
-      throw new Error(`the backend owned ${JSON.stringify([...commands.values()])} instead of a terminal, a worker and an agent`)
+    const terminal = running
+      .find((found) => found.command.includes(`--resume ${ActualHeadlessRuntime.COORDINATOR}`))?.pid
+    const worker = running.find((found) => found.command.includes(TheProcessesTheBackendOwned.WORKER))?.pid
+    if (terminal === undefined || worker === undefined || !running.some((found) => found.pid === agent)) {
+      throw new Error(
+        `the backend owned ${JSON.stringify(running.map((found) => found.command))}, `
+        + `and a terminal, a worker and the agent ${agent} are not all among them`
+      )
     }
 
     return new TheProcessesTheBackendOwned({ terminal, worker, agent })
@@ -165,6 +170,109 @@ class ADispatchedPlan {
     if (answered.status !== 202) throw new Error(`the plan was refused with ${answered.status}: ${said}`)
 
     return runtime.launchFor(JSON.parse(said) as StartedPlan, await runtime.launches(1))
+  }
+}
+
+class ABackendThatCrashed {
+  readonly runtime: ActualHeadlessRuntime
+  readonly launch: RecordedLaunch
+  readonly owned: TheProcessesTheBackendOwned
+  readonly survivors: Set<number>
+  readonly before: ALifeOfTheBackend
+  readonly after: ALifeOfTheBackend
+  readonly secondLife: StartedEntrypoint
+
+  constructor(asked: {
+    runtime: ActualHeadlessRuntime,
+    launch: RecordedLaunch,
+    owned: TheProcessesTheBackendOwned,
+    survivors: Set<number>,
+    before: ALifeOfTheBackend,
+    after: ALifeOfTheBackend,
+    secondLife: StartedEntrypoint,
+  }) {
+    this.runtime = asked.runtime
+    this.launch = asked.launch
+    this.owned = asked.owned
+    this.survivors = asked.survivors
+    this.before = asked.before
+    this.after = asked.after
+    this.secondLife = asked.secondLife
+  }
+
+  static async andStartedAgain(runtime: ActualHeadlessRuntime): Promise<ABackendThatCrashed> {
+    const firstLife = await Entrypoint.started(runtime.environment())
+    await TheCoordinatingSession.recoveredBy(firstLife.port)
+    const launch = await ADispatchedPlan.by(firstLife.port, runtime)
+    const before = await ALifeOfTheBackend.readBy(firstLife.port)
+    const owned = TheProcessesTheBackendOwned.of(firstLife, launch)
+
+    await firstLife.crash()
+
+    const survivors = await TheProcessTable.settled(owned.all())
+    const secondLife = await Entrypoint.recovering(runtime.environment())
+
+    return new ABackendThatCrashed({
+      runtime, launch, owned, survivors, before,
+      after: await ALifeOfTheBackend.readBy(secondLife.port),
+      secondLife,
+    })
+  }
+
+  async relaunches(): Promise<number> {
+    return (await this.runtime.launches(1)).length - 1
+  }
+}
+
+class TheRecoveryOffer {
+  static readonly AFTER_THE_FIRST_PRESS_MS = 8_000
+  static readonly AFTER_THE_SECOND_PRESS_MS = 4_000
+
+  static async pressedOn(crashed: ABackendThatCrashed): Promise<number> {
+    const plan = crashed.after.onlyPlan()
+    const answered = await fetch(`http://127.0.0.1:${crashed.secondLife.port}/recover-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo: ActualHeadlessRuntime.REPOSITORY, issue: plan.plan.issue.number, agent: plan.plan.agent,
+      }),
+    })
+    const said = await answered.text()
+    if (JSON.parse(said).agent !== plan.plan.agent) throw new Error(`the recovery answered for another agent: ${said}`)
+
+    return answered.status
+  }
+
+  static async waited(milliseconds: number): Promise<void> {
+    await new Promise((wake) => setTimeout(wake, milliseconds))
+  }
+}
+
+class WhatPressingTheRecoveryChanges {
+  static async of(asked: {
+    crashed: ABackendThatCrashed,
+    presses: readonly number[],
+    settled: ALifeOfTheBackend,
+  }): Promise<Record<string, string>> {
+    const was = asked.crashed.after.onlyPlan()
+    const now = asked.settled.onlyPlan()
+
+    return {
+      everyPress: [...new Set(asked.presses)].join(' and '),
+      phase: `${was.phase} then ${now.phase}`,
+      recoveryOffered: `${was.recovery?.action} then ${now.recovery?.action}`,
+      diagnostic: was.diagnostic === now.diagnostic ? 'the one it already had' : 'a new one',
+      orphanWorker: WhatPressingTheRecoveryChanges.#liveness(asked.crashed.owned.worker),
+      orphanAgent: WhatPressingTheRecoveryChanges.#liveness(asked.crashed.owned.agent),
+      relaunch: `${await asked.crashed.relaunches()} further launch`,
+      headlessDescendant: asked.crashed.secondLife.descendants()
+        .some((pid) => TheProcessTable.commandOf(pid).includes(TheProcessesTheBackendOwned.WORKER))
+        ? 'started again' : 'none',
+    }
+  }
+
+  static #liveness(pid: number): string {
+    return Entrypoint.alive(pid) ? 'still running' : 'gone'
   }
 }
 
@@ -236,20 +344,17 @@ describe('a crash of the backend with work in flight', () => {
     const runtime = await ActualHeadlessRuntime.prepared()
     let owned: TheProcessesTheBackendOwned | null = null
     try {
-      const firstLife = await Entrypoint.started(runtime.environment())
-      await TheCoordinatingSession.recoveredBy(firstLife.port)
-      const launch = await ADispatchedPlan.by(firstLife.port, runtime)
-      const before = await ALifeOfTheBackend.readBy(firstLife.port)
-      owned = TheProcessesTheBackendOwned.of(firstLife, launch)
-
-      await firstLife.crash()
-
-      const survivors = await TheProcessTable.settled(owned.all())
-      const secondLife = await Entrypoint.recovering(runtime.environment())
-      const after = await ALifeOfTheBackend.readBy(secondLife.port)
+      const crashed = await ABackendThatCrashed.andStartedAgain(runtime)
+      owned = crashed.owned
 
       expect(await WhatARestartGivesBack.of({
-        before, after, owned, survivors, launch, runtime, relaunches: (await runtime.launches(1)).length - 1,
+        before: crashed.before,
+        after: crashed.after,
+        owned: crashed.owned,
+        survivors: crashed.survivors,
+        launch: crashed.launch,
+        runtime,
+        relaunches: await crashed.relaunches(),
       })).toEqual({
         coordinatingConversation: 'the same one',
         coordinatingTimeline: '1 kept and 1 appended',
@@ -267,6 +372,37 @@ describe('a crash of the backend with work in flight', () => {
         dispatchedPlanPrompt: 'on-disk',
         dispatchedPlanWorktree: 'on-disk',
         dispatchedPlanRelaunch: '0 further launch',
+      })
+    } finally {
+      for (const pid of owned?.all() ?? []) await Entrypoint.killPid(pid)
+      await Entrypoint.killAll()
+      await runtime.remove()
+    }
+  }, 120_000)
+
+  it('accepts the recovery as often as it is pressed and leaves the plan exactly as uncertain as it found it', async () => {
+    const runtime = await ActualHeadlessRuntime.prepared()
+    let owned: TheProcessesTheBackendOwned | null = null
+    try {
+      const crashed = await ABackendThatCrashed.andStartedAgain(runtime)
+      owned = crashed.owned
+
+      const presses = [await TheRecoveryOffer.pressedOn(crashed)]
+      await TheRecoveryOffer.waited(TheRecoveryOffer.AFTER_THE_FIRST_PRESS_MS)
+      presses.push(await TheRecoveryOffer.pressedOn(crashed))
+      await TheRecoveryOffer.waited(TheRecoveryOffer.AFTER_THE_SECOND_PRESS_MS)
+
+      expect(await WhatPressingTheRecoveryChanges.of({
+        crashed, presses, settled: await ALifeOfTheBackend.readBy(crashed.secondLife.port),
+      })).toEqual({
+        everyPress: '202',
+        phase: 'uncertain then uncertain',
+        recoveryOffered: 'observe then observe',
+        diagnostic: 'the one it already had',
+        orphanWorker: 'still running',
+        orphanAgent: 'still running',
+        relaunch: '0 further launch',
+        headlessDescendant: 'none',
       })
     } finally {
       for (const pid of owned?.all() ?? []) await Entrypoint.killPid(pid)
