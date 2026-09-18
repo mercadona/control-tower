@@ -44,6 +44,8 @@ import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents } from '../../src/infrastructure/run-plan-agents.ts'
 import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 
 class Deferred<T = void> {
   readonly promise: Promise<T>
@@ -480,6 +482,13 @@ class AgentMother {
   }
 }
 
+
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
+}
+
 describe('RunPlanAgents', () => {
   const roots: string[] = []
   const finalizers: Array<() => void> = []
@@ -525,6 +534,11 @@ describe('RunPlanAgents', () => {
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine: driverMachine,
       step: new ExecuteRunInstruction({ machine: driverMachine, calls: new RefusingRunCalls() }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const legacy = new LegacyDouble()
     const warnings: string[] = []
@@ -636,6 +650,11 @@ describe('RunPlanAgents', () => {
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine,
       step: new ExecuteRunInstruction({ machine, calls: new RefusingRunCalls() }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const legacy = new LegacyDouble()
     const measurements = new MeasurementsDouble(transport)

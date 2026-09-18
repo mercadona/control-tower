@@ -47,6 +47,7 @@ import { CtGroomEpic } from './ct-groom-epic.ts'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { StartMilestonePlan, StartMilestonePlanParams } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
+import { DeliverHeldMessages } from '../application/actions/deliver-held-messages.ts'
 import { DriveRun } from '../application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../application/actions/execute-run-instruction.ts'
 import { RecoverPlan } from '../application/actions/recover-plan.ts'
@@ -532,6 +533,7 @@ class CtApi {
       publication,
       machine,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
+      messages: new DeliverHeldMessages({ messages: journal, calls: planCalls, measurements }),
     })
     const planAgents = new RunPlanAgents({
       legacy: legacyPlanAgents,

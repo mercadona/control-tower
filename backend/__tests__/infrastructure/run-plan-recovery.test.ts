@@ -49,6 +49,8 @@ import { RunJournal, type JournalEntry } from '../../src/infrastructure/run-jour
 import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 
 class Barrier<T = void> {
   readonly promise: Promise<T>
@@ -171,6 +173,12 @@ class RecoveryMachine extends CtRunMachine {
   }
 }
 
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
+}
+
 class RecoveryJournal extends RunJournal {
   readonly recorded = new Map<string, readonly JournalEntry[]>()
 
@@ -207,6 +215,11 @@ class RecoveryAgents extends RunPlanAgents {
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         pluginRoot: '/plugin',
       }) }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     super({
       legacy: new PlanAgents(),
@@ -1006,6 +1019,11 @@ describe('RunPlanRecovery projection', () => {
           machine,
           calls: new ClaudeRunCalls({ calls: transport, machine, measurements, files, pluginRoot: '/plugin' }),
         }),
+        messages: new DeliverHeldMessages({
+          messages: journal,
+          calls: calls,
+          measurements: measurements,
+        }),
       })
       const settled = new Barrier()
       lifecycleSettled = settled
@@ -1408,6 +1426,11 @@ class FiniteBridge {
       publication: new FiniteBridgePublication(),
       machine,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: planCalls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const records = new DiskPlanRecords({
       files,

@@ -7,6 +7,7 @@ import { RunEstablishment, type RunMachine } from '../../domain/ports/run-machin
 import type { CompletedPlanCall, StartedPlanCall } from '../../domain/value-objects/plan-call.ts'
 import type { RunInstruction } from '../../domain/value-objects/run-instruction.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
+import { DeliverHeldMessages, DeliverHeldMessagesParams } from './deliver-held-messages.ts'
 import { ExecuteRunInstruction, ExecuteRunInstructionParams } from './execute-run-instruction.ts'
 
 export class DriveRunParams {
@@ -25,18 +26,21 @@ export class DriveRun {
   readonly publication: PlanPublication
   readonly machine: RunMachine
   readonly step: ExecuteRunInstruction
+  readonly messages: DeliverHeldMessages
   readonly driving: Map<string, Promise<void>>
 
-  constructor({ calls, publication, machine, step }: {
+  constructor({ calls, publication, machine, step, messages }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
     step: ExecuteRunInstruction,
+    messages: DeliverHeldMessages,
   }) {
     this.calls = calls
     this.publication = publication
     this.machine = machine
     this.step = step
+    this.messages = messages
     this.driving = new Map()
   }
 
@@ -65,6 +69,7 @@ export class DriveRun {
 
     let instruction = await this.machine.open(params.watch)
     while (true) {
+      await this.messages.execute(new DeliverHeldMessagesParams({ watch: params.watch }))
       instruction = await this.step.execute(new ExecuteRunInstructionParams({
         watch: params.watch,
         instruction,

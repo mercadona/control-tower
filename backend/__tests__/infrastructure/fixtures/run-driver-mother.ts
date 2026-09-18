@@ -67,6 +67,8 @@ import { Gh } from '../../../src/infrastructure/gh.ts'
 import { GhPlanIssues } from '../../../src/infrastructure/gh-plan-issues.ts'
 import { PlanComment } from '../../../src/domain/value-objects/plan-comment.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
+import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
 type Measurement = {
@@ -343,6 +345,12 @@ class RecoveryReviews extends ReviewWatch {
 
 class RecoveryCheckouts extends CheckoutRegistry {
   override remember(_checkout: RegisteredCheckout): void {}
+}
+
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
 }
 
 export class RunDriverMother {
@@ -783,6 +791,11 @@ export class RunDriverMother {
           publication: fixture.#publication(fixture.files),
           machine: fixture.machine,
           step: new ExecuteRunInstruction({ machine: fixture.machine, calls: cutCalls }),
+          messages: new DeliverHeldMessages({
+            messages: fixture.journal,
+            calls: initial.planCalls,
+            measurements: new UnaskedMeasurements(),
+          }),
         })
         await establishing.execute(new DriveRunParams({ watch, planner })).catch((cause: unknown) => {
           if (!(cause instanceof Error) || cause.message !== 'labelled fixture cut after completed role') throw cause
@@ -830,6 +843,11 @@ export class RunDriverMother {
           publication: fixture.#publication(rebuiltFiles),
           machine: rebuiltMachine,
           step: new ExecuteRunInstruction({ machine: rebuiltMachine, calls: recoveryCalls }),
+          messages: new DeliverHeldMessages({
+            messages: rebuiltJournal,
+            calls: rebuilt.planCalls,
+            measurements: new UnaskedMeasurements(),
+          }),
         })
         const agents = new RunPlanAgents({
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
@@ -1155,6 +1173,11 @@ export class RunDriverMother {
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport, machine, measurements, files, pluginRoot: RunDriverMother.#PLUGIN,
       }) }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: planCalls,
+        measurements: measurements,
+      }),
     })
     const agents = new RunPlanAgents({
       legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal, measurements,
