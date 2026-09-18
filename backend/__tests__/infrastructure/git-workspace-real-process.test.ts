@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { CleanupPlan, CleanupPlanParams } from '../../src/application/actions/cleanup-plan.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
@@ -248,23 +249,28 @@ describe('GitWorkspace real cleanup', () => {
 
       const candidateIssue = {
         number: 331,
-        html_url: issue.url,
+        url: issue.url,
         title: 'Cleanup candidate',
         body: '<!-- ct-order:1 -->',
-        milestone: { number: 331, title: 'CT331' },
-        labels: [{ name: `status:${status}` }, { name: 'gate:none' }],
+        state: 'OPEN',
+        stateReason: null,
+        milestone: { number: 331, title: 'CT331', description: null },
+        labels: { nodes: [{ name: `status:${status}` }, { name: 'gate:none' }] },
       }
+      const page = (nodes: unknown[]): string => JSON.stringify([
+        { data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } },
+      ])
       const candidates = new GhDispatchCandidates({
         gh: new Gh({
           launch: async (argv) => {
-            const state = argv.includes('state=open') ? 'open' : 'closed'
+            const state = argv.some((argument) => argument.includes('states:[OPEN]')) ? 'OPEN' : 'CLOSED'
             expect(argv).toEqual([
-              'api', 'repos/acme/widget/issues', '--method', 'GET',
-              '-f', `state=${state}`, '-f', 'per_page=100', '--paginate', '--slurp',
+              'api', 'graphql', '--paginate', '--slurp',
+              '-f', `query=${issuesQueryFor([state])}`, '-f', 'owner=acme', '-f', 'name=widget',
             ])
             return new ProcessOutput({
               code: 0,
-              stdout: JSON.stringify(state === 'open' ? [[candidateIssue]] : [[]]),
+              stdout: page(state === 'OPEN' ? [candidateIssue] : []),
               stderr: '',
             })
           },

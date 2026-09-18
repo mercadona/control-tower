@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
+import { issuesQueryFor } from '../../../../plugin/scripts/gh-issues.js'
 import type { ChildProcess } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -426,11 +427,14 @@ export class ActualHeadlessRuntime {
       '#!/usr/bin/env node',
       'const argv = process.argv.slice(2)',
       `const issue = { number: 42, html_url: 'https://github.com/acme/widget/issues/42', title: '#1 Fixture slice', body: 'x'.repeat(${ActualHeadlessRuntime.ISSUE_BODY_UNITS}) + '\\n<!-- ct-order:1 -->', milestone: { number: 1, title: 'Fixture milestone' }, labels: [{ name: 'status:ready' }] }`,
+      "const node = { number: issue.number, url: issue.html_url, title: issue.title, body: issue.body, state: 'OPEN', stateReason: null, milestone: { ...issue.milestone, description: null }, labels: { nodes: issue.labels } }",
+      "const page = (nodes) => JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])",
       "if (argv[0] === 'issue' && argv[1] === 'create') console.log('https://github.com/acme/widget/issues/41')",
       "else if (argv[0] === 'issue' && argv[1] === 'view') { const number = Number(argv[2]); console.log(JSON.stringify({ number, title: number === 42 ? '#1 Fixture slice' : 'Loose fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: number === 42 ? { title: 'Fixture milestone' } : null })) }",
       "else if (argv[0] === 'issue' && argv[1] === 'list') console.log(JSON.stringify([{ number: 42, url: issue.html_url, title: issue.title, labels: issue.labels, state: 'OPEN', body: '<!-- ct-order:1 -->' }]))",
       "else if (argv[0] === 'api' && argv[1].includes('/contents/')) console.log(JSON.stringify({ sha: process.env.CT_FIXTURE_SPEC_SHA }))",
-      "else if (argv[0] === 'api' && argv[1] === 'repos/acme/widget/issues') console.log(JSON.stringify(argv.includes('state=closed') ? [[]] : [[issue]]))",
+      `else if (argv[0] === 'api' && argv[1] === 'graphql' && argv.includes(${JSON.stringify(`query=${issuesQueryFor(['CLOSED'])}`)})) console.log(page([]))`,
+      `else if (argv[0] === 'api' && argv[1] === 'graphql' && argv.includes(${JSON.stringify(`query=${issuesQueryFor(['OPEN'])}`)})) console.log(page([node]))`,
       "else console.log('{}')",
     ].join('\n') + '\n', { mode: 0o755 })
   }
