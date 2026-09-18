@@ -18,7 +18,7 @@ const CONTRACT_VERSION = Number(initScriptSrc.match(/^SLICES_CONTRACT_VERSION=(\
 const ARTIFACT_IDS = [
   'state-md', 'conventions-md', 'spec-template', 'gitignore',
   'scope-gate-workflow', 'scope-gate-bundle', 'scope-gate-package',
-  'claude-settings', 'agents-md', 'slices-contract', 'loop-section', 'e2e-howto',
+  'claude-settings', 'plugin-install', 'agents-md', 'slices-contract', 'loop-section', 'e2e-howto',
 ]
 
 function mkTarget() {
@@ -60,18 +60,35 @@ describe('ct-init.sh --json', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('a fresh directory reports every artifact as created', () => {
+  // plugin-install (slice 6) is excluded from the two blanket checks below: its
+  // status depends on this machine's own `claude` registry, never on the
+  // target directory, so it is checked on its own, against the closed set the
+  // "install" class allows — never `drifted`, and `refused` is a legitimate
+  // steady state, not a failure to seed.
+  it('a fresh directory reports every artifact as created, except plugin-install', () => {
     const dir = mkTarget()
     const report = runJson(dir)
-    for (const artifact of report.artifacts) expect(artifact.status).toBe('created')
+    for (const artifact of report.artifacts) {
+      if (artifact.id === 'plugin-install') {
+        expect(['created', 'already-present', 'refused']).toContain(artifact.status)
+        continue
+      }
+      expect(artifact.status).toBe('created')
+    }
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('a second run on the same directory reports every artifact as already-present', () => {
+  it('a second run on the same directory reports every artifact as already-present, except plugin-install', () => {
     const dir = mkTarget()
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const report = runJson(dir)
-    for (const artifact of report.artifacts) expect(artifact.status).toBe('already-present')
+    for (const artifact of report.artifacts) {
+      if (artifact.id === 'plugin-install') {
+        expect(['created', 'already-present', 'refused']).toContain(artifact.status)
+        continue
+      }
+      expect(artifact.status).toBe('already-present')
+    }
     rmSync(dir, { recursive: true, force: true })
   })
 

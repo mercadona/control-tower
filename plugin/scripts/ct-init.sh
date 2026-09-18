@@ -24,6 +24,13 @@ shift || true
 #     picking the one that blames the user. And "the hash could not be
 #     computed" (a machine with neither `shasum` nor `sha256sum`) is a third
 #     state with a message of its own: nothing was compared there.
+# The one command a person runs by hand, when the install step below reports
+# `refused`. Kept as a literal, not read from ControlTowerPlugin.installCommand
+# (scripts/claude-settings.js), so it stays available even on the "no node"
+# path where nothing in scripts/ can be required — the same reason
+# seed-claude-settings.mjs's own reminder is a literal too, one call above the
+# one this repeats.
+INSTALL_COMMAND_TEXT='claude plugin install control-tower-loop@control-tower --scope project'
 UPDATE_SLICES_CONTRACT=0
 FORCE=0
 # --json (slice 4): report what happened on stdout as one JSON object instead
@@ -61,15 +68,15 @@ say() {
 }
 
 # ARTIFACT_CLASSES: the closed, literal list slice 5 asks for — which
-# artifact belongs to which of the four drift classes. It is read by
-# `record` below as a guard: an artifact classified `user-owned` or `exempt`
-# can only ever be reported `created` or `already-present` — reporting
-# `drifted` or `refused` for one of those would mean this script compared
-# something the doctrine says it must never compare, and that is a bug in
-# THIS script, not a fact about the target repo. Only `generated` and
-# `versioned` artifacts may ever say `drifted`; only `versioned` may ever say
-# `refused` (an old ct-init that will not downgrade a contract a newer
-# release wrote).
+# artifact belongs to which drift class. It is read by `record` below as a
+# guard: an artifact classified `user-owned` or `exempt` can only ever be
+# reported `created` or `already-present` — reporting `drifted` or `refused`
+# for one of those would mean this script compared something the doctrine
+# says it must never compare, and that is a bug in THIS script, not a fact
+# about the target repo. `drifted` is only ever said by `generated` or
+# `versioned` (an old ct-init that will not downgrade a contract a newer
+# release wrote); `refused` is only ever said by `versioned` or, since slice
+# 6, `install`.
 #
 #   user-owned  — create-if-absent, NEVER compared: STATE.md, conventions.md,
 #                 the execution-spec template, the AGENTS.md skeleton, the
@@ -82,6 +89,11 @@ say() {
 #   exempt      — a template the user fills in on purpose: a content change
 #                 is correct use, not drift. The loop section and the e2e
 #                 traversal section, both inside AGENTS.md.
+#   install     — slice 6, and not a file: the plugin install step. There is
+#                 no content to byte-compare, so it never drifts; `refused` is
+#                 its expected steady state on a folder nobody has trusted
+#                 yet, never a defect this script must not compare its way
+#                 out of.
 ARTIFACT_CLASSES='
 state-md             user-owned
 conventions-md       user-owned
@@ -95,6 +107,7 @@ loop-section         exempt
 e2e-howto            exempt
 scope-gate-bundle    generated
 slices-contract      versioned
+plugin-install       install
 '
 
 artifact_class() {
@@ -127,9 +140,12 @@ record() {
   shift 3
   local class
   class="$(artifact_class "$id")"
-  if { [ "$status" = drifted ] || [ "$status" = refused ]; } \
-     && [ "$class" != generated ] && [ "$class" != versioned ]; then
-    echo "internal error in ct-init.sh: artifact '$id' was reported '$status', but it is classified '$class' — only a generated or versioned artifact may drift or be refused" >&2
+  if [ "$status" = drifted ] && [ "$class" != generated ] && [ "$class" != versioned ]; then
+    echo "internal error in ct-init.sh: artifact '$id' was reported 'drifted', but it is classified '$class' — only a generated or versioned artifact may drift" >&2
+    exit 70
+  fi
+  if [ "$status" = refused ] && [ "$class" != versioned ] && [ "$class" != install ]; then
+    echo "internal error in ct-init.sh: artifact '$id' was reported 'refused', but it is classified '$class' — only a versioned or install artifact may be refused" >&2
     exit 70
   fi
   local extra="" kv key val
@@ -517,6 +533,54 @@ if [ "$SETTINGS_STATUS" -eq 0 ]; then
   if [ "$CLAUDE_SETTINGS_BEFORE" != "$CLAUDE_SETTINGS_AFTER" ]; then CLAUDE_SETTINGS_STATUS=created; fi
 fi
 record claude-settings .claude/settings.json "$CLAUDE_SETTINGS_STATUS"
+
+# Issue #386 — the install itself. `.claude/settings.json` above only
+# DECLARES the plugin; nothing until now made it resolve on this machine, and
+# `commands/ct-init.md` told the agent not to run the install command at all.
+# That rule is reversed here: the scaffolder runs it, the same way it seeds
+# settings.json, guarded the same way (`command -v node`) and never read as
+# success when it could not be checked. The logic lives in
+# scripts/plugin-install.js (pure-ish, injected `claude` collaborator, tested
+# without ever shelling out for real) and scripts/ct-install.mjs prints one
+# JSON line with the outcome — the disk-touching CLI wrapper, same split as
+# claude-settings.js / seed-claude-settings.mjs above.
+#
+# A genuinely clean slate reports `refused`: a project marketplace becomes
+# known to `claude` only once the folder is trusted, and trusting it is a
+# person's decision this script does not take for them (see CLAUDE.md on
+# `hasTrustDialogAccepted`). That is the CORRECT outcome here, not a defect.
+CT_INSTALL_JSON=''
+CT_INSTALL_RC=0
+if command -v node >/dev/null 2>&1; then
+  CT_INSTALL_JSON="$(node "$HERE/scripts/ct-install.mjs" "$TARGET" 2>/dev/null)" || CT_INSTALL_RC=$?
+else
+  CT_INSTALL_RC=127
+fi
+if [ "$CT_INSTALL_RC" -eq 127 ] && ! command -v node >/dev/null 2>&1; then
+  echo "warning: control-tower-loop could neither be installed nor checked — the operation needs \`node\` and it could not be run. Do NOT read that as \"the plugin is installed\": run \`${INSTALL_COMMAND_TEXT}\` yourself, once this repo's folder is trusted." >&2
+  record plugin-install "" refused "detail=node is not on the PATH"
+else
+  CT_INSTALL_STATUS_VALUE="$(printf '%s' "$CT_INSTALL_JSON" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')"
+  CT_INSTALL_DETAIL_VALUE="$(printf '%s' "$CT_INSTALL_JSON" | sed -n 's/.*"detail":"\([^"]*\)".*/\1/p')"
+  CT_INSTALL_CONFIGDIR_VALUE="$(printf '%s' "$CT_INSTALL_JSON" | sed -n 's/.*"configDir":"\([^"]*\)".*/\1/p')"
+  if [ -z "$CT_INSTALL_STATUS_VALUE" ]; then
+    echo "warning: control-tower-loop could neither be installed nor checked — \`node $HERE/scripts/ct-install.mjs\` printed nothing usable (exit $CT_INSTALL_RC). Do NOT read that as \"the plugin is installed\": run \`${INSTALL_COMMAND_TEXT}\` yourself." >&2
+    record plugin-install "" refused "detail=ct-install.mjs printed no usable status" "configDir=$CT_INSTALL_CONFIGDIR_VALUE"
+  else
+    if [ "$CT_INSTALL_STATUS_VALUE" = created ]; then
+      say "control-tower-loop@control-tower: installed"
+    elif [ "$CT_INSTALL_STATUS_VALUE" = already-present ]; then
+      say "control-tower-loop@control-tower: already installed, nothing to do"
+    else
+      say "control-tower-loop@control-tower: not installed — $CT_INSTALL_DETAIL_VALUE. Run \`${INSTALL_COMMAND_TEXT}\` yourself once the folder is trusted."
+    fi
+    if [ -n "$CT_INSTALL_DETAIL_VALUE" ]; then
+      record plugin-install "" "$CT_INSTALL_STATUS_VALUE" "detail=$CT_INSTALL_DETAIL_VALUE" "configDir=$CT_INSTALL_CONFIGDIR_VALUE"
+    else
+      record plugin-install "" "$CT_INSTALL_STATUS_VALUE" "configDir=$CT_INSTALL_CONFIGDIR_VALUE"
+    fi
+  fi
+fi
 
 AGENTS_MD="$TARGET/AGENTS.md"
 if [ ! -f "$AGENTS_MD" ]; then
