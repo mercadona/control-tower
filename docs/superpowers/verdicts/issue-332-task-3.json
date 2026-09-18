@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 3,
+  "task_name": "Execute and recover the unchanged oracle protocol",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The adapter publishes each command request before execution and its receipt before subsequent execution. Receipts retain the actual code, stdout, stderr and raw before/after snapshots. Nonzero results stop, including exit 9. Establishment now only reads evidence; absent open performs the plan gates. Replay follows recorded next-query receipts and returns at the successor instruction boundary instead of executing that successor's work. Pending commands refuse replay, malformed chain topology raises, inspection executes nothing, and delivery terminates.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named exit-nine test supplies code 9 through the injected process boundary, asserts the refused instruction and complete persisted receipt, and asserts that the consuming verb is the only process effect. This pins the requested unchanged boundary code and zero follow-up effects. It is an adapter protocol test; real subprocess coverage belongs to the separately planned rehearsal.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "CtRunMachine extends RunMachine with the specified constructor ports and establishment, open, advance and inspect signatures. RunInspection and its tagged payload are frozen. Manifest, request and receipt serialization use the specified exact keys; readers reject malformed shapes and unknown keys. Established open uses journal evidence without Git discovery, check-plan or initial-hash comparison. The established-open test makes both process boundaries throw if invoked. STEPS and RUN_STATES are imported; no transition function is invoked.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The diff preserves plugin authority, immutable command evidence, exact subprocess diagnostics and non-replay of uncertain commands. It introduces no activation switch, plugin modification, attempt-row ingestion or PR operation. Unsupported slice-agent reconciliation is now refused before its next footer can trigger another command; prepared ct-reconciler announcements retain their consuming verb. Runtime admissions, model dispatch material and recovery/fix composition remain obligations of their named later tasks, not additional implementation requirements for task 3.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The new TypeScript adapter follows constructor injection, local boundary models, immutable payloads and the existing HeadlessFiles/RunJournal persistence seam. The supplied conventions were measured with the package's rule-by-rule precedence. Under defects.md: closed vocabulary is carried by tagged OracleEffect and InspectionFact unions, with exhaustive internal projections and explicit rejection of unknown external steps; raw map as the return value of logic is corrected by OracleResult, MachineState, RunManifest, CommandRequest, CommandReceipt and JournalCommand instances; two fields that have to agree are not introduced as a competing phase, mutable cursor or completion flag, and absent disk evidence remains explicit null; errors named for where they happen are not introduced, with RunNotAdvanced and RunNotUnderstood preserving the existing failure family. Helpers belong to types, boundary parsing remains in infrastructure, and runner policy is injected rather than chosen here.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing test assertion, case or test is removed or weakened. The test file is new, and the authorized plan amendment leaves task 3's TDD, test list, file contract and verification commands intact.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production code implements receipt ordering, exit preservation, read-only inspection, establishment precedence, successor replay and unsupported reconciliation refusal. Tests exercise CtRunMachine over a real temporary journal with request-keyed process doubles. Recovery evidence is arranged through the journal rather than through the adapter being judged, and assertions observe returned instructions, persisted bytes and external requests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The two new backend files implement and test the oracle adapter requested by task 3. The plan amendment consistently removes the superseded activation design and updates future admission/runtime/documentation tasks under the user's explicit authorization. It does not relax the current task's requirements or verification. The package contains no plugin change or deferred ingestion implementation.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests use isolated temporary state roots with afterEach cleanup, fixed protocol inputs and request-keyed doubles that reject unlisted requests. They rely on no live service, clock-based assertion or sleep. Their assertions exercise real adapter decisions and journal effects, including the corrected establishment, replay and reconciliation paths. The declared controls are accepted as already green; no commands were rerun.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "56047d489e374e8c6b7490dd47701d66439e871a46753bc36aab301434f758f8"
+  }
+}

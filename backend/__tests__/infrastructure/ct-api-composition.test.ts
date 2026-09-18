@@ -582,6 +582,10 @@ describe('the API composition is exercised over HTTP with external execution inj
     expect(fixture.workers[1].descriptor.purpose).toBe('plan')
     const milestoneArgs = fixture.workers[1].descriptor.argv as string[]
     expect(milestoneArgs[milestoneArgs.indexOf('--session-id') + 1]).toBe(started.agent)
+    for (const launched of fixture.workers) {
+      expect((launched.descriptor.argv as string[]).at(-1))
+        .toBe(`Read the file at ${join(launched.argv[1], '..', 'prompt.md')} and do exactly what it says.`)
+    }
     expect(fixture.tools.calls.filter((call) => call.argv.includes('--paginate')).map((call) => call.whole)).toEqual([true, true])
     expect(fixture.tools.calls.filter((call) => call.argv[0]?.endsWith('ct-groom.mjs')).map((call) => call.whole)).toEqual([true])
     const events = await fixture.request('/plan-events/41?repo=acme%2Fwidget')

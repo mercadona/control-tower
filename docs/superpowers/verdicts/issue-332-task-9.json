@@ -1,0 +1,57 @@
+{
+  "issue": 332,
+  "task": 9,
+  "task_name": "Wire unconditional machine admissions with legacy-record compatibility",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The complete current diff assembles RunJournal, separate oracle and Git runners, CtRunMachine, measurements, model calls, ExecuteRunInstruction, DriveRun and RunPlanAgents at the real CtApi entrypoint. The previous agents and recovery become the legacy delegates; RunPlanRecovery receives the same ownership-aware agents used by review delivery. The runtime tests exercise new admission, existing-record recovery, an actual watcher-triggered legacy fix and restart at a persisted failed oracle boundary. The two specified proof gaps are resolved in this diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The exact named test starts the production API process and POSTs /start-plan. Its evidence reader requires persisted oracle receipts containing the implementation dispatch. Assertions require the admission's original conversation, published plan source, one planner and one implementation call, shared conversation identity and a run-prefixed implementation request. These measure the planner publication, oracle dispatch and identity promised by the TDD sentence.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The Current state block is expanded beside the original adapters without rewriting their methods. Both runWholeOutput functions are bound to their own runners, the oracle uses the plan-call timeout, the Git runner uses the process timeout, and both ownership wrappers receive Date.now. Existing files, records, transport and publication are shared. No new public request shape or activation parameter is introduced.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Applicable closed decisions are preserved by unconditional composition, distinct legacy delegates and durable-provenance wrappers. The diff introduces no flag, copied transition table, plugin edit, attempt row, delivery model call, PR publication logic or legacy method rewrite. The runtime restart test waits for a real nonzero persisted receipt and requires its exact diagnostic in both the uncertain projection and inspect recovery action, unchanged journal bytes and call identities, and zero review reads. The legacy fix is resumed with the original conversation and review request identity without an admission.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the eight conventions embedded in the brief, the supplied repository instructions and the composition context in the diff; standalone source exemplars and additional convention files were not opened under this review's read restriction. The entrypoint injects collaborators and caps rather than deciding run policy; new test helpers hang off fixture types and identifiers are English. Defects checks: closed vocabulary — no new production classification or catch-all dispatch; test strings are wire-format observations. Raw map as the return value of logic — no new production logic returns a raw map; fixture aggregates collect boundary evidence. Two fields that have to agree — no new production redundant state or absence sentinel; receipt and descriptor fields follow existing external contracts. Errors named for where they happen — no new production error type. The plan explicitly requests runtime restart evidence at an uncertain boundary whereas embedded testing.md ordinarily excludes refusal integration tests; this plan/yardstick tension is recorded here rather than charged to the implementer.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No existing assertion, case or test is removed or weakened. The existing entrypoint test file gains a root path, Make helpers and an additional activation-free entrypoint test; the other test file is new.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The new composition is production code. External GitHub and model executables are doubled, but admission, publication, plugin oracle execution, journal persistence, recovery and watcher-to-fix dispatch run through the actual API process. In the legacy fix case the fixture exposes a CHANGES_REQUESTED review after baseline observation; production then creates and completes the fix call. Assertions inspect the subprocess's captured argv, prompt and conversation alongside the persisted fix descriptor, review ID, GitHub requests and absent admission. Restart evidence is produced by the first real runtime, not seeded with an expected recovery answer. Removing the new wiring prevents the driver-specific admission and restart observations.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "All changes serve Task 9's runtime composition and real-entrypoint compatibility checks in its three declared files. The Make test starts the existing start target and inspects the existing run-backend command without changing deployment configuration. There is no plan amendment or adjacent production refactor. Full delivered-run proof and future Task 10 delivery scope are not conditions of this Task 9 verdict.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The tests use per-scenario temporary state, external-tool doubles and teardown. Polling waits for observable receipts, completions, baseline observation or the exact recovery projection rather than using a fixed sleep as proof. Restart begins after a nonzero receipt is persisted; the answer must carry that receipt's diagnostic and inspect action before journal/call equality and no-review assertions are taken. No assertion depends on today's date or a randomly predetermined UUID. The legacy watcher test asserts actual subprocess inputs and durable effects, while the entrypoint tests exercise real startup. Synthetic CLI output proves offline protocol/composition behavior, not live CLI enforcement. No high-severity determinism, isolation or real-behavior defect was established by reading the current diff; controls are inherited as green and were not rerun.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "b6416ae36c9ffe5438685d28dec53e90644483153e87f5d16aab882447ce3590"
+  }
+}

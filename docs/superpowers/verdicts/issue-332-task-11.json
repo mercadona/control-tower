@@ -1,0 +1,66 @@
+{
+  "issue": 332,
+  "task": 11,
+  "task_name": "Record the amended delivery boundary and rollout evidence",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Read the whole fresh task-11-review.diff, token 310d1a35806c32a17d40fe0eac80b6fff57725cc70e0b33ed9b9d26ec0818e83. The three documents cover unconditional deployment, provenance-limited legacy compatibility, immutable evidence, supported material, measurement limits, coordinator-owned publication, downgrade constraints and deferred #379 ingestion. ct-api.ts:531-605 unconditionally assembles the driver; RunPlanAgents.launch admits before planning, and provenance requires the exact legacy pair rather than treating missing admission as permission. The historical command counts match the final controls logs. execution-progress.md, task reports, metrics/issue-332.jsonl and committed task verdicts support the recorded progression; both recovery-approval files explicitly authorize the exceptional trials at local revision 7dcc19b6f98c4c066dca9f449c764091723f6351. The task-10 tests and committed verdict support the finite API/CT/Git rehearsal, consumer-bound packages, stale exit 9 and restart/fix assertions, with synthetic model and GitHub boundaries clearly distinguished. Only a minor schema-list wording ambiguity is reported below. Global checks, final slice judgement and live Claude acceptance are explicitly not certified.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The task explicitly declares No TDD for documentation of behavior measured by prior tasks. No new executable behavior or test is introduced, and no documentation-mirroring test is owed.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "The pinned Final text appears verbatim at the start of the evidence document, including both the unchanged-plugin/#379 sentence and the resumed-spending limitation. The diff changes no signatures, response schema, exception or durable record format. Its account of the existing contract agrees with RunDispatch: four structured response roles, edits-only reconciliation, literal producer paths plus plugin role files, sealed hashes and explicit unsupported-material refusal. The schema-list wording nit is counted once under objetivo.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The relevant closed decisions remain closed: no activation setting; admission as provenance; positive legacy proof; plugin-only sequencing; one resumed implementation-purpose call per run ticket; commands without model calls; explicit E2E/fallback refusal; delivery without PR/release ownership; #379 owns attempt ingestion. DriveRun:55-79 preserves publication only for absent establishment and stops at delivered. RunPlanAgents:286-347 and RunPlanRecovery:155-239 support explicit untouched/completed continuation, no replay of ambiguous or unowned unfinished work, and later-fix precedence. RunPlanAgents:441-460 retains typed launch/recovery/fix mappings and unexpected-cause identity; the prose introduces no public run-error code or automatic recovery promise. ClaudeRunMeasurements preserves available reported values and zero, omits unavailable metrics and labels resumed totals unverified-resume; the three capture limitations match issue-331-cli-captures.md. The downgrade guidance requires preserved driver work and a compatible recovery binary, not legacy adoption. No decision is reopened by this documentation diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "This is a prose-only diff, so code exemplars and structural code conventions have no implementation subject. The current repository convention is amended only around its #332 vocabulary and delivery boundary, and the added documentation is English. Applied the package precedence. Under plugin/conventions/defects.md: closed vocabulary has no new runtime classification subject; raw map as the return value of logic has no logic subject; two fields that have to agree has no new state subject; errors named for where they happen has no new exception subject. The six-test convention guard, protected plugin equality and whitespace checks are inherited green from task-11-controls-1.log, not rerun.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The complete diff changes only three Markdown documents. No pre-existing assertion, case or test is removed or weakened, and no verification command is amended.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The task declares only documents, so this production-code rubric item has no subject. Documentation truth was assessed under objetivo: the finite rehearsal is not promoted to live model enforcement, production deployment or final slice acceptance.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every hunk serves task 11 within backend/API.md, backend/conventions/this-repository.md and docs/superpowers/evidence/issue-332-run-driver.md. The evidence records commands, failures, recoveries, mutations and restoration limits without modifying historical records. The two human-audited local #370 recoveries are reported as historical events, not implemented or published here. No source, plugin, configuration, frontend, historical spec, plan or local tracking file is added to the task diff. Final/global judgement remains future work for the parent.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "No test is added by this documentation task. The brief expressly retains the existing convention guard and rejects prose-mirroring tests. Prior task tests were read as evidence for the claims, not treated as newly introduced tests or rerun.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "The phrase first four follows a four-role list ending in reconciler, so it can be read as promising a response schema for reconciliation. The intended four structured roles include the implementer from the preceding sentence; reconciliation actually returns edits without --json-schema. Name implementer, judge, advisor and slice judge explicitly, or say that reconciliation is edits-only. This is a wording ambiguity, not a missing driver capability.",
+        "path": "backend/API.md",
+        "line": 115,
+        "evidence": "API.md:114-115 says: Judge, advisor, slice-judge and reconciler calls receive the plugin's role files; the first four also receive their response schema. In backend/src/infrastructure/run-dispatch.ts:334-341 the reconciliation argv ends with --agent and definition.name, and its response is Object.freeze({ kind: 'edits' }); the structured paths at lines 194 and 311 supply --json-schema."
+      }
+    ],
+    "review_token": "310d1a35806c32a17d40fe0eac80b6fff57725cc70e0b33ed9b9d26ec0818e83"
+  }
+}
