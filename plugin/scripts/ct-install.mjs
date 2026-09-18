@@ -11,10 +11,6 @@ export class CtInstallCli {
       console.error(CtInstallCli.USAGE)
       process.exit(2)
     }
-    // CT_CLAUDE_BIN: the documented way to point this at a stand-in instead
-    // of the real `claude` binary. It defaults to ClaudeCli.BINARY (the real
-    // one), so production behaviour is unchanged; a test sets it to a fake
-    // executable so it never reaches the real CLI or the network.
     const outcome = new PluginInstaller(new ClaudeCli(process.env.CT_CLAUDE_BIN || ClaudeCli.BINARY)).run(target)
     const configDir = configuredDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
     process.stdout.write(`${JSON.stringify({ ...outcome.toJSON(), configDir })}\n`)
