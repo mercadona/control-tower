@@ -239,21 +239,6 @@ curl -N 'http://127.0.0.1:8787/plan-events/7?repo=owner/name'
 
 ---
 
-## `POST /implement-plan`
-
-This path is not mounted. A request receives the shared 404 `not-found`
-response. There is no manual GO endpoint in the current API: gate 2 authorises
-milestone work, and successful plan publication is followed by automatic
-same-conversation continuation.
-
-```
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/implement-plan \
-  -d '{"agent":"11111111-1111-4111-8111-111111111111","issue":33,"repo":"owner/name"}'
-```
-
----
-
 ## `GET /implement-progress/:issue?root=<abs path>&repo=owner/name`
 
 Where the implementation stands. Poll it; there is no stream. **Both** query
@@ -1821,7 +1806,6 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
 |---|---|---|
 | `POST /start-plan` | `frontend/src/app/start-plan/client.ts` | `StartPlan.types.ts` |
 | `GET /plan-events` | `frontend/src/app/plan-events/client.ts` | `PlanEvents.types.ts` |
-| `POST /implement-plan` | `frontend/src/app/implement-plan/client.ts` | `ImplementPlan.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
 | `GET /implement-history` | `frontend/src/app/implement-history/client.ts` | `ImplementHistory.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |

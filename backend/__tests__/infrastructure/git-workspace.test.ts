@@ -329,18 +329,26 @@ describe('GitWorkspace', () => {
     expect(unfetched.calls.some((argv) => argv.includes('worktree'))).toBe(false)
   })
 
-  it('an explicit plan gate is refused before preparation', async () => {
+  it('an issue still labelled with the retired plan gate is prepared like any other', async () => {
     const issueRead = GitDouble.issueAnswer(GitDouble.issueFields({
       labels: [{ name: 'status:ready' }, { name: 'gate:none' }, { name: 'gate:plan' }],
     }))
     const git = new GitDouble({ issueRead })
 
-    const refusal = await git.prepared().catch((cause) => cause)
+    const { located } = await git.prepared()
 
-    expect(refusal).toBeInstanceOf(WorkspaceNotPrepared)
-    expect(refusal.message).toContain('plan')
-    expect(git.calls).toEqual([])
-    expect(git.written).toEqual([])
+    expect(located.path).toBe(GitDouble.WORKTREE)
+    expect(git.cut()).toEqual([
+      '-C', GitDouble.ROOT,
+      'worktree', 'add',
+      '-b', 'feat/42',
+      GitDouble.WORKTREE,
+      `origin/${GitDouble.BASE}`,
+    ])
+    expect(git.written.map(([path]) => path)).toEqual([
+      GitDouble.EXCLUDE_PATH,
+      `${GitDouble.WORKTREE}/.agent/SLICE.md`,
+    ])
   })
 
   it('it_cuts_the_branch_from_the_remote_base_so_the_session_starts_from_what_is_published', async () => {
