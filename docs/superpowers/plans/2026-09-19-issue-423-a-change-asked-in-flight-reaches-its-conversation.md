@@ -341,15 +341,17 @@ or `uncertain`, `fix` throws `RunNotAdvanced` with the fact's own kind inside th
 `delivered`, `fix` claims and continues down the body that exists today, unchanged. The
 `catch` still routes every cause through `#throwFixFailure`.
 
-**TDD:** `it('a change asked while the run is active is held')` — an inspection of `active`, a
-claimed conversation, expect no throw and expect the journal to hold the text. Then `it('a
-change asked while the run is absent is still refused')` — expect `PlanAgentNotResumed` whose
-message names `absent`. Then `it('a change asked after delivery still starts a fix call')` —
-the path of today, unchanged.
+**TDD:** `it('a change asked while the run is in flight is held rather than refused')` — an
+inspection of `active`, then one of `unstarted`. Expect no throw. Expect the journal to hold
+both texts in order. Expect no call. Then `it('a change asked before the run is established is
+still refused')` — expect a throw whose message names `absent`.
 
 **Tests:** added to `backend/__tests__/infrastructure/run-plan-agents.test.ts`: `it('a change
-asked while the run is active is held')`, `it('a change asked while the run is unstarted is
-held')`, `it('a change asked while the run is absent is still refused')`.
+asked while the run is in flight is held rather than refused')`, `it('a change asked before the
+run is established is still refused')`. One test of that file changes on purpose. `it('fixes
+wait for delivery and retain their original errand and measurements')` becomes `it('a fix after
+delivery retains its original errand and measurements')`. It drops the line that pinned the
+refusal of an `active` run. That refusal is what this issue retires.
 
 **Verification:** The typecheck proves the door. Its own suite proves the four facts. The
 infrastructure suite proves the route and the recovery still read what they read.
