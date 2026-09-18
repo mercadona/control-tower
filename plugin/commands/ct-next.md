@@ -20,7 +20,7 @@ It only dispatches issues in `status:ready`; `/ct-groom` creates them in `status
 | `3` | Batch selected, zero launches and nothing half-done (claim race lost against another dispatcher) | retry later; it is not an alarm |
 | `130` / `143` | Interrupted (SIGINT / SIGTERM); a half-done claim reverts itself | nothing |
 
-When dispatching a slice with the `plan` gate it prints the go (`GO de #N: contesta exactamente -OK <nonce>`), which the human writes as a comment on the issue; `dispatch-check --release` refuses without it (exit 9). The other transitions —`--reopen`, `--requeue`, `--collect`— live in `scripts/dispatch-check.mjs` and print their own remedy.
+The transitions —`--reopen`, `--requeue`, `--collect`— live in `scripts/dispatch-check.mjs` and print their own remedy.
 
 Do not launch two `/ct-next` at once against the same repo: the claim is a label with no compare-and-swap.
 
