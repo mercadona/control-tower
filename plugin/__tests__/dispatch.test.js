@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectNext, buildCmuxArgv, collectInFlight, planDispatch, computeReadyCandidates, parseRepoSlug } from '../scripts/dispatch.js'
+import { selectNext, buildCmuxArgv, collectInFlight, planDispatch, computeReadyCandidates, parseRepoSlug, explainNoSelection, UNCAPPED } from '../scripts/dispatch.js'
 
 const ISSUES = [
   { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'] },
@@ -514,5 +514,88 @@ describe('parseRepoSlug — the alphabet of a repository name (#348)', () => {
   it('the names GitHub really allows are still accepted, lowercased', () => {
     expect(parseRepoSlug('mercadona/control-tower')).toEqual({ owner: 'mercadona', name: 'control-tower' })
     expect(parseRepoSlug('Mercadona/Other_Repo.js')).toEqual({ owner: 'mercadona', name: 'other_repo.js' })
+  })
+})
+
+// #436 — the cap goes away entirely. `UNCAPPED` is what the headless chain
+// passes: with it `remainingCap` stays `null`, `selectNext` never cuts by
+// number, and `explainNoSelection` cannot reach its `cap-full` branch. That
+// last one is the property that matters: with no cap there is no full cap, and
+// a `blockReason` saying otherwise would send the reader to raise a number
+// that does not exist. Without a cap the only reasons left are the real ones —
+// nothing ready, unmerged deps, or a token collision.
+describe('planDispatch with UNCAPPED — every unblocked slice, and no cap to be full (#436)', () => {
+  it('four ready slices with merged deps and disjoint touches are all selected in one batch', () => {
+    const issues = [
+      { n: 1, order: 1, status: 'ready', deps: [], touches: ['api'] },
+      { n: 2, order: 2, status: 'ready', deps: [], touches: ['ui'] },
+      { n: 3, order: 3, status: 'ready', deps: [], touches: ['docs'] },
+      { n: 4, order: 4, status: 'ready', deps: [], touches: [] },
+    ]
+    const plan = planDispatch(issues, { mergedIssues: [], cap: UNCAPPED })
+    expect(plan.selected.map((i) => i.n)).toEqual([1, 2, 3, 4])
+    expect(plan.remainingCap).toBe(UNCAPPED)
+    expect(plan.blockReason).toBeNull()
+  })
+
+  it('two ready slices sharing a touches token → only the first by order is selected', () => {
+    const issues = [
+      { n: 7, order: 1, status: 'ready', deps: [], touches: ['api'] },
+      { n: 8, order: 2, status: 'ready', deps: [], touches: ['api'] },
+    ]
+    const plan = planDispatch(issues, { mergedIssues: [], cap: UNCAPPED })
+    expect(plan.selected.map((i) => i.n)).toEqual([7])
+  })
+
+  it('work in flight no longer consumes a cap: it only holds its tokens', () => {
+    const issues = [
+      { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'] },
+      { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'] },
+      { n: 3, order: 3, status: 'ready', deps: [], touches: ['ui'] },
+    ]
+    const plan = planDispatch(issues, { mergedIssues: [], cap: UNCAPPED })
+    expect(plan.selected.map((i) => i.n)).toEqual([3])
+  })
+
+  it('a slice whose pull request is open still holds its tokens, and the rest go', () => {
+    const issues = [
+      { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'] },
+      { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'] },
+      { n: 3, order: 3, status: 'ready', deps: [], touches: ['ui'] },
+    ]
+    const plan = planDispatch(issues, { mergedIssues: [], cap: UNCAPPED })
+    expect(plan.selected.map((i) => i.n)).toEqual([3])
+  })
+
+  it('explainNoSelection never reports cap-full with no cap: the collision is what it names', () => {
+    const issues = [
+      { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'] },
+      { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'] },
+    ]
+    const plan = planDispatch(issues, { mergedIssues: [], cap: UNCAPPED })
+    expect(plan.selected).toEqual([])
+    expect(plan.blockReason.reason).toBe('collision')
+    expect(explainNoSelection(issues, {
+      mergedIssues: [], inFlight: collectInFlight(issues), cap: UNCAPPED,
+    }).reason).not.toBe('cap-full')
+  })
+
+  it('with no cap and nothing in flight the remaining reasons are still told apart', () => {
+    const noneReady = planDispatch([{ n: 1, order: 1, status: 'backlog', deps: [], touches: [] }], { cap: UNCAPPED })
+    const depsUnmet = planDispatch([{ n: 2, order: 2, status: 'ready', deps: [1], touches: [] }], { cap: UNCAPPED })
+    expect(noneReady.blockReason.reason).toBe('none-ready')
+    expect(depsUnmet.blockReason.reason).toBe('deps-unmet')
+  })
+
+  it('a numeric cap keeps cutting by number, and cap-full is still reachable through it', () => {
+    const issues = [
+      { n: 1, order: 1, status: 'ready', deps: [], touches: ['api'] },
+      { n: 2, order: 2, status: 'ready', deps: [], touches: ['ui'] },
+    ]
+    expect(planDispatch(issues, { mergedIssues: [], cap: 1 }).selected.map((i) => i.n)).toEqual([1])
+    expect(planDispatch([
+      { n: 3, order: 1, status: 'in-progress', deps: [], touches: ['api'] },
+      { n: 4, order: 2, status: 'ready', deps: [], touches: ['ui'] },
+    ], { mergedIssues: [], cap: 1 }).blockReason.reason).toBe('cap-full')
   })
 })

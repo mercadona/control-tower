@@ -1,6 +1,17 @@
 // Pure logic of the dispatcher: slice selection, account map, cmux argv.
 export const SERIALIZING_TOUCHES = ['migration', 'ci', 'pbxproj']
 
+// UNCAPPED (#436): the cap a caller passes when there is no cap. The headless
+// chain dispatches everything that is not blocked, so it has no number to
+// give, and `undefined` would silently fall back to the default of 1 — the
+// very serialisation the chain is getting rid of. With it, `remainingCap` stays
+// `null`, `selectNext` never cuts by number, and `explainNoSelection` cannot
+// reach its `cap-full` branch: with no cap there is no full cap, and reporting
+// one would send the reader to raise a number that does not exist. The reasons
+// left are the real ones — nothing ready, unmerged deps, or a token collision.
+// `/ct-next --cap N` keeps passing its integer and nothing about it changes.
+export const UNCAPPED = null
+
 // computeReadyCandidates: shared computation of "which issues are in
 // status:ready" (`ready`) and, of those, "which have ALL their deps merged"
 // (`readyDepsMet`, already sorted by ascending `order` — the same order in
@@ -64,7 +75,7 @@ export function selectNext(issues, { mergedIssues = [], runningTouches = [], con
   const selected = []
   let hasSerializingInBatch = hasSerializingTouchInRunning
   for (const i of ready) {
-    if (selected.length >= concurrencyCap) break
+    if (concurrencyCap !== UNCAPPED && selected.length >= concurrencyCap) break
     const touches = i.touches || []
     // collision with what is already running or already selected in this batch
     // (shared token), or a cross-serialization conflict with what has already
@@ -356,7 +367,7 @@ export function explainNoSelection(issues, { mergedIssues = [], inFlight = [], t
   // without duplicating the collision/deps logic a second time for the "full
   // cap" case.
   const gap = explainSelectionGap(issues, { mergedIssues, inFlight: holders, depStates })
-  if (inFlightCount >= cap) {
+  if (cap !== UNCAPPED && inFlightCount >= cap) {
     // `inFlight` travels whole (not just its count) because the "full cap"
     // message needs to be able to cross EVERY issue occupying the cap against
     // the local evidence that something is really working on it — see F13/H3 in
@@ -388,11 +399,15 @@ export function explainNoSelection(issues, { mergedIssues = [], inFlight = [], t
 // PR was opened, while the conflict's window reaches to the merge.
 // `remainingCap` is still computed with `inFlight.length`: a PR under review
 // occupies nobody.
+/**
+ * @param {*} issues
+ * @param {{ mergedIssues?: *, cap?: number | null, depStates?: * }} [asked]
+ */
 export function planDispatch(issues, { mergedIssues = [], cap = 1, depStates = {} } = {}) {
   const inFlight = collectInFlight(issues)
   const tokenHolders = collectTokenHolders(issues)
   const runningTouches = tokenHolders.flatMap((i) => i.touches || [])
-  const remainingCap = Math.max(0, cap - inFlight.length)
+  const remainingCap = cap === UNCAPPED ? UNCAPPED : Math.max(0, cap - inFlight.length)
   const selected = selectNext(issues, { mergedIssues, runningTouches, concurrencyCap: remainingCap })
   const blockReason = selected.length === 0 ? explainNoSelection(issues, { mergedIssues, inFlight, tokenHolders, cap, depStates }) : null
   return { selected, inFlight, tokenHolders, runningTouches, remainingCap, blockReason }
