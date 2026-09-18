@@ -56,25 +56,26 @@ class RunningApi {
       RunningApi.#servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
     )
   }
+
+  static post(port: number, path: string, body: string): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
+      body,
+    })
+  }
 }
 
 afterEach(async () => {
   await RunningApi.stop()
 })
 
-const post = (port: number, path: string, body: string): Promise<Response> =>
-  fetch(`http://127.0.0.1:${port}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${port}` },
-    body,
-  })
-
 describe('SliceMessageRoute', () => {
   it('a posted message reaches the recorded conversation of that issue', async () => {
     const spy = new FixesSpy()
     const port = await RunningApi.listening(spy.fixes)
 
-    const response = await post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
+    const response = await RunningApi.post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
 
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: 'delivered' })
@@ -85,11 +86,11 @@ describe('SliceMessageRoute', () => {
     const spy = new FixesSpy()
     const port = await RunningApi.listening(spy.fixes)
 
-    const unknownField = await post(
+    const unknownField = await RunningApi.post(
       port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT, extra: 'x' })
     )
-    const emptyText = await post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: '' }))
-    const malformedIssue = await post(
+    const emptyText = await RunningApi.post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: '' }))
+    const malformedIssue = await RunningApi.post(
       port, '/slices/abc/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT })
     )
 
@@ -104,7 +105,7 @@ describe('SliceMessageRoute', () => {
     const spy = new FixesSpy(new PlanAgentNotResumed(detail))
     const port = await RunningApi.listening(spy.fixes)
 
-    const response = await post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
+    const response = await RunningApi.post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ code: 'slice-message-not-delivered', detail })
