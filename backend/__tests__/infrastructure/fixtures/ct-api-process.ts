@@ -419,10 +419,6 @@ export class ActualHeadlessRuntime {
       "  if (errandMatch === null) throw new Error('unexpected CLI errand: ' + JSON.stringify(errand))",
       '  fs.writeFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, `${id}.json`), '
       + 'JSON.stringify({ argv, prompt: errandMatch[1], pid: process.pid }))',
-      '} else {',
-      '  process.stdin.resume()',
-      "  process.stdin.on('end', () => process.exit(0))",
-      "  process.stdin.on('error', () => process.exit(0))",
       '}',
       'setInterval(() => {}, 1000)',
     ].join('\n') + '\n', { mode: 0o755 })

@@ -119,6 +119,15 @@ class TheProcessesTheBackendOwned {
   }
 }
 
+class TheHangupOnTheTerminal {
+  static readonly ON_DARWIN = 'died with the backend'
+  static readonly ELSEWHERE = 'orphaned and still running'
+
+  static measured(): string {
+    return process.platform === 'darwin' ? TheHangupOnTheTerminal.ON_DARWIN : TheHangupOnTheTerminal.ELSEWHERE
+  }
+}
+
 class ALifeOfTheBackend {
   readonly coordinating: ReadCoordinatingSession
   readonly sessions: readonly ReadSession[]
@@ -348,7 +357,7 @@ describe('a crash of the backend with work in flight', () => {
     await Entrypoint.killAll()
   })
 
-  it('gives back every record it had written, opens a new terminal, and leaves the headless call running unowned', async () => {
+  it('gives back every record it had written, opens a new terminal, and reaps nothing it had started', async () => {
     const runtime = await ActualHeadlessRuntime.prepared()
     let owned: TheProcessesTheBackendOwned | null = null
     try {
@@ -367,7 +376,7 @@ describe('a crash of the backend with work in flight', () => {
         coordinatingConversation: 'the same one',
         coordinatingTimeline: '1 kept and 1 appended',
         coordinatingTerminal: 'a different one',
-        coordinatingTerminalProcess: 'died with the backend',
+        coordinatingTerminalProcess: TheHangupOnTheTerminal.measured(),
         dispatchedPlan: 'the same one',
         dispatchedPlanBranch: 'the same one',
         dispatchedPlanPhase: 'planning then uncertain',
