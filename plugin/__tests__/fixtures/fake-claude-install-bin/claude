@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+// Stand-in for the real `claude` binary (D2): ct-init.sh's own tests spawn
+// `bash ct-init.sh --json` as a real subprocess, which in turn spawns
+// `node ct-install.mjs`, which in turn spawns `claude plugin list --json`
+// and `claude plugin install ... --json`. With no shim, those tests reach
+// the REAL CLI, the real marketplace resolution and, on a machine where the
+// marketplace resolves, a REAL install into the developer's plugin cache.
+//
+// CT_CLAUDE_BIN (read by ct-install.mjs) points at this file instead. It
+// keeps state in a JSON file inside the invoked CWD — the target repo each
+// test bootstraps into its own tmpdir — so "install" and "list" behave
+// consistently across the two calls a single ct-init.sh run makes, and
+// across a second run in the same directory (the idempotency tests).
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+
+const STATE_FILE = '.fake-claude-installed.json'
+const args = process.argv.slice(2)
+
+function readState() {
+  if (!existsSync(STATE_FILE)) return []
+  try {
+    return JSON.parse(readFileSync(STATE_FILE, 'utf8'))
+  } catch {
+    return []
+  }
+}
+
+function writeState(entries) {
+  writeFileSync(STATE_FILE, JSON.stringify(entries))
+}
+
+if (args[0] === 'plugin' && args[1] === 'list') {
+  process.stdout.write(JSON.stringify(readState()))
+  process.exit(0)
+}
+
+if (args[0] === 'plugin' && args[1] === 'install') {
+  const id = args[2]
+  const scopeIndex = args.indexOf('--scope')
+  const scope = scopeIndex >= 0 ? args[scopeIndex + 1] : 'project'
+  const entries = readState()
+  entries.push({ id, scope })
+  writeState(entries)
+  process.stdout.write(JSON.stringify({ status: 'ok' }))
+  process.exit(0)
+}
+
+process.stderr.write(`fake-claude-install-bin: unrecognised args ${JSON.stringify(args)}\n`)
+process.exit(1)

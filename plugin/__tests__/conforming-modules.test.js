@@ -72,6 +72,9 @@ class BornConforming {
     'scripts/claude-settings.js',
     'scripts/seed-claude-settings.mjs',
     '__tests__/claude-settings.test.js',
+    'scripts/plugin-install.js',
+    'scripts/ct-install.mjs',
+    '__tests__/plugin-install.test.js',
   ]
 
   static SPANISH_WORDS = [
