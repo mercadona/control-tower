@@ -117,6 +117,7 @@ class PullRequestReviewLoop {
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.IN_REVIEW_LABELS, stderr: '' }),
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.REVIEWS_PAGE, stderr: '' }),
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.COMMENTS_PAGE, stderr: '' }),
+      new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.IN_REVIEW_LABELS, stderr: '' }),
     ])
     const gh = new Gh({
       launch: (argv) => this.ghProcess.launch(argv),
@@ -138,7 +139,7 @@ class PullRequestReviewLoop {
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const requestFixes = new RequestFixes({ workbench, planAgents: this.agents })
+    const requestFixes = new RequestFixes({ workbench, planAgents: this.agents, planIssues: this.planIssues })
     const sweep = new Sweep(null)
     const reviews = new ReviewWatch({
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
@@ -211,6 +212,9 @@ describe('the pull request review loop composed end to end, only gh, node and th
       [
         'api', 'repos/josemerca/ct-loop-sandbox/pulls/42/comments',
         '-f', 'per_page=100', '--paginate', '--slurp', '--method', 'GET',
+      ],
+      [
+        'issue', 'view', '7', '--repo', 'josemerca/ct-loop-sandbox', '--json', 'labels',
       ],
     ])
     for (const argv of loop.ghProcess.calls) {

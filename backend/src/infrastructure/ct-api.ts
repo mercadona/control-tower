@@ -552,7 +552,7 @@ class CtApi {
       node: CtApi.#tool(process.execPath),
       dispatchCheck: PluginTree.dispatchCheck(),
     })
-    const requestFixes = new RequestFixes({ workbench, planAgents })
+    const requestFixes = new RequestFixes({ workbench, planAgents, planIssues })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, requestFixes)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
