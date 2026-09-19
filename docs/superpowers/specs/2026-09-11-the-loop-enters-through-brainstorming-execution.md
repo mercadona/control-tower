@@ -18,6 +18,17 @@ on Linux) closes the alternative for a prompt that already carries a 31 KB spec;
 that the idea enters through the form the cabin already has — a Jira ticket, free text or both —
 and hydrates the brainstorming instead of replacing it. Slice 3 takes the new criterion and now
 touches the frontend as well.
+2026-09-19, **approved** on 2026-09-19 at the same gate 1, with the bet intact and eight slices,
+agreed between @josemerca and @jjponz out of #456: the user's only interlocutor is the coordinating
+session, so the message box of a slice's own panel retires — it addressed a slice directly, which
+is what D-20 already said the change does not do; D-24 keeps its channel and narrows its motive,
+from interrupting a session that works to answering what that session asked; and D-27 added, so
+that a slice which meets a doubt or a gap it cannot close escalates it upwards and the run waits
+for the answer instead of closing in failure, which is what D-18 promised and nothing delivered.
+**Slice 8's row is not rewritten**: it shipped on 2026-09-18 and the table is the minutes of what
+was accepted, so its clause *"a message reaches the live conversation"* is superseded here and left
+where it stands, while the clause beside it — *"a change asked from the coordinating session reaches
+that slice's own conversation"* — is the one this amendment keeps and builds on.
 
 ## Hipótesis del experimento
 
@@ -176,7 +187,13 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   coordinator reaches a slice with `cmux send --workspace workspace:97` — and
   this is the same property without cmux. It is also the mechanism D-20 needs:
   the change you ask of the boss reaches that slice because the boss can address
-  it by name.
+  it by name. **What the channel is for narrows with the amendment of
+  2026-09-19**: it answers what a session asked, and it does not interrupt one
+  that is working. The user is never at its other end — the boss is, and it
+  addresses a slice to carry back a decision that D-27 escalated, or the change
+  that D-20 describes. A box that let a person write into a slice's conversation
+  from that slice's own panel was neither this channel nor D-20's, because both
+  of them go through the boss.
   *(Procedencia: hablada — «cada sesión será lanzada por la coordinadora, de no ser así, al menos tiene que saber cómo hablar a las otras». Que las lance el backend y no ella es la decisión ya tomada en D-19, con su motivo: una cadena que no dependa de que un modelo siga despierto, y un expediente escrito por el dueño del proceso.)*
 - **D-25 · The context of every call is composed by the plugin and relayed
   verbatim, never paraphrased by the backend** — `ct-step next` is already the
@@ -239,6 +256,22 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   path of a loose issue stays as it is; what changes is that the cabin's button
   now opens an epic, and A-2 keeps deciding the rest of that path later.
   *(Procedencia: hablada — «quiero (…) que la introducción de la idea sea un ticket de jira o un texto libre, como la interfaz que ya tenía en el inicio»; «el usuario igual que ahora puede escribir el ticket, ticket + comentario o comentario solo, la página principal no debe de cambiar, solo el botón de start plan por start brainstorming». Que hidrata y no sustituye es deducido de D-1 y confirmado al enseñárselo.)*
+- **D-27 · A slice that cannot decide escalates, and the decision comes back
+  down** — the user never addresses a slice, and a slice never waits on the user
+  directly. When an agent meets a doubt, or a gap in the spec that is not its to
+  close, it says so where the program can read it; the coordinating session
+  carries the question to the human, who is already talking to it in every phase
+  by D-21; and the decision travels back into that slice's conversation through
+  the channel D-24 gives the boss. Asked how a slice is going, the coordinating
+  session answers with what the program already knows — the step and the task
+  that `/implement-progress` reports — and not with what the agent is thinking
+  at that moment. **The run waits for the answer instead of closing in
+  failure**: today every `blocked-*` state of the run machine is "a closure in
+  failure that a person gets out of, not a retry", and the slice that reaches
+  one keeps its claim, its tokens and its `--cap` slot with no transition that
+  frees them. This is what D-18 already promised — the boss "unblocks what is
+  stuck, implementations included" — and what nothing delivered.
+  *(Procedencia: hablada — «el usuario no tiene necesidad de ver el slice, su interfaz con cada sesión de slice debe ser la sesión coordinadora (…) cuando la sesión del slice se atasca porque tiene dudas o hay huecos en el spec que necesitan de una decisión por parte del usuario, la sesión con el slice debe escalar la duda a la sesión coordinadora para que el usuario la vea y pueda tomar una decisión»; y sobre qué contesta la coordinadora, «con lo que ya hay, paso y tarea». Que la pata de bajada sea la de D-24 y no un canal nuevo es deducido de D-24 y D-20.)*
 
 ## Enfoque técnico
 
