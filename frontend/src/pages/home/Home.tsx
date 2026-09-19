@@ -8,7 +8,7 @@ import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
-import { SliceSession } from 'app/slice-session/components/slice-session'
+import { SliceSession, type SliceRecovery } from 'app/slice-session/components/slice-session'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -79,6 +79,8 @@ const Home = () => {
   const recoveryMutationRef = useRef<symbol | null>(null)
   const [recoveryMutationPending, setRecoveryMutationPending] = useState(false)
   const [recoveryFailure, setRecoveryFailure] = useState<string | null>(null)
+  const [recoveringSlice, setRecoveringSlice] = useState<string | null>(null)
+  const [sliceRecoveryFailure, setSliceRecoveryFailure] = useState<{ identity: string, detail: string } | null>(null)
   const discardedPlansRef = useRef(new Set<string>())
   const uncertainActiveRef = useRef<ActivePlan | null>(null)
   const mountedRef = useRef(false)
@@ -356,6 +358,42 @@ const Home = () => {
     }
   }
 
+  const runSliceRecovery = async (active: ActivePlan) => {
+    if (active.phase !== 'uncertain' || active.recovery.action === 'inspect') return
+    const identity = activePlanIdentity(active)
+    if (recoveringSlice !== null || recoveryMutationRef.current !== null) return
+    const expectedCoordinator = coordinatingConversationRef.current
+    setRecoveringSlice(identity)
+    setSliceRecoveryFailure(null)
+    try {
+      const outcome = active.recovery.action === 'cleanup'
+        ? await ActivePlansClient.cleanup(active)
+        : await ActivePlansClient.recover(active)
+      if (!mountedRef.current || expectedCoordinator !== coordinatingConversationRef.current) return
+      if (outcome.kind === 'unavailable') {
+        setSliceRecoveryFailure({ identity, detail: 'No se pudo contactar con el backend para ejecutar la recuperación.' })
+      }
+      if (outcome.kind === 'refused') setSliceRecoveryFailure({ identity, detail: outcome.detail })
+      await reconcile(true)
+    } finally {
+      if (mountedRef.current) setRecoveringSlice(null)
+    }
+  }
+
+  const sliceRecoveryOf = (slice: ActivePlan): SliceRecovery | null => {
+    if (slice.phase !== 'uncertain') return null
+    const identity = activePlanIdentity(slice)
+
+    return {
+      diagnostic: slice.diagnostic,
+      action: slice.recovery.action,
+      pending: recoveringSlice === identity,
+      failure: sliceRecoveryFailure?.identity === identity ? sliceRecoveryFailure.detail : null,
+      onAct: () => void runSliceRecovery(slice),
+      onRetry: retryReconciliation,
+    }
+  }
+
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
   const restoredNeedsRecovery = reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain'
   const restoredIsConfirmed = reconciliation === 'confirmed' || reconciliation === 'not-required'
@@ -535,6 +573,7 @@ const Home = () => {
                   issue={slice.plan.issue.number}
                   root={slice.plan.root ?? slice.request.path}
                   repo={slice.plan.repo}
+                  recovery={sliceRecoveryOf(slice)}
                 />
               ))}
             </section>

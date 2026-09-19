@@ -61,6 +61,23 @@ class HeadlessPlanMother {
     return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
   }
 
+  static uncertainAmong(uncertain: number, action: RecoveryAction, ...others: number[]): Answer {
+    const plans = [uncertain, ...others].map((issue) => (issue === uncertain
+      ? {
+        ...HeadlessPlanMother.slice(issue),
+        phase: 'uncertain',
+        diagnostic: HeadlessPlanMother.uncertainDiagnostic(issue),
+        recovery: { action, detail: `la accion registrada es ${action}` },
+      }
+      : HeadlessPlanMother.slice(issue)))
+
+    return { status: 200, body: JSON.stringify({ plans }) }
+  }
+
+  static uncertainDiagnostic(issue: number): string {
+    return `no se puede confirmar el estado de #${issue}`
+  }
+
   static workflowOfSlice(issue: number): WorkflowSnapshot {
     const { phase, request, plan } = HeadlessPlanMother.slice(issue)
     return { phase, request, plan }
