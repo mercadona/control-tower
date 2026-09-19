@@ -1906,6 +1906,53 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
 
 ---
 
+## `GET /slices/:issue/escalation?root=<abs path>`
+
+What a slice asked that it cannot answer itself. Poll it. Only `root` is
+required: the read is on disk and never reaches GitHub, so no `repo` is asked
+for.
+
+The agent of a slice writes this itself, and its own kickoff tells it to: if it
+meets a doubt, or a gap in the spec that is not its to close, it writes
+`blocked: {reason, unblock}` into its worktree's `.agent/SLICE.md` and stops.
+This endpoint reads that file with the plugin's own `readBlocked`, so the shape
+of the field is the plugin's to decide and this backend never re-spells it.
+
+**Reading only.** It moves no label, frees no token and resumes nothing.
+
+**200 OK**
+
+```json
+{"state":"raised","reason":"the spec does not say which repository the row lands in",
+ "unblock":"a decision from the coordinating session","notes":[],"detail":""}
+```
+
+`state` is one of three:
+
+| `state` | Meaning |
+|---|---|
+| `raised` | the agent declared itself blocked; `reason` and `unblock` are what it wrote, and `notes` carries what the plugin's reader has to say about a field written in an unexpected shape |
+| `none` | there is nothing raised — either the file says so, or no worktree for that issue exists here |
+| `unchecked` | the worktree exists and `.agent/SLICE.md` does not, so whether that agent is blocked **has not been looked at**; `detail` says why it could not be. It is deliberately not reported as `none`: that would assert something nobody checked |
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `malformed-escalation-issue` | 400 | `:issue` is not a positive whole number |
+| `malformed-escalation-root` | 400 | `root` is missing or is not an absolute path |
+| `slice-escalation-not-read` | 400 | the state file is there and could not be read; `detail` names the path and the system's own message |
+| `slice-escalation-not-understood` | 400 | the file's frontmatter is not valid YAML, or the reader cannot interpret it; `detail` names the path |
+
+A read that fails is never reported as "there is no block" — the same criterion
+`/ct-next` applies when it walks the same file.
+
+```
+curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/control-tower'
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |

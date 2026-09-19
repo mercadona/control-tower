@@ -17,6 +17,9 @@ import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-ro
 import { RecoverPlanOutcome } from '../../src/infrastructure/recover-plan-route.ts'
 import { CleanupPlanOutcome } from '../../src/infrastructure/cleanup-plan-route.ts'
 import { SliceMessageOutcome, SliceMessageCollapse } from '../../src/infrastructure/slice-message-route.ts'
+import {
+  EscalationRequestOutcome, EscalationCollapse,
+} from '../../src/infrastructure/slice-escalation-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -40,6 +43,7 @@ class RequestVocabularies {
       ...Object.values(EpicPromotionOutcome),
       ...Object.values(RecoverPlanOutcome),
       ...Object.values(CleanupPlanOutcome),
+      ...Object.values(EscalationRequestOutcome),
       ...Object.values(SliceMessageOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
@@ -87,6 +91,7 @@ class EveryCodeTheApiEmits {
       ...ProgressCollapse.declaredCodes(),
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
+      ...EscalationCollapse.declaredCodes(),
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...PlanEvents.declaredCodes(),
     ]

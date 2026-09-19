@@ -25,6 +25,10 @@ import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import { RecoverPlanRoute } from './recover-plan-route.ts'
 import { CleanupPlanRoute } from './cleanup-plan-route.ts'
+import { SliceEscalationRoute } from './slice-escalation-route.ts'
+import type {
+  ReadSliceEscalationParams, ReadSliceEscalationResult,
+} from '../application/queries/read-slice-escalation.ts'
 import { SliceMessageRoute } from './slice-message-route.ts'
 import type { SliceChangeAsked } from './slice-message-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
@@ -62,6 +66,10 @@ export const LOOPBACK = '127.0.0.1'
 
 type ImplementationProgressReader = {
   execute(params: ReadImplementationProgressParams): Promise<{ readonly state: ImplementationState }>,
+}
+
+type SliceEscalationReader = {
+  execute(params: ReadSliceEscalationParams): Promise<ReadSliceEscalationResult>,
 }
 
 type ImplementationHistoryReader = {
@@ -139,6 +147,7 @@ export type ApiCollaborators = {
   epicGroomInFlight?: WorkInFlight | null,
   promoteEpic?: PromoteEpic | null,
   sliceMessage?: SliceChangeAsked | null,
+  sliceEscalation?: SliceEscalationReader | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -207,6 +216,7 @@ export class ApiServer {
   readonly epicGroomInFlight: WorkInFlight | null | undefined
   readonly promoteEpic: PromoteEpic | null | undefined
   readonly sliceMessage: SliceChangeAsked | null | undefined
+  readonly sliceEscalation: SliceEscalationReader | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
@@ -218,7 +228,7 @@ export class ApiServer {
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
-    sliceMessage, stderr, frontendRoot,
+    sliceMessage, sliceEscalation, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -254,6 +264,7 @@ export class ApiServer {
     this.epicGroomInFlight = epicGroomInFlight
     this.promoteEpic = promoteEpic
     this.sliceMessage = sliceMessage
+    this.sliceEscalation = sliceEscalation
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -324,6 +335,12 @@ export class ApiServer {
       ImplementProgressRoute.handledBy(this.implementProgress!)
     )
     app.all(ImplementProgressRoute.PATH, ImplementProgressRoute.refuseOtherMethods)
+    app.get(
+      SliceEscalationRoute.PATH,
+      Browsers.turnAwayForeign,
+      SliceEscalationRoute.handledBy(this.sliceEscalation!)
+    )
+    app.all(SliceEscalationRoute.PATH, SliceEscalationRoute.refuseOtherMethods)
     app.get(
       ImplementHistoryRoute.PATH,
       Browsers.turnAwayForeign,
