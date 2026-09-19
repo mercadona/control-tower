@@ -1,5 +1,6 @@
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { delimiter as pathDelimiter, isAbsolute, join } from 'node:path'
+import { ControlTowerState, InvalidStateDirectory } from '../../../plugin/scripts/control-tower-state.js'
 
 export const InvocationOutcome = Object.freeze({
   READY: 'ready',
@@ -15,7 +16,8 @@ export class Invocation {
   static readonly DEFAULT_PORT = 8787
   static readonly PORT_VARIABLE = 'CT_API_PORT'
   static readonly CONFIG_VARIABLE = 'CLAUDE_CONFIG_DIR'
-  static readonly STATE_DIRECTORY = 'control-tower'
+  static readonly STATE_DIRECTORY = ControlTowerState.DIRECTORY
+  static readonly STATE_VARIABLE = ControlTowerState.VARIABLE
   static readonly DEFAULT_CONFIG_DIRECTORY = '.claude'
   static readonly HOME_VARIABLE = 'HOME'
   static readonly CLAIM_PREFIX = 'CT_CLAIM_'
@@ -65,8 +67,9 @@ export class Invocation {
 
   static stateRootIn(environment: NodeJS.ProcessEnv, home: string): string | null {
     const configured = Invocation.configuredIn(environment, home)
+    if (!isAbsolute(configured)) return null
 
-    return isAbsolute(configured) ? join(configured, Invocation.STATE_DIRECTORY) : null
+    return ControlTowerState.directory(configured, environment[Invocation.STATE_VARIABLE])
   }
 
   static #port(environment: NodeJS.ProcessEnv): number | null {
@@ -121,7 +124,14 @@ export class Invocation {
         `${Invocation.PORT_VARIABLE} must be an integer between 0 and ${Invocation.#MAX_PORT}, got ${JSON.stringify(environment[Invocation.PORT_VARIABLE])}`
       )
     }
-    const stateRoot = Invocation.stateRootIn(environment, home)
+    let stateRoot: string | null
+    try {
+      stateRoot = Invocation.stateRootIn(environment, home)
+    } catch (failure) {
+      if (!(failure instanceof InvalidStateDirectory)) throw failure
+
+      return Invocation.#refused(InvocationOutcome.UNKNOWN_STATE_HOME, failure.message)
+    }
     if (stateRoot === null) {
       return Invocation.#refused(
         InvocationOutcome.UNKNOWN_STATE_HOME,

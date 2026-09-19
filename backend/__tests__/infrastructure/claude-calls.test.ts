@@ -104,7 +104,8 @@ class CallMother {
       binary: '/usr/local/bin/claude',
       worker: '/backend/src/infrastructure/headless-call-worker.ts',
       spawn,
-      env: { PATH: '/usr/bin', CT_PHASE_PROMPT: '/coordinator.md', CT_SESSION_HOOKS_URL: 'http://hooks' },
+      env: { PATH: '/usr/bin', CT_PHASE_PROMPT: '/coordinator.md', CT_SESSION_HOOKS_URL: 'http://hooks',
+        CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' },
       newId: () => CallMother.CALL,
       now: over.now ?? (() => CallMother.STARTED_AT),
       budgetMs: 100,
@@ -386,6 +387,7 @@ describe('ClaudeCalls', () => {
     expect(started.id).toBe(CallMother.CALL)
     expect(observed).not.toMatchObject({ env: { CT_PHASE_PROMPT: expect.anything() } })
     expect(observed).not.toMatchObject({ env: { CT_SESSION_HOOKS_URL: expect.anything() } })
+    expect(observed).toMatchObject({ env: { CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' } })
   })
 
   it('a failed record write launches nothing', async () => {

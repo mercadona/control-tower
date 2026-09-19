@@ -278,20 +278,30 @@ only when metrics delivery is on.
 
 ### 4.6 Configure
 
-Three environment variables, all optional, **all read once at start-up** — a
+Four environment variables, all optional, **all read once at start-up** — a
 change needs a restart.
 
 | Variable | Default | Shape |
 |---|---|---|
 | `CT_API_PORT` | `8787` | digits only, ≤ `65535`; `0` asks the OS for an ephemeral port |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | an absolute path, if set |
+| `CT_STATE_DIR` | `<Claude config directory>/control-tower` | an absolute path; empty means unset |
 | `CT_HARVEST_BQ_TABLE` | unset | `project:dataset.table` |
 
 Copy `.env.example` to `.env` and fill in your own values there instead of
 exporting them in every terminal. Git ignores `.env`, and the Makefile reads
 it with `-include`, so `make check`, `make run-backend` and `make start` all
-see the same value. It is read at start-up like the three variables above, so
+see the same value. It is read at start-up like the four variables above, so
 a change still needs a restart.
+
+`CT_STATE_DIR` separates CT's backend records, checkout registry and machine
+logs from the Claude account. Backend, plugin commands and their children must
+inherit the same value. It is the exact root, with no extra `control-tower`
+suffix. Relative paths are refused rather than silently using account state.
+It changes no credentials, Claude settings, conversation transcripts or
+repository-local `.agent/` and metrics files. Existing records are not moved or
+deleted; stop active work before choosing another root. Unset keeps the current
+location unchanged. This is state separation, not a credential security boundary.
 
 `CT_HARVEST_BQ_TABLE` off is not a failure: plans, dispatch and the collection
 of merged slices work the same. The only cost is that no merged pull request
