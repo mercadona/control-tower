@@ -7,22 +7,16 @@ import { openHome } from './helpers'
 
 const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
 const NO_SESSIONS = SessionsMother.noSessions()
-const MESSAGE_TEXT = 'Cambia el nombre del export'
-const DELIVERED = { status: 202, body: '{"status":"delivered"}' }
 
 const responseFor = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
 
-const stubFetch = (posted: (body: unknown) => void, progress = ImplementProgressMother.inReview()) => {
-  const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+const stubFetch = (progress = ImplementProgressMother.inReview()) => {
+  const fetching = vi.fn(async (input: string | URL | Request) => {
     const url = String(input)
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(NO_SESSIONS)
     if (url === '/active-plans') return responseFor(HeadlessPlanMother.implementing())
     if (url.startsWith('/implement-progress/')) return responseFor(progress)
-    if (url === `/slices/${StartPlanMother.ISSUE.number}/message` && init?.method === 'POST') {
-      posted(JSON.parse(String(init.body)))
-      return responseFor(DELIVERED)
-    }
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -33,33 +27,31 @@ const stubFetch = (posted: (body: unknown) => void, progress = ImplementProgress
 describe('Home · slice session', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('the implementation stage renders the slice panel with the recorded conversation', async () => {
-    const posted = vi.fn()
-    stubFetch(posted)
-    const { user } = openHome()
+  it('the implementation stage renders the slice panel and offers no field in it', async () => {
+    const fetching = stubFetch()
+    openHome()
 
     expect(
       await screen.findByRole('heading', { name: `Slice #${StartPlanMother.ISSUE.number}`, level: 2 }),
     ).toBeInTheDocument()
-    const field = await screen.findByLabelText('Pedir un cambio a esta conversación')
-    await user.type(field, MESSAGE_TEXT)
-    await user.click(screen.getByRole('button', { name: 'Enviar' }))
+    expect(await screen.findByText('En revisión')).toBeInTheDocument()
 
-    await screen.findByText('Cambio entregado a la conversación del slice')
-    expect(posted).toHaveBeenCalledWith({ repo: StartPlanMother.REPO, agent: StartPlanMother.AGENT, text: MESSAGE_TEXT })
+    expect(screen.queryByLabelText('Pedir un cambio a esta conversación')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Enviar' })).toBeNull()
+    expect(fetching.mock.calls.some(([input]) => String(input).includes('/message'))).toBe(false)
   })
 
   it('the coordinating session drawer stays visible while the slice panel shows', async () => {
-    stubFetch(vi.fn())
+    stubFetch()
 
     openHome()
 
-    await screen.findByLabelText('Pedir un cambio a esta conversación')
+    await screen.findByRole('heading', { name: `Slice #${StartPlanMother.ISSUE.number}`, level: 2 })
     expect(screen.getByRole('heading', { name: 'Sesión coordinadora', level: 2 })).toBeInTheDocument()
   })
 
   it('the adopted workflow\'s panel offers no field while its slice is implementing', async () => {
-    stubFetch(vi.fn(), ImplementProgressMother.progress())
+    stubFetch(ImplementProgressMother.progress())
 
     openHome()
 

@@ -5,7 +5,6 @@ import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
-import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
@@ -14,11 +13,8 @@ import { openHome, pressStart, typePath, typeRepository, typeTicket } from './he
 
 type Answer = { status: number; body: string }
 
-const MESSAGE_TEXT = 'Cambia el nombre del export'
 const MESSAGE_FIELD = 'Pedir un cambio a esta conversación'
 const SEND = 'Enviar'
-const DELIVERED_COPY = 'Cambio entregado a la conversación del slice'
-const SLICE_MESSAGE = /^\/slices\/(\d+)\/message$/
 
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_SESSIONS = SessionsMother.noSessions()
@@ -35,12 +31,10 @@ const backendFallsOver = () => {
 
 const IMPLEMENT_PROGRESS = /^\/implement-progress\/(\d+)/
 
-const backendWith = ({ activePlans, message, progress = () => ImplementProgressMother.inReview() }: {
+const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inReview() }: {
   activePlans: () => Answer
-  message?: (issue: number) => Answer
   progress?: (issue: number) => Answer
 }) => {
-  const posted = vi.fn()
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url === '/active-plans') return responseFor(activePlans())
@@ -53,17 +47,11 @@ const backendWith = ({ activePlans, message, progress = () => ImplementProgressM
     const asProgress = IMPLEMENT_PROGRESS.exec(url)
     if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
     if (url.startsWith('/implement-history/')) return responseFor(ImplementProgressMother.notRead())
-    const asMessage = SLICE_MESSAGE.exec(url)
-    if (asMessage !== null && init?.method === 'POST') {
-      const issue = Number(asMessage[1])
-      posted(issue, JSON.parse(String(init.body)))
-      return responseFor(message === undefined ? SliceSessionMother.delivered() : message(issue))
-    }
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
 
-  return { posted, fetching }
+  return { fetching }
 }
 
 const panelOf = async (issue: number) => within(await screen.findByRole('region', { name: `Slice #${issue}` }))
@@ -102,8 +90,8 @@ describe('Home · the slices in flight', () => {
     expect(screen.queryByRole('heading', { name: /^Slice #/ })).toBeNull()
   })
 
-  it('the panel of a slice still implementing offers no field, while the one whose pull request is open does', async () => {
-    backendWith({
+  it('no panel offers a field, whatever the state of its slice, and none reaches the message endpoint', async () => {
+    const { fetching } = backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
       progress: (issue) => (issue === 7 ? ImplementProgressMother.progress() : ImplementProgressMother.inReview()),
     })
@@ -111,41 +99,12 @@ describe('Home · the slices in flight', () => {
 
     const implementing = await panelOf(7)
     expect(await implementing.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
-    expect(implementing.queryByLabelText(MESSAGE_FIELD)).toBeNull()
     const inReview = await panelOf(8)
-    expect(await inReview.findByLabelText(MESSAGE_FIELD)).toBeInTheDocument()
-  })
+    expect(await inReview.findByText('En revisión')).toBeInTheDocument()
 
-  it('delivers a message to the conversation of the panel it was typed in and to no other', async () => {
-    const { posted } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
-    const { user } = openHome()
-
-    const panel = await panelOf(8)
-    await user.type(await panel.findByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
-    await user.click(panel.getByRole('button', { name: SEND }))
-
-    expect(await panel.findByText(DELIVERED_COPY)).toBeInTheDocument()
-    expect(posted).toHaveBeenCalledTimes(1)
-    expect(posted).toHaveBeenCalledWith(8, {
-      repo: StartPlanMother.REPO, agent: HeadlessPlanMother.agentFor(8), text: MESSAGE_TEXT,
-    })
-  })
-
-  it('shows a refusal in the panel that asked and leaves the others untouched', async () => {
-    backendWith({
-      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
-      message: () => SliceSessionMother.refused(),
-    })
-    const { user } = openHome()
-
-    const refused = await panelOf(7)
-    await user.type(await refused.findByLabelText(MESSAGE_FIELD), MESSAGE_TEXT)
-    await user.click(refused.getByRole('button', { name: SEND }))
-
-    expect(await refused.findByRole('alert')).toHaveTextContent(SliceSessionMother.NOT_DELIVERED_DETAIL)
-    const untouched = await panelOf(8)
-    expect(untouched.queryByRole('alert')).toBeNull()
-    expect(untouched.getByLabelText(MESSAGE_FIELD)).toHaveValue('')
+    expect(screen.queryAllByLabelText(MESSAGE_FIELD)).toEqual([])
+    expect(screen.queryAllByRole('button', { name: SEND })).toEqual([])
+    expect(fetching.mock.calls.some(([input]) => String(input).includes('/message'))).toBe(false)
   })
 
   it('drops the panel of a slice that left the active plans and keeps the rest', async () => {
@@ -195,7 +154,7 @@ describe('Home · the slices in flight', () => {
 
     expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)
-    expect(screen.getAllByLabelText(MESSAGE_FIELD)).toHaveLength(2)
+    expect(screen.queryAllByLabelText(MESSAGE_FIELD)).toEqual([])
   })
 
   it('a saved workflow does not hide the other slices the backend reports', async () => {
