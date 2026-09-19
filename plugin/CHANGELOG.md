@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.59.0](https://github.com/mercadona/control-tower/compare/plugin-v0.58.0...plugin-v0.59.0) (2026-09-19)
+
+
+### Funcionalidades
+
+* **plugin:** the judge gets a brief of its own, without the yardstick its package already lists by path ([#446](https://github.com/mercadona/control-tower/issues/446)) ([6964abe](https://github.com/mercadona/control-tower/commit/6964abe4f9a4a73bc39d232f04eded08d3e461fa))
+* **plugin:** the twelve skills carry the ct- prefix so they stop colliding with the teams' skills ([#422](https://github.com/mercadona/control-tower/issues/422)) ([8425c55](https://github.com/mercadona/control-tower/commit/8425c55c0c66559e4754bde692d526b0c571b1d6))
+
+
+### Correcciones
+
+* **backend:** the headless dispatcher lists issues over GraphQL, like the plugin does since [#46](https://github.com/mercadona/control-tower/issues/46) ([#430](https://github.com/mercadona/control-tower/issues/430)) ([51afd1b](https://github.com/mercadona/control-tower/commit/51afd1b9a2e821f86e1f9a62dd0a19b729dd4547))
+
 ## [0.58.0](https://github.com/mercadona/control-tower/compare/plugin-v0.57.0...plugin-v0.58.0) (2026-09-17)
 
 
