@@ -1,4 +1,4 @@
-import { parseStateSafe, readBlocked } from '../../../plugin/scripts/state.js'
+import { parseStateSafe, readBlocked, renderState } from '../../../plugin/scripts/state.js'
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { SliceEscalationNotRead, SliceEscalationNotUnderstood } from '../domain/exceptions.ts'
 import { SliceEscalations } from '../domain/ports/slice-escalations.ts'
@@ -24,14 +24,17 @@ export class DiskSliceEscalations extends SliceEscalations {
 
   readonly read: (path: string) => Promise<string | null>
   readonly exists: (path: string) => Promise<boolean>
+  readonly write: (path: string, text: string) => Promise<void>
 
-  constructor({ read, exists }: {
+  constructor({ read, exists, write }: {
     read: (path: string) => Promise<string | null>,
     exists: (path: string) => Promise<boolean>,
+    write: (path: string, text: string) => Promise<void>,
   }) {
     super()
     this.read = read
     this.exists = exists
+    this.write = write
   }
 
   static worktreeFor(root: string, issue: number): string {
@@ -59,6 +62,30 @@ export class DiskSliceEscalations extends SliceEscalations {
     }
 
     return DiskSliceEscalations.#escalationOf(readBlocked(parsed.meta, { stateRel: SLICE_REL_PATH }), path)
+  }
+
+  override async lift({ root, issue }: { root: CheckoutRoot, issue: number }): Promise<void> {
+    const path = DiskSliceEscalations.stateFileFor(root.text, issue)
+    if (!(await this.exists(DiskSliceEscalations.worktreeFor(root.text, issue)))) return
+    let markdown: string | null
+    try {
+      markdown = await this.read(path)
+    } catch (cause) {
+      throw new SliceEscalationNotRead(`${path} could not be read: ${DiskSliceEscalations.#messageOf(cause)}`)
+    }
+    if (markdown === null) return
+    const parsed = parseStateSafe(markdown)
+    if (parsed.error !== null) {
+      throw new SliceEscalationNotUnderstood(`the frontmatter of ${path} is not valid YAML: ${parsed.error}`)
+    }
+    const meta: Record<string, unknown> = { ...parsed.meta }
+    if (meta.blocked === undefined || meta.blocked === null) return
+    meta.blocked = null
+    try {
+      await this.write(path, renderState({ meta, body: parsed.body }))
+    } catch (cause) {
+      throw new SliceEscalationNotRead(`${path} could not be written: ${DiskSliceEscalations.#messageOf(cause)}`)
+    }
   }
 
   static #escalationOf(reading: BlockReading, path: string): SliceEscalation {

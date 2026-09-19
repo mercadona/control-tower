@@ -530,12 +530,19 @@ class CtApi {
       files,
       pluginRoot: PluginTree.root(),
     })
+    const escalations = new DiskSliceEscalations({
+      read: Disk.read, exists: Disk.exists, write: Disk.atomicWrite,
+    })
+    const readSliceEscalation = new ReadSliceEscalation({ escalations })
     const driver = new DriveRun({
       calls: planCalls,
       publication,
       machine,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
-      messages: new DeliverHeldMessages({ messages: journal, calls: planCalls, measurements }),
+      messages: new DeliverHeldMessages({
+        messages: journal, calls: planCalls, measurements, escalations,
+      }),
+      escalations: readSliceEscalation,
     })
     const planAgents = new RunPlanAgents({
       legacy: legacyPlanAgents,
@@ -707,9 +714,7 @@ class CtApi {
         planIssues,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
-      sliceEscalation: new ReadSliceEscalation({
-        escalations: new DiskSliceEscalations({ read: Disk.read, exists: Disk.exists }),
-      }),
+      sliceEscalation: readSliceEscalation,
       planEvents: CtApi.#planEvents(readPlanProgress),
       sessions,
       activePlans,

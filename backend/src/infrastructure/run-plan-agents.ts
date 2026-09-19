@@ -159,6 +159,7 @@ export class RunPlanAgents extends PlanAgents {
       const inspection = await this.machine.inspect(watch)
       if (inspection.fact.kind === 'unstarted' || inspection.fact.kind === 'active') {
         await this.journal.hold(watch, asked.changes)
+        await this.#resumeIfNobodyDrives(watch)
         return
       }
       if (inspection.fact.kind !== 'delivered') {
@@ -187,6 +188,18 @@ export class RunPlanAgents extends PlanAgents {
       handedOff = true
     } catch (cause) {
       RunPlanAgents.#throwFixFailure(cause)
+    } finally {
+      if (!handedOff) this.reservations.delete(watch.agent)
+    }
+  }
+
+  async #resumeIfNobodyDrives(watch: PlanWatch): Promise<void> {
+    if (!this.#claim(watch)) return
+    let handedOff = false
+    try {
+      const planner = await this.calls.planningFor(watch)
+      this.#supervise(watch, planner, this.driver.execute(new DriveRunParams({ watch, planner })))
+      handedOff = true
     } finally {
       if (!handedOff) this.reservations.delete(watch.agent)
     }

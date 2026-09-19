@@ -46,6 +46,23 @@ import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
 import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
+import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
+import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
+import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+
+class QuietEscalations extends SliceEscalations {
+  static reader(): ReadSliceEscalation {
+    return new ReadSliceEscalation({ escalations: new QuietEscalations() })
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    return SliceEscalation.none()
+  }
+
+  override async lift(): Promise<void> {
+    return undefined
+  }
+}
 
 class Deferred<T = void> {
   readonly promise: Promise<T>
@@ -541,7 +558,9 @@ describe('RunPlanAgents', () => {
         messages: journal,
         calls: calls,
         measurements: new UnaskedMeasurements(),
+        escalations: new QuietEscalations(),
       }),
+      escalations: QuietEscalations.reader(),
     })
     const legacy = new LegacyDouble()
     const warnings: string[] = []
@@ -657,7 +676,9 @@ describe('RunPlanAgents', () => {
         messages: journal,
         calls: calls,
         measurements: new UnaskedMeasurements(),
+        escalations: new QuietEscalations(),
       }),
+      escalations: QuietEscalations.reader(),
     })
     const legacy = new LegacyDouble()
     const measurements = new MeasurementsDouble(transport)
@@ -1288,6 +1309,28 @@ describe('RunPlanAgents', () => {
       'Rename the port before the next task.', 'And drop the flag.',
     ])
     expect(tested.calls.starts).toEqual([])
+  })
+
+  it('a change asked of a run nobody is driving puts somebody back on it', async () => {
+    const tested = await scenario(true, () => '2026-09-19T10:00:00.000Z', [
+      '66666666-6666-4666-8666-666666666666',
+    ])
+    tested.machine.inspection = new RunInspection({ kind: 'active', instruction: new RunInstruction({
+      kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+    }) })
+
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+
+    await tested.agents.fix({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Rename the port before the next task.',
+      requestId: 'review-13',
+    })
+
+    expect(await tested.journal.pending(AgentMother.WATCH)).toHaveLength(1)
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(true)
   })
 
   it('a change asked before the run is established is still refused', async () => {

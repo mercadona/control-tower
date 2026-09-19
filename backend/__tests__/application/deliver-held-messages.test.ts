@@ -5,7 +5,9 @@ import {
 import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
+import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceMessages } from '../../src/domain/ports/slice-messages.ts'
+import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
 import { HeldMessage } from '../../src/domain/value-objects/held-message.ts'
 import {
   CompletedPlanCall, StartedPlanCall, type CallExecution,
@@ -73,6 +75,23 @@ class SliceMessagesDouble extends SliceMessages {
   }
 }
 
+class SliceEscalationsDouble extends SliceEscalations {
+  readonly trace: string[]
+
+  constructor(trace: string[]) {
+    super()
+    this.trace = trace
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    return SliceEscalation.none()
+  }
+
+  override async lift(asked: { issue: number }): Promise<void> {
+    this.trace.push(`lift:${asked.issue}`)
+  }
+}
+
 class PlanCallsDouble extends PlanCalls {
   readonly trace: string[]
   readonly failing: string | null
@@ -126,6 +145,7 @@ describe('DeliverHeldMessages', () => {
       messages,
       calls: new PlanCallsDouble(trace),
       measurements: new CallMeasurementsDouble(trace),
+      escalations: new SliceEscalationsDouble(trace),
     })
 
     await drain.execute(new DeliverHeldMessagesParams({ watch: DrainMother.WATCH }))
@@ -139,6 +159,7 @@ describe('DeliverHeldMessages', () => {
       'wait:call-message:bb',
       'capture:call-message:bb',
       'settle:bb:call-message:bb',
+      `lift:${DrainMother.WATCH.issue.number}`,
     ])
     expect(await messages.pending()).toEqual([])
   })
@@ -153,6 +174,7 @@ describe('DeliverHeldMessages', () => {
       messages,
       calls: new PlanCallsDouble(trace, 'call-message:a'),
       measurements: new CallMeasurementsDouble(trace),
+      escalations: new SliceEscalationsDouble(trace),
     })
 
     await expect(drain.execute(new DeliverHeldMessagesParams({ watch: DrainMother.WATCH })))
@@ -168,6 +190,7 @@ describe('DeliverHeldMessages', () => {
       messages: new SliceMessagesDouble(trace, []),
       calls: new PlanCallsDouble(trace),
       measurements: new CallMeasurementsDouble(trace),
+      escalations: new SliceEscalationsDouble(trace),
     })
 
     await drain.execute(new DeliverHeldMessagesParams({ watch: DrainMother.WATCH }))
