@@ -9,6 +9,7 @@ import { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
 import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
 import { ClaudeCallResult } from './claude-call-result.ts'
 import { HeadlessFiles } from './headless-files.ts'
+import { InheritedTerminals } from './inherited-terminals.ts'
 import { NonLaunchRecord } from './non-launch-record.ts'
 
 type LeaderOutcome = { readonly kind: 'pending' }
@@ -367,6 +368,7 @@ export class HeadlessCallWorker {
   }
 
   static async main(argv: readonly string[]): Promise<void> {
+    InheritedTerminals.ofThisProcess().released()
     if (argv.length !== 1) throw new Error(`expected one descriptor path, got ${argv.length}`)
     const descriptorPath = argv[0]
     const descriptor = CallDescriptor.from(await fs.readFile(descriptorPath, 'utf8'))
