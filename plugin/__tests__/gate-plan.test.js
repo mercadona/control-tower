@@ -196,11 +196,13 @@ describe('/ct-next dispatches without a go', () => {
     join(fixturesDir, 'fake-gh-bin'),
     join(fixturesDir, 'fake-cmux-bin'),
     join(fixturesDir, 'fake-claude-bin'),
-    // No `fake-osascript-bin`: the stub of `osascript` existed for
+    // No `osascript` double, and there is no longer one to put here: the stub
+    // that lived in `fixtures/fake-osascript-bin/` existed for
     // `CT_GO_CHANNEL=notify`, the channel that dictated the nonce through a
     // system notification instead of stdout, and it retired with
-    // `go-channel.js`. Nothing in the plugin calls `osascript` any more, so
-    // putting the double on the PATH would double a call that cannot happen.
+    // `go-channel.js`. Nothing in the plugin calls `osascript` any more, so the
+    // fixture went too (#442): a double on the PATH would double a call that
+    // cannot happen.
     process.env.PATH,
   ].join(':')
 

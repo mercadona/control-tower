@@ -9,9 +9,15 @@
 // coordinator's window to tell it.
 //
 // The REAL script is executed as a subprocess, the same as ct-watch-go.test.js
-// and for the same reason: what is left to test here is the seam —talking to
-// `gh`, finding the coordinator by its DIRECTORY and typing the line into it—,
-// which is precisely what a test with in-memory doubles would not check.
+// did and for the same reason: what is left to test here is the seam —talking
+// to `gh`, finding the coordinator by its DIRECTORY and typing the line into
+// it—, which is precisely what a test with in-memory doubles would not check.
+//
+// THAT SIBLING SUITE NO LONGER EXISTS: the `-OK` watcher of the `plan` gate
+// retired with its whole protocol (A-3, issue #434), and its suite went with
+// it. It is still named here, and in the two comparisons further down, because
+// the decisions those comparisons explain are not obvious without it. Read
+// every mention of it as history.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
@@ -214,10 +220,10 @@ describe('what cannot bring the watch down', () => {
   })
 
   it('if the merge arrives and cmux cannot be asked right then, it does NOT give up', () => {
-    // The finding ct-watch-go paid for with an adversarial review: "cmux
-    // answered that it is not there" and "it could not be asked" do not mean the
-    // same thing, and throwing that distinction away on the DELIVERY path kills
-    // the watch at the only instant that matters.
+    // The finding ct-watch-go paid for with an adversarial review, and which
+    // outlived it: "cmux answered that it is not there" and "it could not be
+    // asked" do not mean the same thing, and throwing that distinction away on
+    // the DELIVERY path kills the watch at the only instant that matters.
     const r = run(withMerge({ PATH: withoutCmux() }), { timeoutMs: 500, pollMs: 40 })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/the merge is seen but cmux could not be asked/)
@@ -225,10 +231,10 @@ describe('what cannot bring the watch down', () => {
   })
 
   // -------------------------------------------------------------------------
-  // THE DELIBERATE DIVERGENCE FROM ct-watch-go.
+  // THE DELIBERATE DIVERGENCE FROM ct-watch-go (retired, A-3 / issue #434).
   //
-  // That one shuts down as soon as cmux answers that the slice's session does
-  // not exist, and it is right to: without that session there is nothing to
+  // That one shut down as soon as cmux answered that the slice's session did
+  // not exist, and it was right to: without that session there was nothing to
   // watch. Here it does NOT, and the reason is that the absence of the
   // coordinator does not mean the same thing: closing its window is the normal
   // thing —you go to sleep and the merge arrives in the morning— and that is
@@ -241,7 +247,7 @@ describe('what cannot bring the watch down', () => {
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/deadline exhausted/)
     // And no exit 4 "the session no longer exists" has been invented like the
-    // go watcher's: here that is not a bound, it is the normal case.
+    // go watcher had: here that is not a bound, it is the normal case.
     expect(r.stdout).not.toMatch(/no longer exists/)
   })
 
@@ -266,9 +272,9 @@ describe('the arguments and the deadlines', () => {
   })
 
   it('a deadline that cannot be understood aborts instead of silently falling back to the default', () => {
-    // Same criterion as CT_WATCH_GO_POLL_MS and CT_NEXT_LAUNCH_TIMEOUT_MS: a
-    // badly written deadline changes what this process means, and you would not
-    // want to discover that two days later.
+    // Same criterion as CT_NEXT_LAUNCH_TIMEOUT_MS, and as the retired
+    // CT_WATCH_GO_POLL_MS before it: a badly written deadline changes what this
+    // process means, and you would not want to discover that two days later.
     const r = run({ CT_WATCH_MERGE_POLL_MS: 'un rato' })
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/CT_WATCH_MERGE_POLL_MS invalid/)

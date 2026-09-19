@@ -126,10 +126,14 @@ function main() {
     return
   }
 
-  // `issue comment` — used by the `-OK` watcher to explain the format when
-  // someone tries to give the go and their comment does not open it. The body
-  // goes to the argv log (FAKE_GH_ARGV_LOG_FILE), which is where the test reads
-  // it: what has to be checkable is that that body does NOT carry the nonce.
+  // `issue comment` — the WRITE of a comment. Its first caller was the `-OK`
+  // watcher, explaining the format when somebody's comment did not open the
+  // go, and that watcher retired with the whole protocol (A-3, issue #434).
+  // The handler stays because writing a comment on the issue did NOT retire
+  // with it: the plan is still published there — by the backend in the panel's
+  // flow, by the agent in the dispatched one — so a double that refused this
+  // subcommand would refuse a live act of the loop. The body goes to the argv
+  // log (FAKE_GH_ARGV_LOG_FILE), which is where a test reads it.
   if (argv[0] === 'issue' && argv[1] === 'comment') {
     if (process.env.FAKE_GH_ISSUE_COMMENT_FAIL) {
       console.error('fake-gh: issue comment failed (simulado)')
@@ -164,44 +168,23 @@ function main() {
       process.exitCode = 1
       return
     }
-    // FAKE_GH_VIEW_COMMENTS — the `--json comments` path, which is the one the
-    // `-OK` watcher uses (scripts/ct-watch-go.mjs). It goes apart from the
-    // labels one because they are two different questions to the same
-    // subcommand: without separating them, the watcher would receive the list
-    // of labels and would never find `comments` in it.
+    // THERE IS NO `--json comments` PATH, AND THAT IS DELIBERATE. It existed
+    // for the `-OK` watcher (scripts/ct-watch-go.mjs), the only thing in this
+    // plugin that ever READ an issue's comments, and it had four variables of
+    // its own —FAKE_GH_VIEW_COMMENTS, its _SEQUENCE for one payload per tick,
+    // its _COUNTER_FILE and its _FAIL for door 9 of `--release`— because the
+    // question had to be kept apart from the labels one: without that, the
+    // watcher would have received the list of labels and never found
+    // `comments` in it. The watcher retired with the whole go protocol (A-3,
+    // issue #434) and the branch went with it (#442). Writing a comment did
+    // NOT retire — see the `issue comment` handler above — but nothing reads
+    // them back any more, so there is no question left to keep apart and the
+    // labels fallthrough at the end of this block is the honest answer.
     //
-    // FAKE_GH_VIEW_COMMENTS_SEQUENCE (optional) is a list of payloads, one per
-    // call, so that what really matters about the watcher can be tested: that
-    // on the first tick there is NO go and it keeps waiting, and that on a
-    // LATER tick there is one and then it pushes. With a fixed payload only one
-    // of the two can be tested.
-    if (joined.includes('--json comments')) {
-      // FAKE_GH_VIEW_COMMENTS_FAIL (F38): fails ONLY the read of comments, not
-      // the one of labels nor the one of the body. With FAKE_GH_VIEW_FAIL
-      // (which brings down every `issue view`) door 9 of `--release` cannot be
-      // tested: door 8, which reads the body, wins first and the test would be
-      // measuring something else.
-      if (process.env.FAKE_GH_VIEW_COMMENTS_FAIL) {
-        console.error('fake-gh: issue view --json comments failed (simulado)')
-        process.exitCode = 1
-        return
-      }
-      const seq = process.env.FAKE_GH_VIEW_COMMENTS_SEQUENCE
-        ? JSON.parse(process.env.FAKE_GH_VIEW_COMMENTS_SEQUENCE)
-        : null
-      if (seq) {
-        const i = nextCallIndex(process.env.FAKE_GH_VIEW_COMMENTS_COUNTER_FILE)
-        process.stdout.write(JSON.stringify(seq[Math.min(i, seq.length - 1)]))
-      } else {
-        process.stdout.write(process.env.FAKE_GH_VIEW_COMMENTS || '{"comments":[]}')
-      }
-      process.exitCode = 0
-      return
-    }
     // FAKE_GH_VIEW_BODY (TASK 10) — the `--json body` path, which is the one
     // the F-e2e door of `dispatch-check.mjs --release` uses to read the body of
     // the issue and cross it against the delivered run. It goes apart from the
-    // labels one and the comments one for the same reason as they do: same
+    // labels one for the same reason the retired comments one did: same
     // subcommand, different question — without separating it, the F-e2e door
     // would receive the list of labels and would never find a body to parse.
     if (joined.includes('--json body')) {
@@ -212,8 +195,8 @@ function main() {
     // FAKE_GH_ISSUE_VIEW_JSON (F20/harvest, Task 6) — the `--json
     // number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences`
     // path, which is the whole row of the slice that `SliceHarvest` reads in
-    // `--collect`. It goes apart from labels/comments/body for the same reason
-    // as they do: same subcommand, different question.
+    // `--collect`. It goes apart from labels/body for the same reason they do:
+    // same subcommand, different question.
     if (joined.includes('--json number,title')) {
       process.stdout.write(process.env.FAKE_GH_ISSUE_VIEW_JSON || '{}')
       process.exitCode = 0

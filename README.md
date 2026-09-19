@@ -336,9 +336,13 @@ the groom then presses itself.
 
 **Solicitud → Revisar plan → Implementación.** `POST /start-plan` cuts the
 worktree, opens the plan issue and launches the plan agent; the progress arrives
-over Server-Sent Events. The plan gate is yours: you read the plan and answer
-`-OK <nonce>`, and without that go `dispatch-check --release` refuses. Then
-`POST /implement-plan` drives the implementation, task by task, through
+over Server-Sent Events. When the plan agent finishes, the backend publishes the
+plan as a comment on the issue and starts the implementation itself, in the same
+watch and with no second request to make: the plan is read there, not answered.
+Until `0.58.0` this stage was a gate — a human granted the go, the release
+refused to pass without it, and a `POST /implement-plan` resumed the work. A-3
+(issue #434) retired the protocol and #435 took that route out of the backend,
+where it now answers 404. The implementation goes on task by task, through
 `ct-step`.
 
 **Gate 3 · the merge.** It has no panel: it happens on GitHub. Still yours, but

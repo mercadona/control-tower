@@ -197,7 +197,7 @@ From a tool refusing:
 | `plan-issue-not-created` | `gh issue create` refused |
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
-| `dispatch-not-available` | the plugin found no eligible ready slice, or the selected slice still declares a plan gate |
+| `dispatch-not-available` | the plugin selected no slice: none is ready in the milestone, or every ready one is held by an unmet dependency or an `area:`/`touches:` collision |
 | `dispatch-not-read` | the complete open/closed GitHub issue table could not be read |
 | `dispatch-not-understood` | the issue table or plugin dispatch result was ambiguous |
 | `plan-agent-never-launched` | definite pre-worker or worker-spawn failure; this start refusal alone does not authorize cleanup |

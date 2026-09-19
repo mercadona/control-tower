@@ -1,26 +1,35 @@
 // ============================================================================
-// WHAT THE TWO WATCHERS SHARE, and what was copied verbatim between them.
+// WHAT THE TWO WATCHERS SHARED, and what was copied verbatim between them.
 //
-// `ct-watch-go.mjs` and `ct-watch-merge.mjs` are siblings on purpose: one
-// watches the `plan` gate's `-OK` and the other the PR's merge, and they read
-// side by side because the divergences between them show up precisely when
-// everything else is identical. That holds for their STRUCTURE. It did not hold
-// for this: the argv parsing, opening the log, the `plazo()` that aborts on an
-// unreadable value and the `sleep` did not have two versions because anybody
-// had decided two things — they had them because the second file was born by
-// copying the first.
+// THIS MODULE WAS BORN OF A PAIR, and today only one of the pair is left.
+// `ct-watch-go.mjs` watched the `plan` gate's `-OK` and `ct-watch-merge.mjs`
+// watches the PR's merge; they were siblings on purpose, and they read side by
+// side because the divergences between them showed up precisely when
+// everything else was identical. The go watcher retired with its whole
+// protocol (A-3, issue #434), so the merge one is the only caller now. The
+// comparison stays written down because it is the REASON this file exists: a
+// shared module with one caller and no memory of why it was extracted is a
+// module the next reader folds back into that caller.
+//
+// The sharing held for their STRUCTURE. It did not hold for this: the argv
+// parsing, opening the log, the `plazo()` that aborts on an unreadable value
+// and the `sleep` did not have two versions because anybody had decided two
+// things — they had them because the second file was born by copying the
+// first.
 //
 // An adversarial review on #37 pointed it out, and of its two halves this is
 // the cheap one: the expensive half is that the cmux walk was also copied, and
 // there there really was a divergence with consequences (see scripts/cmux.js).
 //
-// THE TWO DEADLINES STILL BELONG TO EACH OF THEM. This module shares the
-// MECHANISM (`plazo`, which reads an environment variable and aborts if it
-// cannot be understood), never the NUMBERS: the `-OK` watcher polls every 30 s
-// for 8 h because it covers a person being asleep, and the merge one every
-// 60 s for 48 h because it covers a PR waiting for review, which is counted in
-// days. Melting them together here would turn two measured decisions into one
-// shared constant that nobody looks at again.
+// THE DEADLINE BELONGED TO EACH WATCHER, AND THE SURVIVOR STILL OWNS ITS OWN.
+// This module shares the MECHANISM (`plazo`, which reads an environment
+// variable and aborts if it cannot be understood), never the NUMBERS: the
+// `-OK` watcher polled every 30 s for 8 h because it covered a person being
+// asleep, and the merge one polls every 60 s for 48 h because it covers a PR
+// waiting for review, which is counted in days. Melting them together here
+// would have turned two measured decisions into one shared constant that
+// nobody looks at again — which is also why the surviving number does not move
+// in here now that it is alone.
 // ============================================================================
 
 import { mkdirSync, openSync, writeSync, closeSync } from 'node:fs'
@@ -40,8 +49,8 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // A DEADLINE THAT CANNOT BE UNDERSTOOD ABORTS, it does not fall back to the
 // default in silence. Same criterion as CT_NEXT_LAUNCH_TIMEOUT_MS, and for the
 // same reason: a badly written deadline changes what the process MEANS, and you
-// would not want to find that out eight hours (or two days) later while looking
-// into why nobody warned you.
+// would not want to find that out two days later while looking into why nobody
+// warned you.
 export function plazo(name, fallback) {
   const raw = process.env[name]
   if (raw == null || raw === '') return fallback
