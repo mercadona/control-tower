@@ -1,5 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
 import { SliceSession } from './SliceSession'
@@ -9,141 +8,83 @@ type Answer = { status: number; body: string }
 const FIELD_LABEL = 'Pedir un cambio a esta conversación'
 const SEND_LABEL = 'Enviar'
 
-const stubFetch = ({ progress, then = progress, message }: { progress: Answer, then?: Answer, message?: Answer }) => {
-  const posted = vi.fn()
-  let reads = 0
-  const fetching = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+const stubFetch = (progress: Answer) => {
+  const fetching = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url.startsWith('/implement-progress/')) {
-      const answer = reads === 0 ? progress : then
-      reads += 1
-      return new Response(answer.body, { status: answer.status })
-    }
-    if (url === `/slices/${SliceSessionMother.ISSUE}/message` && init?.method === 'POST') {
-      posted(JSON.parse(String(init.body)))
-      if (message === undefined) throw new Error('no message answer scripted')
-      return new Response(message.body, { status: message.status })
-    }
+    if (url.startsWith('/implement-progress/')) return new Response(progress.body, { status: progress.status })
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
 
-  return { posted }
+  return fetching
 }
 
-const renderSession = () => render(
-  <SliceSession
-    issue={SliceSessionMother.ISSUE}
-    root={SliceSessionMother.ROOT}
-    repo={SliceSessionMother.REPO}
-    agent={SliceSessionMother.AGENT}
-  />
+const renderSession = (issue = SliceSessionMother.ISSUE) => render(
+  <SliceSession issue={issue} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} />
 )
+
+const carriesNoField = () => {
+  expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
+  expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+  expect(screen.queryByRole('textbox')).toBeNull()
+}
 
 describe('SliceSession', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    vi.useRealTimers()
   })
 
-  it('a slice whose pull request is open offers the field and delivers the typed message to its conversation', async () => {
-    const { posted } = stubFetch({ progress: SliceSessionMother.inReview(), message: SliceSessionMother.delivered() })
-    const user = userEvent.setup()
-    renderSession()
-
-    const field = await screen.findByLabelText(FIELD_LABEL)
-    await user.type(field, SliceSessionMother.TEXT)
-    await user.click(screen.getByRole('button', { name: SEND_LABEL }))
-
-    expect(await screen.findByText('Cambio entregado a la conversación del slice')).toBeInTheDocument()
-    expect(posted).toHaveBeenCalledWith({
-      repo: SliceSessionMother.REPO, agent: SliceSessionMother.AGENT, text: SliceSessionMother.TEXT,
-    })
-    expect(field).toHaveValue('')
-  })
-
-  it('an empty message reaches no endpoint', async () => {
-    const { posted } = stubFetch({ progress: SliceSessionMother.inReview() })
-    renderSession()
-
-    await screen.findByLabelText(FIELD_LABEL)
-
-    expect(screen.getByRole('button', { name: SEND_LABEL })).toBeDisabled()
-    expect(posted).not.toHaveBeenCalled()
-  })
-
-  it('a refused delivery keeps the text and shows the reason', async () => {
-    stubFetch({ progress: SliceSessionMother.inReview(), message: SliceSessionMother.refused() })
-    const user = userEvent.setup()
-    renderSession()
-
-    const field = await screen.findByLabelText(FIELD_LABEL)
-    await user.type(field, SliceSessionMother.TEXT)
-    await user.click(screen.getByRole('button', { name: SEND_LABEL }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(SliceSessionMother.NOT_DELIVERED_DETAIL)
-    expect(field).toHaveValue(SliceSessionMother.TEXT)
-  })
-
-  it('an unreachable backend says so instead of claiming delivery', async () => {
-    const progress = SliceSessionMother.inReview()
-    const fetching = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input)
-      if (url.startsWith('/implement-progress/')) return new Response(progress.body, { status: progress.status })
-      if (url === `/slices/${SliceSessionMother.ISSUE}/message` && init?.method === 'POST') {
-        throw new TypeError('Failed to fetch')
-      }
-      throw new Error(`unexpected fetch to ${url}`)
-    })
-    vi.stubGlobal('fetch', fetching)
-    const user = userEvent.setup()
-    renderSession()
-
-    const field = await screen.findByLabelText(FIELD_LABEL)
-    await user.type(field, SliceSessionMother.TEXT)
-    await user.click(screen.getByRole('button', { name: SEND_LABEL }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
-    expect(field).toHaveValue(SliceSessionMother.TEXT)
-  })
-
-  it('a slice that is still implementing offers no field, because its conversation would refuse the message', async () => {
-    stubFetch({ progress: SliceSessionMother.progress() })
+  it('a slice that is implementing shows its progress and offers no message field', async () => {
+    stubFetch(SliceSessionMother.progress())
     renderSession()
 
     expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
-    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
-    expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+    carriesNoField()
   })
 
-  it('a run that has delivered without opening a pull request yet offers no field', async () => {
-    stubFetch({ progress: ImplementProgressMother.delivered() })
+  it('a slice whose pull request is open offers no message field either, because the boss carries the change', async () => {
+    stubFetch(SliceSessionMother.inReview())
     renderSession()
 
-    expect(await screen.findByText('Entregado')).toBeInTheDocument()
-    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
-    expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+    expect(await screen.findByText('En revisión')).toBeInTheDocument()
+    carriesNoField()
   })
 
-  it('a slice already fixing what its review asked still offers the field, because its pull request is open', async () => {
-    stubFetch({ progress: ImplementProgressMother.fixing() })
+  it('a slice fixing what its review asked offers no message field', async () => {
+    stubFetch(ImplementProgressMother.fixing())
     renderSession()
 
-    expect(await screen.findByLabelText(FIELD_LABEL)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: SEND_LABEL })).toBeInTheDocument()
+    expect(await screen.findByText('Corrigiendo lo pedido en la revisión')).toBeInTheDocument()
+    carriesNoField()
   })
 
-  it('the field appears when the pull request opens under a slice that was implementing', async () => {
-    vi.useFakeTimers()
-    stubFetch({ progress: SliceSessionMother.progress(), then: SliceSessionMother.inReview() })
+  it('a slice whose pull request is open still shows the link to it', async () => {
+    stubFetch(SliceSessionMother.inReview())
     renderSession()
 
-    await act(async () => vi.advanceTimersByTimeAsync(0))
-    expect(screen.getByText(/Tarea 3 de 7/)).toBeInTheDocument()
-    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
+    expect(await screen.findByRole('link', { name: /#31/ })).toBeInTheDocument()
+  })
 
-    await act(async () => vi.advanceTimersByTimeAsync(3000))
+  it('the panel asks the backend for progress and for nothing else', async () => {
+    const fetching = stubFetch(SliceSessionMother.inReview())
+    renderSession()
 
-    expect(screen.getByLabelText(FIELD_LABEL)).toBeInTheDocument()
+    await screen.findByText('En revisión')
+
+    expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/implement-progress/'))).toBe(true)
+  })
+
+  it('two slices side by side each carry their own title', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <>
+        <SliceSession issue={7} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} />
+        <SliceSession issue={8} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} />
+      </>
+    )
+
+    expect(await screen.findByRole('region', { name: 'Slice #7' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Slice #8' })).toBeInTheDocument()
+    carriesNoField()
   })
 })

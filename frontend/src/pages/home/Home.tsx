@@ -535,7 +535,6 @@ const Home = () => {
                   issue={slice.plan.issue.number}
                   root={slice.plan.root ?? slice.request.path}
                   repo={slice.plan.repo}
-                  agent={slice.plan.agent}
                 />
               ))}
             </section>
@@ -622,7 +621,6 @@ const Home = () => {
                   issue={workflow.plan.issue.number}
                   root={workflow.plan.root ?? workflow.request.path}
                   repo={workflow.plan.repo}
-                  agent={workflow.plan.agent}
                 />
               )}
             </WorkflowStep>
