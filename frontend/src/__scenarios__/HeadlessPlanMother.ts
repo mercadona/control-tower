@@ -1,4 +1,5 @@
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkflowSnapshot } from 'app/workflow-snapshot/storage'
 
 type Answer = { status: number; body: string }
 type HeadlessPhase = 'planning' | 'implementing' | 'uncertain'
@@ -54,6 +55,34 @@ class HeadlessPlanMother {
 
   static deferredChanges(): DeferredHeadlessPlanChanges {
     return new DeferredHeadlessPlanChanges()
+  }
+
+  static slicesInFlight(...issues: number[]): Answer {
+    return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
+  }
+
+  static workflowOfSlice(issue: number): WorkflowSnapshot {
+    const { phase, request, plan } = HeadlessPlanMother.slice(issue)
+    return { phase, request, plan }
+  }
+
+  static agentFor(issue: number): string {
+    return `conversation-of-${issue}`
+  }
+
+  private static slice(issue: number) {
+    return {
+      phase: 'implementing',
+      request: { id: null, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
+      plan: {
+        id: null,
+        repo: StartPlanMother.REPO,
+        issue: { number: issue, url: `https://github.com/${StartPlanMother.REPO}/issues/${issue}` },
+        agent: HeadlessPlanMother.agentFor(issue),
+        branch: `feat/${issue}`,
+        worktree: `${StartPlanMother.PATH}/.worktrees/${issue}`,
+      },
+    } as const
   }
 
   private static active(phase: HeadlessPhase, recovery?: RecoveryAction): Answer {

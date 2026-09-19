@@ -12,13 +12,13 @@ const DELIVERED = { status: 202, body: '{"status":"delivered"}' }
 
 const responseFor = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
 
-const stubFetch = (posted: (body: unknown) => void) => {
+const stubFetch = (posted: (body: unknown) => void, progress = ImplementProgressMother.inReview()) => {
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(NO_SESSIONS)
     if (url === '/active-plans') return responseFor(HeadlessPlanMother.implementing())
-    if (url.startsWith('/implement-progress/')) return responseFor(ImplementProgressMother.progress())
+    if (url.startsWith('/implement-progress/')) return responseFor(progress)
     if (url === `/slices/${StartPlanMother.ISSUE.number}/message` && init?.method === 'POST') {
       posted(JSON.parse(String(init.body)))
       return responseFor(DELIVERED)
@@ -41,7 +41,7 @@ describe('Home · slice session', () => {
     expect(
       await screen.findByRole('heading', { name: `Slice #${StartPlanMother.ISSUE.number}`, level: 2 }),
     ).toBeInTheDocument()
-    const field = screen.getByLabelText('Pedir un cambio a esta conversación')
+    const field = await screen.findByLabelText('Pedir un cambio a esta conversación')
     await user.type(field, MESSAGE_TEXT)
     await user.click(screen.getByRole('button', { name: 'Enviar' }))
 
@@ -56,5 +56,17 @@ describe('Home · slice session', () => {
 
     await screen.findByLabelText('Pedir un cambio a esta conversación')
     expect(screen.getByRole('heading', { name: 'Sesión coordinadora', level: 2 })).toBeInTheDocument()
+  })
+
+  it('the adopted workflow\'s panel offers no field while its slice is implementing', async () => {
+    stubFetch(vi.fn(), ImplementProgressMother.progress())
+
+    openHome()
+
+    expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: `Slice #${StartPlanMother.ISSUE.number}`, level: 2 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Pedir un cambio a esta conversación')).toBeNull()
   })
 })

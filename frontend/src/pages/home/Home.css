@@ -189,23 +189,17 @@
   color: var(--foreground-secondary);
 }
 
-.home__active-plans {
+.home__slices {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0;
-  margin: 0 0 24px;
-  list-style: none;
+  gap: 16px;
 }
 
-.home__active-plan {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
-  border: 1px solid var(--border-secondary);
-  border-radius: var(--shape-container-xs);
+.home__slices .slice-session {
+  padding: 16px;
+  border: var(--borderwidth-sm) solid var(--border-primary);
+  border-radius: var(--shape-container-sm);
+  background: var(--background-primary);
 }
 
 /* Under 1280px the right column stacks below the content: it stays a column
@@ -258,11 +252,6 @@
 @media (width < 768px) {
   .home__content {
     padding: 16px;
-  }
-
-  .home__active-plan {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .home__flow ol {

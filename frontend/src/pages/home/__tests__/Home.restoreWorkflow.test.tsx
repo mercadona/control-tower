@@ -13,7 +13,6 @@ import {
   backendRecovering,
   openHome,
   openRestored,
-  pressStart,
   streamFrame,
   typePath,
   typeRepository,
@@ -776,41 +775,16 @@ describe('Home · restore workflow', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('should let the user select one of multiple backend plans', async () => {
-    const second = activePlan('implementing', StartPlanMother.ANOTHER_REPO, 9)
-    backendRecovering(activePlansAnswer(activePlan(), second))
-    const { user } = openHome()
+  it('should paint a panel for each of several backend plans without adopting one', async () => {
+    const several = activePlansAnswer(activePlan('implementing'), activePlan('implementing', StartPlanMother.REPO, 9))
+    withReadyTools(vi.fn(() => Promise.resolve(new Response(several.body, { status: several.status }))))
+    openHome()
 
-    const choices = await screen.findAllByRole('button', { name: /Continuar plan/ })
-    expect(choices).toHaveLength(2)
-    expect(choices[0]).toHaveAccessibleName(/ABC-123, owner\/name, issue #7/)
-    expect(choices[1]).toHaveAccessibleName(/ABC-123, owner\/other-name, issue #9/)
-    await user.click(choices[1])
-
-    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Arrancar otro plan' })).toBeEnabled()
+    expect(await screen.findByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Slice #9', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByText('Implementación iniciada automáticamente')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
-  })
-
-  it('should discard recovered candidates when a new plan starts', async () => {
-    const second = activePlan('implementing', StartPlanMother.ANOTHER_REPO, 9)
-    const fetching = vi.fn((input: string | URL | Request) =>
-      input === '/active-plans'
-        ? Promise.resolve(new Response(JSON.stringify({ plans: [activePlan(), second] }), { status: 200 }))
-        : Promise.resolve(new Response(CoordinatingSessionMother.opened().body, { status: 202 })),
-    )
-    withReadyTools(fetching)
-    const { user } = openHome()
-    expect(await screen.findAllByRole('button', { name: /Continuar plan/ })).toHaveLength(2)
-
-    await typeTicket(user, StartPlanMother.TICKET)
-    expect(screen.queryByRole('button', { name: /Continuar plan/ })).toBeNull()
-    await typeRepository(user, StartPlanMother.REPO)
-    await typePath(user, StartPlanMother.PATH)
-    await pressStart(user)
-
-    await waitFor(() => expect(fetching.mock.calls.filter(([input]) => input === '/coordinating-session')).toHaveLength(1))
-    expect(screen.queryByRole('button', { name: /Continuar plan/ })).toBeNull()
   })
 
   it('a live coordinator blocks gate 2 from opening a second conversation', async () => {

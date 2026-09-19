@@ -59,7 +59,7 @@ const Home = () => {
   const workflowRef = useRef(workflow)
   const restoredRef = useRef(workflow !== null)
   const [reconciliation, setReconciliation] = useState<Reconciliation>(workflow === null ? 'not-required' : 'checking')
-  const [candidates, setCandidates] = useState<ActivePlan[]>([])
+  const [slicesInFlight, setSlicesInFlight] = useState<ActivePlan[]>([])
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
@@ -104,7 +104,6 @@ const Home = () => {
     setRecoveryFailure(null)
     setWorkflow(selected)
     setReconciliation(restored ? 'confirmed' : 'not-required')
-    setCandidates([])
     setUncertainRequest(null)
     setExpandedSummary(null)
     WorkflowSnapshotStorage.save(selected)
@@ -119,13 +118,64 @@ const Home = () => {
       setRecoveryFailure(null)
       setWorkflow(null)
       setUncertainRequest(active.request)
-      setCandidates([])
       setExpandedSummary(null)
       setReconciliation('uncertain')
       return
     }
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
+
+  const adoptFromRead = useCallback((plans: ActivePlan[]): ActivePlan | null => {
+    const current = workflowRef.current
+    if (current !== null) {
+      const active = plans.find((candidate) => isSameWorkflow(current, candidate))
+      if (active === undefined) {
+        setReconciliation('stale')
+        return null
+      }
+      if (active.phase === 'uncertain') {
+        uncertainActiveRef.current = active
+        setReconciliation('uncertain')
+        return active
+      }
+
+      uncertainActiveRef.current = null
+      const reconciled: WorkflowSnapshot = {
+        ...current,
+        phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
+      }
+      workflowRef.current = reconciled
+      setWorkflow(reconciled)
+      if (reconciled.phase !== current.phase) setExpandedSummary(null)
+      setReconciliation('confirmed')
+      WorkflowSnapshotStorage.save(reconciled)
+      return active
+    }
+
+    const uncertain = uncertainActiveRef.current
+    if (uncertain !== null) {
+      const active = plans.find((candidate) => activePlanIdentity(candidate) === activePlanIdentity(uncertain))
+      if (active === undefined) {
+        setReconciliation('stale')
+        return null
+      }
+      if (active.phase === 'uncertain') {
+        uncertainActiveRef.current = active
+        setUncertainRequest(active.request)
+        setReconciliation('uncertain')
+        return active
+      }
+      selectActivePlan(active)
+      return active
+    }
+
+    if (plans.length === 1) {
+      selectActivePlan(plans[0])
+      return plans[0]
+    }
+    setReconciliation('not-required')
+    return null
+  }, [selectActivePlan])
 
   const reconcile = useCallback((afterMutation = false): Promise<void> => {
     if (recoveryMutationRef.current !== null && !afterMutation) return Promise.resolve()
@@ -152,65 +202,15 @@ const Home = () => {
       }
 
       const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
-      const current = workflowRef.current
-      if (current !== null) {
-        const active = plans.find((candidate) => isSameWorkflow(current, candidate))
-        if (active === undefined) {
-          setReconciliation('stale')
-          return
-        }
-        if (active.phase === 'uncertain') {
-          uncertainActiveRef.current = active
-          setReconciliation('uncertain')
-          return
-        }
-
-        uncertainActiveRef.current = null
-        const reconciled: WorkflowSnapshot = {
-          ...current,
-          phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
-        }
-        workflowRef.current = reconciled
-        setWorkflow(reconciled)
-        if (reconciled.phase !== current.phase) setExpandedSummary(null)
-        setReconciliation('confirmed')
-        WorkflowSnapshotStorage.save(reconciled)
-        return
-      }
-
-      const uncertain = uncertainActiveRef.current
-      if (uncertain !== null) {
-        const active = plans.find((candidate) => activePlanIdentity(candidate) === activePlanIdentity(uncertain))
-        if (active === undefined) {
-          setCandidates([])
-          setReconciliation('stale')
-          return
-        }
-        if (active.phase === 'uncertain') {
-          uncertainActiveRef.current = active
-          setUncertainRequest(active.request)
-          setReconciliation('uncertain')
-          return
-        }
-        selectActivePlan(active)
-        return
-      }
-
-      if (plans.length === 1) {
-        selectActivePlan(plans[0])
-      } else if (plans.length > 1) {
-        setCandidates(plans)
-      } else {
-        setCandidates([])
-        setReconciliation('not-required')
-      }
+      const adopted = adoptFromRead(plans)
+      setSlicesInFlight(plans.filter((plan) => plan !== adopted))
     })()
     recoveryInFlightRef.current = request
     void request.finally(() => {
       if (recoveryInFlightRef.current === request) recoveryInFlightRef.current = null
     })
     return request
-  }, [selectActivePlan])
+  }, [adoptFromRead])
 
   useEffect(() => {
     mountedRef.current = true
@@ -225,7 +225,7 @@ const Home = () => {
   }, [reconcile])
 
   const keepsFollowingActivePlans =
-    workflow !== null || candidates.length > 0 || uncertainRequest !== null || (workflow === null && isCoordinatingSessionLive)
+    workflow !== null || slicesInFlight.length > 0 || uncertainRequest !== null || (workflow === null && isCoordinatingSessionLive)
 
   useEffect(() => {
     if (!keepsFollowingActivePlans) return
@@ -247,7 +247,6 @@ const Home = () => {
   const formInteracted = useCallback(() => {
     recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
-    setCandidates([])
     setBrainstormingUnreachable(false)
   }, [])
 
@@ -258,7 +257,6 @@ const Home = () => {
   const sessionOpened = useCallback(() => {
     recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
-    setCandidates([])
     setBrainstormingUnreachable(false)
   }, [])
 
@@ -296,7 +294,6 @@ const Home = () => {
     setRecoveryFailure(null)
     setWorkflow(null)
     setReconciliation('not-required')
-    setCandidates([])
     setUncertainRequest(null)
     setExpandedSummary(null)
     setRequestFormVersion((version) => version + 1)
@@ -530,6 +527,20 @@ const Home = () => {
             </ol>
           </nav>
 
+          {slicesInFlight.length > 0 && (
+            <section className="home__slices" aria-label="Slices en vuelo">
+              {slicesInFlight.map((slice) => (
+                <SliceSession
+                  key={`${slice.plan.repo}:${slice.plan.issue.number}`}
+                  issue={slice.plan.issue.number}
+                  root={slice.plan.root ?? slice.request.path}
+                  repo={slice.plan.repo}
+                  agent={slice.plan.agent}
+                />
+              ))}
+            </section>
+          )}
+
           {currentStage === 'request' && (
             <WorkflowStep
               aria-label={STAGE_LABEL.request}
@@ -541,24 +552,6 @@ const Home = () => {
             >
               {recovery}
               {brainstormingRecovery}
-              {candidates.length > 1 && (
-                <ul className="home__active-plans" aria-label="Planes activos">
-                  {candidates.map((candidate) => (
-                    <li key={`${candidate.plan.repo}:${candidate.plan.issue.number}`} className="home__active-plan">
-                      <span>
-                        <strong>{candidate.request.id}</strong> · <code>{candidate.request.repo}</code> · issue #{candidate.plan.issue.number}
-                      </span>
-                      <Button
-                        variant="secondary"
-                        aria-label={`Continuar plan ${candidate.request.id}, ${candidate.request.repo}, issue #${candidate.plan.issue.number}`}
-                        onClick={() => selectActivePlan(candidate)}
-                      >
-                        Continuar plan
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
               <StartPlanForm
                 key={requestFormVersion}
                 onOpened={sessionOpened}
