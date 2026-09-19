@@ -619,3 +619,47 @@ describe('/ct-status — the scope of the report (#348)', () => {
     cleanUp(b)
   })
 })
+
+// #471: where Control Tower keeps its state is resolved at start-up, through
+// the one door that reads the variable. What this pins is the SHAPE of the
+// refusal — a sentence and a 2, the same as a badly formed `--repo` — because
+// what it replaces was a stack trace out of the middle of the report.
+describe('a state directory this command cannot use', () => {
+  // Without the null byte, and not by oversight: Node refuses to put one in a
+  // child's environment at all ("must be a string without null bytes"), so no
+  // real process can ever receive that value. The rule still covers it, and
+  // control-tower-state.test.js is where it is checked.
+  const REFUSED = ['relative/state', '~/state', ' ']
+
+  it('is_refused_at_start_up_with_a_sentence_and_the_usage_code_of_a_bad_argument', () => {
+    const b = bench()
+    for (const stateDir of REFUSED) {
+      const res = run(b, { CT_STATE_DIR: stateDir })
+
+      expect(res.status).toBe(2)
+      expect(res.stderr.trim())
+        .toBe(`CT_STATE_DIR must be an absolute path without null bytes, got ${JSON.stringify(stateDir)}`)
+    }
+    cleanUp(b)
+  })
+
+  it('never_reaches_the_report_as_a_stack_trace_and_never_reads_an_issue_first', () => {
+    const b = bench()
+    const res = run(b, { CT_STATE_DIR: 'relative/state' })
+
+    expect(res.stderr).not.toMatch(/at .*\.mjs:\d+/)
+    expect(res.stderr).not.toMatch(/InvalidStateDirectory|TypeError/)
+    expect(res.stdout).toBe('')
+    expect(existsSync(b.argvLog)).toBe(false)
+    cleanUp(b)
+  })
+
+  it('an_absolute_one_is_taken_and_the_command_carries_on_reporting', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES, CT_STATE_DIR: join(b.dir, 'isolated-state') })
+
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toMatch(/CT_STATE_DIR/)
+    cleanUp(b)
+  })
+})

@@ -20,6 +20,7 @@ import { buildDispatchInput, NO_MILESTONE_KEY } from './gh-issue-map.js'
 // the registry that says where each of those is checked out on this machine.
 import { MilestoneRepos } from './milestone-repos.js'
 import { CheckoutRegistry } from './checkout-registry.js'
+import { ControlTowerState } from './control-tower-state.js'
 import { parseStateSafe, readBlocked } from './state.js'
 import { SLICE_REL_PATH, excludeContentWith } from './state-paths.js'
 import {
@@ -1150,6 +1151,16 @@ if (!parseRepoSlug(repo)) {
   console.error(`--repo invalid: "${repo}" — it must have the form owner/repo (e.g. josemerca/control-tower), with exactly one slash and neither half empty.`)
   process.exit(2)
 }
+
+// Where this command's state lives, resolved ONCE and here, through the one
+// door that reads `CT_STATE_DIR`. A malformed value is a config refusal like
+// the ones above and not the stack trace each reader used to raise on its own
+// (#471).
+const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (stateRoot.reason !== null) {
+  console.error(stateRoot.reason)
+  process.exit(2)
+}
 // D4, defect 2: `parseInt(capArg, 10)` silently accepted a value DIFFERENT
 // from the one the user wrote — `--cap 1e3` dispatched 1, `--cap 3perros`
 // dispatched 3, `--cap 2.9` dispatched 2 (verified by construction against the
@@ -1962,7 +1973,7 @@ const exitCodeRefusing = (code) => (anyTargetRepoRefused ? 1 : code)
 {
   const reaches = MilestoneRepos.awayFrom(dispatchInput.reachByMilestone || [], repo)
   if (reaches.length) {
-    const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+    const registry = CheckoutRegistry.read({ stateDir: stateRoot.path })
     const resolved = new Map()
     const resolveTarget = (target) => {
       if (resolved.has(target)) return resolved.get(target)

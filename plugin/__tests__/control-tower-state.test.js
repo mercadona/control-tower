@@ -1,58 +1,112 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ControlTowerState, StateRoot } from '../scripts/control-tower-state.js'
 import { configuredDir, controlTowerDir, controlTowerLogDir, metricsPath } from '../scripts/run-metrics.js'
 import { CheckoutRegistry } from '../scripts/checkout-registry.js'
 
 class Machine {
-  static account() { return { configDir: '/account', home: '/home/person' } }
-  static isolated() { return { ...Machine.account(), stateDir: '/isolated/state' } }
+  static ACCOUNT = '/account'
+  static HOME = '/home/person'
+  static ISOLATED = '/isolated/state'
+
+  static account() { return { configDir: Machine.ACCOUNT, home: Machine.HOME } }
+  static isolated() { return { ...Machine.account(), stateDir: Machine.ISOLATED } }
 }
 
-beforeEach(() => vi.stubEnv('CT_STATE_DIR', ''))
+class Asked {
+  static REFUSED = ['relative/state', '~/state', ' ', '/state\u0000hidden']
+
+  static nothing() { return ControlTowerState.resolveIn({}, Machine.account()) }
+  static for(requested) {
+    return ControlTowerState.resolveIn({ [ControlTowerState.VARIABLE]: requested }, Machine.account())
+  }
+  static withNoAccountConfigured(requested) {
+    return ControlTowerState.resolveIn({ [ControlTowerState.VARIABLE]: requested }, { home: Machine.HOME })
+  }
+}
+
+beforeEach(() => vi.stubEnv(ControlTowerState.VARIABLE, ''))
 afterEach(() => vi.unstubAllEnvs())
 
-describe('Control Tower state independent of the Claude account', () => {
-  it('keeps_the_existing_default_when_the_override_is_absent_or_empty', () => {
-    for (const stateDir of [undefined, null, '']) {
-      expect(controlTowerDir({ ...Machine.account(), stateDir })).toBe('/account/control-tower')
+describe('the one door where Control Tower resolves where it keeps its state', () => {
+  it('an_unset_variable_resolves_the_account_relative_default_rather_than_a_refusal', () => {
+    expect(Asked.nothing().path).toBe('/account/control-tower')
+    expect(Asked.nothing().reason).toBe(null)
+    expect(Asked.for('').path).toBe('/account/control-tower')
+    expect(Asked.withNoAccountConfigured(undefined).path).toBe('/home/person/.claude/control-tower')
+  })
+
+  it('a_requested_root_is_used_exactly_as_given_without_appending_another_control_tower_directory', () => {
+    expect(Asked.for(Machine.ISOLATED).path).toBe('/isolated/state')
+    expect(Asked.for('/state with spaces').path).toBe('/state with spaces')
+    expect(Asked.for(Machine.ISOLATED).reason).toBe(null)
+  })
+
+  it('a_value_that_is_not_an_absolute_path_comes_back_as_a_sentence_and_no_path_instead_of_throwing', () => {
+    for (const requested of Asked.REFUSED) {
+      expect(() => Asked.for(requested)).not.toThrow()
+      expect(Asked.for(requested).path).toBe(null)
+      expect(Asked.for(requested).reason)
+        .toBe(`${ControlTowerState.VARIABLE} must be an absolute path without null bytes, got ${JSON.stringify(requested)}`)
     }
-    expect(controlTowerDir({ home: '/home/person' })).toBe('/home/person/.claude/control-tower')
   })
 
-  it('uses_the_exact_requested_root_without_appending_another_control_tower_directory', () => {
-    expect(controlTowerDir(Machine.isolated())).toBe('/isolated/state')
-    expect(controlTowerDir({ ...Machine.account(), stateDir: '/state with spaces' })).toBe('/state with spaces')
+  it('a_refused_value_never_resolves_to_the_account_state_somebody_asked_to_stop_using', () => {
+    for (const requested of Asked.REFUSED) {
+      expect(Asked.for(requested).path).not.toBe('/account/control-tower')
+    }
+  })
+})
+
+describe('the paths that hang off the root, once the door has checked it', () => {
+  it('logs_metrics_and_the_checkout_registry_all_follow_the_checked_value', () => {
+    const checked = { stateDir: Asked.for(Machine.ISOLATED).path }
+
+    expect(controlTowerDir(checked)).toBe('/isolated/state')
+    expect(controlTowerLogDir(checked)).toBe('/isolated/state/log')
+    expect(metricsPath('ct-step', checked)).toBe('/isolated/state/log/ct-step.jsonl')
+    expect(CheckoutRegistry.path(checked)).toBe('/isolated/state/checkouts.json')
   })
 
-  it('moves_logs_metrics_and_checkout_registry_together', () => {
-    expect(controlTowerLogDir(Machine.isolated())).toBe('/isolated/state/log')
-    expect(metricsPath('ct-step', Machine.isolated())).toBe('/isolated/state/log/ct-step.jsonl')
-    expect(CheckoutRegistry.path(Machine.isolated())).toBe('/isolated/state/checkouts.json')
+  it('no_checked_value_keeps_the_account_relative_default_every_reader_resolves_today', () => {
+    expect(controlTowerDir(Machine.account())).toBe('/account/control-tower')
+    expect(metricsPath('ct-step', Machine.account())).toBe('/account/control-tower/log/ct-step.jsonl')
+    expect(CheckoutRegistry.path(Machine.account())).toBe('/account/control-tower/checkouts.json')
+    expect(controlTowerDir({ home: Machine.HOME })).toBe('/home/person/.claude/control-tower')
   })
 
-  it('passes_the_inherited_override_through_existing_plugin_call_sites', () => {
-    vi.stubEnv('CT_STATE_DIR', '/inherited/state')
+  it('they_do_not_read_the_environment_themselves_so_an_unchecked_value_cannot_reach_them', () => {
+    vi.stubEnv(ControlTowerState.VARIABLE, '/never/read/here')
 
-    expect(controlTowerDir(Machine.account())).toBe('/inherited/state')
-    expect(metricsPath('ct-step', Machine.account())).toBe('/inherited/state/log/ct-step.jsonl')
-    expect(CheckoutRegistry.path(Machine.account())).toBe('/inherited/state/checkouts.json')
+    expect(controlTowerDir(Machine.account())).toBe('/account/control-tower')
+    expect(metricsPath('ct-step', Machine.account())).toBe('/account/control-tower/log/ct-step.jsonl')
+    expect(CheckoutRegistry.path(Machine.account())).toBe('/account/control-tower/checkouts.json')
     expect(configuredDir(Machine.account())).toBe('/account')
   })
 
-  it('an_explicit_option_is_not_overridden_by_the_callers_environment', () => {
-    vi.stubEnv('CT_STATE_DIR', '/inherited/state')
+  it('a_malformed_value_in_the_environment_can_no_longer_make_them_throw', () => {
+    for (const requested of Asked.REFUSED) {
+      vi.stubEnv(ControlTowerState.VARIABLE, requested)
 
-    expect(controlTowerDir(Machine.isolated())).toBe('/isolated/state')
-    expect(controlTowerDir({ ...Machine.account(), stateDir: null })).toBe('/account/control-tower')
+      expect(() => controlTowerDir(Machine.account())).not.toThrow()
+      expect(() => metricsPath('ct-step', Machine.account())).not.toThrow()
+      expect(() => CheckoutRegistry.read(Machine.account())).not.toThrow()
+    }
+  })
+})
+
+describe('StateRoot, the answer the door gives', () => {
+  it('carries_either_a_path_or_a_reason_and_never_both', () => {
+    const resolved = Asked.for(Machine.ISOLATED)
+    const refused = Asked.for('relative/state')
+
+    expect([resolved.path, resolved.reason]).toEqual(['/isolated/state', null])
+    expect([refused.path, refused.reason]).toEqual([null, expect.any(String)])
   })
 
-  it('refuses_invalid_overrides_without_returning_a_default_write_destination', () => {
-    for (const stateDir of ['relative/state', '~/state', ' ', '/state\u0000hidden']) {
-      const options = { ...Machine.account(), stateDir }
-      const reason = `CT_STATE_DIR must be an absolute path without null bytes, got ${JSON.stringify(stateDir)}`
+  it('cannot_be_edited_after_it_answers', () => {
+    const resolved = Asked.for(Machine.ISOLATED)
 
-      expect(() => controlTowerDir(options)).toThrow(reason)
-      expect(() => metricsPath('ct-step', options)).toThrow(reason)
-      expect(() => CheckoutRegistry.path(options)).toThrow(reason)
-    }
+    expect(Object.isFrozen(resolved)).toBe(true)
+    expect(resolved).toBeInstanceOf(StateRoot)
   })
 })

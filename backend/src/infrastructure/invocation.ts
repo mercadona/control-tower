@@ -1,6 +1,6 @@
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { delimiter as pathDelimiter, isAbsolute, join } from 'node:path'
-import { ControlTowerState, InvalidStateDirectory } from '../../../plugin/scripts/control-tower-state.js'
+import { ControlTowerState } from '../../../plugin/scripts/control-tower-state.js'
 
 export const InvocationOutcome = Object.freeze({
   READY: 'ready',
@@ -69,7 +69,15 @@ export class Invocation {
     const configured = Invocation.configuredIn(environment, home)
     if (!isAbsolute(configured)) return null
 
-    return ControlTowerState.directory(configured, environment[Invocation.STATE_VARIABLE])
+    return ControlTowerState.resolveIn(environment, { configDir: configured }).path
+  }
+
+  static #stateReason(environment: NodeJS.ProcessEnv, home: string): string {
+    const refused: string | null = ControlTowerState.resolveIn(environment, {
+      configDir: Invocation.configuredIn(environment, home),
+    }).reason
+
+    return refused ?? `the home directory of whoever runs this could not be resolved, so there is no absolute path for the state Control Tower shares with its plugin: set ${Invocation.HOME_VARIABLE}, or ${Invocation.CONFIG_VARIABLE} to an absolute path`
   }
 
   static #port(environment: NodeJS.ProcessEnv): number | null {
@@ -124,19 +132,9 @@ export class Invocation {
         `${Invocation.PORT_VARIABLE} must be an integer between 0 and ${Invocation.#MAX_PORT}, got ${JSON.stringify(environment[Invocation.PORT_VARIABLE])}`
       )
     }
-    let stateRoot: string | null
-    try {
-      stateRoot = Invocation.stateRootIn(environment, home)
-    } catch (failure) {
-      if (!(failure instanceof InvalidStateDirectory)) throw failure
-
-      return Invocation.#refused(InvocationOutcome.UNKNOWN_STATE_HOME, failure.message)
-    }
+    const stateRoot = Invocation.stateRootIn(environment, home)
     if (stateRoot === null) {
-      return Invocation.#refused(
-        InvocationOutcome.UNKNOWN_STATE_HOME,
-        `the home directory of whoever runs this could not be resolved, so there is no absolute path for the state Control Tower shares with its plugin: set ${Invocation.HOME_VARIABLE}, or ${Invocation.CONFIG_VARIABLE} to an absolute path`
-      )
+      return Invocation.#refused(InvocationOutcome.UNKNOWN_STATE_HOME, Invocation.#stateReason(environment, home))
     }
     const harvestTable = environment[Invocation.HARVEST_TABLE_VARIABLE]
     if (harvestTable === undefined || harvestTable === '') {
