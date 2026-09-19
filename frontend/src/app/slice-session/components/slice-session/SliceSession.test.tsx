@@ -1,24 +1,22 @@
-import { act, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
+import type { SlicePhase } from 'app/slice-session/SliceSession.types'
 import { SliceSession } from './SliceSession'
 
 type Answer = { status: number; body: string }
 
 const FIELD_LABEL = 'Pedir un cambio a esta conversación'
 const SEND_LABEL = 'Enviar'
+const WAITING_COPY = 'Esperando a que arranque la implementación…'
+const PULL_REQUEST_LINK = '#31'
 
-const stubFetch = ({ progress, then = progress, message }: { progress: Answer, then?: Answer, message?: Answer }) => {
+const stubFetch = ({ progress, message }: { progress: Answer, message?: Answer }) => {
   const posted = vi.fn()
-  let reads = 0
   const fetching = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (url.startsWith('/implement-progress/')) {
-      const answer = reads === 0 ? progress : then
-      reads += 1
-      return new Response(answer.body, { status: answer.status })
-    }
+    if (url.startsWith('/implement-progress/')) return new Response(progress.body, { status: progress.status })
     if (url === `/slices/${SliceSessionMother.ISSUE}/message` && init?.method === 'POST') {
       posted(JSON.parse(String(init.body)))
       if (message === undefined) throw new Error('no message answer scripted')
@@ -31,14 +29,17 @@ const stubFetch = ({ progress, then = progress, message }: { progress: Answer, t
   return { posted }
 }
 
-const renderSession = () => render(
+const sessionWith = (phase: SlicePhase) => (
   <SliceSession
     issue={SliceSessionMother.ISSUE}
     root={SliceSessionMother.ROOT}
     repo={SliceSessionMother.REPO}
     agent={SliceSessionMother.AGENT}
+    phase={phase}
   />
 )
+
+const renderSession = (phase: SlicePhase) => render(sessionWith(phase))
 
 describe('SliceSession', () => {
   afterEach(() => {
@@ -46,10 +47,10 @@ describe('SliceSession', () => {
     vi.useRealTimers()
   })
 
-  it('a slice whose pull request is open offers the field and delivers the typed message to its conversation', async () => {
-    const { posted } = stubFetch({ progress: SliceSessionMother.inReview(), message: SliceSessionMother.delivered() })
+  it('a slice that is implementing offers the field and delivers the typed change to its conversation', async () => {
+    const { posted } = stubFetch({ progress: SliceSessionMother.progress(), message: SliceSessionMother.delivered() })
     const user = userEvent.setup()
-    renderSession()
+    renderSession('implementing')
 
     const field = await screen.findByLabelText(FIELD_LABEL)
     await user.type(field, SliceSessionMother.TEXT)
@@ -63,8 +64,8 @@ describe('SliceSession', () => {
   })
 
   it('an empty message reaches no endpoint', async () => {
-    const { posted } = stubFetch({ progress: SliceSessionMother.inReview() })
-    renderSession()
+    const { posted } = stubFetch({ progress: SliceSessionMother.progress() })
+    renderSession('implementing')
 
     await screen.findByLabelText(FIELD_LABEL)
 
@@ -72,10 +73,10 @@ describe('SliceSession', () => {
     expect(posted).not.toHaveBeenCalled()
   })
 
-  it('a refused delivery keeps the text and shows the reason', async () => {
-    stubFetch({ progress: SliceSessionMother.inReview(), message: SliceSessionMother.refused() })
+  it('a refusal the panel could not foresee is shown with the text kept', async () => {
+    stubFetch({ progress: ImplementProgressMother.fixing(), message: SliceSessionMother.refused() })
     const user = userEvent.setup()
-    renderSession()
+    renderSession('implementing')
 
     const field = await screen.findByLabelText(FIELD_LABEL)
     await user.type(field, SliceSessionMother.TEXT)
@@ -86,7 +87,7 @@ describe('SliceSession', () => {
   })
 
   it('an unreachable backend says so instead of claiming delivery', async () => {
-    const progress = SliceSessionMother.inReview()
+    const progress = SliceSessionMother.progress()
     const fetching = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/implement-progress/')) return new Response(progress.body, { status: progress.status })
@@ -97,7 +98,7 @@ describe('SliceSession', () => {
     })
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    renderSession()
+    renderSession('implementing')
 
     const field = await screen.findByLabelText(FIELD_LABEL)
     await user.type(field, SliceSessionMother.TEXT)
@@ -107,42 +108,40 @@ describe('SliceSession', () => {
     expect(field).toHaveValue(SliceSessionMother.TEXT)
   })
 
-  it('a slice that is still implementing offers no field, because its conversation would refuse the message', async () => {
-    stubFetch({ progress: SliceSessionMother.progress() })
-    renderSession()
+  it("a slice in the planner's window offers no field, because the run is not there to hold the change", async () => {
+    stubFetch({ progress: ImplementProgressMother.notRead() })
+    renderSession('planning')
 
-    expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
+    expect(await screen.findByText(WAITING_COPY)).toBeInTheDocument()
     expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
     expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
   })
 
-  it('a run that has delivered without opening a pull request yet offers no field', async () => {
+  it('an uncertain slice offers no field even though its pull request is open', async () => {
+    stubFetch({ progress: SliceSessionMother.inReview() })
+    renderSession('uncertain')
+
+    expect(await screen.findByRole('link', { name: PULL_REQUEST_LINK })).toBeInTheDocument()
+    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
+    expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+  })
+
+  it('a slice that has delivered before its pull request exists offers the field', async () => {
     stubFetch({ progress: ImplementProgressMother.delivered() })
-    renderSession()
+    renderSession('implementing')
 
     expect(await screen.findByText('Entregado')).toBeInTheDocument()
-    expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
-    expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
+    expect(screen.getByLabelText(FIELD_LABEL)).toBeInTheDocument()
   })
 
-  it('a slice already fixing what its review asked still offers the field, because its pull request is open', async () => {
-    stubFetch({ progress: ImplementProgressMother.fixing() })
-    renderSession()
+  it("the field appears the moment a slice leaves the planner's window", async () => {
+    stubFetch({ progress: ImplementProgressMother.notRead() })
+    const { rerender } = renderSession('planning')
 
-    expect(await screen.findByLabelText(FIELD_LABEL)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: SEND_LABEL })).toBeInTheDocument()
-  })
-
-  it('the field appears when the pull request opens under a slice that was implementing', async () => {
-    vi.useFakeTimers()
-    stubFetch({ progress: SliceSessionMother.progress(), then: SliceSessionMother.inReview() })
-    renderSession()
-
-    await act(async () => vi.advanceTimersByTimeAsync(0))
-    expect(screen.getByText(/Tarea 3 de 7/)).toBeInTheDocument()
+    expect(await screen.findByText(WAITING_COPY)).toBeInTheDocument()
     expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
 
-    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    rerender(sessionWith('implementing'))
 
     expect(screen.getByLabelText(FIELD_LABEL)).toBeInTheDocument()
   })

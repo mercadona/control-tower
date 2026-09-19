@@ -58,7 +58,7 @@ describe('Home · slice session', () => {
     expect(screen.getByRole('heading', { name: 'Sesión coordinadora', level: 2 })).toBeInTheDocument()
   })
 
-  it('the adopted workflow\'s panel offers no field while its slice is implementing', async () => {
+  it('the adopted workflow\'s panel offers the field while its slice is implementing', async () => {
     stubFetch(vi.fn(), ImplementProgressMother.progress())
 
     openHome()
@@ -67,6 +67,6 @@ describe('Home · slice session', () => {
     expect(
       screen.getByRole('heading', { name: `Slice #${StartPlanMother.ISSUE.number}`, level: 2 }),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Pedir un cambio a esta conversación')).toBeNull()
+    expect(screen.getByLabelText('Pedir un cambio a esta conversación')).toBeInTheDocument()
   })
 })

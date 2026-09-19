@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
 import { SliceSessionClient } from 'app/slice-session/client'
+import type { SlicePhase } from 'app/slice-session/SliceSession.types'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { TextArea } from 'system-ui/text-area'
@@ -13,7 +14,7 @@ const DELIVERED_MESSAGE = 'Cambio entregado a la conversación del slice'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const textFieldId = (issue: number) => `slice-session-text-${issue}`
 
-type SliceSessionProps = { issue: number; root: string; repo: string; agent: string }
+type SliceSessionProps = { issue: number; root: string; repo: string; agent: string; phase: SlicePhase }
 
 type SendState =
   | { phase: 'idle' }
@@ -24,12 +25,12 @@ type SendState =
 
 const IDLE: SendState = { phase: 'idle' }
 
-const SliceSession = ({ issue, root, repo, agent }: SliceSessionProps) => {
+const SliceSession = ({ issue, root, repo, agent, phase }: SliceSessionProps) => {
   const [text, setText] = useState('')
   const [state, setState] = useState<SendState>(IDLE)
   const isSendingRef = useRef(false)
   const progress = useImplementProgress(issue, root, repo)
-  const pullRequest = progress.phase === 'progress' ? progress.pullRequest : null
+  const offersMessage = phase === 'implementing'
 
   const send = async () => {
     if (isSendingRef.current || text.length === 0) return
@@ -53,7 +54,7 @@ const SliceSession = ({ issue, root, repo, agent }: SliceSessionProps) => {
     <section className="slice-session" aria-label={`Slice #${issue}`}>
       <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
       <ImplementProgress progress={progress} />
-      {pullRequest !== null && (
+      {offersMessage && (
         <div className="slice-session__message">
           <label className="slice-session__label lg-caption1-regular" htmlFor={textFieldId(issue)}>
             {FIELD_LABEL}

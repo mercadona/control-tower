@@ -18,6 +18,7 @@ const MESSAGE_TEXT = 'Cambia el nombre del export'
 const MESSAGE_FIELD = 'Pedir un cambio a esta conversación'
 const SEND = 'Enviar'
 const DELIVERED_COPY = 'Cambio entregado a la conversación del slice'
+const WAITING_COPY = 'Esperando a que arranque la implementación…'
 const SLICE_MESSAGE = /^\/slices\/(\d+)\/message$/
 
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
@@ -102,18 +103,19 @@ describe('Home · the slices in flight', () => {
     expect(screen.queryByRole('heading', { name: /^Slice #/ })).toBeNull()
   })
 
-  it('the panel of a slice still implementing offers no field, while the one whose pull request is open does', async () => {
+  it("the panel of a slice in the planner's window offers no field, while the one implementing does", async () => {
     backendWith({
-      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
-      progress: (issue) => (issue === 7 ? ImplementProgressMother.progress() : ImplementProgressMother.inReview()),
+      activePlans: () => HeadlessPlanMother.aPlannerAndAnImplementer(7, 8),
+      progress: (issue) => (issue === 7 ? ImplementProgressMother.notRead() : ImplementProgressMother.progress()),
     })
     openHome()
 
-    const implementing = await panelOf(7)
+    const planning = await panelOf(7)
+    expect(await planning.findByText(WAITING_COPY)).toBeInTheDocument()
+    expect(planning.queryByLabelText(MESSAGE_FIELD)).toBeNull()
+    const implementing = await panelOf(8)
     expect(await implementing.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
-    expect(implementing.queryByLabelText(MESSAGE_FIELD)).toBeNull()
-    const inReview = await panelOf(8)
-    expect(await inReview.findByLabelText(MESSAGE_FIELD)).toBeInTheDocument()
+    expect(implementing.getByLabelText(MESSAGE_FIELD)).toBeInTheDocument()
   })
 
   it('delivers a message to the conversation of the panel it was typed in and to no other', async () => {

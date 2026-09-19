@@ -58,21 +58,33 @@ class HeadlessPlanMother {
   }
 
   static slicesInFlight(...issues: number[]): Answer {
-    return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
+    return {
+      status: 200,
+      body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue, 'implementing')) }),
+    }
+  }
+
+  static aPlannerAndAnImplementer(planning: number, implementing: number): Answer {
+    return {
+      status: 200,
+      body: JSON.stringify({
+        plans: [HeadlessPlanMother.slice(planning, 'planning'), HeadlessPlanMother.slice(implementing, 'implementing')],
+      }),
+    }
   }
 
   static workflowOfSlice(issue: number): WorkflowSnapshot {
-    const { phase, request, plan } = HeadlessPlanMother.slice(issue)
-    return { phase, request, plan }
+    const { request, plan } = HeadlessPlanMother.slice(issue, 'implementing')
+    return { phase: 'implementing', request, plan }
   }
 
   static agentFor(issue: number): string {
     return `conversation-of-${issue}`
   }
 
-  private static slice(issue: number) {
+  private static slice(issue: number, phase: HeadlessPhase) {
     return {
-      phase: 'implementing',
+      phase,
       request: { id: null, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
       plan: {
         id: null,
@@ -82,7 +94,7 @@ class HeadlessPlanMother {
         branch: `feat/${issue}`,
         worktree: `${StartPlanMother.PATH}/.worktrees/${issue}`,
       },
-    } as const
+    }
   }
 
   private static active(phase: HeadlessPhase, recovery?: RecoveryAction): Answer {
