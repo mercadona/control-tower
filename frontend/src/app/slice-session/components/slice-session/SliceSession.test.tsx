@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
 import { SliceSession } from './SliceSession'
+import type { SliceRecovery } from './SliceSession'
 
 type Answer = { status: number; body: string }
 
@@ -72,6 +73,43 @@ describe('SliceSession', () => {
     await screen.findByText('En revisión')
 
     expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/implement-progress/'))).toBe(true)
+  })
+
+  it('a slice whose recovery can only be inspected offers the retry and no action', async () => {
+    stubFetch(SliceSessionMother.progress())
+    const onRetry = vi.fn()
+    const onAct = vi.fn()
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        recovery={{ diagnostic: 'el proceso ya no responde', action: 'inspect', pending: false, failure: null, onAct, onRetry }}
+      />
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('el proceso ya no responde')
+    expect(screen.getByRole('button', { name: 'Reintentar recuperación' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
+    expect(onAct).not.toHaveBeenCalled()
+  })
+
+  it('a recovery that failed shows the reason in place of the diagnostic and keeps the button', async () => {
+    stubFetch(SliceSessionMother.progress())
+    const recovery: SliceRecovery = {
+      diagnostic: 'el proceso ya no responde',
+      action: 'continue',
+      pending: true,
+      failure: 'No se pudo contactar con el backend para ejecutar la recuperación.',
+      onAct: vi.fn(),
+      onRetry: vi.fn(),
+    }
+    render(
+      <SliceSession issue={SliceSessionMother.ISSUE} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} recovery={recovery} />
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    expect(screen.getByRole('button', { name: 'Recuperar trabajo' })).toBeDisabled()
   })
 
   it('two slices side by side each carry their own title', async () => {

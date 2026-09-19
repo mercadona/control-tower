@@ -47,6 +47,8 @@ const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inR
     const asProgress = IMPLEMENT_PROGRESS.exec(url)
     if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
     if (url.startsWith('/implement-history/')) return responseFor(ImplementProgressMother.notRead())
+    if (url === '/recover-plan' && init?.method === 'POST') return new Response('{"agent":"conversation-of-8"}', { status: 202 })
+    if (url === '/cleanup-plan' && init?.method === 'POST') return new Response('{}', { status: 200 })
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -105,6 +107,64 @@ describe('Home · the slices in flight', () => {
     expect(screen.queryAllByLabelText(MESSAGE_FIELD)).toEqual([])
     expect(screen.queryAllByRole('button', { name: SEND })).toEqual([])
     expect(fetching.mock.calls.some(([input]) => String(input).includes('/message'))).toBe(false)
+  })
+
+  it('an uncertain slice among several carries its recovery inside its own panel and leaves the others alone', async () => {
+    backendWith({ activePlans: () => HeadlessPlanMother.uncertainAmong(8, 'continue', 7) })
+    openHome()
+
+    const uncertain = await panelOf(8)
+    expect(await uncertain.findByRole('alert')).toHaveTextContent(HeadlessPlanMother.uncertainDiagnostic(8))
+    expect(uncertain.getByRole('button', { name: 'Recuperar trabajo' })).toBeInTheDocument()
+
+    const untouched = await panelOf(7)
+    expect(untouched.queryByRole('alert')).toBeNull()
+    expect(untouched.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
+    expect(await untouched.findByText('En revisión')).toBeInTheDocument()
+  })
+
+  it('an uncertain slice whose start never launched offers the cleanup instead', async () => {
+    backendWith({ activePlans: () => HeadlessPlanMother.uncertainAmong(8, 'cleanup', 7) })
+    openHome()
+
+    const uncertain = await panelOf(8)
+
+    expect(await uncertain.findByRole('button', { name: 'Limpiar arranque fallido' })).toBeInTheDocument()
+    expect(uncertain.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
+  })
+
+  it('recovering one uncertain slice asks for that slice and keeps every other panel standing', async () => {
+    const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.uncertainAmong(8, 'continue', 7) })
+    const { user } = openHome()
+
+    const uncertain = await panelOf(8)
+    await user.click(await uncertain.findByRole('button', { name: 'Recuperar trabajo' }))
+
+    await waitFor(() => expect(
+      fetching.mock.calls.some(([input]) => String(input) === '/recover-plan')
+    ).toBe(true))
+    const asked = fetching.mock.calls.find(([input]) => String(input) === '/recover-plan')
+    expect(JSON.parse(String((asked?.[1] as RequestInit).body))).toEqual({
+      repo: StartPlanMother.REPO, issue: 8, agent: HeadlessPlanMother.agentFor(8),
+    })
+    expect(await panelOf(7)).toBeTruthy()
+  })
+
+  it('a slice that stops being uncertain loses its recovery and shows its progress again', async () => {
+    let answer = HeadlessPlanMother.uncertainAmong(8, 'continue', 7)
+    vi.useFakeTimers()
+    backendWith({ activePlans: () => answer })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(within(screen.getByRole('region', { name: 'Slice #8' })).getByRole('alert')).toBeInTheDocument()
+
+    answer = HeadlessPlanMother.slicesInFlight(8, 7)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    const settled = within(screen.getByRole('region', { name: 'Slice #8' }))
+    expect(settled.queryByRole('alert')).toBeNull()
+    expect(settled.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
   })
 
   it('drops the panel of a slice that left the active plans and keeps the rest', async () => {
