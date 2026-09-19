@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
+import { existsSync, readdirSync, readlinkSync } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
@@ -53,6 +54,7 @@ class OnDisk {
 
 class TheProcessTable {
   static readonly #SETTLE_MS = 250
+  static readonly #FLOOR_MS = 2_000
   static readonly #DEADLINE_MS = 10_000
 
   static commandOf(pid: number): string {
@@ -64,13 +66,14 @@ class TheProcessTable {
   }
 
   static async settled(pids: readonly number[]): Promise<Set<number>> {
+    const startedAt = Date.now()
     let previous = TheProcessTable.#aliveAmong(pids)
-    const deadline = Date.now() + TheProcessTable.#DEADLINE_MS
-    while (Date.now() < deadline) {
+    while (Date.now() < startedAt + TheProcessTable.#DEADLINE_MS) {
       await new Promise((wake) => setTimeout(wake, TheProcessTable.#SETTLE_MS))
       const now = TheProcessTable.#aliveAmong(pids)
-      if (TheProcessTable.#same(previous, now)) return now
+      const quiet = TheProcessTable.#same(previous, now)
       previous = now
+      if (quiet && Date.now() >= startedAt + TheProcessTable.#FLOOR_MS) return now
     }
     throw new Error('the descendants of the crashed backend never stopped changing')
   }
@@ -120,12 +123,72 @@ class TheProcessesTheBackendOwned {
   }
 }
 
-class TheHangupOnTheTerminal {
-  static readonly ON_DARWIN = 'died with the backend'
-  static readonly ELSEWHERE = 'orphaned and still running'
+class WhatStillHoldsTheTerminalOpen {
+  static readonly #MASTER = 'ptmx'
+  static readonly #PROC = '/proc'
 
-  static measured(): string {
-    return process.platform === 'darwin' ? TheHangupOnTheTerminal.ON_DARWIN : TheHangupOnTheTerminal.ELSEWHERE
+  static among(pids: readonly number[], survivors: Set<number>): number[] {
+    return pids.filter((pid) => survivors.has(pid) && WhatStillHoldsTheTerminalOpen.#holdsAMaster(pid))
+  }
+
+  static #holdsAMaster(pid: number): boolean {
+    return WhatStillHoldsTheTerminalOpen.#openedBy(pid)
+      .some((target) => target.endsWith(WhatStillHoldsTheTerminalOpen.#MASTER))
+  }
+
+  static #openedBy(pid: number): string[] {
+    return existsSync(WhatStillHoldsTheTerminalOpen.#PROC)
+      ? WhatStillHoldsTheTerminalOpen.#underProc(pid)
+      : WhatStillHoldsTheTerminalOpen.#underLsof(pid)
+  }
+
+  static #underProc(pid: number): string[] {
+    const root = join(WhatStillHoldsTheTerminalOpen.#PROC, String(pid), 'fd')
+    try {
+      return readdirSync(root).map((entry) => {
+        try {
+          return readlinkSync(join(root, entry))
+        } catch {
+          return ''
+        }
+      })
+    } catch {
+      return []
+    }
+  }
+
+  static #underLsof(pid: number): string[] {
+    try {
+      return execFileSync('lsof', ['-p', String(pid), '-F', 'n'], { encoding: 'utf8' })
+        .split('\n')
+        .filter((line) => line.startsWith('n'))
+        .map((line) => line.slice(1))
+    } catch {
+      return []
+    }
+  }
+}
+
+class TheHangupOnTheTerminal {
+  static readonly REAPED = 'died with the backend'
+  static readonly OUTLIVING = 'orphaned and still running'
+  static readonly HELD = 'held open by what the backend left behind'
+  static readonly UNHELD = 'with nothing it left behind still holding its terminal open'
+
+  static expectedWhile(holders: readonly number[]): string {
+    return TheHangupOnTheTerminal.#said(
+      holders.length === 0 ? TheHangupOnTheTerminal.REAPED : TheHangupOnTheTerminal.OUTLIVING, holders
+    )
+  }
+
+  static measuredWhile(outliving: boolean, holders: readonly number[]): string {
+    return TheHangupOnTheTerminal.#said(
+      outliving ? TheHangupOnTheTerminal.OUTLIVING : TheHangupOnTheTerminal.REAPED, holders
+    )
+  }
+
+  static #said(fate: string, holders: readonly number[]): string {
+    return `${fate}, ${holders.length === 0 ? TheHangupOnTheTerminal.UNHELD : TheHangupOnTheTerminal.HELD}`
   }
 }
 
@@ -188,6 +251,7 @@ class ABackendThatCrashed {
   readonly launch: RecordedLaunch
   readonly owned: TheProcessesTheBackendOwned
   readonly survivors: Set<number>
+  readonly holders: readonly number[]
   readonly before: ALifeOfTheBackend
   readonly after: ALifeOfTheBackend
   readonly secondLife: StartedEntrypoint
@@ -197,6 +261,7 @@ class ABackendThatCrashed {
     launch: RecordedLaunch,
     owned: TheProcessesTheBackendOwned,
     survivors: Set<number>,
+    holders: readonly number[],
     before: ALifeOfTheBackend,
     after: ALifeOfTheBackend,
     secondLife: StartedEntrypoint,
@@ -205,6 +270,7 @@ class ABackendThatCrashed {
     this.launch = asked.launch
     this.owned = asked.owned
     this.survivors = asked.survivors
+    this.holders = asked.holders
     this.before = asked.before
     this.after = asked.after
     this.secondLife = asked.secondLife
@@ -220,10 +286,11 @@ class ABackendThatCrashed {
     await firstLife.crash()
 
     const survivors = await TheProcessTable.settled(owned.all())
+    const holders = WhatStillHoldsTheTerminalOpen.among([owned.worker, owned.agent], survivors)
     const secondLife = await Entrypoint.recovering(runtime.environment())
 
     return new ABackendThatCrashed({
-      runtime, launch, owned, survivors, before,
+      runtime, launch, owned, survivors, holders, before,
       after: await ALifeOfTheBackend.readBy(secondLife.port),
       secondLife,
     })
@@ -302,6 +369,7 @@ class WhatARestartGivesBack {
     after: ALifeOfTheBackend,
     owned: TheProcessesTheBackendOwned,
     survivors: Set<number>,
+    holders: readonly number[],
     launch: RecordedLaunch,
     runtime: ActualHeadlessRuntime,
     relaunches: number,
@@ -316,7 +384,9 @@ class WhatARestartGivesBack {
       ),
       coordinatingTimeline: WhatARestartGivesBack.#grown(asked.before.timelineIds(), asked.after.timelineIds()),
       coordinatingTerminal: WhatARestartGivesBack.#same(asked.before.terminalId(), asked.after.terminalId()),
-      coordinatingTerminalProcess: WhatARestartGivesBack.#outliving(asked.owned.terminal, asked.survivors),
+      coordinatingTerminalProcess: TheHangupOnTheTerminal.measuredWhile(
+        asked.survivors.has(asked.owned.terminal), asked.holders
+      ),
       dispatchedPlan: WhatARestartGivesBack.#same(before.plan.agent, after.plan.agent),
       dispatchedPlanBranch: WhatARestartGivesBack.#same(before.plan.branch, after.plan.branch),
       dispatchedPlanPhase: `${before.phase} then ${after.phase}`,
@@ -370,6 +440,7 @@ describe('a crash of the backend with work in flight', () => {
         after: crashed.after,
         owned: crashed.owned,
         survivors: crashed.survivors,
+        holders: crashed.holders,
         launch: crashed.launch,
         runtime,
         relaunches: await crashed.relaunches(),
@@ -377,7 +448,7 @@ describe('a crash of the backend with work in flight', () => {
         coordinatingConversation: 'the same one',
         coordinatingTimeline: '1 kept and 1 appended',
         coordinatingTerminal: 'a different one',
-        coordinatingTerminalProcess: TheHangupOnTheTerminal.measured(),
+        coordinatingTerminalProcess: TheHangupOnTheTerminal.expectedWhile(crashed.holders),
         dispatchedPlan: 'the same one',
         dispatchedPlanBranch: 'the same one',
         dispatchedPlanPhase: 'planning then uncertain',
