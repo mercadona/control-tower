@@ -26,6 +26,48 @@ import { RunInstruction } from '../../src/domain/value-objects/run-instruction.t
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
+import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
+import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+
+class QuietEscalations extends SliceEscalations {
+  static reader(): ReadSliceEscalation {
+    return new ReadSliceEscalation({ escalations: new QuietEscalations() })
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    return SliceEscalation.none()
+  }
+
+  override async lift(): Promise<void> {
+    return undefined
+  }
+}
+
+class ScriptedEscalations extends SliceEscalations {
+  readonly trace: string[]
+  readonly answers: SliceEscalation[]
+
+  static raised(): SliceEscalation {
+    return SliceEscalation.raised({ reason: 'which repository?', unblock: 'a decision', notes: [] })
+  }
+
+  constructor(trace: string[], answers: readonly SliceEscalation[]) {
+    super()
+    this.trace = trace
+    this.answers = [...answers]
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    this.trace.push('escalation')
+    return this.answers.shift() ?? SliceEscalation.none()
+  }
+
+  override async lift(): Promise<void> {
+    this.trace.push('lift')
+  }
+}
+
 
 class Deferred<T> {
   readonly promise: Promise<T>
@@ -268,6 +310,7 @@ class RunFlow {
     publication?: PlanPublication,
     messages?: SliceMessages,
     drainCalls?: PlanCalls,
+    escalations?: SliceEscalations,
   }) {
     this.trace = asked.trace ?? []
     this.machine = asked.machine
@@ -283,7 +326,11 @@ class RunFlow {
         messages: asked.messages ?? new HeldMessagesDouble(),
         calls: asked.drainCalls ?? new PlanCallsDouble(this.trace),
         measurements: new CallMeasurementsDouble(this.trace),
+        escalations: new QuietEscalations(),
       }),
+      escalations: asked.escalations === undefined
+        ? QuietEscalations.reader()
+        : new ReadSliceEscalation({ escalations: asked.escalations }),
     })
   }
 
@@ -293,6 +340,42 @@ class RunFlow {
 }
 
 describe('DriveRun', () => {
+  it('a slice that raised a question stops the run before the next step and does not close it', async () => {
+    const trace: string[] = []
+    const flow = new RunFlow({
+      trace,
+      escalations: new ScriptedEscalations(trace, [ScriptedEscalations.raised()]),
+      machine: new RunMachineDouble({
+        trace,
+        opening: RunMother.call('c1'),
+        continuations: new Map([['c1', RunMother.delivered()]]),
+      }),
+    })
+
+    await expect(flow.run()).resolves.toBeUndefined()
+
+    expect(trace).toEqual(['establishment', 'open', 'escalation'])
+  })
+
+  it('a question already answered lets the run carry on from the step it was on', async () => {
+    const trace: string[] = []
+    const flow = new RunFlow({
+      trace,
+      escalations: new ScriptedEscalations(trace, [SliceEscalation.none(), ScriptedEscalations.raised()]),
+      machine: new RunMachineDouble({
+        trace,
+        opening: RunMother.call('c1'),
+        continuations: new Map([['c1', RunMother.command('c2')], ['c2', RunMother.delivered()]]),
+      }),
+    })
+
+    await flow.run()
+
+    expect(trace).toEqual([
+      'establishment', 'open', 'escalation', 'perform:c1', 'advance:c1', 'escalation',
+    ])
+  })
+
   it('every held change is handed over before the next instruction runs', async () => {
     const trace: string[] = []
     const held = new HeldMessagesDouble(trace, [

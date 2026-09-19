@@ -1,7 +1,9 @@
 import { PlanAgentNotResumed } from '../../domain/exceptions.ts'
 import type { CallMeasurements } from '../../domain/ports/call-measurements.ts'
 import type { PlanCalls } from '../../domain/ports/plan-calls.ts'
+import type { SliceEscalations } from '../../domain/ports/slice-escalations.ts'
 import type { SliceMessages } from '../../domain/ports/slice-messages.ts'
+import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { CompletedPlanCall } from '../../domain/value-objects/plan-call.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 
@@ -20,18 +22,22 @@ export class DeliverHeldMessages {
   readonly messages: SliceMessages
   readonly calls: PlanCalls
   readonly measurements: CallMeasurements
+  readonly escalations: SliceEscalations
 
-  constructor({ messages, calls, measurements }: {
+  constructor({ messages, calls, measurements, escalations }: {
     messages: SliceMessages,
     calls: PlanCalls,
     measurements: CallMeasurements,
+    escalations: SliceEscalations,
   }) {
     this.messages = messages
     this.calls = calls
     this.measurements = measurements
+    this.escalations = escalations
   }
 
   async execute(params: DeliverHeldMessagesParams): Promise<void> {
+    let delivered = 0
     for (const message of await this.messages.pending(params.watch)) {
       const call = await this.calls.start(
         params.watch,
@@ -43,7 +49,12 @@ export class DeliverHeldMessages {
       await this.measurements.capture(call)
       DeliverHeldMessages.#requireSuccess(completed)
       await this.messages.settle(params.watch, message.ticket, call.id)
+      delivered += 1
     }
+    if (delivered === 0) return
+    const root = params.watch.located.root
+    if (root === undefined) return
+    await this.escalations.lift({ root: new CheckoutRoot(root), issue: params.watch.issue.number })
   }
 
   static #requireSuccess(completed: CompletedPlanCall): void {

@@ -43,7 +43,13 @@ class EscalationMother {
   }
 
   static escalations(): DiskSliceEscalations {
-    return new DiskSliceEscalations({ read: Disk.read, exists: Disk.exists })
+    return new DiskSliceEscalations({ read: Disk.read, exists: Disk.exists, write: Disk.write })
+  }
+
+  static lift(root: string) {
+    return EscalationMother.escalations().lift({
+      root: new CheckoutRoot(root), issue: EscalationMother.ISSUE,
+    })
   }
 
   static ask(root: string) {
@@ -62,6 +68,11 @@ class Disk {
       if ((cause as { code?: string }).code === 'ENOENT') return null
       throw cause
     }
+  }
+
+  static async write(path: string, text: string): Promise<void> {
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(path, text, 'utf8')
   }
 
   static async exists(path: string): Promise<boolean> {
@@ -144,6 +155,7 @@ describe('DiskSliceEscalations', () => {
     const escalations = new DiskSliceEscalations({
       read: async () => { throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }) },
       exists: Disk.exists,
+      write: Disk.write,
     })
 
     const refusal = await escalations.of({
@@ -152,6 +164,49 @@ describe('DiskSliceEscalations', () => {
 
     expect(refusal).toBeInstanceOf(SliceEscalationNotRead)
     expect((refusal as Error).message).toContain('EACCES')
+  })
+
+  it('lifting the block leaves the slice with nothing raised and keeps the rest of its state', async () => {
+    const root = await EscalationMother.root()
+    roots.push(root)
+    await EscalationMother.seed(root, EscalationMother.raised())
+
+    await EscalationMother.lift(root)
+
+    expect((await EscalationMother.ask(root)).state).toBe(EscalationState.NONE)
+    const markdown = await Disk.read(join(EscalationMother.worktree(root), '.agent', 'SLICE.md'))
+    expect(markdown).toContain('status: in-progress')
+    expect(markdown).toContain('# Slice 460')
+  })
+
+  it('lifting a slice that raised nothing changes nothing and refuses nothing', async () => {
+    const root = await EscalationMother.root()
+    roots.push(root)
+    await EscalationMother.seed(root, EscalationMother.working())
+    const before = await Disk.read(join(EscalationMother.worktree(root), '.agent', 'SLICE.md'))
+
+    await EscalationMother.lift(root)
+
+    expect(await Disk.read(join(EscalationMother.worktree(root), '.agent', 'SLICE.md'))).toBe(before)
+  })
+
+  it('a block declared only as a status word survives the lift and says what to fix', async () => {
+    const root = await EscalationMother.root()
+    roots.push(root)
+    await EscalationMother.seed(root, '---\nstatus: blocked\n---\n\n# Slice 460\n')
+
+    await EscalationMother.lift(root)
+
+    const escalation = await EscalationMother.ask(root)
+    expect(escalation.state).toBe(EscalationState.RAISED)
+    expect(escalation.notes.join(' ')).toContain('blocked: {reason')
+  })
+
+  it('lifting where there is no worktree touches nothing', async () => {
+    const root = await EscalationMother.root()
+    roots.push(root)
+
+    await expect(EscalationMother.lift(root)).resolves.toBeUndefined()
   })
 
   it('a block declared as a bare sentence keeps that sentence as its reason', async () => {

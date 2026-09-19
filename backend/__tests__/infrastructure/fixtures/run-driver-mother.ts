@@ -69,6 +69,9 @@ import { PlanComment } from '../../../src/domain/value-objects/plan-comment.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts'
+import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
+import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
+import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
 type Measurement = {
@@ -103,6 +106,20 @@ type FixProjection = {
   readonly watching: boolean,
   readonly calls: number,
   readonly verbs: number,
+}
+
+class QuietEscalations extends SliceEscalations {
+  static reader(): ReadSliceEscalation {
+    return new ReadSliceEscalation({ escalations: new QuietEscalations() })
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    return SliceEscalation.none()
+  }
+
+  override async lift(): Promise<void> {
+    return undefined
+  }
 }
 
 class FixtureProcesses {
@@ -795,7 +812,9 @@ export class RunDriverMother {
             messages: fixture.journal,
             calls: initial.planCalls,
             measurements: new UnaskedMeasurements(),
+            escalations: new QuietEscalations(),
           }),
+          escalations: QuietEscalations.reader(),
         })
         await establishing.execute(new DriveRunParams({ watch, planner })).catch((cause: unknown) => {
           if (!(cause instanceof Error) || cause.message !== 'labelled fixture cut after completed role') throw cause
@@ -847,7 +866,9 @@ export class RunDriverMother {
             messages: rebuiltJournal,
             calls: rebuilt.planCalls,
             measurements: new UnaskedMeasurements(),
+            escalations: new QuietEscalations(),
           }),
+          escalations: QuietEscalations.reader(),
         })
         const agents = new RunPlanAgents({
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
@@ -1177,7 +1198,9 @@ export class RunDriverMother {
         messages: journal,
         calls: planCalls,
         measurements: measurements,
+        escalations: new QuietEscalations(),
       }),
+      escalations: QuietEscalations.reader(),
     })
     const agents = new RunPlanAgents({
       legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal, measurements,

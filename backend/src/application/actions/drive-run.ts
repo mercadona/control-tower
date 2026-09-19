@@ -7,7 +7,10 @@ import { RunEstablishment, type RunMachine } from '../../domain/ports/run-machin
 import type { CompletedPlanCall, StartedPlanCall } from '../../domain/value-objects/plan-call.ts'
 import type { RunInstruction } from '../../domain/value-objects/run-instruction.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
+import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
+import { EscalationState } from '../../domain/value-objects/slice-escalation.ts'
 import { DeliverHeldMessages, DeliverHeldMessagesParams } from './deliver-held-messages.ts'
+import { ReadSliceEscalation, ReadSliceEscalationParams } from '../queries/read-slice-escalation.ts'
 import { ExecuteRunInstruction, ExecuteRunInstructionParams } from './execute-run-instruction.ts'
 
 export class DriveRunParams {
@@ -27,20 +30,23 @@ export class DriveRun {
   readonly machine: RunMachine
   readonly step: ExecuteRunInstruction
   readonly messages: DeliverHeldMessages
+  readonly escalations: ReadSliceEscalation
   readonly driving: Map<string, Promise<void>>
 
-  constructor({ calls, publication, machine, step, messages }: {
+  constructor({ calls, publication, machine, step, messages, escalations }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
     step: ExecuteRunInstruction,
     messages: DeliverHeldMessages,
+    escalations: ReadSliceEscalation,
   }) {
     this.calls = calls
     this.publication = publication
     this.machine = machine
     this.step = step
     this.messages = messages
+    this.escalations = escalations
     this.driving = new Map()
   }
 
@@ -70,6 +76,7 @@ export class DriveRun {
     let instruction = await this.machine.open(params.watch)
     while (true) {
       await this.messages.execute(new DeliverHeldMessagesParams({ watch: params.watch }))
+      if (await this.#waiting(params.watch)) return
       instruction = await this.step.execute(new ExecuteRunInstructionParams({
         watch: params.watch,
         instruction,
@@ -84,6 +91,16 @@ export class DriveRun {
           throw new RunNotAdvanced(instruction.work.detail)
       }
     }
+  }
+
+  async #waiting(watch: PlanWatch): Promise<boolean> {
+    const root = watch.located.root
+    if (root === undefined) return false
+    const read = await this.escalations.execute(new ReadSliceEscalationParams({
+      root: new CheckoutRoot(root), issue: watch.issue.number,
+    }))
+
+    return read.escalation.state === EscalationState.RAISED
   }
 
   async #publish(watch: PlanWatch): Promise<void> {

@@ -51,6 +51,23 @@ import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
 import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
+import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
+import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
+import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+
+class QuietEscalations extends SliceEscalations {
+  static reader(): ReadSliceEscalation {
+    return new ReadSliceEscalation({ escalations: new QuietEscalations() })
+  }
+
+  override async of(): Promise<SliceEscalation> {
+    return SliceEscalation.none()
+  }
+
+  override async lift(): Promise<void> {
+    return undefined
+  }
+}
 
 class Barrier<T = void> {
   readonly promise: Promise<T>
@@ -219,7 +236,9 @@ class RecoveryAgents extends RunPlanAgents {
         messages: journal,
         calls: calls,
         measurements: new UnaskedMeasurements(),
+        escalations: new QuietEscalations(),
       }),
+      escalations: QuietEscalations.reader(),
     })
     super({
       legacy: new PlanAgents(),
@@ -1023,7 +1042,9 @@ describe('RunPlanRecovery projection', () => {
           messages: journal,
           calls: calls,
           measurements: measurements,
+          escalations: new QuietEscalations(),
         }),
+        escalations: QuietEscalations.reader(),
       })
       const settled = new Barrier()
       lifecycleSettled = settled
@@ -1430,7 +1451,9 @@ class FiniteBridge {
         messages: journal,
         calls: planCalls,
         measurements: new UnaskedMeasurements(),
+        escalations: new QuietEscalations(),
       }),
+      escalations: QuietEscalations.reader(),
     })
     const records = new DiskPlanRecords({
       files,
