@@ -189,3 +189,9 @@ export class EpicIssuesNotRead extends EpicIssuesFailure {}
 export class EpicIssuesNotUnderstood extends EpicIssuesFailure {}
 
 export class EpicIssueNotPromoted extends EpicIssuesFailure {}
+
+export class EscalationFailure extends PlanFailure {}
+
+export class SliceEscalationNotRead extends EscalationFailure {}
+
+export class SliceEscalationNotUnderstood extends EscalationFailure {}

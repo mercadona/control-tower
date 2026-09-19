@@ -45,7 +45,7 @@ describe('PlanCollapse', () => {
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
     'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
-    'RunFailure',
+    'RunFailure', 'EscalationFailure',
   ]
 
   const ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE = SliceMessageCollapse.declaredFailures()
@@ -64,7 +64,8 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.PlanRecoveryFailure) &&
     !(thrown.prototype instanceof exceptions.PlanCleanupFailure) &&
     !(thrown.prototype instanceof exceptions.SessionClosureFailure) &&
-    !(thrown.prototype instanceof exceptions.RunFailure)
+    !(thrown.prototype instanceof exceptions.RunFailure) &&
+    !(thrown.prototype instanceof exceptions.EscalationFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)

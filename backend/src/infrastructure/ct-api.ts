@@ -95,6 +95,8 @@ import { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
 import { GhPlanPublication } from './gh-plan-publication.ts'
 import { GhDispatchCandidates } from './gh-dispatch-candidates.ts'
 import { DispatchCheckClaims } from './dispatch-check-claims.ts'
+import { DiskSliceEscalations } from './disk-slice-escalations.ts'
+import { ReadSliceEscalation } from '../application/queries/read-slice-escalation.ts'
 import { RunJournal } from './run-journal.ts'
 import { CtRunMachine } from './ct-run-machine.ts'
 import { ClaudeRunMeasurements } from './claude-run-measurements.ts'
@@ -705,6 +707,9 @@ class CtApi {
         planIssues,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
+      sliceEscalation: new ReadSliceEscalation({
+        escalations: new DiskSliceEscalations({ read: Disk.read, exists: Disk.exists }),
+      }),
       planEvents: CtApi.#planEvents(readPlanProgress),
       sessions,
       activePlans,
