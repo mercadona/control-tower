@@ -402,7 +402,7 @@ recover a session it lost — a reload, or a backend restart.
 **200 OK**
 
 ```json
-{"plans":[{"phase":"planning",
+{"plans":[{"phase":"planning","acceptsChange":false,
   "request":{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"},
   "plan":{"id":"ABC-123","repo":"owner/name",
     "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
@@ -434,6 +434,22 @@ workspace.
 | `planning` | this API owns a live planning call | watch `/plan-events` |
 | `implementing` | this API owns implementation/fix, or durable completion proves it began | poll `/implement-progress` |
 | `uncertain` | durable evidence cannot prove whether publication, continuation or an incomplete call finished | show it for human investigation; never replay it automatically |
+
+`acceptsChange` is the answer to *would `POST /slices/:issue/message` be
+accepted right now?* — the backend's own answer, not a proxy for it, so a caller
+gates on it instead of guessing from `phase`.
+
+`phase` does not determine it, which is why it is published separately. Two
+`implementing` entries read alike and answer opposite things: a run that is
+**mid-step** accepts — the change is held in the run journal and handed over at
+the next boundary of the driver's loop — while a **delivered** run whose fix is
+still being supervised refuses, because its conversation already has supervised
+work. A delivered run with no fix, or with one that finished, accepts. A plan
+whose run provenance is legacy accepts regardless, because its message path
+starts the call without inspecting the run.
+
+`planning` and `uncertain` carry `false`. Asking anyway is not an error: the
+refusal is the same answer, later.
 
 **Refusal**
 
@@ -1902,6 +1918,52 @@ the sharing on purpose so a future rename of either has to touch both.
 curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
   -H 'x-coordinating-target: 6d13bc52-740f-49f8-b128-15e597674f3a' \
   http://127.0.0.1:8787/epic-promotion
+```
+
+---
+
+## `POST /slices/:issue/message`
+
+A change asked of a slice that is already implementing. **The coordinating
+session is what calls it**, never a person and never a slice's own panel: D-20
+says you tell the boss and the boss makes it happen, and the amendment in #457
+retired the panel's box that went round it.
+
+```json
+{"repo":"owner/name","agent":"11111111-1111-4111-8111-111111111111","text":"rename the column"}
+```
+
+All three fields are required and no other field is accepted. `:issue` is a
+positive whole number.
+
+**202 Accepted** — `{"status":"delivered"}`. Delivered does not mean worked on
+yet: a run that is mid-step **holds** the change in its run journal and hands it
+over at the next boundary of the driver's loop.
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `body-not-a-json-object` | 400 | the body is not a JSON object |
+| `unknown-field` | 400 | a field that is not `repo`, `agent` or `text` |
+| `malformed-repo` | 400 | `repo` is not `owner/name` |
+| `slice-message-malformed-issue` | 400 | `:issue` is not a positive whole number |
+| `slice-message-malformed-agent` | 400 | `agent` is not a conversation id |
+| `slice-message-malformed-text` | 400 | `text` is missing or empty |
+| `slice-message-not-delivered` | 400 | the conversation already has supervised work, or the resumed call did not succeed |
+| `slice-message-not-reopened` | 400 | the issue had to go back to the workbench and did not |
+| `slice-message-reopen-not-understood` | 400 | the reopen answered something this backend cannot read |
+| `slice-message-status-not-read` | 400 | the issue's status could not be read |
+| `slice-message-status-not-understood` | 400 | the issue's status answered something this backend cannot read |
+
+`GET /active-plans` is what says beforehand whether this call would be accepted:
+see `acceptsChange` there. Asking without reading it is not an error — the
+refusal is the same answer, later.
+
+```
+curl -s -X POST 'http://127.0.0.1:8787/slices/460/message' \
+  -H 'Content-Type: application/json' \
+  -d '{"repo":"mercadona/control-tower","agent":"<conversation>","text":"rename the column"}'
 ```
 
 ---

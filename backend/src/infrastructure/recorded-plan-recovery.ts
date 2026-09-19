@@ -38,6 +38,8 @@ class RecoveredPlan {
 }
 
 export class RecordedPlanRecovery {
+  static readonly ACCEPTS_CHANGE = true
+
   readonly records: PlanRecords
   readonly calls: PlanCalls
   readonly ownership: ClaudeCalls
@@ -150,7 +152,7 @@ export class RecordedPlanRecovery {
         )
         return
       case ActivePlanPhase.IMPLEMENTING:
-        this.activePlans.rememberImplementing(recovered.watch)
+        this.activePlans.rememberImplementing(recovered.watch, RecordedPlanRecovery.ACCEPTS_CHANGE)
         if (previous?.phase !== ActivePlanPhase.IMPLEMENTING || previous.watch.agent !== recovered.watch.agent) {
           void this.reviews.startRecovered(recovered.watch)
         }

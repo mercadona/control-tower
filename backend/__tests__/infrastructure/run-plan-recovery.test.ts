@@ -1160,11 +1160,28 @@ describe('RunPlanRecovery projection', () => {
     expect(tested.activePlans.known()[0].diagnostic).toContain('not the current machine work')
   })
 
+  it('a run that is mid-step accepts a change, because the queue holds it to the next boundary', async () => {
+    const tested = new ProjectionScenario()
+    const watch = tested.watches[0]
+    const ticket = '33333333-3333-4333-8333-333333333333'
+    tested.add(watch, 'implementation', `run:${ticket}`)
+    tested.entries(watch, ticket)
+    tested.machine.inspections.set(watch.agent, new RunInspection({
+      kind: 'active',
+      instruction: new RunInstruction({ kind: 'call', ticket }),
+    }))
+    tested.agents.reservations.add(watch.agent)
+
+    await tested.recovery.recover()
+
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: true })
+  })
+
   describe.each([
-    ['failed', 'failed', false, 'uncertain', 'inspect', 'recorded failure', true],
-    ['successful', 'successful', true, 'implementing', null, null, false],
-    ['owned incomplete', 'incomplete', true, 'implementing', null, null, true],
-    ['unowned incomplete', 'incomplete', false, 'uncertain', 'inspect', 'not owned', true],
+    ['failed', 'failed', false, 'uncertain', 'inspect', 'recorded failure', true, null],
+    ['successful', 'successful', true, 'implementing', null, null, false, true],
+    ['owned incomplete', 'incomplete', true, 'implementing', null, null, true, false],
+    ['unowned incomplete', 'incomplete', false, 'uncertain', 'inspect', 'not owned', true, null],
   ] as const)('%s post-delivery fix', (
     _name,
     state,
@@ -1173,6 +1190,7 @@ describe('RunPlanRecovery projection', () => {
     action,
     diagnostic,
     stopsReview,
+    acceptsChange,
   ) => {
     it('post-delivery fix policy precedes the permanent delivered marker', async () => {
       const tested = new ProjectionScenario()
@@ -1188,6 +1206,7 @@ describe('RunPlanRecovery projection', () => {
 
       const projected = tested.activePlans.known()[0]
       expect(projected.phase).toBe(phase)
+      if (acceptsChange !== null) expect(projected).toMatchObject({ acceptsChange })
       if (action !== null) {
         expect(projected).toMatchObject({
           diagnostic: expect.stringContaining(diagnostic),
