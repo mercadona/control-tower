@@ -44,7 +44,11 @@ class DispatchingMachine extends CtRunMachine {
 
   constructor(files: HeadlessFiles, pluginRoot: string, dispatches: readonly RunDispatch[]) {
     super({
-      journal: new RunJournal({ files, newId: () => { throw new Error('journal identity is not requested') } }),
+      journal: new RunJournal({
+        files,
+        newId: () => { throw new Error('journal identity is not requested') },
+        now: () => { throw new Error('the journal clock is not asked') },
+      }),
       node: async () => { throw new Error('oracle execution is not requested') },
       git: async () => { throw new Error('git execution is not requested') },
       read: async () => { throw new Error('machine file reads are not requested') },

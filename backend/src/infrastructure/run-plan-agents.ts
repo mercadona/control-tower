@@ -155,15 +155,25 @@ export class RunPlanAgents extends PlanAgents {
       RunPlanAgents.#throwFixFailure(cause)
     }
     if (provenance === RunProvenance.LEGACY) return this.legacy.fix(asked)
+    try {
+      const inspection = await this.machine.inspect(watch)
+      if (inspection.fact.kind === 'unstarted' || inspection.fact.kind === 'active') {
+        await this.journal.hold(watch, asked.changes)
+        return
+      }
+      if (inspection.fact.kind !== 'delivered') {
+        throw new RunNotAdvanced(
+          `conversation ${JSON.stringify(watch.agent)} is ${inspection.fact.kind} rather than delivered`,
+        )
+      }
+    } catch (cause) {
+      RunPlanAgents.#throwFixFailure(cause)
+    }
     if (!this.#claim(watch)) {
       throw new PlanAgentNotResumed(`conversation ${JSON.stringify(watch.agent)} already has supervised work`)
     }
     let handedOff = false
     try {
-      const inspection = await this.machine.inspect(watch)
-      if (inspection.fact.kind !== 'delivered') {
-        throw new RunNotAdvanced(`conversation ${JSON.stringify(watch.agent)} has not been delivered`)
-      }
       const history = await this.transport.history(watch.agent)
       const existing = await this.#existingFix(history)
       if (existing !== null) {

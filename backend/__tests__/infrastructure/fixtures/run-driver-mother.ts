@@ -67,6 +67,8 @@ import { Gh } from '../../../src/infrastructure/gh.ts'
 import { GhPlanIssues } from '../../../src/infrastructure/gh-plan-issues.ts'
 import { PlanComment } from '../../../src/domain/value-objects/plan-comment.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
+import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
 type Measurement = {
@@ -345,6 +347,12 @@ class RecoveryCheckouts extends CheckoutRegistry {
   override remember(_checkout: RegisteredCheckout): void {}
 }
 
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
+}
+
 export class RunDriverMother {
   static readonly ISSUE = 7
   static readonly REPOSITORY = 'acme/widget'
@@ -413,7 +421,11 @@ export class RunDriverMother {
     this.publication = asked.publication
     this.#processes = new FixtureProcesses(this.captures)
     this.files = new HeadlessFiles({ root: this.state, fs, newId: () => this.#identity() })
-    this.journal = new RunJournal({ files: this.files, newId: () => this.#identity() })
+    this.journal = new RunJournal({
+      files: this.files,
+      newId: () => this.#identity(),
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     this.watch = new PlanWatch({
       story: null,
       issue: new PlanIssue({ number: RunDriverMother.ISSUE, url: 'https://github.com/acme/widget/issues/7' }),
@@ -779,6 +791,11 @@ export class RunDriverMother {
           publication: fixture.#publication(fixture.files),
           machine: fixture.machine,
           step: new ExecuteRunInstruction({ machine: fixture.machine, calls: cutCalls }),
+          messages: new DeliverHeldMessages({
+            messages: fixture.journal,
+            calls: initial.planCalls,
+            measurements: new UnaskedMeasurements(),
+          }),
         })
         await establishing.execute(new DriveRunParams({ watch, planner })).catch((cause: unknown) => {
           if (!(cause instanceof Error) || cause.message !== 'labelled fixture cut after completed role') throw cause
@@ -798,7 +815,11 @@ export class RunDriverMother {
         }
         const publicationsBefore = await fixture.#publicationCount()
         const rebuiltFiles = new HeadlessFiles({ root: fixture.state, fs, newId: () => fixture.#identity() })
-        const rebuiltJournal = new RunJournal({ files: rebuiltFiles, newId: () => fixture.#identity() })
+        const rebuiltJournal = new RunJournal({
+          files: rebuiltFiles,
+          newId: () => fixture.#identity(),
+          now: () => { throw new Error('the journal clock is not asked') },
+        })
         const rebuiltRecords = new DiskPlanRecords({
           files: rebuiltFiles, newId: () => fixture.#identity(), now: () => new Date().toISOString(),
           exists: async (path) => existsSync(path),
@@ -822,6 +843,11 @@ export class RunDriverMother {
           publication: fixture.#publication(rebuiltFiles),
           machine: rebuiltMachine,
           step: new ExecuteRunInstruction({ machine: rebuiltMachine, calls: recoveryCalls }),
+          messages: new DeliverHeldMessages({
+            messages: rebuiltJournal,
+            calls: rebuilt.planCalls,
+            measurements: new UnaskedMeasurements(),
+          }),
         })
         const agents = new RunPlanAgents({
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
@@ -1117,7 +1143,11 @@ export class RunDriverMother {
       files, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
       exists: async (path) => existsSync(path),
     })
-    const journal = new RunJournal({ files, newId: () => this.#identity() })
+    const journal = new RunJournal({
+      files,
+      newId: () => this.#identity(),
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     const machine = new CtRunMachine({
       journal,
       node: async () => { verbs += 1; throw new Error('recovery must not execute a verb') },
@@ -1143,6 +1173,11 @@ export class RunDriverMother {
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport, machine, measurements, files, pluginRoot: RunDriverMother.#PLUGIN,
       }) }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: planCalls,
+        measurements: measurements,
+      }),
     })
     const agents = new RunPlanAgents({
       legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal, measurements,

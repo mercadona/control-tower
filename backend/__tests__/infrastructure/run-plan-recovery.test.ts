@@ -49,6 +49,8 @@ import { RunJournal, type JournalEntry } from '../../src/infrastructure/run-jour
 import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 
 class Barrier<T = void> {
   readonly promise: Promise<T>
@@ -155,7 +157,7 @@ class RecoveryMachine extends CtRunMachine {
     const files = new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' })
     const effects = { commands: 0 }
     super({
-      journal: new RunJournal({ files, newId: () => 'unused' }),
+      journal: new RunJournal({ files, newId: () => 'unused', now: () => { throw new Error('the journal clock is not asked') } }),
       node: async () => { effects.commands += 1; throw new Error('GET must not execute the oracle') },
       git: async () => { throw new Error('GET must not inspect git') },
       read: async () => null,
@@ -171,6 +173,12 @@ class RecoveryMachine extends CtRunMachine {
   }
 }
 
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
+}
+
 class RecoveryJournal extends RunJournal {
   readonly recorded = new Map<string, readonly JournalEntry[]>()
 
@@ -178,6 +186,7 @@ class RecoveryJournal extends RunJournal {
     super({
       files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
       newId: () => 'unused',
+      now: () => { throw new Error('the journal clock is not asked') },
     })
   }
 
@@ -206,6 +215,11 @@ class RecoveryAgents extends RunPlanAgents {
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         pluginRoot: '/plugin',
       }) }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     super({
       legacy: new PlanAgents(),
@@ -981,7 +995,11 @@ describe('RunPlanRecovery projection', () => {
     try {
       const watch = RecoveryMother.watch()
       const files = new HeadlessFiles({ root, fs, newId: () => 'temporary-record' })
-      const journal = new RunJournal({ files, newId: () => '99999999-9999-4999-8999-999999999999' })
+      const journal = new RunJournal({
+        files,
+        newId: () => '99999999-9999-4999-8999-999999999999',
+        now: () => { throw new Error('the journal clock is not asked') },
+      })
       const records = new LifecycleRecords(watch)
       const calls = new LifecycleCalls(watch)
       lifecycleCalls = calls
@@ -1000,6 +1018,11 @@ describe('RunPlanRecovery projection', () => {
         step: new ExecuteRunInstruction({
           machine,
           calls: new ClaudeRunCalls({ calls: transport, machine, measurements, files, pluginRoot: '/plugin' }),
+        }),
+        messages: new DeliverHeldMessages({
+          messages: journal,
+          calls: calls,
+          measurements: measurements,
         }),
       })
       const settled = new Barrier()
@@ -1298,11 +1321,15 @@ class FiniteBridge {
     }
     const files = new HeadlessFiles({ root: state, fs, newId: () => 'temporary-response' })
     const ids = asked.ids ?? [FiniteBridge.DISPATCH, FiniteBridge.CONSUMING, FiniteBridge.BOUNDARY]
-    const journal = new RunJournal({ files, newId: () => {
-      const id = ids.shift()
-      if (id === undefined) throw new Error('unexpected or duplicate journal request')
-      return id
-    } })
+    const journal = new RunJournal({
+      files,
+      newId: () => {
+        const id = ids.shift()
+        if (id === undefined) throw new Error('unexpected or duplicate journal request')
+        return id
+      },
+      now: () => { throw new Error('the journal clock is not asked') },
+    })
     const watch = new PlanWatch({
       story: null,
       issue: new PlanIssue({ number: 332, url: 'https://github.com/mercadona/control-tower-plugin/issues/332' }),
@@ -1399,6 +1426,11 @@ class FiniteBridge {
       publication: new FiniteBridgePublication(),
       machine,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: planCalls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const records = new DiskPlanRecords({
       files,

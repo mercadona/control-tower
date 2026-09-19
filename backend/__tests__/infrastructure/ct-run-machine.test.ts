@@ -179,6 +179,7 @@ class OracleFixture {
         if (id === undefined) throw new Error('no journal identity was arranged')
         return id
       },
+      now: () => { throw new Error('the journal clock is not asked') },
     })
   }
 

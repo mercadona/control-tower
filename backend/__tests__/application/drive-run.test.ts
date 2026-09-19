@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import {
+  DeliverHeldMessages,
+} from '../../src/application/actions/deliver-held-messages.ts'
 import { DriveRun, DriveRunParams } from '../../src/application/actions/drive-run.ts'
 import {
   ExecuteRunInstruction, ExecuteRunInstructionParams,
@@ -6,8 +9,11 @@ import {
 import {
   PlanAgentNotResumed, PlanProgressNotRead, RunNotAdvanced,
 } from '../../src/domain/exceptions.ts'
+import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
+import { SliceMessages } from '../../src/domain/ports/slice-messages.ts'
+import { HeldMessage } from '../../src/domain/value-objects/held-message.ts'
 import { RunCalls } from '../../src/domain/ports/run-calls.ts'
 import {
   RunEstablishment, type RunEstablishmentValue, RunMachine,
@@ -91,9 +97,57 @@ class PlanCallsDouble extends PlanCalls {
     this.completion = completion
   }
 
+  override async start(
+    watch: PlanWatch,
+    purpose: string,
+    _changes: string | null,
+    requestId?: string,
+  ): Promise<StartedPlanCall> {
+    this.trace.push(`start:${purpose}:${String(requestId)}`)
+    return new StartedPlanCall({ conversation: watch.agent, id: `call-${String(requestId)}` })
+  }
+
   override async wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
     this.trace.push(`wait:${call.id}`)
     return this.completion
+  }
+}
+
+class HeldMessagesDouble extends SliceMessages {
+  readonly trace: string[] | null
+  held: HeldMessage[]
+
+  constructor(trace: string[] | null = null, held: readonly HeldMessage[] = []) {
+    super()
+    this.trace = trace
+    this.held = [...held]
+  }
+
+  override async hold(): Promise<string> {
+    throw new Error('the driver never holds a change')
+  }
+
+  override async pending(): Promise<readonly HeldMessage[]> {
+    this.trace?.push('pending')
+    return Object.freeze([...this.held])
+  }
+
+  override async settle(_watch: PlanWatch, ticket: string): Promise<void> {
+    this.trace?.push(`settle:${ticket}`)
+    this.held = this.held.filter((message) => message.ticket !== ticket)
+  }
+}
+
+class CallMeasurementsDouble extends CallMeasurements {
+  readonly trace: string[]
+
+  constructor(trace: string[]) {
+    super()
+    this.trace = trace
+  }
+
+  override async capture(call: StartedPlanCall): Promise<void> {
+    this.trace.push(`capture:${call.id}`)
   }
 }
 
@@ -212,6 +266,8 @@ class RunFlow {
     trace?: string[],
     calls?: PlanCalls,
     publication?: PlanPublication,
+    messages?: SliceMessages,
+    drainCalls?: PlanCalls,
   }) {
     this.trace = asked.trace ?? []
     this.machine = asked.machine
@@ -223,6 +279,11 @@ class RunFlow {
       publication: this.publication,
       machine: this.machine,
       step: new ExecuteRunInstruction({ machine: this.machine, calls: this.runCalls }),
+      messages: new DeliverHeldMessages({
+        messages: asked.messages ?? new HeldMessagesDouble(),
+        calls: asked.drainCalls ?? new PlanCallsDouble(this.trace),
+        measurements: new CallMeasurementsDouble(this.trace),
+      }),
     })
   }
 
@@ -232,6 +293,67 @@ class RunFlow {
 }
 
 describe('DriveRun', () => {
+  it('every held change is handed over before the next instruction runs', async () => {
+    const trace: string[] = []
+    const held = new HeldMessagesDouble(trace, [
+      new HeldMessage({ ticket: 'ticket-1', askedAt: '2026-09-19T10:00:00.000Z', text: 'drop the flag' }),
+    ])
+    const flow = new RunFlow({
+      trace,
+      messages: held,
+      machine: new RunMachineDouble({
+        trace,
+        opening: RunMother.call('c1'),
+        continuations: new Map([['c1', RunMother.command('c2')], ['c2', RunMother.delivered()]]),
+      }),
+    })
+
+    await flow.run()
+
+    expect(trace).toEqual([
+      'establishment',
+      'open',
+      'pending',
+      'start:fix:message:ticket-1',
+      'wait:call-message:ticket-1',
+      'capture:call-message:ticket-1',
+      'settle:ticket-1',
+      'perform:c1',
+      'advance:c1',
+      'pending',
+      'advance:c2',
+    ])
+  })
+
+  it('a drain that refuses stops the run', async () => {
+    const trace: string[] = []
+    const held = new HeldMessagesDouble(trace, [
+      new HeldMessage({ ticket: 'ticket-1', askedAt: '2026-09-19T10:00:00.000Z', text: 'drop the flag' }),
+    ])
+    const flow = new RunFlow({
+      trace,
+      messages: held,
+      drainCalls: new PlanCallsDouble(trace, RunMother.completed({ kind: 'error', diagnostic: 'the agent refused' }, 1)),
+      machine: new RunMachineDouble({
+        trace,
+        opening: RunMother.call('c1'),
+        continuations: new Map([['c1', RunMother.delivered()]]),
+      }),
+    })
+
+    await expect(flow.run()).rejects.toThrow('the agent refused')
+
+    expect(trace).toEqual([
+      'establishment',
+      'open',
+      'pending',
+      'start:fix:message:ticket-1',
+      'wait:call-message:ticket-1',
+      'capture:call-message:ticket-1',
+    ])
+    expect(held.held).toHaveLength(1)
+  })
+
   it('the driver follows oracle instructions without a local step order', async () => {
     const trace: string[] = []
     const first = RunMother.command('judge-before-implementation')

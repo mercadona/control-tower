@@ -44,6 +44,8 @@ import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents } from '../../src/infrastructure/run-plan-agents.ts'
 import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
+import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 
 class Deferred<T = void> {
   readonly promise: Promise<T>
@@ -480,6 +482,13 @@ class AgentMother {
   }
 }
 
+
+class UnaskedMeasurements extends CallMeasurements {
+  override async capture(): Promise<void> {
+    throw new Error('the drain measures nothing here')
+  }
+}
+
 describe('RunPlanAgents', () => {
   const roots: string[] = []
   const finalizers: Array<() => void> = []
@@ -493,7 +502,10 @@ describe('RunPlanAgents', () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
-  async function scenario(admit = false) {
+  async function scenario(admit = false, now: () => string = () => {
+    throw new Error('the journal clock is not asked')
+  }, tickets: readonly string[] = []) {
+    const remaining = [...tickets]
     const root = await mkdtemp(join(tmpdir(), 'ct-run-plan-agents-'))
     roots.push(root)
     const events: string[] = []
@@ -506,7 +518,8 @@ describe('RunPlanAgents', () => {
     const supervisor = new Deferred()
     const journal = new RunJournal({
       files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
-      newId: () => '44444444-4444-4444-8444-444444444444',
+      newId: () => remaining.shift() ?? '44444444-4444-4444-8444-444444444444',
+      now,
     })
     if (admit) await journal.admit(AgentMother.WATCH)
     const calls = new CallsDouble(events, plannerDone, fixDone)
@@ -524,6 +537,11 @@ describe('RunPlanAgents', () => {
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine: driverMachine,
       step: new ExecuteRunInstruction({ machine: driverMachine, calls: new RefusingRunCalls() }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const legacy = new LegacyDouble()
     const warnings: string[] = []
@@ -582,6 +600,7 @@ describe('RunPlanAgents', () => {
         if (id === undefined) throw new Error('no journal identity was arranged')
         return id
       },
+      now: () => { throw new Error('the journal clock is not asked') },
     })
     if (admit) await journal.admit(AgentMother.WATCH)
     const calls = new CallsDouble(events, plannerDone, fixDone)
@@ -634,6 +653,11 @@ describe('RunPlanAgents', () => {
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine,
       step: new ExecuteRunInstruction({ machine, calls: new RefusingRunCalls() }),
+      messages: new DeliverHeldMessages({
+        messages: journal,
+        calls: calls,
+        measurements: new UnaskedMeasurements(),
+      }),
     })
     const legacy = new LegacyDouble()
     const measurements = new MeasurementsDouble(transport)
@@ -1240,11 +1264,47 @@ describe('RunPlanAgents', () => {
     expect(await ambiguous.journal.admitted(AgentMother.WATCH)).toBe(true)
   })
 
-  it('fixes wait for delivery and retain their original errand and measurements', async () => {
-    const tested = await scenario(true)
+  it('a change asked while the run is in flight is held rather than refused', async () => {
+    const tested = await scenario(true, () => '2026-09-19T10:00:00.000Z', [
+      '66666666-6666-4666-8666-666666666666', '77777777-7777-4777-8777-777777777777',
+    ])
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Rename the port before the next task.',
+      requestId: 'review-11',
+    }
+
     tested.machine.inspection = new RunInspection({ kind: 'active', instruction: new RunInstruction({
       kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
     }) })
+    await tested.agents.fix(asked)
+    tested.machine.inspection = new RunInspection({ kind: 'unstarted' })
+    await tested.agents.fix({ ...asked, changes: 'And drop the flag.' })
+
+    const held = await tested.journal.pending(AgentMother.WATCH)
+    expect(held.map((message) => message.text)).toEqual([
+      'Rename the port before the next task.', 'And drop the flag.',
+    ])
+    expect(tested.calls.starts).toEqual([])
+  })
+
+  it('a change asked before the run is established is still refused', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({ kind: 'absent' })
+
+    await expect(tested.agents.fix({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Too early for this one.',
+      requestId: 'review-12',
+    })).rejects.toThrow('absent')
+  })
+
+  it('a fix after delivery retains its original errand and measurements', async () => {
+    const tested = await scenario(true)
     const asked = {
       agent: AgentMother.CONVERSATION,
       issue: AgentMother.ISSUE.number,
@@ -1253,7 +1313,6 @@ describe('RunPlanAgents', () => {
       requestId: 'review-10',
     }
 
-    await expect(tested.agents.fix(asked)).rejects.toBeInstanceOf(PlanAgentNotResumed)
     tested.machine.inspection = new RunInspection({ kind: 'delivered' })
     tested.registerSupervisor()
     await tested.agents.fix(asked)

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { CallMeasurements } from '../domain/ports/call-measurements.ts'
 import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import { CallDescriptor, type ClaudeCalls } from './claude-calls.ts'
 import { HeadlessFiles } from './headless-files.ts'
@@ -301,13 +302,14 @@ class ReportedMeasurements {
   }
 }
 
-export class ClaudeRunMeasurements {
+export class ClaudeRunMeasurements extends CallMeasurements {
   static readonly FILE = 'measurements-v1.json'
 
   readonly files: HeadlessFiles
   readonly calls: ClaudeCalls
 
   constructor(ports: { files: HeadlessFiles, calls: ClaudeCalls }) {
+    super()
     this.files = ports.files
     this.calls = ports.calls
   }
