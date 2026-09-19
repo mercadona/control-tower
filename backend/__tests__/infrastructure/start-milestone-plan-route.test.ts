@@ -549,7 +549,7 @@ describe('StartPlanRoute milestone entrance', () => {
     const registry = new PlanRegistryFixture()
     const start = new StartMilestonePlanDouble(async () => {
       const started = Mother.started()
-      registry.activePlans.rememberImplementing(started.watch)
+      registry.activePlans.rememberImplementing(started.watch, false)
       return Mother.dispatching(started)
     })
     const port = await RunningApi.listening({

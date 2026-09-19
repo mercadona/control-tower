@@ -22,7 +22,8 @@ type AskedPlan = { issue: number, repository: RepositoryName }
 export type ActivePlanRecovery = { action: 'observe' | 'continue' | 'cleanup' | 'inspect', detail: string }
 
 export type FoundActivePlan =
-  | { phase: typeof ActivePlanPhase.PLANNING | typeof ActivePlanPhase.IMPLEMENTING, watch: PlanWatch }
+  | { phase: typeof ActivePlanPhase.PLANNING, watch: PlanWatch }
+  | { phase: typeof ActivePlanPhase.IMPLEMENTING, watch: PlanWatch, acceptsChange: boolean }
   | {
     phase: typeof ActivePlanPhase.UNCERTAIN,
     watch: PlanWatch,
@@ -32,6 +33,7 @@ export type FoundActivePlan =
 
 export type ProjectedActivePlan = {
   phase: ActivePlanPhaseValue,
+  acceptsChange: boolean,
   diagnostic?: string,
   request: { id: string | null, repo: string, path: string | undefined },
   plan: {
@@ -49,7 +51,7 @@ export type ActivePlanRecovering = { recover: () => Promise<string | null> }
 
 export class ActivePlans {
   readonly sessions: PlanSessions
-  readonly implementing: Map<string, PlanWatch>
+  readonly implementing: Map<string, { watch: PlanWatch, acceptsChange: boolean }>
   readonly uncertain: Map<string, Extract<FoundActivePlan, { phase: typeof ActivePlanPhase.UNCERTAIN }>>
 
   constructor({ sessions }: { sessions: PlanSessions }) {
@@ -62,11 +64,11 @@ export class ActivePlans {
     return `${watch.repository.text}#${watch.issue.number}`
   }
 
-  rememberImplementing(watch: PlanWatch): void {
+  rememberImplementing(watch: PlanWatch, acceptsChange: boolean): void {
     const key = ActivePlans.#keyFor(watch)
     this.uncertain.delete(key)
     this.sessions.forget({ issue: watch.issue.number, repository: watch.repository })
-    this.implementing.set(key, watch)
+    this.implementing.set(key, { watch, acceptsChange })
   }
 
   rememberPlanning(watch: PlanWatch): void {
@@ -93,7 +95,7 @@ export class ActivePlans {
   watches(): readonly PlanWatch[] {
     return [
       ...this.sessions.known(),
-      ...this.implementing.values(),
+      ...[...this.implementing.values()].map((held) => held.watch),
       ...[...this.uncertain.values()].map((found) => found.watch),
     ]
   }
@@ -102,7 +104,11 @@ export class ActivePlans {
     const key = `${repository.text}#${issue}`
     const implementing = this.implementing.get(key)
     if (implementing !== undefined) {
-      return { phase: ActivePlanPhase.IMPLEMENTING, watch: implementing }
+      return {
+        phase: ActivePlanPhase.IMPLEMENTING,
+        watch: implementing.watch,
+        acceptsChange: implementing.acceptsChange,
+      }
     }
     const uncertain = this.uncertain.get(key)
     if (uncertain !== undefined) return uncertain
@@ -114,7 +120,9 @@ export class ActivePlans {
   known(): ProjectedActivePlan[] {
     return [
       ...this.sessions.known().map((watch) => ActivePlans.#project(ActivePlanPhase.PLANNING, watch)),
-      ...[...this.implementing.values()].map((watch) => ActivePlans.#project(ActivePlanPhase.IMPLEMENTING, watch)),
+      ...[...this.implementing.values()].map((held) => (
+        ActivePlans.#project(ActivePlanPhase.IMPLEMENTING, held.watch, null, null, held.acceptsChange)
+      )),
       ...[...this.uncertain.values()].map((found) => (
         ActivePlans.#project(ActivePlanPhase.UNCERTAIN, found.watch, found.diagnostic, found.recovery)
       )),
@@ -126,9 +134,11 @@ export class ActivePlans {
     watch: PlanWatch,
     diagnostic: string | null = null,
     recovery: ActivePlanRecovery | null = null,
+    acceptsChange: boolean = false,
   ): ProjectedActivePlan {
     const projected: ProjectedActivePlan = {
       phase,
+      acceptsChange,
       request: {
         id: watch.storyText(),
         repo: watch.repository.text,

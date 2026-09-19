@@ -1807,6 +1807,7 @@ describe('ApiServer', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ plans: [{
       phase: 'planning',
+      acceptsChange: false,
       request: { id: 'ABC-123', repo: 'owner/name', path: '/repo/checkout' },
       plan: {
         id: 'ABC-123',

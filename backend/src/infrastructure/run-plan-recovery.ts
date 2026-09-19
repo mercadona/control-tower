@@ -22,7 +22,11 @@ import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from './run-pla
 
 type PlanOutcome =
   | { readonly phase: typeof ActivePlanPhase.PLANNING }
-  | { readonly phase: typeof ActivePlanPhase.IMPLEMENTING, readonly review: boolean }
+  | {
+    readonly phase: typeof ActivePlanPhase.IMPLEMENTING,
+    readonly review: boolean,
+    readonly acceptsChange: boolean,
+  }
   | {
     readonly phase: typeof ActivePlanPhase.UNCERTAIN,
     readonly diagnostic: string,
@@ -45,6 +49,8 @@ class RecoveredRunPlan {
 }
 
 export class RunPlanRecovery {
+  static readonly LEGACY_ACCEPTS_CHANGE = true
+
   readonly legacy: RecordedPlanRecovery
   readonly records: PlanRecords
   readonly calls: PlanCalls
@@ -158,10 +164,12 @@ export class RunPlanRecovery {
   async #legacy(watch: PlanWatch): Promise<RecoveredRunPlan> {
     const recovery = await this.calls.recoveryFor(watch)
     if (recovery.successfulExecution() !== null) {
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true })
+      return new RecoveredRunPlan(watch, {
+        phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: RunPlanRecovery.LEGACY_ACCEPTS_CHANGE,
+      })
     }
     if (recovery.action === 'observe' && this.transport.owns(recovery.call())) {
-      return this.#owned(watch, recovery.purposeOf(recovery.call()))
+      return this.#owned(watch, recovery.purposeOf(recovery.call()), RunPlanRecovery.LEGACY_ACCEPTS_CHANGE)
     }
     return this.#uncertain(
       watch,
@@ -210,7 +218,9 @@ export class RunPlanRecovery {
       return this.#owned(watch, unfinished[0].purpose)
     }
     if (this.agents.owns(watch)) {
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false })
+      return new RecoveredRunPlan(watch, {
+        phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange: true,
+      })
     }
     return fact.kind === 'unstarted'
       ? this.#continuable(watch, 'the established run has not issued its first command')
@@ -237,14 +247,20 @@ export class RunPlanRecovery {
 
   #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): RecoveredRunPlan {
     if (fixes.length === 0) {
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true })
+      return new RecoveredRunPlan(watch, {
+        phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true,
+      })
     }
     const recovery = PlanRecovery.from({ calls: fixes, proof: null, cleanup: null, nowMs: this.nowMs() })
     if (recovery.successfulExecution() !== null) {
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true })
+      return new RecoveredRunPlan(watch, {
+        phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true,
+      })
     }
     if (recovery.action === 'observe' && this.transport.owns(recovery.call())) {
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false })
+      return new RecoveredRunPlan(watch, {
+        phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange: false,
+      })
     }
     if (recovery.action === 'observe') {
       return this.#inspect(
@@ -303,10 +319,12 @@ export class RunPlanRecovery {
     })
   }
 
-  #owned(watch: PlanWatch, purpose: RecordedCall['purpose']): RecoveredRunPlan {
+  #owned(
+    watch: PlanWatch, purpose: RecordedCall['purpose'], acceptsChange: boolean = false,
+  ): RecoveredRunPlan {
     return purpose === 'plan'
       ? new RecoveredRunPlan(watch, { phase: ActivePlanPhase.PLANNING })
-      : new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false })
+      : new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange })
   }
 
   #inspect(watch: PlanWatch, detail: string): RecoveredRunPlan {
@@ -346,11 +364,11 @@ export class RunPlanRecovery {
         if (!recovered.outcome.review) {
           this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })
           this.#forgetReviewing(key)
-          this.activePlans.rememberImplementing(recovered.watch)
+          this.activePlans.rememberImplementing(recovered.watch, recovered.outcome.acceptsChange)
           return
         }
         if (this.reviewing.has(key)) {
-          this.activePlans.rememberImplementing(recovered.watch)
+          this.activePlans.rememberImplementing(recovered.watch, recovered.outcome.acceptsChange)
           return
         }
         this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })
@@ -358,7 +376,7 @@ export class RunPlanRecovery {
         const registration = Object.freeze({})
         this.reviewing.set(key, registration)
         const watching = this.reviews.startRecovered(recovered.watch)
-        this.activePlans.rememberImplementing(recovered.watch)
+        this.activePlans.rememberImplementing(recovered.watch, recovered.outcome.acceptsChange)
         void watching.finally(() => {
           if (this.reviewing.get(key) === registration) this.reviewing.delete(key)
         })
