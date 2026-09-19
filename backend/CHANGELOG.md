@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/mercadona/control-tower/compare/backend-v0.3.0...backend-v0.4.0) (2026-09-19)
+
+
+### Funcionalidades
+
+* **backend:** the backend reads the escalation a stuck slice already writes ([#463](https://github.com/mercadona/control-tower/issues/463)) ([462f680](https://github.com/mercadona/control-tower/commit/462f68069e19af04d2f65a65e26d0bab2ea7506a))
+* **backend:** the run waits for the decision instead of closing in failure (D-27) ([#465](https://github.com/mercadona/control-tower/issues/465)) ([1b206f3](https://github.com/mercadona/control-tower/commit/1b206f31a3a0f31674923ebc0bbe6b76e72e403e))
+* **plugin:** the twelve skills carry the ct- prefix so they stop colliding with the teams' skills ([#422](https://github.com/mercadona/control-tower/issues/422)) ([8425c55](https://github.com/mercadona/control-tower/commit/8425c55c0c66559e4754bde692d526b0c571b1d6))
+
+
+### Correcciones
+
+* **backend:** Projection refuses undefined as a value, so a declared undefined never reads as an undeclared member ([#445](https://github.com/mercadona/control-tower/issues/445)) ([a7af249](https://github.com/mercadona/control-tower/commit/a7af2493234d8e69dcdc31ef67904de11564e7e6))
+* **backend:** RunDriverMother creates its checkout before the directories inside it ([#440](https://github.com/mercadona/control-tower/issues/440)) ([8fe5837](https://github.com/mercadona/control-tower/commit/8fe5837d3d16e386a5aa7c40cd815a373c6d9caf))
+* **backend:** the headless dispatcher lists issues over GraphQL, like the plugin does since [#46](https://github.com/mercadona/control-tower/issues/46) ([#430](https://github.com/mercadona/control-tower/issues/430)) ([51afd1b](https://github.com/mercadona/control-tower/commit/51afd1b9a2e821f86e1f9a62dd0a19b729dd4547))
+* **backend:** the message path reopens only what there is to reopen ([#462](https://github.com/mercadona/control-tower/issues/462)) ([2f02426](https://github.com/mercadona/control-tower/commit/2f02426af8221514de7ae1200886b91c71b3a956))
+* the yardstick reads the name of a parameterised test, so Spanish no longer escapes a describe.each ([#438](https://github.com/mercadona/control-tower/issues/438)) ([c1878ef](https://github.com/mercadona/control-tower/commit/c1878efc161bc4c1831cdc851cf9093ea007c120))
+
 ## [0.3.0](https://github.com/mercadona/control-tower/compare/backend-v0.2.0...backend-v0.3.0) (2026-09-17)
 
 
