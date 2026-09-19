@@ -6,7 +6,9 @@ import type { AddressInfo } from 'node:net'
 import { Browsers, JsonBody } from '../../src/infrastructure/http.ts'
 import { SliceMessageRoute } from '../../src/infrastructure/slice-message-route.ts'
 import type { SliceChangeAsked } from '../../src/infrastructure/slice-message-route.ts'
-import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
+import {
+  PlanAgentNotResumed, PlanStatusNotRead, PlanStatusNotUnderstood,
+} from '../../src/domain/exceptions.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 const AGENT = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
@@ -109,6 +111,28 @@ describe('SliceMessageRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ code: 'slice-message-not-delivered', detail })
+  })
+
+  it('a status the route had to read and could not refuses with its own declared code', async () => {
+    const detail = 'gh issue view --json labels failed: HTTP 502'
+    const spy = new FixesSpy(new PlanStatusNotRead(detail))
+    const port = await RunningApi.listening(spy.fixes)
+
+    const response = await RunningApi.post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ code: 'slice-message-status-not-read', detail })
+  })
+
+  it('a status that reads as two labels at once refuses with its own declared code', async () => {
+    const detail = '42 wears more than one status label (status:in-review, status:in-progress)'
+    const spy = new FixesSpy(new PlanStatusNotUnderstood(detail))
+    const port = await RunningApi.listening(spy.fixes)
+
+    const response = await RunningApi.post(port, '/slices/42/message', JSON.stringify({ repo: REPO, agent: AGENT, text: TEXT }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ code: 'slice-message-status-not-understood', detail })
   })
 
   it('the other methods of the path answer with an allow header', async () => {

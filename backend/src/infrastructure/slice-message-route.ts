@@ -1,6 +1,13 @@
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
-import { PlanAgentNotResumed, PlanFailure, ReopenNotUnderstood, SliceNotReopened } from '../domain/exceptions.ts'
+import {
+  PlanAgentNotResumed,
+  PlanFailure,
+  PlanStatusNotRead,
+  PlanStatusNotUnderstood,
+  ReopenNotUnderstood,
+  SliceNotReopened,
+} from '../domain/exceptions.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { Request, RequestHandler, Response } from 'express'
@@ -171,6 +178,8 @@ export class SliceMessageCollapse {
       [PlanAgentNotResumed, SliceMessageCollapse.#collapsed('slice-message-not-delivered')],
       [SliceNotReopened, SliceMessageCollapse.#collapsed('slice-message-not-reopened')],
       [ReopenNotUnderstood, SliceMessageCollapse.#collapsed('slice-message-reopen-not-understood')],
+      [PlanStatusNotRead, SliceMessageCollapse.#collapsed('slice-message-status-not-read')],
+      [PlanStatusNotUnderstood, SliceMessageCollapse.#collapsed('slice-message-status-not-understood')],
     ])
 
   static of(cause: Error): Refusal {

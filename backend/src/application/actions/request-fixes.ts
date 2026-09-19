@@ -1,4 +1,6 @@
 import type { PlanAgents } from '../../domain/ports/plan-agents.ts'
+import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
+import { PlanIssueStatus } from '../../domain/value-objects/plan-issue-status.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { Workbench } from '../../domain/ports/workbench.ts'
 
@@ -28,14 +30,26 @@ export class RequestFixesParams {
 export class RequestFixes {
   readonly workbench: Workbench
   readonly planAgents: PlanAgents
+  readonly planIssues: PlanIssues
 
-  constructor({ workbench, planAgents }: { workbench: Workbench, planAgents: PlanAgents }) {
+  constructor({ workbench, planAgents, planIssues }: {
+    workbench: Workbench,
+    planAgents: PlanAgents,
+    planIssues: PlanIssues,
+  }) {
     this.workbench = workbench
     this.planAgents = planAgents
+    this.planIssues = planIssues
   }
 
   async execute(params: RequestFixesParams): Promise<void> {
-    await this.workbench.reopen({ issueNumber: params.issueNumber, repository: params.repository })
+    const status = await this.planIssues.statusOf({
+      issueNumber: params.issueNumber,
+      repository: params.repository,
+    })
+    if (status === PlanIssueStatus.IN_REVIEW) {
+      await this.workbench.reopen({ issueNumber: params.issueNumber, repository: params.repository })
+    }
     await this.planAgents.fix({
       agent: params.agent,
       issue: params.issueNumber,
