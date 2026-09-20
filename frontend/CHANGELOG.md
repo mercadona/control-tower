@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/mercadona/control-tower/compare/frontend-v0.2.0...frontend-v0.3.0) (2026-09-20)
+
+
+### Funcionalidades
+
+* **frontend:** an uncertain slice carries its recovery inside its own panel ([#466](https://github.com/mercadona/control-tower/issues/466)) ([e8d168a](https://github.com/mercadona/control-tower/commit/e8d168a2c87e8274924d2003b68a71ea7fcce602))
+* **frontend:** the slice panel stops offering a message box ([#464](https://github.com/mercadona/control-tower/issues/464)) ([dfb1027](https://github.com/mercadona/control-tower/commit/dfb1027279f414025fc8fd9a2abd10b64af09693))
+
+
+### Correcciones
+
+* the yardstick reads the name of a parameterised test, so Spanish no longer escapes a describe.each ([#438](https://github.com/mercadona/control-tower/issues/438)) ([c1878ef](https://github.com/mercadona/control-tower/commit/c1878efc161bc4c1831cdc851cf9093ea007c120))
+
 ## [0.2.0](https://github.com/mercadona/control-tower/compare/frontend-v0.1.1...frontend-v0.2.0) (2026-09-17)
 
 

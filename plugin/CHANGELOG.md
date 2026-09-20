@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.59.0](https://github.com/mercadona/control-tower/compare/plugin-v0.58.0...plugin-v0.59.0) (2026-09-20)
+
+
+### Funcionalidades
+
+* **ci:** the checks answer to the merge queue, so an entry is measured on the tree it is about to become ([#481](https://github.com/mercadona/control-tower/issues/481)) ([445c14b](https://github.com/mercadona/control-tower/commit/445c14b21bd9577c153f7a2ec1dd4b074f68e015))
+* **plugin:** Control Tower's state gets a root of its own, and both halves of the loop agree on where it is ([#472](https://github.com/mercadona/control-tower/issues/472)) ([b4cd3b8](https://github.com/mercadona/control-tower/commit/b4cd3b8cc715d8624818036368c6b0059aada9a3))
+* **plugin:** the judge gets a brief of its own, without the yardstick its package already lists by path ([#446](https://github.com/mercadona/control-tower/issues/446)) ([6964abe](https://github.com/mercadona/control-tower/commit/6964abe4f9a4a73bc39d232f04eded08d3e461fa))
+* **plugin:** the rehearsal before a merge stops depending on somebody remembering to do it ([#480](https://github.com/mercadona/control-tower/issues/480)) ([5d1f586](https://github.com/mercadona/control-tower/commit/5d1f5864876baa79ca1ddc6822eacb89c4be6966))
+* **plugin:** the twelve skills carry the ct- prefix so they stop colliding with the teams' skills ([#422](https://github.com/mercadona/control-tower/issues/422)) ([8425c55](https://github.com/mercadona/control-tower/commit/8425c55c0c66559e4754bde692d526b0c571b1d6))
+
+
+### Correcciones
+
+* **backend:** the headless dispatcher lists issues over GraphQL, like the plugin does since [#46](https://github.com/mercadona/control-tower/issues/46) ([#430](https://github.com/mercadona/control-tower/issues/430)) ([51afd1b](https://github.com/mercadona/control-tower/commit/51afd1b9a2e821f86e1f9a62dd0a19b729dd4547))
+
+
+### Documentación
+
+* the command list says six, because the rehearsal made it six ([#482](https://github.com/mercadona/control-tower/issues/482)) ([02dc54a](https://github.com/mercadona/control-tower/commit/02dc54ac6cab9bfdc098686efefb9cf5bdcc2eec))
+
 ## [0.58.0](https://github.com/mercadona/control-tower/compare/plugin-v0.57.0...plugin-v0.58.0) (2026-09-17)
 
 
