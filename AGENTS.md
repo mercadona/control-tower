@@ -211,6 +211,7 @@ Named, because these are the forms it actually takes:
 - `git -c core.hooksPath=…`, or any invocation that moves the hooks aside;
 - editing, renaming or deleting a hook to get a command through;
 - `--force` past a protection that refused;
+- `--admin` on a merge, or any other way of stepping over the ruleset of `main`;
 - weakening a test, a gate or an assertion until it stops failing.
 
 **A control that refuses when it should not is a finding, not an obstacle.** Stop,
@@ -221,7 +222,39 @@ more whether it ever protected anything.
 This binds whatever the permission mode is. `bypassPermissions` says the human
 stopped being asked; it does not say the repository stopped deciding.
 
-### The one control known to be wrong, and the route that is not a workaround
+### What stands between a change and `main`, exactly
+
+The gate is the CI and nothing else. `main` carries a ruleset that requires the
+`ci` check green with the branch up to date, asks for no approval, and has no
+bypass actor. A merge waits for a test run, not for a person.
+
+It reads that way because the gate before it could not be satisfied. It asked
+for one approval; the person who writes almost everything here cannot approve
+their own pull request; and the ruleset carried an `always` bypass for
+repository admins. So every merge went through `--admin`, no status check was
+ever required underneath, and the control protected nothing while looking like
+it did. **A gate nobody can pass is not a strict gate. It is an absent one with
+a sign on it**, and this document said the sign was real.
+
+Two consequences an agent works under. `--admin` no longer gets past anything:
+it is refused with *Repository rule violations found*, which was watched
+happening on a pull request opened for no other purpose. And a branch has to be
+up to date with `main` before it merges, so a pull request that went green
+against an older `main` is measured again on the tree it will actually land on.
+
+`ci` is the one required check on purpose. It is the aggregator that counts a
+skipped job as a pass and fails when the job that decides what to run did not
+succeed; requiring `backend` or `frontend` directly would block every pull
+request that does not touch them.
+
+When the CI is stuck and something has to land anyway, the route is to change
+the ruleset — visibly, leaving a record of who opened it and when — and never
+to find a flag that steps over it.
+
+### The control that was wrong, and the route that was not a workaround
+
+Kept because the reasoning is the part that travels, not the fault. What follows
+describes the version that was wrong, in the present tense it was written in.
 
 `branch-protection.py` resolves the current branch by running `git rev-parse`
 with no `cwd`, so it inherits the working directory of the session that invoked
@@ -234,10 +267,14 @@ worktree, so the hook resolves the branch that is really being pushed. That is
 not a workaround: it makes the hook see the truth instead of hiding it. An agent
 whose working directory is pinned elsewhere — a subagent, for instance — cannot
 do that, and hands the push back instead of getting past the hook another way.
+**That paragraph is not history.** It is what any agent does with any control it
+cannot legitimately satisfy, and the fix below does not retire it.
 
-The real fix is one argument, `cwd`, on that `subprocess.run`. It lives in a
-cached plugin outside this repository, so until it lands, the route above is the
-route.
+The fix was one argument, `cwd`, on that `subprocess.run`. It landed in
+`mercadona/skills#553` and was confirmed here on the push of a feature branch
+from a main checkout sitting on that branch. The hook lives in a cached plugin
+outside this repository, so a machine that has not pulled it still runs the old
+one: check the first push of a session rather than assuming the fix is there.
 
 ## The title of a pull request is the message that reaches main
 
