@@ -208,7 +208,8 @@ describe('OpenCoordinatingSession', () => {
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
       Flow.COMMENT.text,
-      PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.CHANGE_TO_A_SLICE,
+  PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -224,7 +225,8 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       Flow.COMMENT.text,
-      PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.CHANGE_TO_A_SLICE,
+  PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -301,7 +303,8 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,
-      PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.CHANGE_TO_A_SLICE,
+  PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 })

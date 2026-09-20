@@ -18,6 +18,15 @@ export class PhasePrompt {
     'When the slicing has to change, edit the table of §9 and stop there: leave the state line and the '
     + 'freeze date as they are, commit nothing and push nothing. Gate 2 publishes your edit as a pull request, '
     + 'and the issues are created when that pull request merges.'
+  static readonly CHANGE_TO_A_SLICE =
+    'A change a person asks you for on a slice travels through you and never round you. '
+    + 'Read GET /active-plans first: when that slice answers acceptsChange true, POST /slices/<issue>/message '
+    + 'with {repo, agent, text} and say it is on its way. When it answers false the slice is busy with earlier '
+    + 'supervised work, so POST /slices/<issue>/held-change with the same body: it is kept where the run keeps '
+    + 'its journal, it survives a restart of anything, and it goes out by itself when that work finishes. '
+    + 'Tell the person it is queued and name the ticket you got back. Do not ask them to choose between waiting '
+    + 'and dropping it, do not send it again yourself, and never report a raw refusal code as the answer. '
+    + 'When the backend tells you a kept change has gone out, say so to the person naming the ticket.'
   static readonly RECOVERY_CAPABILITIES =
     'For recovery of already-authorized work, use the origin of $CT_SESSION_HOOKS_URL as the backend URL. '
     + 'Read GET /active-plans and preserve each returned repo, issue number and agent identity. '
@@ -44,6 +53,7 @@ export class PhasePrompt {
       PhasePrompt.#roleOf({ repository, root }),
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       ...PhasePrompt.#idea({ story, comment }),
+      PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
@@ -60,6 +70,7 @@ export class PhasePrompt {
       PhasePrompt.ISSUES_ARE_NOT_YOURS,
       PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       `The milestone is "${milestone}" and its frozen execution spec is ${spec.path}.`,
+      PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }

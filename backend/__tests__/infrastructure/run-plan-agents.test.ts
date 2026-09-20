@@ -40,6 +40,7 @@ import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-mac
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { ChangeAnnouncements } from '../../src/domain/ports/change-announcements.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents } from '../../src/infrastructure/run-plan-agents.ts'
 import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
@@ -506,6 +507,16 @@ class UnaskedMeasurements extends CallMeasurements {
   }
 }
 
+class AnnouncementsDouble extends ChangeAnnouncements {
+  readonly announced: Array<{ repository: string, issue: number, ticket: string }> = []
+
+  override async announce({ repository, issue, ticket }: {
+    repository: RepositoryName, issue: number, ticket: string,
+  }): Promise<void> {
+    this.announced.push({ repository: repository.text, issue, ticket })
+  }
+}
+
 class Settled {
   static async waitFor(check: () => boolean, what: string): Promise<void> {
     await Settled.until(async () => check(), what)
@@ -578,6 +589,7 @@ describe('RunPlanAgents', () => {
     })
     const legacy = new LegacyDouble()
     const warnings: string[] = []
+    const announcements = new AnnouncementsDouble()
     const agents = new RunPlanAgents({
       legacy,
       records: new RecordsDouble(AgentMother.WATCH, events),
@@ -587,6 +599,7 @@ describe('RunPlanAgents', () => {
       machine,
       journal,
       measurements,
+      announcements,
       newId: () => '55555555-5555-4555-8555-555555555555',
       nowMs: () => Date.parse('2026-09-17T09:30:00.000Z'),
       stderr: (line) => { warnings.push(line); supervisor.resolve() },
@@ -594,7 +607,7 @@ describe('RunPlanAgents', () => {
     return {
       root, events, plannerDone, fixDone, publicationEntered, publicationRelease, oracle,
       release, supervisor, journal, calls, transport, measurements, machine,
-      driverMachine, legacy, warnings, agents,
+      driverMachine, legacy, warnings, announcements, agents,
       registerDriverSupervisor: () => {
         releases.push(release)
         supervisors.push(supervisor)
@@ -705,6 +718,7 @@ describe('RunPlanAgents', () => {
       machine,
       journal,
       measurements,
+      announcements: new AnnouncementsDouble(),
       newId: () => '55555555-5555-4555-8555-555555555555',
       nowMs: () => Date.parse('2026-09-17T09:30:00.000Z'),
       stderr: () => {},
@@ -1468,5 +1482,11 @@ describe('RunPlanAgents', () => {
       'fix', 'And also rename the port.', 'message:66666666-6666-4666-8666-666666666666',
     ])
     await Settled.until(async () => (await tested.journal.pending(AgentMother.WATCH)).length === 0, 'the ticket settling')
+    await Settled.waitFor(() => tested.announcements.announced.length === 1, 'the session being told')
+    expect(tested.announcements.announced).toEqual([{
+      repository: AgentMother.REPOSITORY.text,
+      issue: AgentMother.ISSUE.number,
+      ticket: '66666666-6666-4666-8666-666666666666',
+    }])
   })
 })

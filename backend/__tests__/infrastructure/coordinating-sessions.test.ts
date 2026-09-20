@@ -40,8 +40,14 @@ class LiveSessionsDouble extends LiveSessions {
     return new LiveSessionsDouble(open)
   }
 
+  readonly written: Array<{ id: string, text: string }> = []
+
   find(id: string): LiveSession | null {
     return this.#open.get(id) ?? null
+  }
+
+  write({ session, text }: { session: LiveSession, text: string }): void {
+    this.written.push({ id: session.id, text })
   }
 
   watch({ session, onEnded }: {
@@ -644,5 +650,32 @@ describe('CoordinatingSessions', () => {
 
     expect(held.gateCheckout()?.conversation).toBe(Mother.SECOND)
     expect(held.gateCheckout()?.target).toBe(Mother.SECOND_TARGET)
+  })
+
+  it('an_announcement_reaches_the_live_coordinating_session_as_a_submitted_line', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const sessions = new CoordinatingSessions({
+      liveSessions,
+      stderr: () => {},
+      newTarget: () => Mother.FIRST_TARGET,
+    })
+    sessions.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    expect(sessions.announce('the held change went out')).toBe(true)
+    expect(liveSessions.written).toEqual([
+      { id: Mother.FIRST_SESSION.id, text: `the held change went out${CoordinatingSessions.SUBMIT}` },
+    ])
+  })
+
+  it('an_announcement_with_nobody_to_hear_it_is_refused_rather_than_written_into_the_void', () => {
+    const liveSessions = LiveSessionsDouble.holding()
+    const sessions = new CoordinatingSessions({
+      liveSessions,
+      stderr: () => {},
+      newTarget: () => Mother.FIRST_TARGET,
+    })
+
+    expect(sessions.announce('nobody is listening')).toBe(false)
+    expect(liveSessions.written).toEqual([])
   })
 })

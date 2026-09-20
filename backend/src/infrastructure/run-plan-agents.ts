@@ -18,6 +18,7 @@ import { PlanRecovery } from '../domain/policies/plan-recovery.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import { RecoveryCall } from '../domain/value-objects/recovery-call.ts'
+import { ChangeAnnouncements } from '../domain/ports/change-announcements.ts'
 import { HeldMessage } from '../domain/value-objects/held-message.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
@@ -54,6 +55,7 @@ export class RunPlanAgents extends PlanAgents {
   readonly machine: CtRunMachine
   readonly journal: RunJournal
   readonly measurements: ClaudeRunMeasurements
+  readonly announcements: ChangeAnnouncements
   readonly newId: () => string
   readonly nowMs: () => number
   readonly stderr: (line: string) => void
@@ -68,6 +70,7 @@ export class RunPlanAgents extends PlanAgents {
     machine: CtRunMachine,
     journal: RunJournal,
     measurements: ClaudeRunMeasurements,
+    announcements: ChangeAnnouncements,
     newId: () => string,
     nowMs: () => number,
     stderr: (line: string) => void,
@@ -81,6 +84,7 @@ export class RunPlanAgents extends PlanAgents {
     this.machine = ports.machine
     this.journal = ports.journal
     this.measurements = ports.measurements
+    this.announcements = ports.announcements
     this.newId = ports.newId
     this.nowMs = ports.nowMs
     this.stderr = ports.stderr
@@ -463,6 +467,20 @@ export class RunPlanAgents extends PlanAgents {
       await this.measurements.capture(call)
       RunPlanAgents.#requireSuccess(completed)
       await this.journal.settle(watch, held.ticket, call.id)
+      await this.#announce(watch, held.ticket)
+    }
+  }
+
+  async #announce(watch: PlanWatch, ticket: string): Promise<void> {
+    try {
+      await this.announcements.announce({
+        repository: watch.repository, issue: watch.issue.number, ticket,
+      })
+    } catch (cause) {
+      this.stderr(
+        `run plan agent: ${watch.repository.text}#${watch.issue.number} held change ${ticket} went out `
+        + `and could not be announced: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+      )
     }
   }
 
@@ -516,4 +534,8 @@ export class RunPlanAgents extends PlanAgents {
     }
     throw cause
   }
+}
+
+export class SilentChangeAnnouncements extends ChangeAnnouncements {
+  override async announce(): Promise<void> {}
 }
