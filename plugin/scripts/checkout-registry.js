@@ -16,17 +16,17 @@ export class CheckoutRegistry {
     STALE: 'stale',
   })
 
-  static directory({ configDir = null, home = null } = {}) {
-    return controlTowerDir({ configDir, home })
+  static directory(opts = {}) {
+    return controlTowerDir(opts)
   }
 
-  static path({ configDir = null, home = null } = {}) {
-    return join(CheckoutRegistry.directory({ configDir, home }), CheckoutRegistry.FILE)
+  static path(opts = {}) {
+    return join(CheckoutRegistry.directory(opts), CheckoutRegistry.FILE)
   }
 
-  static read({ configDir = null, home = null } = {}) {
-    const directory = CheckoutRegistry.directory({ configDir, home })
-    const path = CheckoutRegistry.path({ configDir, home })
+  static read(opts = {}) {
+    const directory = CheckoutRegistry.directory(opts)
+    const path = CheckoutRegistry.path(opts)
     if (!isAbsolute(directory)) {
       return { error: `the registry of checkouts does not resolve to an absolute path ("${directory}")`, path }
     }

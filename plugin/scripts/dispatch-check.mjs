@@ -32,6 +32,8 @@ import { checkPlans } from './plan-contract.js'
 import { deliveredRun } from './run-machine.js'
 import { extractE2eRuns, E2E_HEADING } from './gh-issue-map.js'
 import { controlTowerLogDir } from './run-metrics.js'
+import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { SliceBase, BaseBranch } from './slice-base.js'
 import { DeliveryState } from './slice-collection.js'
 import { CollectionAction, CollectionOutcome, SliceCollector } from './slice-collector.js'
@@ -252,6 +254,22 @@ if (issue === null || issue < 1) {
   dieErr(`<issue#> invalid: ${process.argv[2] === undefined ? '(absent)' : `"${process.argv[2]}"`} — it must be an integer >= 1 written in plain digits (no "42x", no "1e3", no "4.2", no spaces, no "+"/"-" sign: an approximate number here would claim an issue that is not the one you asked for).\n${usage}`, 2)
 }
 if (typeof repo !== 'string' || repo.length === 0) { dieErr(usage, 2) }
+
+// Where this command's state lives, resolved ONCE and here, through the one
+// door that reads `CT_STATE_DIR`. A malformed value is a config refusal like
+// the ones above and not the stack trace each reader used to raise on its own
+// (#471).
+const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (stateRoot.reason !== null) dieErr(stateRoot.reason, 2)
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) dieErr(disagreement, 2)
+
 // The three flags move the SAME label along different edges of the cycle
 // (ready → in-progress → in-review → in-progress → … → ready). Passing two
 // together has no reasonable interpretation, and silently picking one would
@@ -867,7 +885,7 @@ function launchMergeWatcher(n) {
     // announce "watcher launched" with a pid that no longer exists. Same
     // guard, and same reason, as in ct-next.mjs#lanzarVigilanteDelGo.
     if (!existsSync(bin)) return warn(`the watcher's program does not exist: ${bin}`)
-    const logPath = join(controlTowerLogDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }), `watch-merge-${n}.log`)
+    const logPath = join(controlTowerLogDir({ stateDir: stateRoot.path }), `watch-merge-${n}.log`)
     const child = spawn(process.execPath, [
       bin, '--issue', String(n), '--repo', repo, '--coordinator-cwd', disk.mainRoot, '--log', logPath,
     ], { detached: true, stdio: 'ignore' })

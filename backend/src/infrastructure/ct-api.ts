@@ -85,6 +85,7 @@ import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
 import { SpecRevision } from '../domain/policies/spec-revision.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
+import { StateRootMarker } from '../../../plugin/scripts/state-root-marker.js'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
 import { HeadlessFiles } from './headless-files.ts'
 import { DiskPlanRecords } from './disk-plan-records.ts'
@@ -411,6 +412,15 @@ class CtApi {
     })
   }
 
+  static #publishStateRoot(root: string, environment: NodeJS.ProcessEnv): void {
+    const path = StateRootMarker.pathIn({ configDir: Invocation.configuredIn(environment, homedir()) })
+    try {
+      Disk.atomicWriteSync(path, StateRootMarker.contentFor(root, { pid: process.pid, at: new Date().toISOString() }))
+    } catch (failure) {
+      process.stderr.write(`warning: the state root could not be published at ${path} (${CtApi.#messageOf(failure)}), so a plugin command resolving a different root cannot tell, and reports an empty loop instead of a disagreement\n`)
+    }
+  }
+
   static #messageOf(failure: unknown): string {
     return failure instanceof Error ? failure.message : String(failure)
   }
@@ -420,6 +430,7 @@ class CtApi {
     if (asked.outcome !== InvocationOutcome.READY || asked.port === null || asked.stateRoot === null) {
       CtApi.#refuseUsage(asked.reason)
     }
+    CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const workspace = new GitWorkspace({
@@ -607,7 +618,7 @@ class CtApi {
       newId: randomUUID,
       hooksUrl: () => `http://${LOOPBACK}:${listeningPort}${SessionHooksRoute.PATH}`,
     })
-    const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
+    const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write, stateRoot: asked.stateRoot })
     const conversationRecords = new DiskConversationRecords({
       read: Disk.read,
       write: Disk.atomicWrite,

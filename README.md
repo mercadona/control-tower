@@ -278,20 +278,45 @@ only when metrics delivery is on.
 
 ### 4.6 Configure
 
-Three environment variables, all optional, **all read once at start-up** — a
+Four environment variables, all optional, **all read once at start-up** — a
 change needs a restart.
 
 | Variable | Default | Shape |
 |---|---|---|
 | `CT_API_PORT` | `8787` | digits only, ≤ `65535`; `0` asks the OS for an ephemeral port |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | an absolute path, if set |
+| `CT_STATE_DIR` | `<Claude config directory>/control-tower` | an absolute path; empty means unset |
 | `CT_HARVEST_BQ_TABLE` | unset | `project:dataset.table` |
 
 Copy `.env.example` to `.env` and fill in your own values there instead of
 exporting them in every terminal. Git ignores `.env`, and the Makefile reads
 it with `-include`, so `make check`, `make run-backend` and `make start` all
-see the same value. It is read at start-up like the three variables above, so
+see the same value. It is read at start-up like the four variables above, so
 a change still needs a restart.
+
+`CT_STATE_DIR` separates CT's backend records, checkout registry and machine
+logs from the Claude account. It is the exact root, with no extra
+`control-tower` suffix. A value that is not an absolute path is refused with a
+sentence — by the backend at start-up and by `/ct-status`, `/ct-next`,
+`ct-step` and `dispatch-check` alike — rather than silently using account
+state. Unset keeps the current location unchanged.
+
+Backend and plugin commands have to resolve the **same** root, and two things
+now see to it rather than leaving it to whoever typed `make`. When a
+coordinating session opens in a checkout, the backend writes the root it
+resolved into that checkout's `.claude/settings.local.json`, so a command
+launched there inherits it; that file is one machine's local state and
+`ct-init` already keeps it out of git. And the backend publishes the same root
+where both halves can find it without the variable itself, so a command that
+resolves a different one while the backend is running stops and names both
+instead of reporting a loop that looks empty. With the backend stopped there is
+nothing to compare against, and a marker left by a backend that is gone is
+ignored.
+
+It changes no credentials, Claude settings, conversation transcripts or
+repository-local `.agent/` and metrics files. Existing records are not moved or
+deleted; stop active work before choosing another root. This is state
+separation, not a credential security boundary.
 
 `CT_HARVEST_BQ_TABLE` off is not a failure: plans, dispatch and the collection
 of merged slices work the same. The only cost is that no merged pull request

@@ -78,6 +78,7 @@ import { join } from 'node:path'
 import { NO_MILESTONE_KEY } from './gh-issue-map.js'
 import { IdentityCollapse } from './tool-usage.js'
 import { YardstickCitation } from './yardstick-citation.js'
+import { ControlTowerState } from './control-tower-state.js'
 
 // The identity fields of §10.1 of the spec, in order: where and against what
 // (repo, epic, issue, plan and its hash), which step (task, step, attempt) and
@@ -120,12 +121,18 @@ export const planSha256 = (text) => createHash('sha256').update(String(text ?? '
 // control-tower state). An empty `CLAUDE_CONFIG_DIR` is treated as unset, the
 // same reading `backend/src/infrastructure/invocation.ts`'s `configuredIn`
 // gives it — two callers of one rule, never two copies of it.
-export function configuredDir({ configDir = null, home = null } = {}) {
-  return configDir || join(home || homedir(), '.claude')
+export function configuredDir(opts = {}) {
+  return ControlTowerState.accountDirectory(opts)
 }
 
+// It does NOT read `CT_STATE_DIR`. `ControlTowerState.resolveIn` is where the
+// environment is read and refused, once, at the start-up of each entrypoint,
+// and what arrives here through `stateDir` has already been checked there.
+// Reading it again would put back the fifth call site that #471 removed.
 export function controlTowerDir(opts = {}) {
-  return join(configuredDir(opts), 'control-tower')
+  const { stateDir = null } = opts
+
+  return ControlTowerState.rootOf(configuredDir(opts), stateDir)
 }
 
 // `log/` is ONE tenant of the folder, not the folder. F38 added a second one
@@ -139,8 +146,8 @@ export function controlTowerLogDir(opts = {}) {
   return join(controlTowerDir(opts), 'log')
 }
 
-export function metricsPath(concept, { configDir = null, home = null } = {}) {
-  return join(controlTowerLogDir({ configDir, home }), `${concept}.jsonl`)
+export function metricsPath(concept, opts = {}) {
+  return join(controlTowerLogDir(opts), `${concept}.jsonl`)
 }
 
 // THE PATH INSIDE THE REPO, in a single constant and not in two: `ct-step

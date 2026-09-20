@@ -129,6 +129,18 @@ describe('ClaudeConversations', () => {
     TerminalDouble.closeAll()
   })
 
+  it('passes_the_state_root_to_the_coordinator_without_replacing_its_claude_account', () => {
+    const { conversations, spawn } = Adapter.readyToOpen({
+      env: { PATH: '/usr/bin', CT_STATE_DIR: '/isolated/state' },
+      claudeDirectory: Governed.CLAUDE_DIRECTORY,
+    })
+
+    conversations.start({ conversation: Governed.conversation(), promptPath: Governed.PROMPT_PATH })
+
+    expect(spawn.calls[0].options.env.CT_STATE_DIR).toBe('/isolated/state')
+    expect(spawn.calls[0].options.env.CLAUDE_CONFIG_DIR).toBe(Governed.CLAUDE_DIRECTORY)
+  })
+
   it('hands the session the resolved claude directory, so an empty one in its own environment does not reach it', () => {
     const { conversations, spawn } = Adapter.readyToOpen({
       env: { PATH: '/usr/bin', [Invocation.CONFIG_VARIABLE]: '' },

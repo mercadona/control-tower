@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.ts'
 import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
+import { controlTowerDir } from '../../../plugin/scripts/run-metrics.js'
 
 class PluginEnvironment {
   static SCRIPT = join(
@@ -43,6 +44,14 @@ class Invoked {
 
   static withHome(given: string) {
     return Invocation.from([], {}, given)
+  }
+
+  static withStateDirectory(given: string) {
+    return Invocation.from([], { CT_STATE_DIR: given, CLAUDE_CONFIG_DIR: '/account' }, Invoked.HOME)
+  }
+
+  static withRelativeAccountAndAbsoluteStateDirectory() {
+    return Invocation.from([], { CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: 'relative/account' }, Invoked.HOME)
   }
 
   static withHarvestTable(given: string) {
@@ -247,6 +256,48 @@ describe('Invocation looking a binary up in PATH without executing it', () => {
 })
 
 describe('Invocation resolving where Control Tower keeps its state', () => {
+  it('a_separate_state_directory_wins_without_moving_the_claude_account', () => {
+    const environment = { CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' }
+
+    expect(Invoked.withStateDirectory(environment.CT_STATE_DIR).stateRoot).toBe('/isolated/state')
+    expect(Invocation.configuredIn(environment, Invoked.HOME)).toBe('/account')
+    expect(Invocation.harvestEnvironment(environment, { ghTimeoutMs: 1000 }).CT_STATE_DIR).toBe('/isolated/state')
+    expect(environment).toEqual({ CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' })
+  })
+
+  it('backend_and_plugin_resolve_the_same_state_root_without_moving_account_configuration', () => {
+    for (const stateDir of [undefined, '', '/isolated/state', '/isolated/state with spaces']) {
+      const environment = { CT_STATE_DIR: stateDir, CLAUDE_CONFIG_DIR: '/account' }
+
+      expect(Invocation.from([], environment, Invoked.HOME).stateRoot).toBe(
+        controlTowerDir({ stateDir: stateDir ?? '', configDir: '/account', home: Invoked.HOME })
+      )
+      expect(Invocation.configuredIn(environment, Invoked.HOME)).toBe('/account')
+    }
+  })
+
+  it('an_empty_state_override_preserves_the_account_relative_default', () => {
+    expect(Invoked.withStateDirectory('').stateRoot).toBe('/account/control-tower')
+  })
+
+  it('a_separate_state_root_does_not_make_a_relative_account_directory_valid', () => {
+    const refused = Invoked.withRelativeAccountAndAbsoluteStateDirectory()
+
+    expect(refused.outcome).toBe(InvocationOutcome.UNKNOWN_STATE_HOME)
+    expect(refused.stateRoot).toBe(null)
+  })
+
+  it('an_invalid_state_override_refuses_startup_instead_of_falling_back_to_account_state', () => {
+    for (const stateDir of ['relative/state', '~/state', ' ', '/state\u0000hidden']) {
+      const refused = Invoked.withStateDirectory(stateDir)
+
+      expect(refused.outcome).toBe(InvocationOutcome.UNKNOWN_STATE_HOME)
+      expect(refused.stateRoot).toBe(null)
+      expect(refused.port).toBe(null)
+      expect(refused.reason).toBe(`CT_STATE_DIR must be an absolute path without null bytes, got ${JSON.stringify(stateDir)}`)
+    }
+  })
+
   it('with_nothing_asked_for_the_state_root_hangs_off_the_home_of_whoever_runs_it', () => {
     expect(Invoked.bare().stateRoot).toBe('/home/someone/.claude/control-tower')
   })

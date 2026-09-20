@@ -80,6 +80,8 @@ import {
   readAdvice, ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS,
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
+import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { RoleBytes } from './role-bytes.js'
 import { ClaudeCodeTranscript, ClaudeCodeUsage } from './claude-code-usage.js'
 import { ClaudeCodeAccount } from './claude-code-account.js'
@@ -428,6 +430,22 @@ const currentAttempt = () => StepSeal.attemptOf(run)
 const PLUGIN_VERSION = PluginManifest.installed().version
 const ACTOR = (git(['config', 'user.email'], { allowFail: true }) || '').trim() || null
 
+
+// Where this command's state lives, resolved ONCE and here, through the one
+// door that reads `CT_STATE_DIR`. A malformed value is a config refusal like
+// the ones above and not the stack trace each reader used to raise on its own
+// (#471).
+const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (stateRoot.reason !== null) die(stateRoot.reason, EXIT.USAGE)
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) die(disagreement, EXIT.USAGE)
+
 // The path is dictated by run-metrics.js, which is also what teaches it to
 // /ct-harvest: the writer and the reader cannot diverge.
 const METRICS_REL = metricsRepoRelPath(issue)
@@ -508,7 +526,7 @@ function measure(step, measures) {
   }, { ...measures, ...toolUsageMeasures(), tool_account_email: toolAccountEmail() }, { now: new Date().toISOString() }))
   // The two destinations are attempted separately: the account's disk being
   // full cannot cost the repo the row that travels, nor the other way round.
-  for (const destination of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {
+  for (const destination of [metricsPath('ct-step', { stateDir: stateRoot.path }), join(repoRoot, METRICS_REL)]) {
     try {
       mkdirSync(dirname(destination), { recursive: true })
       appendFileSync(destination, line)

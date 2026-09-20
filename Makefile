@@ -28,6 +28,7 @@ PACKAGES := plugin backend frontend
 -include .env
 
 CT_API_PORT ?= 8787
+export CT_STATE_DIR
 
 # CLAUDE_CONFIG_DIR travels only when it has a value. Expanding it empty is not
 # the same as leaving it out: `claude` reads the empty string as its config

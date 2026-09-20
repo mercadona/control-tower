@@ -56,6 +56,8 @@ import { parseRepoSlug, repoOfRemoteUrl } from './dispatch.js'
 // the registry that says where each of those is checked out on this machine.
 import { MilestoneRepos } from './milestone-repos.js'
 import { CheckoutRegistry } from './checkout-registry.js'
+import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { homedir } from 'node:os'
 
 // A hardened `arg()`: the SAME one as in
@@ -89,6 +91,26 @@ if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); proce
 // explaining that the problem was the shape of the argument.
 if (!parseRepoSlug(repo)) {
   console.error(`invalid --repo: "${repo}" — it has to have the form owner/repo (e.g. josemerca/control-tower), with exactly one slash and neither half empty.`)
+  process.exit(2)
+}
+
+// Where this command's state lives, resolved ONCE and here. The refusal is a
+// sentence and a 2 like the ones above, and not the stack trace `CT_STATE_DIR`
+// used to produce when each reader checked it for itself (#471).
+const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (stateRoot.reason !== null) {
+  console.error(stateRoot.reason)
+  process.exit(2)
+}
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) {
+  console.error(disagreement)
   process.exit(2)
 }
 
@@ -203,7 +225,7 @@ const scopeLines = []
   // `repoOfRemoteUrl` for the same reason.
   const reaches = MilestoneRepos.awayFrom(MilestoneRepos.reachesIn([...open, ...closed]), repo)
   if (reaches.length) {
-    const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+    const registry = CheckoutRegistry.read({ stateDir: stateRoot.path })
     const resolved = new Map()
     const whereOf = (target) => {
       if (!resolved.has(target)) {
