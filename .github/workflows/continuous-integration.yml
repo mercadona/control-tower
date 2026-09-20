@@ -131,44 +131,15 @@ jobs:
             exit 0
           fi
 
-          # Three dots, not two: what this pull request changed since it forked
-          # off the base, not everything that separates the two commits.
-          files="$(git diff --name-only "$BASE...$HEAD")"
-
-          plugin=false
-          backend=false
-          frontend=false
-          outside=false
-
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            case "$file" in
-              plugin/*) plugin=true ;;
-              backend/*) backend=true ;;
-              frontend/*) frontend=true ;;
-              *) outside=true ;;
-            esac
-          done <<< "$files"
-
-          if [ -z "$files" ] || [ "$outside" = true ]; then
-            plugin=true
-            backend=true
-            frontend=true
-          fi
-
-          # The one dependency edge: backend/ compiles and tests against
-          # plugin/ sources, so a plugin change has to be checked on the
-          # backend side too.
-          if [ "$plugin" = true ]; then
-            backend=true
-          fi
-
-          echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
-          echo "backend=$backend" >> "$GITHUB_OUTPUT"
-          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
-
-          echo "plugin=$plugin backend=$backend frontend=$frontend"
-          echo "$files" | sed 's/^/  /'
+          # The rule itself is plugin/scripts/changed-packages.js, asked here and
+          # by /ct-premerge. It used to live in this heredoc, where nothing
+          # could test it — and the `ci` job below exists precisely because a
+          # filter that decides wrong turns into a green pull request with
+          # nothing run. Now it is one object with tests, and two callers.
+          decided="$(node plugin/scripts/ct-changed-packages.mjs "$BASE" "$HEAD")"
+          echo "$decided" >> "$GITHUB_OUTPUT"
+          echo "$decided" | tr '\n' ' '
+          echo
 
   dist:
     needs: changes
