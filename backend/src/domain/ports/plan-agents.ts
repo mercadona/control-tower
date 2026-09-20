@@ -28,6 +28,18 @@ export class PlanAgents {
     )
   }
 
+  async hold({ agent, issue, repository, changes }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+    changes: string,
+  }): Promise<string> {
+    throw new Error(
+      `${this.constructor.name} must implement hold({ agent, issue, repository, changes }), `
+      + `asked for ${agent} on ${issue} in ${repository} with ${changes.length} characters`
+    )
+  }
+
   async fix({ agent, issue, repository, changes, requestId }: {
     agent: string,
     issue: number,

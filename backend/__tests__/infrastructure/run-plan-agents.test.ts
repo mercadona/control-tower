@@ -506,6 +506,20 @@ class UnaskedMeasurements extends CallMeasurements {
   }
 }
 
+class Settled {
+  static async waitFor(check: () => boolean, what: string): Promise<void> {
+    await Settled.until(async () => check(), what)
+  }
+
+  static async until(check: () => Promise<boolean>, what: string): Promise<void> {
+    for (let attempt = 0; attempt < 400; attempt += 1) {
+      if (await check()) return
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    throw new Error(`${what} never happened`)
+  }
+}
+
 describe('RunPlanAgents', () => {
   const roots: string[] = []
   const finalizers: Array<() => void> = []
@@ -1377,5 +1391,82 @@ describe('RunPlanAgents', () => {
       AgentMother.descriptor(tested.calls.fixCall, 'fix', asked.requestId),
     )
     await expect(tested.agents.fix(asked)).rejects.toBeInstanceOf(PlanAgentNotResumed)
+  })
+
+  it('a_change_a_busy_slice_cannot_take_is_kept_with_a_ticket_and_starts_nothing', async () => {
+    const tested = await scenario(true, () => '2026-09-20T10:00:00.000Z', [
+      '66666666-6666-4666-8666-666666666666',
+    ])
+
+    tested.machine.inspection = new RunInspection({ kind: 'delivered' })
+    const ticket = await tested.agents.hold({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'And also rename the port.',
+    })
+
+    expect(ticket).toBe('66666666-6666-4666-8666-666666666666')
+    expect(tested.calls.starts).toEqual([])
+    expect((await tested.journal.pending(AgentMother.WATCH)).map((held) => held.text))
+      .toEqual(['And also rename the port.'])
+  })
+
+  it('a_kept_change_outlives_the_session_because_it_is_written_where_the_run_keeps_its_journal', async () => {
+    const tested = await scenario(true, () => '2026-09-20T10:00:00.000Z', [
+      '66666666-6666-4666-8666-666666666666',
+    ])
+
+    tested.machine.inspection = new RunInspection({ kind: 'delivered' })
+    await tested.agents.hold({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Survive a restart.',
+    })
+    const reopened = new RunJournal({
+      files: new HeadlessFiles({ root: tested.root, fs, newId: () => 'temporary-record' }),
+      newId: () => 'unused',
+      now: () => '2026-09-20T11:00:00.000Z',
+    })
+
+    expect((await reopened.pending(AgentMother.WATCH)).map((held) => held.text)).toEqual(['Survive a restart.'])
+  })
+
+  it('a_run_that_predates_the_journal_refuses_to_keep_a_change_instead_of_dropping_it', async () => {
+    const tested = await scenario()
+
+    await expect(tested.agents.hold({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Nowhere to keep this.',
+    })).rejects.toBeInstanceOf(PlanAgentNotResumed)
+  })
+
+  it('what_was_kept_while_a_fix_was_in_flight_goes_out_when_that_fix_finishes', async () => {
+    const tested = await scenario(true, () => '2026-09-20T10:00:00.000Z', [
+      '66666666-6666-4666-8666-666666666666',
+    ])
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      changes: 'Fix the supervised thing.',
+      requestId: 'review-20',
+    }
+
+    tested.machine.inspection = new RunInspection({ kind: 'delivered' })
+    await tested.agents.fix(asked)
+    await tested.agents.hold({ ...asked, changes: 'And also rename the port.' })
+    expect(tested.calls.starts).toEqual([['fix', asked.changes, asked.requestId]])
+
+    tested.fixDone.resolve(AgentMother.completed(tested.calls.fixCall))
+    await Settled.waitFor(() => tested.calls.starts.length === 2, 'the held change going out')
+
+    expect(tested.calls.starts[1]).toEqual([
+      'fix', 'And also rename the port.', 'message:66666666-6666-4666-8666-666666666666',
+    ])
+    await Settled.until(async () => (await tested.journal.pending(AgentMother.WATCH)).length === 0, 'the ticket settling')
   })
 })

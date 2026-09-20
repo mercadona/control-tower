@@ -28,6 +28,10 @@ export type SliceChangeAsked = (asked: {
   agent: string, issue: number, repository: RepositoryName, changes: string,
 }) => Promise<void>
 
+export type SliceChangeHeld = (asked: {
+  agent: string, issue: number, repository: RepositoryName, changes: string,
+}) => Promise<string>
+
 type AcceptedSliceMessageRequest = SliceMessageRequest & {
   readonly issue: number, readonly repository: RepositoryName, readonly agent: string, readonly text: string,
 }
@@ -226,6 +230,41 @@ export class SliceMessageRoute {
 
   static refuseOtherMethods(request: Request, response: Response): void {
     response.setHeader('Allow', SliceMessageRoute.METHOD)
+    Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
+  }
+}
+
+export class SliceHeldChangeRoute {
+  static readonly PATH = '/slices/:issue/held-change'
+  static readonly METHOD = 'POST'
+  static readonly ISSUE_PARAMETER = 'issue'
+  static readonly STATUS = 'held'
+
+  static handledBy(hold: SliceChangeHeld): RequestHandler {
+    return async (request: Request, response: Response): Promise<void> => {
+      const asked = SliceMessageRequest.from(
+        request.params[SliceHeldChangeRoute.ISSUE_PARAMETER], JsonBody.textOf(request),
+      )
+      if (!SliceMessageRequest.isAccepted(asked)) {
+        Answer.refuseAs(response, SliceMessageRefusal.of(asked))
+        return
+      }
+      let ticket: string
+      try {
+        ticket = await hold({
+          agent: asked.agent, issue: asked.issue, repository: asked.repository, changes: asked.text,
+        })
+      } catch (cause) {
+        if (!(cause instanceof PlanFailure)) throw cause
+        Answer.refuseAs(response, SliceMessageCollapse.of(cause))
+        return
+      }
+      Answer.send(response, 202, { status: SliceHeldChangeRoute.STATUS, ticket })
+    }
+  }
+
+  static refuseOtherMethods(request: Request, response: Response): void {
+    response.setHeader('Allow', SliceHeldChangeRoute.METHOD)
     Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
   }
 }

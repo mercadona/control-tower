@@ -1,4 +1,6 @@
 export class HeldMessage {
+  static readonly REQUEST_PREFIX = 'message:'
+
   readonly ticket: string
   readonly askedAt: string
   readonly text: string

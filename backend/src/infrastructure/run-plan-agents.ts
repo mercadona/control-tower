@@ -18,6 +18,7 @@ import { PlanRecovery } from '../domain/policies/plan-recovery.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import { RecoveryCall } from '../domain/value-objects/recovery-call.ts'
+import { HeldMessage } from '../domain/value-objects/held-message.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { ClaudeCalls } from './claude-calls.ts'
@@ -146,6 +147,26 @@ export class RunPlanAgents extends PlanAgents {
     }
   }
 
+  override async hold(asked: FixPlan): Promise<string> {
+    const watch = await this.#fixWatch(asked)
+    let provenance: RunProvenanceValue
+    try {
+      provenance = await this.provenance(watch)
+    } catch (cause) {
+      RunPlanAgents.#throwFixFailure(cause)
+    }
+    if (provenance === RunProvenance.LEGACY) {
+      throw new PlanAgentNotResumed(
+        `conversation ${JSON.stringify(watch.agent)} predates the journal, so a change cannot be held for it`,
+      )
+    }
+    try {
+      return await this.journal.hold(watch, asked.changes)
+    } catch (cause) {
+      RunPlanAgents.#throwFixFailure(cause)
+    }
+  }
+
   override async fix(asked: FixPlan): Promise<void> {
     const watch = await this.#fixWatch(asked)
     let provenance: RunProvenanceValue
@@ -178,13 +199,13 @@ export class RunPlanAgents extends PlanAgents {
       const history = await this.transport.history(watch.agent)
       const existing = await this.#existingFix(history)
       if (existing !== null) {
-        this.#supervise(watch, existing, this.#completeFix(existing))
+        this.#supervise(watch, existing, this.#completeFix(watch, existing))
         handedOff = true
         return
       }
       const requestId = asked.requestId ?? this.newId()
       const call = await this.calls.start(watch, 'fix', asked.changes, requestId)
-      this.#supervise(watch, call, this.#completeFix(call))
+      this.#supervise(watch, call, this.#completeFix(watch, call))
       handedOff = true
     } catch (cause) {
       RunPlanAgents.#throwFixFailure(cause)
@@ -212,7 +233,7 @@ export class RunPlanAgents extends PlanAgents {
   }
 
   async #recoveredWork(watch: PlanWatch, inspection: RunInspection, call: StartedPlanCall): Promise<void> {
-    if (inspection.fact.kind === 'delivered') return this.#completeFix(call)
+    if (inspection.fact.kind === 'delivered') return this.#completeFix(watch, call)
     if (inspection.fact.kind === 'absent') return this.#driveAfterPlanner(watch, call)
     await this.driver.execute(new DriveRunParams({ watch, planner: call }))
   }
@@ -294,10 +315,11 @@ export class RunPlanAgents extends PlanAgents {
     return this.reservations.has(watch.agent)
   }
 
-  async #completeFix(call: StartedPlanCall): Promise<void> {
+  async #completeFix(watch: PlanWatch, call: StartedPlanCall): Promise<void> {
     const completed = await this.calls.wait(call)
     await this.measurements.capture(call)
     RunPlanAgents.#requireSuccess(completed)
+    await this.#deliverHeld(watch)
   }
 
   async #captureCompleted(history: readonly RecordedCall[]): Promise<void> {
@@ -430,6 +452,18 @@ export class RunPlanAgents extends PlanAgents {
     if (this.reservations.has(watch.agent)) return false
     this.reservations.add(watch.agent)
     return true
+  }
+
+  async #deliverHeld(watch: PlanWatch): Promise<void> {
+    for (const held of await this.journal.pending(watch)) {
+      const call = await this.calls.start(
+        watch, 'fix', held.text, `${HeldMessage.REQUEST_PREFIX}${held.ticket}`,
+      )
+      const completed = await this.calls.wait(call)
+      await this.measurements.capture(call)
+      RunPlanAgents.#requireSuccess(completed)
+      await this.journal.settle(watch, held.ticket, call.id)
+    }
   }
 
   #supervise(watch: PlanWatch, call: StartedPlanCall, work: Promise<void>): void {

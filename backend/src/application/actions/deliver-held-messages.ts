@@ -5,6 +5,7 @@ import type { SliceEscalations } from '../../domain/ports/slice-escalations.ts'
 import type { SliceMessages } from '../../domain/ports/slice-messages.ts'
 import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { CompletedPlanCall } from '../../domain/value-objects/plan-call.ts'
+import { HeldMessage } from '../../domain/value-objects/held-message.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 
 export class DeliverHeldMessagesParams {
@@ -17,7 +18,7 @@ export class DeliverHeldMessagesParams {
 }
 
 export class DeliverHeldMessages {
-  static readonly REQUEST_PREFIX = 'message:'
+  static readonly REQUEST_PREFIX: string = HeldMessage.REQUEST_PREFIX
 
   readonly messages: SliceMessages
   readonly calls: PlanCalls
