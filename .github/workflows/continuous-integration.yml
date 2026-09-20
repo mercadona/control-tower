@@ -9,6 +9,19 @@ on:
   # suite somewhere to report from that is nobody's pull request (#407).
   push:
     branches: [main]
+  # The queue builds each entry on top of the ones ahead of it and runs the
+  # checks THERE, which is the only place the combination of two pull requests
+  # is ever measured: whichever lands second sits on a tree its own run never
+  # saw. Without this trigger an entry would wait forever for a `ci` nobody
+  # reports, so the trigger lands before the queue is switched on, never after.
+  #
+  # It also un-blocks the one pull request nobody can get a check onto. The
+  # release pull request is opened by `github-actions[bot]`, and a run it
+  # triggers is held at `action_required` until a person approves it — four of
+  # them were, and `gh pr checks` reports nothing at all for a run in that
+  # state. Queuing is done by a person, so the `merge_group` run is theirs and
+  # is not held.
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -118,9 +131,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # A run on `main` has no pull request to compare against, so there is
-          # no diff to filter by and every suite is turned on. Not a fallback:
-          # that is the whole point of running there.
+          # A run on `main`, and a queue build, have no pull request to compare
+          # against, so there is no diff to filter by and every suite is turned
+          # on. Not a fallback: that is the whole point of running there, and in
+          # the queue it is what makes an entry measured against the tree it is
+          # about to become rather than against the one it forked from.
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             {
               echo "plugin=true"
