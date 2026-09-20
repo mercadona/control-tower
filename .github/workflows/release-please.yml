@@ -55,13 +55,26 @@ name: Release Please
 # `Required status check "ci" is expected`. The queue evaluates the checks on
 # the merge group AS WELL, not INSTEAD.
 #
-# The durable fix is the one this comment always named, and it is a decision
-# with a price rather than a task: create a PAT with `contents: write` and
-# `pull-requests: write`, keep it as a secret and add
-# `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` to the step below. The pull
-# request is then authored by a user, no run of its is ever held, and nothing
-# else needs touching. The price is a long-lived credential in a public
-# repository, which is why it has not been done by whoever wrote this line.
+# THE PAT IS DECIDED AGAINST, and this is the decision rather than a task
+# nobody got to. A PAT with `contents: write` and `pull-requests: write`, kept
+# as a secret and passed as `token:` to the step below, would make release-please
+# act as a user: no run of its would ever be held and this pull request would
+# merge with no manual step at all. It was weighed on 2026-09-20 and refused.
+#
+# What it costs to go without: one command, and only at the moment somebody
+# wants to publish. The pull request re-holds its runs on every push to `main`,
+# which sounds worse than it is — nobody needs it green until they mean to
+# release, and releases are weeks apart.
+#
+# What it costs to have: a long-lived credential living in a public repository,
+# permanently, so that a command that runs every few weeks does not have to be
+# typed. That is the wrong trade, and the asymmetry is the whole argument.
+#
+# This affects exactly one pull request — this one. Every pull request a person
+# opens here gets its checks immediately and merges without anybody approving
+# anything: eight of them did on the day this was written. Nothing about
+# Control Tower itself, or about the repositories it governs, is touched by any
+# of this.
 
 on:
   push:
