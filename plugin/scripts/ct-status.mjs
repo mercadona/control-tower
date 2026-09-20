@@ -57,6 +57,7 @@ import { parseRepoSlug, repoOfRemoteUrl } from './dispatch.js'
 import { MilestoneRepos } from './milestone-repos.js'
 import { CheckoutRegistry } from './checkout-registry.js'
 import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { homedir } from 'node:os'
 
 // A hardened `arg()`: the SAME one as in
@@ -99,6 +100,17 @@ if (!parseRepoSlug(repo)) {
 const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
 if (stateRoot.reason !== null) {
   console.error(stateRoot.reason)
+  process.exit(2)
+}
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) {
+  console.error(disagreement)
   process.exit(2)
 }
 

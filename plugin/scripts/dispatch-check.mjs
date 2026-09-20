@@ -33,6 +33,7 @@ import { deliveredRun } from './run-machine.js'
 import { extractE2eRuns, E2E_HEADING } from './gh-issue-map.js'
 import { controlTowerLogDir } from './run-metrics.js'
 import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { SliceBase, BaseBranch } from './slice-base.js'
 import { DeliveryState } from './slice-collection.js'
 import { CollectionAction, CollectionOutcome, SliceCollector } from './slice-collector.js'
@@ -260,6 +261,15 @@ if (typeof repo !== 'string' || repo.length === 0) { dieErr(usage, 2) }
 // (#471).
 const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
 if (stateRoot.reason !== null) dieErr(stateRoot.reason, 2)
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) dieErr(disagreement, 2)
+
 // The three flags move the SAME label along different edges of the cycle
 // (ready → in-progress → in-review → in-progress → … → ready). Passing two
 // together has no reasonable interpretation, and silently picking one would

@@ -663,3 +663,43 @@ describe('a state directory this command cannot use', () => {
     cleanUp(b)
   })
 })
+
+// #471, the other half: `CT_STATE_DIR` travels through the Makefile and nothing
+// else, so this command can resolve the account's root while a live backend
+// writes somewhere else. What that used to look like was an empty report.
+describe('a backend that keeps the state somewhere else', () => {
+  function publishing(root, pid) {
+    const configDir = mkdtempSync(join(tmpdir(), 'ct-st-published-'))
+    mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+    writeFileSync(
+      join(configDir, 'control-tower', 'state-root.json'),
+      JSON.stringify({ root, pid, at: '2026-09-20T01:00:00.000Z' })
+    )
+    return configDir
+  }
+
+  it('stops_the_command_naming_both_roots_instead_of_reporting_a_loop_that_is_not_empty', () => {
+    const b = bench()
+    const configDir = publishing('/isolated/state', process.pid)
+    const res = run(b, { CLAUDE_CONFIG_DIR: configDir })
+
+    expect(res.status).toBe(2)
+    expect(res.stderr).toContain('/isolated/state')
+    expect(res.stderr).toContain(join(configDir, 'control-tower'))
+    expect(res.stdout).toBe('')
+    expect(existsSync(b.argvLog)).toBe(false)
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(b)
+  })
+
+  it('says_nothing_when_the_command_was_given_the_very_root_the_backend_published', () => {
+    const b = bench()
+    const configDir = publishing('/isolated/state', process.pid)
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES, CLAUDE_CONFIG_DIR: configDir, CT_STATE_DIR: '/isolated/state' })
+
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toMatch(/disagreement/)
+    rmSync(configDir, { recursive: true, force: true })
+    cleanUp(b)
+  })
+})

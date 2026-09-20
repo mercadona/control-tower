@@ -81,6 +81,7 @@ import {
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { ControlTowerState } from './control-tower-state.js'
+import { StateRootMarker } from './state-root-marker.js'
 import { RoleBytes } from './role-bytes.js'
 import { ClaudeCodeTranscript, ClaudeCodeUsage } from './claude-code-usage.js'
 import { ClaudeCodeAccount } from './claude-code-account.js'
@@ -436,6 +437,14 @@ const ACTOR = (git(['config', 'user.email'], { allowFail: true }) || '').trim() 
 // (#471).
 const stateRoot = ControlTowerState.resolveIn(process.env, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
 if (stateRoot.reason !== null) die(stateRoot.reason, EXIT.USAGE)
+
+// And whether the backend agrees. `CT_STATE_DIR` travels through the Makefile
+// and nothing else, so a command invoked from a Claude Code session can resolve
+// the account's root while a live backend writes somewhere else — and the
+// report that follows would be empty for a reason that is not the loop's
+// (#471).
+const disagreement = StateRootMarker.disagreementWith(stateRoot.path, { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+if (disagreement !== null) die(disagreement, EXIT.USAGE)
 
 // The path is dictated by run-metrics.js, which is also what teaches it to
 // /ct-harvest: the writer and the reader cannot diverge.
