@@ -26,14 +26,42 @@ name: Release Please
 # per package that has changed. With one pull request per package the release
 # queue would compete with the work queue.
 #
-# WHY THIS PULL REQUEST BRINGS NO CHECKS. The events the default `GITHUB_TOKEN`
-# creates do not trigger other workflows —GitHub forbids it so that a workflow
-# cannot call itself in a loop—, so CI does not run over the release pull
-# request. It is acceptable: it only touches versions and changelogs, and CI
-# already ran over every commit that makes it up. If one day the opposite is
-# wanted, create a PAT with `contents: write` and `pull-requests: write`, keep
-# it as a secret and add `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` to the
-# step below. Nothing else needs touching.
+# WHY THIS PULL REQUEST ARRIVES WITH NO CHECKS, AND WHAT TO DO ABOUT IT.
+# Measured on 2026-09-20, because what this comment said before was wrong in a
+# way that mattered: it said CI does not run over the release pull request. CI
+# is triggered. What happens is that a run triggered by an event the default
+# `GITHUB_TOKEN` created is HELD at `action_required` until a person approves
+# it — and `gh pr checks` reports nothing at all for a run in that state, which
+# is exactly what "no checks" looked like from outside.
+#
+# That was harmless while nothing was required. Since `ci` became a required
+# check of `main`, a held run means this pull request cannot merge at all.
+#
+# The unblock is one command, on the run of its current head:
+#
+#   id=$(gh api repos/<owner>/<repo>/actions/runs \
+#     --jq '[.workflow_runs[]|select(.head_branch=="release-please--branches--main"
+#            and .conclusion=="action_required")][0].id')
+#   gh api --method POST repos/<owner>/<repo>/actions/runs/$id/approve
+#
+# Watched working: the run went from `action_required` to `queued`, finished
+# green, and the pull request merged through the queue.
+#
+# Two things that do NOT solve it, both tried. Closing and reopening the pull
+# request does trigger a run that is not held — a person reopened it — but it
+# only lasts until the next push to `main`, because release-please updates the
+# pull request, that is a new head, and the new run is held again. And the merge
+# queue does not exempt it: enqueueing without `ci` is refused with
+# `Required status check "ci" is expected`. The queue evaluates the checks on
+# the merge group AS WELL, not INSTEAD.
+#
+# The durable fix is the one this comment always named, and it is a decision
+# with a price rather than a task: create a PAT with `contents: write` and
+# `pull-requests: write`, keep it as a secret and add
+# `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` to the step below. The pull
+# request is then authored by a user, no run of its is ever held, and nothing
+# else needs touching. The price is a long-lived credential in a public
+# repository, which is why it has not been done by whoever wrote this line.
 
 on:
   push:

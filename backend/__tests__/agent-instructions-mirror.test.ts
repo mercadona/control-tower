@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,6 +20,16 @@ class AgentInstructions {
     'resolves the current branch by running `git rev-parse`',
     'hands the push back instead of getting past the hook another way',
   ]
+
+  static POINTER = /`(docs\/[A-Za-z0-9._/-]+)`/g
+
+  static pointersIn(name: string): string[] {
+    return [...new Set([...AgentInstructions.of(name).matchAll(AgentInstructions.POINTER)].map((found) => found[1]))]
+  }
+
+  static missing(name: string): string[] {
+    return AgentInstructions.pointersIn(name).filter((path) => !existsSync(join(AgentInstructions.ROOT, path)))
+  }
 
   static of(name: string): string {
     return readFileSync(join(AgentInstructions.ROOT, name), 'utf8')
@@ -91,5 +101,24 @@ describe('the two agent-instruction documents say the same thing', () => {
         expect(AgentInstructions.of(name), `${name} no longer carries: ${rule}`).toContain(rule)
       }
     }
+  })
+})
+
+describe('what the two documents point at is there, because a pointer is now how a rule is reached', () => {
+  it.each([AgentInstructions.AGENTS, AgentInstructions.CLAUDE])(
+    '%s promises no path under docs/ that does not exist',
+    (name) => {
+      expect(AgentInstructions.missing(name), `${name} points at something that is not there`).toEqual([])
+    },
+  )
+
+  it('both_point_at_the_same_places_because_they_are_the_same_text', () => {
+    expect(AgentInstructions.pointersIn(AgentInstructions.AGENTS))
+      .toEqual(AgentInstructions.pointersIn(AgentInstructions.CLAUDE))
+  })
+
+  it('the_detector_really_fires_so_the_guard_cannot_pass_by_finding_no_pointers', () => {
+    expect(AgentInstructions.pointersIn(AgentInstructions.CLAUDE).length).toBeGreaterThan(3)
+    expect(AgentInstructions.pointersIn(AgentInstructions.CLAUDE)).toContain('docs/glossary.md')
   })
 })
