@@ -50,3 +50,9 @@ Nothing enforces it today. `commit-keyword-guard` is a `PreToolUse` hook on
 `Bash` and it guards closing keywords in a commit command, which is neither the
 title of a pull request nor this question. Whether a check should refuse an
 untyped title, and where that check would live, is open.
+
+---
+
+The whole path a change takes from a merge to somebody else's session — the
+release pull request, the run that waits to be approved, and why your own
+machine may not be able to tell you any of it: `docs/loop/publishing.md`.
