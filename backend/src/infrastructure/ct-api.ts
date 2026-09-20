@@ -35,6 +35,7 @@ import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
+import { SessionChangeAnnouncements } from './session-change-announcements.ts'
 import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
@@ -564,6 +565,7 @@ class CtApi {
       machine,
       journal,
       measurements,
+      announcements: new SessionChangeAnnouncements({ sessions: () => coordinatingSessions }),
       newId: randomUUID,
       nowMs: Date.now,
       stderr: (line) => process.stderr.write(line),
@@ -717,6 +719,7 @@ class CtApi {
       startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
+      sliceHeldChange: (changed) => planAgents.hold(changed),
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({

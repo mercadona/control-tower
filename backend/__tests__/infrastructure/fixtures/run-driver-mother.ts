@@ -43,7 +43,7 @@ import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../../src/infrastructure/plan-events-route.ts'
 import { RecordedPlanRecovery } from '../../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
-import { RunPlanAgents } from '../../../src/infrastructure/run-plan-agents.ts'
+import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../../src/infrastructure/run-plan-recovery.ts'
 import { DriveRun, DriveRunParams } from '../../../src/application/actions/drive-run.ts'
 import {
@@ -874,6 +874,7 @@ export class RunDriverMother {
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
           transport: rebuilt.transport, driver, machine: rebuiltMachine, journal: rebuiltJournal,
           measurements: rebuilt.measurements, newId: () => fixture.#identity(), nowMs: Date.now,
+          announcements: new SilentChangeAnnouncements(),
           stderr: (line) => nextRoleGate.cancel(new Error(line.trim())),
         })
         const recover = new RecoverPlan({ agents })
@@ -1204,6 +1205,7 @@ export class RunDriverMother {
     })
     const agents = new RunPlanAgents({
       legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal, measurements,
+      announcements: new SilentChangeAnnouncements(),
       newId: () => this.#identity(), nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'), stderr: () => {},
     })
     const reviews = new RecoveryReviews()

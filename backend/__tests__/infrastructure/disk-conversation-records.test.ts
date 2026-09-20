@@ -26,6 +26,7 @@ const PROMPT_TEXT = [
   'Invoke the skill control-tower-loop:ct-brainstorming.',
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
   PhasePrompt.FREEZE_IS_NOT_YOURS,
+  PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.RECOVERY_CAPABILITIES,
 ].join('\n')
 

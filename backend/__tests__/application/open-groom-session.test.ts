@@ -158,7 +158,8 @@ describe('OpenGroomSession', () => {
       PhasePrompt.ISSUES_ARE_NOT_YOURS,
       PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       `The milestone is "${Flow.MILESTONE}" and its frozen execution spec is ${Flow.SPEC_PATH}.`,
-      PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.CHANGE_TO_A_SLICE,
+  PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 

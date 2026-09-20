@@ -195,6 +195,8 @@ export class GateCheckout {
 }
 
 export class CoordinatingSessions implements GroomReviewAdmission {
+  static readonly SUBMIT = '\r'
+
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   readonly records: ConversationRecords
@@ -427,6 +429,16 @@ export class CoordinatingSessions implements GroomReviewAdmission {
     this.stderr(`coordinating session ${conversation} ${attention.status}\n`)
 
     return recorded ? AttendResult.recorded() : AttendResult.notRecorded()
+  }
+
+  announce(line: string): boolean {
+    const held = this.#live()
+    if (held === null || held.session === null) return false
+    const session = this.liveSessions.find(held.session.id)
+    if (session === null) return false
+    this.liveSessions.write({ session, text: `${line}${CoordinatingSessions.SUBMIT}` })
+
+    return true
   }
 
   #live(): HeldCoordinatingSession | null {

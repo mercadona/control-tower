@@ -46,7 +46,7 @@ import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
 import { RunJournal, type JournalEntry } from '../../src/infrastructure/run-journal.ts'
-import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
+import { RunPlanAgents, SilentChangeAnnouncements, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
@@ -252,6 +252,7 @@ class RecoveryAgents extends RunPlanAgents {
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         calls: transport,
       }),
+      announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused',
       nowMs: () => RecoveryMother.NOW,
       stderr: () => {},
@@ -1058,6 +1059,7 @@ describe('RunPlanRecovery projection', () => {
         machine,
         journal,
         measurements,
+        announcements: new SilentChangeAnnouncements(),
         newId: () => 'unused',
         nowMs: () => RecoveryMother.NOW,
         stderr: (line) => { warnings.push(line); settled.resolve() },
@@ -1497,6 +1499,7 @@ class FiniteBridge {
       machine,
       journal,
       measurements,
+      announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused-fix',
       nowMs: () => Date.parse(FiniteBridge.STARTED),
       stderr: (line) => { warnings.push(line) },
