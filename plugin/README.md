@@ -96,7 +96,7 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 - **`cmux`** on the `PATH`: it is what opens the terminal of every dispatched agent. `/ct-next --dry-run` checks that it is there, without running it.
 - **A Project v2 with an iteration field named exactly `Sprint`**, only if you use `/ct-groom --project`.
 
-## The five commands
+## The six commands
 
 | Command | What it does | Mutates |
 |---|---|---|
@@ -105,8 +105,9 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 | **`/ct-next`** | Chooses the next dispatchable slice (order, merged dependencies, no token collision, with a `--cap` gap available), claims it, creates worktree and branch, seeds the state and launches the agent **verifying that it really started**. | GitHub + disk |
 | **`/ct-status`** | Answers in one go: what is in flight, what has been delivered and what is residue. **It does not write a single time** — there is a test that checks it by looking at the real `argv` `gh` was called with. | nothing |
 | **`/ct-harvest`** | Answers what each slice of a milestone really cost, read out of GitHub's timeline and the telemetry the slice left committed: the phases, the reopens, the requeues, the pull request, the judge's vetoes and what the coding tool spent. It asks for no field by hand. With `--bq` it loads the harvest into BigQuery; `--schema` prints the table's schema and touches nothing. | nothing, without `--bq` |
+| **`/ct-premerge`** | Answers whether every open pull request still holds on the `main` it will land on, and whether any two of them still hold **on top of each other** — the question no CI asks, because whichever of two lands second sits on a tree its own run never saw. It measures in throwaway worktrees and never rebases, pushes or merges anything. | nothing |
 
-The five share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`warning:`, `ATTENTION:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
+The six share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`warning:`, `ATTENTION:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
 
 Always start dry:
 

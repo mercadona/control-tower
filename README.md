@@ -149,7 +149,7 @@ repository you want to govern, then use `/ct-init` for every later run.
 - **A Project v2 with an iteration field named exactly `Sprint`**, only if you
   use `/ct-groom --project`.
 
-### The five commands
+### The six commands
 
 | Command | What it does | Mutates |
 |---|---|---|
@@ -158,6 +158,7 @@ repository you want to govern, then use `/ct-init` for every later run.
 | `/ct-next` | Chooses the next dispatchable slice — order, merged dependencies, no token collision, a `--cap` gap available — claims it, creates worktree and branch, seeds the state and launches the agent verifying that it really started | GitHub + disk |
 | `/ct-status` | Answers in one go what is in flight, what has been delivered and what is residue | nothing |
 | `/ct-harvest` | Answers what each slice of a milestone really cost, read out of GitHub's timeline and the telemetry the slice left committed. No field by hand. With `--bq` it loads the harvest into BigQuery | nothing, without `--bq` |
+| `/ct-premerge` | Answers whether every open pull request still holds on the `main` it will land on, and whether any two of them still hold on top of each other — the question no CI asks, because whichever lands second sits on a tree its own run never saw | nothing |
 
 **Always start dry.** `/ct-groom --dry-run` validates exactly the same as the
 real run, and `/ct-next --dry-run` checks what the real run needs and prints
