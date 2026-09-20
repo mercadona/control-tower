@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { SessionHooks } from '../domain/ports/session-hooks.ts'
 import { SessionHooksNotUnderstood, SessionHooksNotWritten } from '../domain/exceptions.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
+import { ControlTowerState } from '../../../plugin/scripts/control-tower-state.js'
 
 type ReadSettings = (path: string) => Promise<string | null>
 type WriteSettings = (path: string, text: string) => Promise<void>
@@ -11,6 +12,7 @@ export class LocalSettingsSessionHooks extends SessionHooks {
   static readonly SETTINGS: readonly string[] = ['.claude', 'settings.local.json']
   static readonly EVENTS: readonly string[] = ['UserPromptSubmit', 'Notification', 'Stop']
   static readonly MARKER = 'CT_SESSION_HOOKS_URL'
+  static readonly STATE_VARIABLE: string = ControlTowerState.VARIABLE
   static readonly TIMEOUT_SECONDS = 5
   static readonly COMMAND =
     'if [ -n "$CT_SESSION_HOOKS_URL" ]; then curl -sS -m 2 -o /dev/null -X POST' +
@@ -18,11 +20,15 @@ export class LocalSettingsSessionHooks extends SessionHooks {
 
   readonly read: ReadSettings
   readonly write: WriteSettings
+  readonly stateRoot: string | null
 
-  constructor({ read, write }: { read: ReadSettings, write: WriteSettings }) {
+  constructor({ read, write, stateRoot = null }: {
+    read: ReadSettings, write: WriteSettings, stateRoot?: string | null,
+  }) {
     super()
     this.read = read
     this.write = write
+    this.stateRoot = stateRoot
   }
 
   static #isRecord(value: unknown): value is JsonRecord {
@@ -97,6 +103,13 @@ export class LocalSettingsSessionHooks extends SessionHooks {
       hooks[event] = [...LocalSettingsSessionHooks.#purged(hooks[event]), LocalSettingsSessionHooks.#ownGroup()]
     }
 
-    await this.#persisted(path, { ...settings, hooks })
+    await this.#persisted(path, { ...settings, hooks, ...this.#published(settings) })
+  }
+
+  #published(settings: JsonRecord): JsonRecord {
+    if (this.stateRoot === null) return {}
+    const existing = LocalSettingsSessionHooks.#isRecord(settings.env) ? settings.env : {}
+
+    return { env: { ...existing, [LocalSettingsSessionHooks.STATE_VARIABLE]: this.stateRoot } }
   }
 }

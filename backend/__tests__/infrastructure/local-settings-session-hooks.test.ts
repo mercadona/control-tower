@@ -110,3 +110,37 @@ describe('LocalSettingsSessionHooks', () => {
     await expect(hooks.install(ROOT)).rejects.toBeInstanceOf(SessionHooksNotWritten)
   })
 })
+
+describe('LocalSettingsSessionHooks publishing the state root into the checkout', () => {
+  const ISOLATED = '/isolated/state'
+
+  it('writes_the_root_the_backend_resolved_so_a_command_in_that_checkout_inherits_it', async () => {
+    const write = vi.fn()
+    const read = vi.fn(async () => null)
+    const hooks = new LocalSettingsSessionHooks({ read, write, stateRoot: ISOLATED })
+
+    await hooks.install(ROOT)
+
+    expect(JSON.parse(write.mock.calls[0][1]).env).toEqual({ CT_STATE_DIR: ISOLATED })
+  })
+
+  it('leaves environment entries that are not ours exactly where they were', async () => {
+    const write = vi.fn()
+    const read = vi.fn(async () => JSON.stringify({ env: { FOREIGN: 'kept', CT_STATE_DIR: '/an/older/root' } }))
+    const hooks = new LocalSettingsSessionHooks({ read, write, stateRoot: ISOLATED })
+
+    await hooks.install(ROOT)
+
+    expect(JSON.parse(write.mock.calls[0][1]).env).toEqual({ FOREIGN: 'kept', CT_STATE_DIR: ISOLATED })
+  })
+
+  it('writes_no_environment_block_at_all_when_no_root_was_given_to_publish', async () => {
+    const write = vi.fn()
+    const read = vi.fn(async () => null)
+    const hooks = new LocalSettingsSessionHooks({ read, write })
+
+    await hooks.install(ROOT)
+
+    expect(JSON.parse(write.mock.calls[0][1])).not.toHaveProperty('env')
+  })
+})

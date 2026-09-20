@@ -618,7 +618,7 @@ class CtApi {
       newId: randomUUID,
       hooksUrl: () => `http://${LOOPBACK}:${listeningPort}${SessionHooksRoute.PATH}`,
     })
-    const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
+    const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write, stateRoot: asked.stateRoot })
     const conversationRecords = new DiskConversationRecords({
       read: Disk.read,
       write: Disk.atomicWrite,
