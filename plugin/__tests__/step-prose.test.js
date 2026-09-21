@@ -249,4 +249,10 @@ describe('DispatchProse names the step from the stdout it prints', () => {
   it('stepOf answers null when the stdout carries no such line', () => {
     expect(DispatchProse.stepOf('nothing to see here')).toBe(null)
   })
+
+  it('a step name outside the declared steps is not named', () => {
+    const stdout = ['task 1/3 — some task', 'step: judge2 (attempt 1)', ''].join('\n')
+
+    expect(DispatchProse.stepOf(stdout)).toBe(null)
+  })
 })

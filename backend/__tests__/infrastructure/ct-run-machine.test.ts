@@ -18,6 +18,7 @@ import { RunInstruction } from '../../src/domain/value-objects/run-instruction.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { AnnouncedStep, CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import { StepProse } from '../../src/infrastructure/run-announcement.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { ProcessOutput, type ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 
@@ -185,6 +186,31 @@ class OracleMother {
       'Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.',
       '',
     ].join('\n')
+  }
+
+  static sliceJudgeAnnouncement(): string {
+    const verdictPath = `${OracleMother.WORKTREE}/.agent/run-332/slice-verdict.json`
+    return [
+      'slice of issue 332 — the 3 tasks committed',
+      'step: slice-judge (attempt 2)',
+      '',
+      STEP_HEADINGS.get(STEPS.SLICE_JUDGE),
+      DispatchProse.inputLine(
+        STEPS.SLICE_JUDGE, INPUT_ROLES.PACKAGE, `${OracleMother.WORKTREE}/.agent/slice-review-332.md`,
+      ),
+      DispatchProse.inputLine(STEPS.SLICE_JUDGE, INPUT_ROLES.PLAN, OracleMother.PLAN),
+      DispatchProse.inputLine(
+        STEPS.SLICE_JUDGE, INPUT_ROLES.VERDICTS, 'docs/superpowers/verdicts/issue-332-task-*.json',
+      ),
+      `${RESPONSE_LABELS.get(STEPS.SLICE_JUDGE)}${verdictPath}`,
+      '',
+      `${DispatchProse.CONSUMING_PREFIX}slice-verdict ${verdictPath} --plan ${OracleMother.PLAN} --issue 332`,
+      '',
+    ].join('\n')
+  }
+
+  static undeclaredStepAnnouncement(): string {
+    return 'task 1/3 — execute oracle\nstep: judge2 (attempt 1)\n'
   }
 
   static reconcileAnnouncement(): string {
@@ -955,5 +981,31 @@ describe('CtRunMachine', () => {
       new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }),
     )
     expect(fixture.asked).toEqual([])
+  })
+
+  it('both prose readers name the same step for the same bytes', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-one-step-reader-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const ticket = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), ticket,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.sliceJudgeAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(StepProse.step(OracleMother.sliceJudgeAnnouncement())).toBe('slice-judge')
+    expect(DispatchProse.stepOf(OracleMother.sliceJudgeAnnouncement())).toBe('slice-judge')
+    expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
+  })
+
+  it('a step name with a digit is not a declared step', () => {
+    expect(StepProse.step(OracleMother.undeclaredStepAnnouncement())).toBe(null)
+    expect(DispatchProse.stepOf(OracleMother.undeclaredStepAnnouncement())).toBe(null)
   })
 })

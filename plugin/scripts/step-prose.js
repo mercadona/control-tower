@@ -88,6 +88,7 @@ export class DispatchMaterialRead {
 
 export class DispatchProse {
   static CONSUMING_PREFIX = 'When it comes back:  ct-step '
+  static #DECLARED_STEPS = new Set(Object.values(STEPS))
 
   static render(announcement) {
     const { run, dispatch, consuming } = JSON.parse(announcement.text())
@@ -174,7 +175,7 @@ export class DispatchProse {
 
   static stepOf(stdout) {
     const match = /^step: (\S+) \(attempt \d+\)$/m.exec(String(stdout ?? ''))
-    return match ? match[1] : null
+    return match && DispatchProse.#DECLARED_STEPS.has(match[1]) ? match[1] : null
   }
 
   static #consumingArgv(command, responsePath) {

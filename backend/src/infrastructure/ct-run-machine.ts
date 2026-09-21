@@ -12,7 +12,7 @@ import {
 } from '../domain/ports/run-machine.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
-import { RunAnnouncement, type RunClosure } from './run-announcement.ts'
+import { RunAnnouncement, StepProse, type RunClosure } from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
@@ -405,7 +405,7 @@ class OracleBoundary {
       }
     }
     const step = AnnouncedStep.read(output.stdout)?.step
-      ?? /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
+      ?? StepProse.step(output.stdout)
     switch (step) {
       case STEPS.IMPLEMENT:
         return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.IMPLEMENT)
@@ -425,7 +425,7 @@ class OracleBoundary {
         return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.RECONCILE, 'reconcile')
       case STEPS.GLOBAL:
         return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.GLOBAL, 'global')
-      case undefined:
+      case null:
         break
       default:
         return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
