@@ -82,7 +82,7 @@ export class RunAnnouncement {
     const run = record.run
     const step = RunAnnouncement.#isRecord(run) ? run.step : undefined
     if (typeof step !== 'string' || step.length === 0) {
-      throw new RunNotUnderstood(`the announcement names no step: ${JSON.stringify(record)}`)
+      throw new RunNotUnderstood(`the announcement names no step in ${JSON.stringify(record)}`)
     }
     return step
   }

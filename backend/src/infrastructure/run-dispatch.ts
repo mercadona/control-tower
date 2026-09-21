@@ -61,8 +61,6 @@ class RunDispatchResolution {
 }
 
 export class RunConsumingCommand {
-  static readonly #PREFIX = 'When it comes back:  ct-step '
-
   readonly argv: readonly string[]
   readonly responsePath: string | null
 
@@ -72,26 +70,11 @@ export class RunConsumingCommand {
     Object.freeze(this)
   }
 
-  static edits(asked: { stdout: string, plan: string, issue: number }): RunConsumingCommand {
-    const command = `${RunConsumingCommand.#PREFIX}reconcile --plan ${asked.plan} --issue ${asked.issue}`
-    const lines = RunConsumingCommand.#lines(asked.stdout)
-    if (lines.length !== 1 || !(lines[0] === command || lines[0].startsWith(`${command}  (`))) {
-      throw new RunNotUnderstood(`ct-step output has no unique reconcile command: ${JSON.stringify(asked.stdout)}`)
-    }
-    return new RunConsumingCommand([
-      'reconcile', '--plan', asked.plan, '--issue', String(asked.issue),
-    ], null)
-  }
-
   static forEdits(argv: readonly string[]): RunConsumingCommand {
     if (argv[0] !== 'reconcile') {
       throw new RunNotUnderstood(`the announced consuming argv does not consume a reconciliation: ${JSON.stringify(argv)}`)
     }
     return new RunConsumingCommand(argv, null)
-  }
-
-  static #lines(stdout: string): readonly string[] {
-    return Object.freeze(stdout.split('\n').filter((line) => line.startsWith(RunConsumingCommand.#PREFIX)))
   }
 }
 
@@ -155,9 +138,7 @@ export class RunDispatch {
     command: RunConsumingCommand | null,
     pluginRoot: string,
   }): DispatchMaterial {
-    if (asked.stdout.includes('DISPATCH ct-reconciler') || asked.stdout.includes('REDISPATCH ct-reconciler')) {
-      return RunDispatch.#edits(asked)
-    }
+    if (RunDispatch.#consumesEdits(asked.command)) return RunDispatch.#edits(asked)
     const step = DispatchProse.stepOf(asked.stdout)
     switch (step) {
       case STEPS.IMPLEMENT: {
@@ -210,13 +191,7 @@ export class RunDispatch {
       case STEPS.E2E:
         throw new RunNotUnderstood('ct-step requested unsupported E2E material')
       case STEPS.RECONCILE:
-        if (asked.stdout.includes("DISPATCH THE SLICE'S AGENT")) {
-          throw new RunNotUnderstood('ct-step requested unsupported slice-agent reconciliation material')
-        }
-        if (!asked.stdout.includes(`DISPATCH ct-reconciler`) && !asked.stdout.includes('REDISPATCH ct-reconciler')) {
-          throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${JSON.stringify(asked.stdout)}`)
-        }
-        return RunDispatch.#edits(asked)
+        throw new RunNotUnderstood('reconciliation material has an incompatible consuming command')
       case null:
         throw new RunNotUnderstood(`ct-step output has no dispatch role: ${JSON.stringify(asked.stdout)}`)
       default:
@@ -269,14 +244,14 @@ export class RunDispatch {
     })
   }
 
+  static #consumesEdits(command: RunConsumingCommand | null): boolean {
+    return command !== null && command.responsePath === null && command.argv[0] === 'reconcile'
+  }
+
   static #edits(asked: {
     stdout: string,
-    command: RunConsumingCommand | null,
     pluginRoot: string,
   }): DispatchMaterial {
-    if (asked.command === null || asked.command.responsePath !== null || asked.command.argv[0] !== 'reconcile') {
-      throw new RunNotUnderstood('reconciliation material has an incompatible consuming command')
-    }
     const files = RoleBytes.filesOf(STEPS.RECONCILE)
     const definition = RunDispatch.#definition(join(asked.pluginRoot, files[0]))
     const tools = definition.tools.join(', ')

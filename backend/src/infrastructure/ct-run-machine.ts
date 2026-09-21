@@ -373,11 +373,6 @@ class OracleBoundary {
         `ct-step exited ${output.code} without announcing a run state; stdout: ${JSON.stringify(output.stdout)}; stderr: ${JSON.stringify(output.stderr)}`,
       )
     }
-    if (output.stdout.includes("DISPATCH THE SLICE'S AGENT (it has Bash)")) {
-      return OracleResult.refused(
-        `ct-step requested unsupported slice-agent reconciliation: ${JSON.stringify(output.stdout)}`,
-      )
-    }
     const round = AnnouncedStep.read(output.stdout)
     if (round !== null && round.responseKind === RESPONSE_KINDS.EDITS) {
       try {
@@ -389,23 +384,7 @@ class OracleBoundary {
         throw cause
       }
     }
-    const reconcileCommand = `When it comes back:  ct-step reconcile --plan ${manifest.plan} --issue ${manifest.issue}`
-    if ((output.stdout.includes('DISPATCH ct-reconciler') || output.stdout.includes('REDISPATCH ct-reconciler'))
-      && output.stdout.split('\n').some((line) => line.trim().startsWith(reconcileCommand))) {
-      try {
-        const consuming = RunConsumingCommand.edits({
-          stdout: output.stdout,
-          plan: manifest.plan,
-          issue: manifest.issue,
-        })
-        return OracleResult.call(command.ticket, consuming.argv, consuming)
-      } catch (cause) {
-        if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
-        throw cause
-      }
-    }
-    const step = AnnouncedStep.read(output.stdout)?.step
-      ?? StepProse.step(output.stdout)
+    const step = round?.step ?? StepProse.step(output.stdout)
     switch (step) {
       case STEPS.IMPLEMENT:
         return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.IMPLEMENT)
@@ -416,7 +395,7 @@ class OracleBoundary {
       case STEPS.SLICE_JUDGE:
         return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.SLICE_JUDGE)
       case STEPS.E2E:
-        return OracleResult.call(command.ticket, [])
+        return OracleResult.refused('ct-step requested unsupported E2E material')
       case STEPS.CONTROLS:
         return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.CONTROLS, 'controls')
       case STEPS.COMMIT:
@@ -464,11 +443,6 @@ class OracleBoundary {
   ): OracleResult {
     const announced = AnnouncedStep.read(stdout)
     if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step, verb)
-    const expected = `ct-step ${verb} --plan ${manifest.plan} --issue ${manifest.issue}`
-    if (!stdout.split('\n').some((line) => line.trim() === expected || line === `Run it with:  ${expected}`)
-      || !stdout.includes(`step: ${step} (`)) {
-      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
-    }
     return OracleResult.command(ticket, [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)])
   }
 
@@ -620,13 +594,9 @@ export class CtRunMachine extends RunMachine {
     if (command.receipt.output.code !== 0) {
       throw new RunNotUnderstood(`dispatch ticket ${ticket} did not record successful oracle output`)
     }
-    if (command.receipt.output.stdout.includes("DISPATCH THE SLICE'S AGENT")) {
-      throw new RunNotUnderstood('ct-step requested unsupported slice-agent reconciliation material')
-    }
     const effect = OracleBoundary.read(command, state.manifest).effect
     if (effect.kind === 'refused') throw new RunNotUnderstood(effect.detail)
     if (effect.kind !== 'call') throw new RunNotUnderstood(`ticket ${ticket} does not carry dispatch material`)
-    if (effect.argv.length === 0) throw new RunNotUnderstood('ct-step requested unsupported E2E material')
     const resolved = await RunDispatch.resolve({
       ticket,
       stdout: command.receipt.output.stdout,
@@ -720,7 +690,7 @@ export class CtRunMachine extends RunMachine {
       '-C', watch.located.path, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'docs/superpowers/plans',
     ])
     CtRunMachine.#requireSuccess(listed, 'git ls-tree could not list the committed plans')
-    const plans = planFilesForIssue(watch.issue.number, listed.stdout.split('\n').filter(Boolean))
+    const plans = planFilesForIssue(watch.issue.number, CtRunMachine.#listedNames(listed.stdout))
     if (plans.length !== 1) {
       throw new RunNotUnderstood(
         `expected exactly one committed plan for ${watch.issue}, found ${plans.length}: ${plans.join(', ')}`,
@@ -796,6 +766,10 @@ export class CtRunMachine extends RunMachine {
     }
     if (visited.size !== commands.length) throw new RunNotUnderstood('the command journal contains a cycle')
     return Object.freeze(ordered)
+  }
+
+  static #listedNames(listing: string): string[] {
+    return listing.split('\n').filter(Boolean)
   }
 
   static #requireSuccess(output: ProcessOutput, action: string): void {

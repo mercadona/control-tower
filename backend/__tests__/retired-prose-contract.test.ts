@@ -29,16 +29,61 @@ class RetiredProseContract {
     'DISPATCH THE JUDGE',
     'DISPATCH THE ADVISOR',
     'DISPATCH THE SLICE JUDGE',
+    "DISPATCH THE SLICE'S AGENT",
+    'DISPATCH ct-reconciler',
   ]
 
-  static STDOUT_PATTERNS = [String.raw`^step: (`, String.raw`next: task `, String.raw`(?:^|\\n)run `]
+  static STDOUT_PATTERNS = [
+    String.raw`^step: (`,
+    String.raw`next: task `,
+    String.raw`(?:^|\\n)run `,
+    'step: ${',
+    'step: e2e (',
+  ]
+
+  static CONSUMING_LINES = ['When it comes back', 'Run it with:']
 
   static FRAGMENTS: readonly string[] = [
     ...RetiredProseContract.PACKAGE_LABELS,
     ...RetiredProseContract.ABSENCE_SENTINELS,
     ...RetiredProseContract.DISPATCH_SENTENCES,
     ...RetiredProseContract.STDOUT_PATTERNS,
+    ...RetiredProseContract.CONSUMING_LINES,
   ]
+}
+
+class StdoutScanning {
+  static MECHANISMS = [
+    'stdout.includes(',
+    'stdout.split(',
+    'stdout.startsWith(',
+    'exec(output.stdout)',
+    'exec(asked.stdout)',
+    '.test(stdout)',
+    '.test(output.stdout)',
+  ]
+
+  static MODULES = [
+    'infrastructure/ct-run-machine.ts',
+    'infrastructure/run-dispatch.ts',
+  ]
+
+  readonly root: string
+
+  constructor(root: string) {
+    this.root = root
+  }
+
+  findings(): Finding[] {
+    return [...StdoutScanning.MODULES].sort().flatMap((file) => this.findingsIn(file))
+  }
+
+  findingsIn(file: string): Finding[] {
+    const text = readFileSync(join(this.root, file), 'utf8')
+    return StdoutScanning.MECHANISMS
+      .filter((mechanism) => text.includes(mechanism))
+      .map((mechanism) => ({ file, fragment: mechanism }))
+  }
 }
 
 class ProseCensus {
@@ -84,6 +129,7 @@ class TreeCarryingEveryFragmentOfTheContract {
     { path: 'sentinel.ts', fragments: RetiredProseContract.ABSENCE_SENTINELS },
     { path: 'infrastructure/dispatched-role.ts', fragments: RetiredProseContract.DISPATCH_SENTENCES },
     { path: 'infrastructure/stdout-pattern.ts', fragments: RetiredProseContract.STDOUT_PATTERNS },
+    { path: 'infrastructure/consuming-line.ts', fragments: RetiredProseContract.CONSUMING_LINES },
   ]
 
   static make(): string {
@@ -119,13 +165,19 @@ describe('the prose contract that slices 2, 3 and 4 retire', () => {
     temporaryTrees.push(root)
 
     expect(new ProseCensus(root).findings()).toEqual([
+      { file: 'infrastructure/consuming-line.ts', fragment: 'When it comes back' },
+      { file: 'infrastructure/consuming-line.ts', fragment: 'Run it with:' },
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH AN IMPLEMENTER' },
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE JUDGE' },
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE ADVISOR' },
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE SLICE JUDGE' },
+      { file: 'infrastructure/dispatched-role.ts', fragment: "DISPATCH THE SLICE'S AGENT" },
+      { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH ct-reconciler' },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`^step: (` },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`next: task ` },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`(?:^|\\n)run ` },
+      { file: 'infrastructure/stdout-pattern.ts', fragment: 'step: ${' },
+      { file: 'infrastructure/stdout-pattern.ts', fragment: 'step: e2e (' },
       { file: 'labelled-package.ts', fragment: '  - the rubric from ' },
       { file: 'labelled-package.ts', fragment: "  - the task's brief: " },
       { file: 'labelled-package.ts', fragment: '  - that it write its report to: ' },
@@ -145,5 +197,11 @@ describe('the prose contract that slices 2, 3 and 4 retire', () => {
       { file: 'sentinel.ts', fragment: '(none)' },
       { file: 'sentinel.ts', fragment: '(N/A declared)' },
     ])
+  })
+
+  it('neither_module_of_the_dispatch_path_scans_ct_step_stdout_as_text', () => {
+    const scanning = new StdoutScanning(join(import.meta.dirname, '..', 'src')).findings()
+
+    expect(scanning, ProseCensus.named(scanning)).toEqual([])
   })
 })

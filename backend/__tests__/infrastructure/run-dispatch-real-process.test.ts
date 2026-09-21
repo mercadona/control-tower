@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../plugin/scripts/state.js'
+import { INPUT_ROLES } from '../../../plugin/scripts/step-announcement.js'
 import {
   ADVISOR_TOOLS,
   JUDGE_TOOLS,
@@ -199,7 +200,7 @@ class DispatchRepository {
     await this.#completeTask()
     await this.#advanceBase('base bytes\n')
     await writeFile(join(this.root, 'work.txt'), 'dirty tree\n')
-    return this.#step('reconcile')
+    return this.#step('reconcile', '--output-format', 'json')
   }
 
   async machine(stdout: string, pluginRoot = DispatchRepository.PLUGIN_ROOT): Promise<CtRunMachine> {
@@ -280,7 +281,7 @@ class DispatchRepository {
   async #reconcileOutput(): Promise<string> {
     await this.#completeTask()
     await this.#advanceBase('base bytes\n')
-    return this.#step('reconcile')
+    return this.#step('reconcile', '--output-format', 'json')
   }
 
   async #reachJudge(): Promise<string> {
@@ -456,10 +457,19 @@ class ProducerOutput {
         ]))
       case 'reconcile':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.RECONCILE, [
-          ProducerOutput.path(stdout, '  - the reconciliation package: '),
+          ProducerOutput.announcedPath(stdout, INPUT_ROLES.RECONCILIATION_PACKAGE),
         ]))
     }
     return role satisfies never
+  }
+
+  static announcedPath(stdout: string, role: string): string {
+    const announced = JSON.parse(stdout) as {
+      dispatch?: { inputs?: readonly { readonly role: string, readonly path: string }[] },
+    }
+    const input = (announced.dispatch?.inputs ?? []).find((candidate) => candidate.role === role)
+    if (input === undefined) throw new Error(`the announcement declares no ${role} input`)
+    return input.path
   }
 
   static optional(stdout: string, label: string): readonly string[] {
@@ -564,7 +574,7 @@ describe('RunDispatch real process', () => {
     repositories.push(fallback)
     const fallbackMachine = await fallback.machine(await fallback.sliceFallbackOutput())
     await expect(fallbackMachine.dispatch(fallback.watch(), DispatchRepository.TICKET))
-      .rejects.toThrow(/unsupported slice-agent reconciliation/)
+      .rejects.toThrow(`ticket ${DispatchRepository.TICKET} does not carry dispatch material`)
     expect(await fallback.material()).toBeNull()
   })
 
