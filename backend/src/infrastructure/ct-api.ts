@@ -648,6 +648,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
       liveSessions,
+      checkouts,
       newId: randomUUID,
       now: () => new Date().toISOString(),
       stderr: (line) => process.stderr.write(line),

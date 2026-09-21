@@ -1,4 +1,6 @@
 import { SessionTimelineEvent, TimelineEventKind } from '../../domain/value-objects/session-timeline-event.ts'
+import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
+import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
 import type { CoordinatingConversation } from '../../domain/value-objects/coordinating-conversation.ts'
 import type { ConversationRecords } from '../../domain/ports/conversation-records.ts'
 import type { Conversations } from '../../domain/ports/conversations.ts'
@@ -82,19 +84,21 @@ export class RecoverCoordinatingSession {
   readonly sessionHooks: SessionHooks
   readonly records: ConversationRecords
   readonly liveSessions: LiveSessions
+  readonly checkouts: CheckoutRegistry
   readonly newId: () => string
   readonly now: () => string
   readonly stderr: (line: string) => void
 
-  constructor({ conversations, sessionHooks, records, liveSessions, newId, now, stderr }: {
+  constructor({ conversations, sessionHooks, records, liveSessions, checkouts, newId, now, stderr }: {
     conversations: Conversations, sessionHooks: SessionHooks, records: ConversationRecords,
-    liveSessions: LiveSessions,
+    liveSessions: LiveSessions, checkouts: CheckoutRegistry,
     newId: () => string, now: () => string, stderr: (line: string) => void,
   }) {
     this.conversations = conversations
     this.sessionHooks = sessionHooks
     this.records = records
     this.liveSessions = liveSessions
+    this.checkouts = checkouts
     this.newId = newId
     this.now = now
     this.stderr = stderr
@@ -138,6 +142,10 @@ export class RecoverCoordinatingSession {
         }
       }
     }
+
+    this.checkouts.remember(new RegisteredCheckout({
+      repository: conversation.repository, root: conversation.root,
+    }))
 
     const prior = await this.records.recallTimeline(conversation)
     if (!this.conversations.isResumable(conversation)) {

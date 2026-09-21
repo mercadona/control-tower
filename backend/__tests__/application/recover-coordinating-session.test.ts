@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   RecoverCoordinatingSession, CoordinatingSessionRecovered, RecoveredConversation,
 } from '../../src/application/actions/recover-coordinating-session.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import type { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
@@ -143,6 +145,19 @@ class Mother {
   }
 }
 
+class CheckoutRegistryDouble extends CheckoutRegistry {
+  remembered: RegisteredCheckout[]
+
+  constructor() {
+    super()
+    this.remembered = []
+  }
+
+  remember(checkout: RegisteredCheckout): void {
+    this.remembered.push(checkout)
+  }
+}
+
 class Flow {
   static readonly NEW_EVENT_ID = 'second-event'
   static readonly NOW = '2026-09-15T10:00:00.000Z'
@@ -151,6 +166,7 @@ class Flow {
   sessionHooks: SessionHooksDouble
   records: ConversationRecordsDouble
   liveSessions: LiveSessionsDouble
+  checkouts: CheckoutRegistryDouble
   newId: () => string
   now: () => string
   said: string[]
@@ -164,6 +180,7 @@ class Flow {
     this.sessionHooks = new SessionHooksDouble()
     this.records = new ConversationRecordsDouble(recorded)
     this.liveSessions = new LiveSessionsDouble()
+    this.checkouts = new CheckoutRegistryDouble()
     this.newId = () => Flow.NEW_EVENT_ID
     this.now = () => Flow.NOW
     this.said = []
@@ -179,6 +196,33 @@ class Flow {
 }
 
 describe('RecoverCoordinatingSession', () => {
+  it('registers the checkout of the conversation it resumes, so an update does not leave an authorised milestone stuck', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered).toHaveLength(1)
+    expect(flow.checkouts.remembered[0].root).toBe(Mother.ROOT)
+    expect(flow.checkouts.remembered[0].repository).toBe(Mother.REPOSITORY)
+  })
+
+  it('registers the checkout of a conversation it cannot resume, because the work it authorised still needs dispatching', async () => {
+    const flow = new Flow({ resumable: false })
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered).toHaveLength(1)
+    expect(flow.checkouts.remembered[0].root).toBe(Mother.ROOT)
+  })
+
+  it('registers no checkout when nothing was ever recorded', async () => {
+    const flow = new Flow({ recorded: null })
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered).toEqual([])
+  })
+
   it('answers none when nothing was ever recorded', async () => {
     const flow = new Flow({ recorded: null })
 

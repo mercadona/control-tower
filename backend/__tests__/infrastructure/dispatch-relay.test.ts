@@ -12,7 +12,9 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
-import { DispatchNotAvailable, DispatchNotRead, PlanAgentNotLaunched } from '../../src/domain/exceptions.ts'
+import {
+  DispatchNotAvailable, DispatchNotRead, EpicSpecNotRead, EpicSpecNotUnderstood, PlanAgentNotLaunched,
+} from '../../src/domain/exceptions.ts'
 import type { PlanFailure } from '../../src/domain/exceptions.ts'
 
 type DispatchAsked = { repository: RepositoryName, root: CheckoutRoot, milestone: string }
@@ -74,14 +76,14 @@ class Mother {
 }
 
 class Relaying {
-  readonly specAnswer: EpicSpec | null
+  readonly specAnswer: EpicSpec | null | Error
   readonly dispatchAnswer: StartMilestonePlanResult | Error
   readonly dispatchAsked: DispatchAsked[]
   readonly written: string[]
   readonly inFlight: WorkInFlight
 
   constructor({ spec, dispatch = Mother.dispatching(Mother.started()), inFlight = new WorkInFlight() }: {
-    spec: EpicSpec | null,
+    spec: EpicSpec | null | Error,
     dispatch?: StartMilestonePlanResult | Error,
     inFlight?: WorkInFlight,
   }) {
@@ -94,7 +96,9 @@ class Relaying {
 
   async run(): Promise<Relaying> {
     const relay = new DispatchRelay({
-      spec: () => Promise.resolve(this.specAnswer),
+      spec: () => this.specAnswer instanceof Error
+        ? Promise.reject(this.specAnswer)
+        : Promise.resolve(this.specAnswer),
       dispatch: (asked) => {
         this.dispatchAsked.push(asked)
         return this.dispatchAnswer instanceof Error
@@ -118,6 +122,30 @@ describe('DispatchRelay', () => {
       { repository: Mother.REPOSITORY, root: Mother.ROOT, milestone: Mother.MILESTONE },
     ])
     expect(relaying.written).toEqual([RelayLine.dispatched(Mother.started())])
+  })
+
+  it('a spec that cannot be read is reported and never escapes the relay, so the clock keeps sweeping', async () => {
+    const unreadable = new EpicSpecNotRead('docs/superpowers/specs/x-execution.md was listed but could not be read')
+
+    const relaying = await new Relaying({ spec: unreadable }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
+    expect(relaying.written).toEqual([RelayLine.refused(Mother.REPOSITORY, unreadable)])
+  })
+
+  it('a spec still being drafted, with no title yet, is reported and never escapes the relay', async () => {
+    const untitled = new EpicSpecNotUnderstood('docs/superpowers/specs/x-execution.md carries no title')
+
+    const relaying = await new Relaying({ spec: untitled }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
+    expect(relaying.written).toEqual([RelayLine.refused(Mother.REPOSITORY, untitled)])
+  })
+
+  it('a failure that is not a plan failure still escapes, because it is a fault and not a checkout', async () => {
+    const bug = new TypeError('a programming error, not a spec')
+
+    await expect(new Relaying({ spec: bug }).run()).rejects.toThrow(bug)
   })
 
   it('a draft spec, a null spec and a titleless spec all dispatch nothing', async () => {

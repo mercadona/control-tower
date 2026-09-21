@@ -2,7 +2,7 @@ import { Reservation, WorkInFlight } from './work-in-flight.ts'
 import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
 import type { PlanStarted } from '../application/actions/start-plan.ts'
 import type { SliceNotStarted, StartMilestonePlanResult } from '../application/actions/start-milestone-plan.ts'
-import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
+import { EpicSpec } from '../domain/value-objects/epic-spec.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
@@ -47,7 +47,15 @@ export class DispatchRelay {
   }
 
   async relay(root: CheckoutRoot, repository: RepositoryName): Promise<void> {
-    const found = await this.spec(root)
+    let found: EpicSpec | null
+    try {
+      found = await this.spec(root)
+    } catch (failure) {
+      if (!(failure instanceof PlanFailure)) throw failure
+      this.stderr(RelayLine.refused(repository, failure))
+
+      return
+    }
     const milestone = DispatchRelay.#milestoneOf(found)
     if (milestone === null) return
 
