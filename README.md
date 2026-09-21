@@ -17,7 +17,7 @@ independent move forward without anybody having to remember anything.
 | Plugin | `control-tower-loop` `0.57.0` · slice table contract `v26` |
 | Backend | `0.2.0` · 21 endpoints on `http://127.0.0.1:8787` |
 | Front end | `0.1.1` · one screen, Vite + React 19 + TypeScript |
-| Tests | 7,592 across three suites, all green |
+| Tests | 8,663 across three suites, all green |
 | Licence | [MIT](LICENSE) |
 
 ---
