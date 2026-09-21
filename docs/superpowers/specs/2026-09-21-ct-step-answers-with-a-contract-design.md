@@ -28,9 +28,9 @@ has already paid for by its own account, and it says so in writing in six
 modules: `JUDGE_TOOLS` (`step-contracts.js:400-435`), `VERDICT_RULES`,
 `PACKAGE_SECTIONS`, `SLICE_PACKAGE_SECTIONS`, plus `cmux.js`, `dispatch.js`,
 `repo-walk.js`, `repo-yardstick.js`, `run-metrics.js` and `scope.js`, each
-carrying a comment naming a divergence that already happened. Writing a
-fourteenth and fifteenth copy of the same strings and tying them with a test
-would be doing the thing the issue exists to stop.
+carrying a comment naming a divergence that already happened. Writing one more
+copy of the same strings and tying it to the others with a test would be doing
+the thing the issue exists to stop.
 
 Rendering the prose *from* the announcement buys a property a test cannot: the
 prose **cannot say anything the announcement does not carry**. A reworded
@@ -61,11 +61,13 @@ The refusal publishes the inputs of that function instead of only its output.
 ## The finding this design acts on
 
 `ct-step`'s prose is not a rendering of a structure. It **is** the structure, and
-the backend keeps a second, hand-made copy of it: fourteen literal labels
-matched as exact line prefixes (`RunDispatch.#printed`,
-`run-dispatch.ts:370-376`), five announcement sentences each required to appear
-as exactly one whole line byte for byte (`#requireAnnouncement`,
-`run-dispatch.ts:386-390`), and four regexes.
+the backend keeps a second, hand-made copy of it: thirteen distinct literal
+labels, passed as fifteen arguments, matched as exact line prefixes
+(`RunDispatch.#printed`, `run-dispatch.ts:370-376`), four announcement sentences
+each required to appear as exactly one whole line byte for byte
+(`#requireAnnouncement`, `run-dispatch.ts:386-390`), and four regexes. Seventeen
+matchers, counted and verified — the reconciler's `DISPATCH ct-reconciler` is a
+`String.includes` match of its own, not one of those four sentences.
 
 The duplication is not theoretical. The same `step:` line is parsed by two
 patterns that disagree on the alphabet — `([a-z0-9-]+)` at
@@ -139,7 +141,7 @@ new duplication:
   so a machine that has not pulled runs an older `ct-step`: a version field
   makes that recognisable instead of mysteriously unparsed.
 
-Fourteen labels collapse into eight `role` names — `package`, `brief`, `rubric`,
+The thirteen labels collapse into eight `role` names — `package`, `brief`, `rubric`,
 `plan`, `controls-log`, `global-log`, `verdicts`, `reconciliation-package` — and
 `kind` distinguishes the one input that is a glob, not a path
 (`RunDispatch.#glob`, the slice judge's committed verdicts).
@@ -216,9 +218,9 @@ the frontend — see the anti-scope.
 ## What retires
 
 - `RunDispatch.#printed`, `#literal`, `#optionalLiteral`, `#glob`,
-  `#requireAnnouncement` and the fourteen label constants.
-- The five announcement sentences as a machine contract. They stay as prose,
-  rendered from the announcement.
+  `#requireAnnouncement` and the thirteen distinct label constants.
+- The four announcement sentences as a machine contract, and the `includes` match
+  over `DISPATCH ct-reconciler`. They stay as prose, rendered from the announcement.
 - The four regexes, and with them the `([a-z0-9-]+)` / `([a-z-]+)` divergence.
 - `RunConsumingCommand`'s prose parsing and its two-space `#PREFIX`.
 - The `(none)` and `(N/A declared)` sentinels.
