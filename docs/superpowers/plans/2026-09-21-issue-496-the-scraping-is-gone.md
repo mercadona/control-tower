@@ -344,11 +344,12 @@ prints, and `:2919`, the `run <state>: …` footer a consuming verb prints.
 
 `worktreeInConflict` is a local function of `e2e-ct-step.test.js`, at line 100. It moves whole
 to `plugin/__tests__/fixtures/worktree-in-conflict.js`, and both files import it. The e2e file
-keeps its eight call sites and its comments, because `BornConforming.PATHS` does not name it.
+keeps its eleven call sites and its comments, because `BornConforming.PATHS` does not name it.
 
-A second factory, `PrintedProse.ofVerb(pluginRoot, repo, argv)`, drives any verb with the same
-environment, the same normaliser and the same exit-code check. It drops the step check, because
-a verb announces no step.
+A second factory, `PrintedProse.ofVerb(pluginRoot, repo, argv, exit)`, drives any verb with the
+same environment and the same normaliser. It drops the step check, because a verb announces no
+step, and it takes the exit code it demands. `controls` reaches the footer only when it closes
+in `blocked-controls`, which exits 4, so a check fixed at 0 could not reach that line.
 
 **A mutating verb needs its own repository.** `reconcile` performs the merge, so one fixture
 cannot serve both roots: each root drives its own conflict, built by the same factory. The same
