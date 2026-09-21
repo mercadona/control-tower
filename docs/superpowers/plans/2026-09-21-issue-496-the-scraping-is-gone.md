@@ -124,7 +124,7 @@ Produces: nothing exported, and no later slice depends on this one.
 ## 6. Test strategy
 
 Task 1 adds a census over `backend/src` with a literal inventory, plus a synthetic tree that
-proves the census fires. Task 2 grows that inventory by four fragments, adds a second census
+proves the census fires. Task 2 grows that inventory by six fragments, adds a second census
 over the mechanism, and then cuts the code. Task 3 adds a real-process test in the plugin,
 under the `-real-process` marker `plugin/conventions/testing.md` demands, and joins it to
 `BornConforming.PATHS`.
@@ -150,7 +150,7 @@ this slice for somebody else's reason. Every command here names the files it mea
 ### Task 1 — the census of the prose that slices 2, 3 and 4 retire
 
 **Objective:** One census test proves that no module under `backend/src` carries the
-twenty-four prose fragments the siblings retire.
+twenty-two prose fragments slices 2, 3 and 4 retire.
 
 **Files:** `backend/__tests__/retired-prose-contract.test.ts` (create)
 
@@ -165,10 +165,9 @@ The thirteen labels, spaces and tail included: `  - the rubric from `,
 `  - the log of the Global verification, ALREADY green, in case it wants it: `,
 `  - the verdict of every task, already committed: `, `  - the reconciliation package: `.
 
-The two sentinels: `(none)`, `(N/A declared)`. The five sentences: `DISPATCH AN IMPLEMENTER`,
-`DISPATCH THE JUDGE`, `DISPATCH THE ADVISOR`, `DISPATCH THE SLICE JUDGE`,
-`DISPATCH ct-reconciler`. The four pattern probes: `^step: (`, `next: task `,
-`(?:^|\\n)run `, `Run it with:`.
+The two sentinels: `(none)`, `(N/A declared)`. The four sentences: `DISPATCH AN IMPLEMENTER`,
+`DISPATCH THE JUDGE`, `DISPATCH THE ADVISOR`, `DISPATCH THE SLICE JUDGE`. The three pattern
+probes: `^step: (`, `next: task `, `(?:^|\\n)run `.
 
 The census reads every `.ts` file under `backend/src` and skips no directory of it. It answers
 with one entry per file and fragment it finds. A fixed-string match, never a regular
@@ -233,12 +232,13 @@ after that cut. Slice 4's plan declares a `forEdits` that does, so read the code
 `e2e` step itself with the words `ct-step requested unsupported E2E material`. `dispatch` then
 drops both probes above and keeps its own refusal for a consuming command it cannot use.
 
-The census grows four fragments over `backend/src`: `DISPATCH THE SLICE'S AGENT`, `step: ${`,
-`step: e2e (` and `When it comes back`. A second census over the two modules above pins the
+The census grows six fragments over `backend/src`: `DISPATCH THE SLICE'S AGENT`, `step: ${`,
+`step: e2e (`, `When it comes back`, `DISPATCH ct-reconciler` and `Run it with:`. The last two
+stay in the code slice 4 keeps, so this task retires them. A second census over the two modules above pins the
 mechanism, with seven fragments: `stdout.includes(`, `stdout.split(`, `stdout.startsWith(`,
 `exec(output.stdout)`, `exec(asked.stdout)`, `.test(stdout)` and `.test(output.stdout)`.
 
-**TDD:** the four fragments enter the inventory first, and
+**TDD:** the six fragments enter the inventory first, and
 `it('no_module_under_backend_src_carries_a_fragment_of_the_retired_prose_contract')` turns red.
 Then `it('neither_module_of_the_dispatch_path_scans_ct_step_stdout_as_text')`, over the two
 paths, red as well. The cut turns both green.
@@ -357,10 +357,12 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
    that criterion: no prose feeds the consuming command. It cuts the class whole only if
    nothing constructs it.
 5. The ownership split between Task 1 and Task 2 comes from a measurement on `12a7c177`, file
-   and line. Twenty-four fragments live only in code slices 2, 3 and 4 own. Four of them —
-   `DISPATCH THE SLICE'S AGENT`, `step: ${`, `step: e2e (`, `When it comes back` — also live in
-   code no sibling owns, so Task 2 carries them. Over-delivery by a sibling is harmless,
-   because a census measures absence.
+   and line. Twenty-two fragments live only in code that slices 2, 3 and 4 own. Six others go
+   to Task 2, because they also live in code no sibling retires. The coordinating session added
+   the last two after a measurement on `4fbf9d78`: `DISPATCH ct-reconciler` in both modules,
+   `Run it with:` in `ct-run-machine.ts`. Slice 4's task 5 keeps every byte of the prose road,
+   so Task 1's census would be red on birth. Over-delivery by a sibling is harmless, because a
+   census measures absence.
 6. The design spec says «fourteen literal labels». I measured fifteen label arguments into
    `RunDispatch.#printed` at `35303a16`, and thirteen distinct strings, because
    `  - the task's brief: ` and `  - that it write its verdict to: ` each appear at two call
