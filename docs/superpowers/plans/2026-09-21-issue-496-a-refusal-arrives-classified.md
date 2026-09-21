@@ -406,50 +406,62 @@ cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 0 — the real oracle and the real reader agree
 ```
 
-### Task 5 — one reader names the step, and the two alphabets go
+### Task 5 — one reader names the step, and both packages agree on the alphabet
 
-**Objective:** Both readers of the `step:` line call `StepProse.step`, so neither alphabet
-remains.
+**Objective:** The backend holds no pattern over the `step:` line, and every reader of that
+line answers a declared step.
 
 **Files:** `backend/src/infrastructure/ct-run-machine.ts` (modify),
-`backend/src/infrastructure/run-dispatch.ts` (modify),
-`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify)
+`plugin/scripts/step-prose.js` (modify),
+`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify),
+`plugin/__tests__/step-prose.test.js` (modify)
 
-Current state (backend/src/infrastructure/ct-run-machine.ts, line 328):
-
-```ts
-    const step = /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
-```
-
-Current state (backend/src/infrastructure/run-dispatch.ts, line 173):
+Current state (backend/src/infrastructure/ct-run-machine.ts, line 387):
 
 ```ts
-    const step = /^step: ([a-z-]+) \(attempt \d+\)$/m.exec(asked.stdout)?.[1]
+      ?? /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
 ```
 
-Both lines become a call to `StepProse.step`, with `output.stdout` and `asked.stdout`. The
-reader answers `string | null`, so the `case undefined:` arm of `OracleBoundary.read`'s switch
-becomes `case null:`, and the `switch` in `RunDispatch.#material` keeps its arms. After this
-task neither file holds a regular expression over `ct-step`'s prose. `run-dispatch.ts` imports
-`StepProse` from `./run-announcement.ts`, which imports nothing from either file, so no cycle
-appears.
+Current state (plugin/scripts/step-prose.js, lines 175-178):
+
+```js
+  static stepOf(stdout) {
+    const match = /^step: (\S+) \(attempt \d+\)$/m.exec(String(stdout ?? ''))
+    return match ? match[1] : null
+  }
+```
+
+The first line becomes a call to `StepProse.step`, which `run-announcement.ts` already exports
+and which answers `string | null` after a membership test against `STEPS`. So the
+`case undefined:` arm of `OracleBoundary.read`'s switch becomes `case null:`.
+
+`stepOf` keeps its pattern and gains the same membership test: it answers `null` for a name
+outside `STEPS`. Without it the two packages disagree on `step: judge2 (attempt 1)`. The oracle
+answers `null` and the dispatch answers `judge2`, so one reader routes what the other refuses.
+
+**Measured before this task:** slice 2 took the `([a-z-]+)` reader out of `run-dispatch.ts`. It
+rewrote the reader as `(\S+)` in `step-prose.js`, so that file left this task's Files. Both
+patterns the slice's third criterion names are then absent once the line above goes.
 
 **TDD:** `it('both prose readers name the same step for the same bytes')` — the literal stdout
 `step: slice-judge (attempt 2)` through `StepProse.step`, and the effect of
 `OracleBoundary.read` over a receipt carrying the same line. Expect the one name
-`'slice-judge'`. Then `it('a step name with a digit is not a declared step')` with `step:
-judge2 (attempt 1)`.
+`'slice-judge'`. Then `it('a step name with a digit is not a declared step')` with
+`step: judge2 (attempt 1)`, over both readers, and expect `null` from each.
 
 **Tests:** added to `backend/__tests__/infrastructure/ct-run-machine.test.ts`: `'both prose
 readers name the same step for the same bytes'`, `'a step name with a digit is not a declared
-step'`. Nothing removed.
+step'`. Added to `plugin/__tests__/step-prose.test.js`: `'a step name outside the declared
+steps is not named'`. Nothing removed.
 
-**Verification:** The first command proves the shared reader over both consumers. The second
-proves that neither file still holds an alphabet or an `(attempt` pattern.
+**Verification:** The first two commands prove the readers agree. The last two prove that
+neither backend module holds an `(attempt` pattern any more.
 
 ```bash
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts   # expected: exit 0 — one reader serves both consumers
-test -z "$(grep -l '(attempt' backend/src/infrastructure/ct-run-machine.ts backend/src/infrastructure/run-dispatch.ts)"   # expected: exit 0 — neither pattern remains
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/step-prose.test.js   # expected: exit 0 — an undeclared step is not named
+test "$(grep -c '(attempt' backend/src/infrastructure/ct-run-machine.ts)" -eq 0   # expected: exit 0 — the oracle holds no pattern
+test "$(grep -c '(attempt' backend/src/infrastructure/run-dispatch.ts)" -eq 0   # expected: exit 0 — and the dispatch holds none either
 ```
 
 ### Task 6 — the classification travels to the inspection
