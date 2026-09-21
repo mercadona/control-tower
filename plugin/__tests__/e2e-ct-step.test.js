@@ -14,7 +14,7 @@ import { DEFAULT_BUDGETS } from '../scripts/run-machine.js'
 import { worktreeInConflict, oneTaskPlan } from './fixtures/worktree-in-conflict.js'
 
 const STEP = fileURLToPath(new URL('../scripts/ct-step.mjs', import.meta.url))
-const A = 'el server escucha en 9115 por defecto y en el puerto indicado si se pasa'
+const A = 'the server listens on 9115 by default and on the given port when one is passed'
 
 // A slice worktree with ONE task already committed and the run stopped at
 // `e2e`. The committed task matters: ct-step cross-checks the real commits
@@ -38,7 +38,7 @@ function worktreeAtE2e({ tasksTotal = 1, e2eRuns = [A], commitsTheTask = true } 
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   git('add', '-A')
-  if (commitsTheTask) git('commit', '-qm', 'tarea 1')
+  if (commitsTheTask) git('commit', '-qm', 'task 1')
   writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({
     plan: 'docs/superpowers/plans/plan.md', issue: 4, baseSha,
     task: tasksTotal, tasksTotal, e2eRuns, step: 'e2e',
@@ -73,7 +73,7 @@ function worktreeAtReconcile({ tasksTotal = 1 } = {}) {
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   writeFileSync(join(dir, 'work.txt'), 'work\n')
   git('add', '-A')
-  git('commit', '-qm', 'tarea 1')
+  git('commit', '-qm', 'task 1')
   writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({
     plan: 'docs/superpowers/plans/plan.md', issue: 4, baseSha,
     task: tasksTotal, tasksTotal, e2eRuns: [], step: 'reconcile',
@@ -91,13 +91,13 @@ function worktreeAtReconcile({ tasksTotal = 1 } = {}) {
 // that is why it does not need the `.gitignore` of the helper above:
 // `merge()` never calls `git status --porcelain`.
 function worktreeWithDirtyTree() {
-  const dir = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-sucio-'))
+  const dir = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-dirty-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
   git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
   writeFileSync(join(dir, 'f.txt'), 'base\n'); git('add', '-A'); git('commit', '-qm', 'base')
   const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
-  const origin = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-sucio-origin-'))
+  const origin = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-dirty-origin-'))
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin], { stdio: 'ignore' })
   git('remote', 'add', 'origin', origin)
   git('push', '-q', 'origin', 'main')
@@ -108,15 +108,15 @@ function worktreeWithDirtyTree() {
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   writeFileSync(join(dir, 'work.txt'), 'work\n')
   git('add', '-A')
-  git('commit', '-qm', 'tarea 1')
+  git('commit', '-qm', 'task 1')
   // The base advances by touching `f.txt`, the SAME file that is going to be
   // dirtied locally without committing.
-  const clone = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-sucio-clone-'))
+  const clone = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-dirty-clone-'))
   execFileSync('git', ['clone', '-q', origin, clone], { stdio: 'ignore' })
   const gClone = (...a) => execFileSync('git', a, { cwd: clone, stdio: 'ignore' })
   gClone('config', 'user.email', 'b@b'); gClone('config', 'user.name', 'b')
-  writeFileSync(join(clone, 'f.txt'), 'avance en la base\n')
-  gClone('add', '-A'); gClone('commit', '-qm', 'la base avanza')
+  writeFileSync(join(clone, 'f.txt'), 'line from the advanced base\n')
+  gClone('add', '-A'); gClone('commit', '-qm', 'the base advances')
   gClone('push', '-q', 'origin', 'main')
   writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({
     plan: 'docs/superpowers/plans/plan.md', issue: 4, baseSha,
@@ -126,7 +126,7 @@ function worktreeWithDirtyTree() {
   }, null, 2))
   // The UNCOMMITTED change in `f.txt`, AFTER writing the run: it is what
   // makes git refuse even to start the merge.
-  writeFileSync(join(dir, 'f.txt'), 'cambio local sin commitear\n')
+  writeFileSync(join(dir, 'f.txt'), 'local change, not committed\n')
   return dir
 }
 
@@ -136,7 +136,7 @@ function worktreeWithDirtyTree() {
 // `.agent/SLICE.md` really feeds `e2eRuns` — the helper above seeds the run
 // by hand and never goes through there.
 function newWorktree({ e2eYaml = '' } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'ct-step-nuevo-'))
+  const dir = mkdtempSync(join(tmpdir(), 'ct-step-new-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
   git('config', 'user.email', 't@t'); git('config', 'user.name', 't')
@@ -151,10 +151,10 @@ function newWorktree({ e2eYaml = '' } = {}) {
 }
 
 const step = (dir, args) => spawnSync(process.execPath, [STEP, ...args, '--plan', 'docs/superpowers/plans/plan.md', '--issue', '4'], { cwd: dir, encoding: 'utf8' })
-const report = (dir, obj) => { const p = join(dir, 'informe.json'); writeFileSync(p, JSON.stringify(obj)); return 'informe.json' }
+const report = (dir, obj) => { const p = join(dir, 'report.json'); writeFileSync(p, JSON.stringify(obj)); return 'report.json' }
 
 const GREEN = { runs: [{ run: A, verdict: 'verde', brought_up: 'cargo run --example serve', evidence: [{ command: 'curl -sS localhost:9115/metrics', output: '# HELP x' }] }] }
-const RED = { runs: [{ run: A, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'otro proceso en el puerto' }] }
+const RED = { runs: [{ run: A, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'another process on the port' }] }
 
 describe('ct-step e2e', () => {
   it('green: exit 0, run delivered and the markdown written and COMMITTED', () => {
@@ -188,12 +188,16 @@ describe('ct-step e2e', () => {
   it("the run persists each run's verdict, with its reason when it is no-verificado", () => {
     const dir = worktreeAtE2e()
     try {
-      const UNVERIFIED = { runs: [{ run: A, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' }] }
+      // `Levantar` and `Listo cuando` keep their Spanish: they are the field
+      // names of the AGENTS.md section `ct-init` seeds
+      // (`plugin/templates/e2e-howto.template.md`) and the ones `ct-step`
+      // itself names on stdout — contract, not prose of this test.
+      const UNVERIFIED = { runs: [{ run: A, verdict: 'no-verificado', reason: 'the AGENTS.md section is not filled in', unblock: 'fill in "Levantar" and "Listo cuando"' }] }
       const r = step(dir, ['e2e', report(dir, UNVERIFIED)])
       expect(r.status).toBe(0) // the no-verificado DELIVERS
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.closed).toBe('delivered')
-      expect(run.e2eResults).toEqual([{ run: A, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar' }])
+      expect(run.e2eResults).toEqual([{ run: A, verdict: 'no-verificado', reason: 'the AGENTS.md section is not filled in' }])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -214,7 +218,7 @@ describe('ct-step e2e', () => {
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.closed).not.toBe('delivered')
       // Red does NOT close the run, so it does not commit: committing here
-      // would push `hechos` above `esperados` (= tasksTotal at the e2e step)
+      // would push `actual` above `expected` (= tasksTotal at the e2e step)
       // and would bring down the NEXT attempt with PRECONDITION before anyone
       // got to fix the failure. The report stays staged as proof that it is
       // waiting for whoever fixes it.
@@ -231,7 +235,7 @@ describe('ct-step e2e', () => {
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       // `task: 2, tasksTotal: 2` and not `task: 1` (which would be this
       // fixture's real `task` with `tasksTotal: 1`): there is ONE commit
-      // since `baseSha` (worktreeAtE2e commits once only, "tarea 1"), so
+      // since `baseSha` (worktreeAtE2e commits once only, "task 1"), so
       // outside the `e2e` step the invariant demands `task - 1 === 1`.
       // `task: 2` without raising `tasksTotal` would make the count add up
       // but would describe "task 2 of 1", a state
@@ -252,8 +256,8 @@ describe('ct-step e2e', () => {
   it('unreadable JSON is a discard, not a usage error', () => {
     const dir = worktreeAtE2e()
     try {
-      writeFileSync(join(dir, 'roto.json'), '{no es json')
-      const r = step(dir, ['e2e', 'roto.json'])
+      writeFileSync(join(dir, 'broken.json'), '{not json')
+      const r = step(dir, ['e2e', 'broken.json'])
       expect(r.status).toBe(0)
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.discards).toBe(1)
@@ -269,21 +273,23 @@ describe('ct-step e2e', () => {
       expect(r.stdout).toMatch(/e2e/)
       expect(r.stdout).toContain(A)
       // The AGENTS.md section is named, not alluded to (§3.3 of the design).
+      // The heading stays Spanish: it is one of the parsed headings the
+      // seeded contract fixes, so `ct-step` prints these exact bytes.
       expect(r.stdout).toContain('## Cómo se atraviesa este repo (e2e)')
       expect(r.stdout).toMatch(/E2E_SCHEMA/)
       // The conditional contract, which is the one `readE2eReport` really
       // demands: announcing only "run and verdict" cost one DISCARDED round
       // per slice. It is checked against the SAME table that validates, not
       // against a list typed in here — two copies diverge.
-      for (const [veredicto, campos] of Object.entries(E2E_REQUIRED_BY_VERDICT)) {
-        expect(r.stdout, veredicto).toContain(`${veredicto}: ${campos.join(', ')}`)
+      for (const [verdict, fields] of Object.entries(E2E_REQUIRED_BY_VERDICT)) {
+        expect(r.stdout, verdict).toContain(`${verdict}: ${fields.join(', ')}`)
       }
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   // This test PASSED for the wrong reason, and the final branch review
   // reproduced it: with the task already committed, `ct-step commit` died at
-  // PRECONDITION (exit 8, "el state y git no cuentan lo mismo") because
+  // PRECONDITION (exit 8, "the state and git do not count the same") because
   // outside the `e2e` step the invariant demands `commits === task - 1` and
   // here there was one too many. `run-4.json` was never rewritten, so
   // `after.step` was the 'commit' the test itself had just written and the
@@ -337,12 +343,12 @@ describe('ct-step e2e', () => {
   // `worktreeAtE2e`), so none of them goes through the `else` branch that
   // creates the run — the only path that calls `newRun`. These two do.
   it('a new run reads the runs from .agent/SLICE.md (the only path that calls newRun)', () => {
-    const dir = newWorktree({ e2eYaml: 'e2e:\n  - uno\n  - dos\n' })
+    const dir = newWorktree({ e2eYaml: 'e2e:\n  - one\n  - two\n' })
     try {
       const r = step(dir, ['next'])
       expect(r.status).toBe(0)
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      expect(run.e2eRuns).toEqual(['uno', 'dos'])
+      expect(run.e2eRuns).toEqual(['one', 'two'])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -563,7 +569,7 @@ describe('ct-step reconcile', () => {
     // Fix round 1: it was first thought that `markers-left` was unreachable
     // here, because the FIRST call leaves
     // `docs/superpowers/metrics/*.jsonl` uncommitted (the very telemetry of
-    // `medir('reconcile', ...)`) and `filesTouchedOutside` looks at that
+    // `measure('reconcile', ...)`) and `filesTouchedOutside` looks at that
     // before the markers. That finding was real (see the report, fix round 1)
     // but the cause was that `BranchReconciliation` did not tell the loop's
     // own footprint apart from a resolution that touched too much. Fix round
@@ -655,7 +661,7 @@ describe('the reconcile ladder reaches all the way down', () => {
       expect(thirdRound.stdout).toMatch(/round-discarded \(markers-left\)/)
       expect(thirdRound.stdout).toMatch(/ct-reconciler used up its \d+ round\(s\)/)
       expect(thirdRound.stdout).toMatch(/it is now up to the slice's own agent, which does have Bash/)
-      expect(thirdRound.stdout).not.toMatch(/REDESPACHA ct-reconciler/)
+      expect(thirdRound.stdout).not.toMatch(/REDISPATCH ct-reconciler/)
       expect(thirdRound.status).toBe(13)
       expect(thirdRound.stdout).toMatch(/run blocked-reconcile/)
       const atTheEnd = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
@@ -697,10 +703,10 @@ describe('ct-step reconcile validates post hoc the merge someone else committed'
     const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
     git('fetch', '-q', 'origin', 'main')
     const merge = spawnSync('git', ['merge', '--no-edit', 'origin/main'], { cwd: dir, encoding: 'utf8' })
-    if (merge.status === 0) throw new Error('el montaje esperaba un conflicto real y no lo obtuvo')
+    if (merge.status === 0) throw new Error('the setup expected a real conflict and did not get one')
     writeFileSync(join(dir, 'shared.txt'), resolution)
     git('add', 'shared.txt')
-    git('commit', '-qm', 'merge resuelta a mano, sin pasar por ct-step reconcile')
+    git('commit', '-qm', 'merge resolved by hand, without going through ct-step reconcile')
     return dir
   }
 
