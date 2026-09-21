@@ -388,10 +388,11 @@ the codec's message. It drops its `verb` parameter, because the table declares t
 check over it. `RunConsumingCommand.structured` goes. The class keeps `#PREFIX`, `#lines` and
 `edits` for slice 5.
 
-**TDD:** `it('a consuming line that names another verb makes the dispatch refuse')` in
-`backend/__tests__/infrastructure/run-dispatch-real-process.test.ts`. It prepends `When it comes
-back:  ct-step verdict other.json …` to an implement output. Expect `RunNotUnderstood` and a
-null seal.
+**TDD:** the five cases of `'conflicting response announcements and duplicate consuming
+commands are refused before sealing'` stay green. Run them before the change and after it.
+
+An earlier version named a test its review deleted. `read` holds no check of `argv[0]` against
+the step's verb, so it passed for another reason. Task 5 carries the test that measures it.
 
 **Tests:** `'conflicting response announcements and duplicate consuming commands are refused
 before sealing'` keeps its name and its five cases in
