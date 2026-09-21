@@ -232,6 +232,9 @@ after that cut. Slice 4's plan declares a `forEdits` that does, so read the code
 `e2e` step itself with the words `ct-step requested unsupported E2E material`. `dispatch` then
 drops both probes above and keeps its own refusal for a consuming command it cannot use.
 
+It routes to `#edits` on the consuming command: a `responsePath` of `null` and a first
+argument of `reconcile`.
+
 The census grows six fragments over `backend/src`: `DISPATCH THE SLICE'S AGENT`, `step: ${`,
 `step: e2e (`, `When it comes back`, `DISPATCH ct-reconciler` and `Run it with:`. The last two
 stay in the code slice 4 keeps, so this task retires them. A second census over the two modules above pins the
