@@ -866,6 +866,7 @@ describe('CtRunMachine', () => {
     expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
       kind: 'refused',
       detail: `ct-step output is not understood: ${JSON.stringify(foreign)}`,
+      closure: null,
     }))
   })
 
