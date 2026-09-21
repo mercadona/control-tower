@@ -123,7 +123,8 @@ Tasks 1 and 2 drive the real `ct-step` through `ct-step-harness.js`, inside the 
 already carries the `-real-process` marker `plugin/conventions/testing.md` demands. Task 4
 drives the real `ct-step reconcile` against the real conflict of `worktreeInConflict`, in
 `e2e-ct-step.test.js`. Tasks 3 and 5 drive `OracleBoundary` through `CtRunMachine`, with the
-announcement seeded into `OracleMother` as a literal string.
+announcement seeded into `OracleMother` as a literal string. Task 6 drives `RunAnnouncement`
+over one literal JSON line, in `run-announcement.test.ts`.
 
 Every expectation in this plan is a literal. No assertion recomputes its expected value with
 the module under test. `run-dispatch-real-process.test.ts` asserted a composed argv that way,
@@ -438,6 +439,73 @@ conflict and reaches `run delivered:`.
 cd backend && npm run typecheck   # expected: exit 0 — the static and its caller agree
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts   # expected: exit 0 — the announced round and its refusal
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 0 — a real conflict still reaches the reconciler
+```
+
+### Task 6 — the announced round carries its inputs to the dispatch
+
+**Objective:** `RunDispatch` takes the reconciliation package from the announced round and not
+from prose.
+
+**Files:** `backend/src/infrastructure/run-announcement.ts` (modify),
+`backend/src/infrastructure/run-dispatch.ts` (modify),
+`backend/__tests__/infrastructure/run-announcement.test.ts` (modify)
+
+Current state (backend/src/infrastructure/run-dispatch.ts, lines 290-299):
+
+```ts
+  static #reconciliationInputs(stdout: string): readonly DispatchInput[] {
+    try {
+      return RunDispatch.#inputsOf(DispatchProse.read({ stdout, step: STEPS.RECONCILE }))
+    } catch (cause) {
+      if (cause instanceof UnreadableStepProse) {
+        throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${cause.detail}`)
+      }
+      throw cause
+    }
+  }
+```
+
+Contract (backend/src/infrastructure/run-announcement.ts):
+
+```ts
+export type AnnouncedInput = {
+  readonly role: string
+  readonly kind: string
+  readonly path: string
+}
+export class RunAnnouncement {
+  readonly inputs: readonly AnnouncedInput[] | null
+}
+```
+
+`inputs` answers the frozen list of `dispatch.inputs` for an announcement of kind `step`. It
+answers `null` for every other kind, and for a step that declares no input. A member whose
+`role`, `kind` or `path` is not a string raises `RunNotUnderstood`, the error every other
+refusal of this class raises.
+
+In `#reconciliationInputs` the announced road runs before the prose one. The method asks
+`RunAnnouncement.of` for the announcement. Then it maps every input of the role
+`reconciliation-package` to a `DispatchInput` of the same `kind` and `path`. The prose road
+below keeps every byte it has today, because a human who runs `ct-step reconcile` with no flag
+still reads prose.
+
+**TDD:** `it('the announced round takes its reconciliation package from the announcement')`.
+Feed the JSON line of a round that dispatches. Expect `inputs` to equal the literal
+`[{ role: 'reconciliation-package', kind: 'literal', path: '.agent/reconcile-package.md' }]`.
+Then `it('an announced input with no path is refused')`.
+
+**Tests:** added to `backend/__tests__/infrastructure/run-announcement.test.ts`: `'the announced
+round takes its reconciliation package from the announcement'`, `'an announced input with no
+path is refused'`, `'an announcement of kind transition carries no inputs'`. Removed on
+purpose: none.
+
+**Verification:** The typecheck proves the new field and its caller agree. The unit suite proves
+the reader and its refusal. The predicate proves the dispatch asks the announcement.
+
+```bash
+cd backend && npm run typecheck   # expected: exit 0 — the field and its caller agree
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-announcement.test.ts   # expected: exit 0 — the reader and its refusal
+test "$(grep -c 'RunAnnouncement.of' backend/src/infrastructure/run-dispatch.ts)" -ge 1   # expected: exit 0 — the dispatch asks the announcement
 ```
 
 ## 8. Global verification
