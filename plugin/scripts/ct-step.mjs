@@ -99,6 +99,10 @@ import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
 import { BaseBranch } from './slice-base.js'
 import { StepSeal } from './dispatch-gate.js'
+// Slice 1, Task 3: the structured announcement `next` prints under
+// `--output-format json`, alongside (not instead of) the prose. Pure module,
+// no disk and no process of its own — see step-announcement.js.
+import { StepAnnouncement, AnnouncedResponse } from './step-announcement.js'
 
 const PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -133,7 +137,12 @@ const MAX_DISCARDS = 6
 function safeWrite(fd, text) {
   try { writeSync(fd, text) } catch { /* the pipe is closed: the line is lost, the exit code does not change */ }
 }
-const out = (msg) => safeWrite(1, msg + '\n')
+// `announcing` is declared further down, once the flag is parsed; `out` only
+// reads it when it is actually called, well after that assignment has run.
+// Under the flag the prose is silenced so the prose road and the JSON road
+// never share stdout — the announcement itself is written straight to stdout
+// with `safeWrite`, the same primitive this closes over.
+const out = (msg) => { if (!announcing) safeWrite(1, msg + '\n') }
 const err = (msg) => safeWrite(2, msg + '\n')
 const die = (msg, code) => { err(msg); process.exit(code) }
 
@@ -158,7 +167,9 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
   e2e <file.json>           the report of the slice's end-to-end journey
 
 The sequence is decided by run-machine.js: a verb that is not the step that is due
-exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.`
+exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
+
+  --output-format json     next answers with one JSON object on stdout instead of prose`
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
@@ -173,6 +184,20 @@ if (typeof issueRaw !== 'string' || !/^\d+$/.test(issueRaw)) {
   die(`--issue must be a whole number: I got ${JSON.stringify(issueRaw)}`, EXIT.USAGE)
 }
 const issue = Number(issueRaw)
+
+// The announcement flag (Slice 1, Task 3). `json` turns it on; any other
+// value — `true` included, which is what a flag given with no value reads as
+// — is a usage error, the same family as an unreadable --plan or a
+// non-numeric --issue. Only "next" answers with an announcement: any other
+// verb under the flag refuses before it does anything else.
+const outputFormatRaw = arg('--output-format', null)
+if (outputFormatRaw !== null && outputFormatRaw !== 'json') {
+  die(`unknown --output-format: ${JSON.stringify(outputFormatRaw)}\n\n${USAGE}`, EXIT.USAGE)
+}
+const announcing = outputFormatRaw === 'json'
+if (announcing && verb !== 'next') {
+  die('only "ct-step next" answers with an announcement', EXIT.USAGE)
+}
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const git = (argv, { allowFail = false } = {}) => {
@@ -309,6 +334,12 @@ if (existsSync(stateFile)) {
   // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
     if (verb === 'next') {
+      // Under the flag `out` writes nothing, so falling through to it here would
+      // exit 0 with an empty stdout — silence reported as success, which is the
+      // one shape the closed decision forbids. There is no announcement to make
+      // instead: a `delivered` transition is a later slice's work, not this
+      // one's. Refuse, in the same family as the two refusals above.
+      if (announcing) die('ct-step next has no announcement for a delivered run yet', EXIT.USAGE)
       out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
@@ -571,10 +602,18 @@ function nextVerb() {
   }
   out(`step: ${run.step} (attempt ${currentAttempt()})`)
   out('')
+  // Slice 1, Task 3: the announcement is built on BOTH roads — with the flag
+  // off included — and only PRINTED under the flag. Building it always is
+  // deliberate: a step this program cannot announce reddens the whole
+  // existing suite, not one flagged run, which is what keeps the contract
+  // honest while nothing reads it yet.
+  let announcement
+  const stepRunFields = { issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, attempt: currentAttempt() }
   switch (run.step) {
     case STEPS.IMPLEMENT: {
       const brief = writeBrief()
       const reportPath = join(workDir, `task-${run.task}-report.json`)
+      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, reportPath) })
       // The list comes out of the constant and is not typed again: the hand copy
       // of the judge's already diverged once, and `ct-step next` ended up
       // announcing tools that were not those of the agent being dispatched.
@@ -593,6 +632,7 @@ function nextVerb() {
       break
     }
     case STEPS.CONTROLS:
+      announcement = StepAnnouncement.program(stepRunFields)
       out('MEASURE THE TASK (the implementer does not do it, and its word does not count):')
       for (const c of t.commands) out(`  $ ${c}`)
       if (t.testsAdded.length) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
@@ -603,6 +643,7 @@ function nextVerb() {
       const packagePath = writeReviewPackage()
       const judgeBrief = writeJudgeBrief()
       const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
+      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, verdictPath) })
       out(`DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`)
       out(`  - the review package: ${packagePath}`)
       out(`  - the task's brief: ${judgeBrief}`)
@@ -624,6 +665,7 @@ function nextVerb() {
     case STEPS.ADVISE: {
       const packagePath = writeAdviceReviewPackage()
       const advicePath = join(workDir, `task-${run.task}-advice.json`)
+      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, advicePath) })
       out(`DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`)
       out(`  - the advisor's package: ${packagePath}`)
       out(`  - that it write its advice to: ${advicePath}`)
@@ -633,6 +675,7 @@ function nextVerb() {
       break
     }
     case STEPS.COMMIT:
+      announcement = StepAnnouncement.program(stepRunFields)
       out('COMITEA LA TAREA:')
       out(`  ct-step commit --plan ${planPath} --issue ${issue}`)
       out('The message is composed by the plugin and validated against the closing keywords.')
@@ -653,6 +696,7 @@ function nextVerb() {
     // there is a conflict, it is the verb that says who to dispatch, not
     // `next`.
     case STEPS.RECONCILE:
+      announcement = StepAnnouncement.program(stepRunFields)
       out('RECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):')
       out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       out('If there is a conflict, the verb itself says who to dispatch.')
@@ -660,6 +704,7 @@ function nextVerb() {
     // §3.7-A: the plan's end to end, after the last commit. It is run by the
     // PROGRAM — never by an agent evaluating itself.
     case STEPS.GLOBAL:
+      announcement = StepAnnouncement.program(stepRunFields)
       out("RUN THE PLAN'S GLOBAL VERIFICATION (no agent runs it, the program runs it):")
       if (globalVerification.commands.length) {
         for (const c of globalVerification.commands) out(`  $ ${c}`)
@@ -674,6 +719,7 @@ function nextVerb() {
     case STEPS.SLICE_JUDGE: {
       const packagePath = writeSliceReviewPackage()
       const verdictPath = join(workDir, 'slice-verdict.json')
+      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, verdictPath) })
       out(`DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`)
       out(`  - the slice's review package: ${packagePath}`)
       out(`  - the plan: ${planPath}`)
@@ -685,6 +731,7 @@ function nextVerb() {
       break
     }
     case STEPS.E2E:
+      announcement = StepAnnouncement.program(stepRunFields)
       // There is no brief and no package to write: no task subagent is
       // dispatched here, the whole slice is crossed with the environment already
       // brought up by whoever is driving. `AGENTS.md` is the place with the
@@ -715,6 +762,11 @@ function nextVerb() {
     default:
       die(`the state has a step this version does not know: ${run.step}`, EXIT.UNNAMED)
   }
+  // The announcement was built above on both roads; it is PRINTED only under
+  // the flag, straight to stdout with the same primitive `out` closes over —
+  // `out` writes nothing once the flag is on, so the prose and the JSON never
+  // share a channel. `text()` already ends with its own newline.
+  if (announcing) safeWrite(1, announcement.text())
   // THE SEAL OF THE STEP. `next` has just written the input the subagent of
   // this step is going to read —the brief, or the judge's package—, and that is
   // exactly what a dispatch that skips this verb leaves unwritten: measured
