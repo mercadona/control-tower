@@ -41,6 +41,9 @@ describe('CT run machine real process', () => {
     expect(evidence.advisor.consumer.prompt).toBe(
       `Read the listed files.\n${evidence.advisor.producer.paths.join('\n')}\nComplete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`,
     )
+    expect(evidence.advisor.producer.response).toEqual({
+      kind: 'structured', path: expect.stringContaining('advice.json'),
+    })
     expect(evidence.advisor.requestId).toBe(`run:${evidence.advisor.producer.ticket}`)
     expect(evidence.advisor.producer.argv).toEqual(expect.arrayContaining([
       '--tools', ADVISOR_TOOLS, '--allowedTools', ADVISOR_TOOLS,
@@ -69,6 +72,7 @@ describe('CT run machine real process', () => {
     expect(evidence.reconciler.consumer.prompt).toBe(
       `Read the listed files.\n${evidence.reconciler.producer.paths.join('\n')}\nComplete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`,
     )
+    expect(evidence.reconciler.producer.response).toEqual({ kind: 'edits' })
     expect(evidence.reconciler.requestId).toBe(`run:${evidence.reconciler.producer.ticket}`)
     expect(evidence.reconciler.producer.argv).toEqual(expect.arrayContaining([
       '--tools', RECONCILER_TOOLS, '--allowedTools', RECONCILER_TOOLS, '--agent', 'ct-reconciler',

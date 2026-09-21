@@ -35,6 +35,7 @@ class StructuredResponse {
 export class ClaudeRunCalls extends RunCalls {
   static readonly RESPONSE = 'response.json'
   static readonly ERRAND_END = 'Complete this role. Return the CLI response. Do not run CT commands or dispatch another agent.'
+  static readonly FILE_ERRAND_END = 'Complete this role. Write your answer to the path on the last line of this file. Do not run CT commands or dispatch another agent.'
 
   readonly calls: ClaudeCalls
   readonly machine: CtRunMachine
@@ -65,7 +66,7 @@ export class ClaudeRunCalls extends RunCalls {
       purpose: 'implementation',
       cwd: watch.located.path,
       argv: this.#argv(watch.agent, dispatch),
-      prompt: ClaudeRunCalls.#prompt(dispatch.paths),
+      prompt: ClaudeRunCalls.#prompt(dispatch),
       requestId: `run:${dispatch.ticket}`,
     })
     const recorded = await this.calls.startedFor(invocation)
@@ -79,8 +80,15 @@ export class ClaudeRunCalls extends RunCalls {
     }
     await this.measurements.capture(call)
     if (!completion.succeeded) throw new RunNotAdvanced(ClaudeRunCalls.#failureOf(completion))
-    if (dispatch.response.kind === 'edits') return
-    await this.#installResponse(watch, call, dispatch.response.path)
+    switch (dispatch.response.kind) {
+      case 'edits':
+      case 'file':
+        return
+      case 'structured':
+        await this.#installResponse(watch, call, dispatch.response.path)
+        return
+    }
+    return dispatch.response satisfies never
   }
 
   #argv(conversation: string, dispatch: RunDispatch): readonly string[] {
@@ -128,8 +136,16 @@ export class ClaudeRunCalls extends RunCalls {
     if (existing !== text) throw new Error(`${path} contains different bytes after immutable publication collided`)
   }
 
-  static #prompt(paths: readonly string[]): string {
-    return `Read the listed files.\n${paths.join('\n')}\n${ClaudeRunCalls.ERRAND_END}`
+  static #prompt(dispatch: RunDispatch): string {
+    const listed = `Read the listed files.\n${dispatch.paths.join('\n')}\n`
+    switch (dispatch.response.kind) {
+      case 'edits':
+      case 'structured':
+        return `${listed}${ClaudeRunCalls.ERRAND_END}`
+      case 'file':
+        return `${listed}${ClaudeRunCalls.FILE_ERRAND_END}\n${dispatch.response.path}`
+    }
+    return dispatch.response satisfies never
   }
 
   static #destination(cwd: string, printed: string): string {

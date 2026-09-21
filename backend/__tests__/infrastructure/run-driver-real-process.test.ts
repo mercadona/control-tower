@@ -19,6 +19,7 @@ describe('run driver real process', () => {
 
     expect(evidence.conversations).toEqual([evidence.admission.conversation])
     expect(evidence.roles).toEqual(['implement', 'judge', 'slice-judge'])
+    expect(evidence.dispatches.map((dispatch) => dispatch.response.kind)).toEqual(['structured', 'file', 'file'])
     expect(new Set(evidence.callIds).size).toBe(evidence.callIds.length)
     expect(evidence.requests.every((request) => request.startsWith('run:'))).toBe(true)
     expect(evidence.measurements.every((measurement) => (
@@ -38,7 +39,10 @@ describe('run driver real process', () => {
     for (let index = 0; index < implementations.length; index += 1) {
       const call = implementations[index]
       const dispatch = evidence.dispatches[index]
-      expect(call.prompt).toBe(`Read the listed files.\n${dispatch.paths.join('\n')}\nComplete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`)
+      const listed = `Read the listed files.\n${dispatch.paths.join('\n')}\n`
+      expect(call.prompt).toBe(dispatch.response.kind === 'file'
+        ? `${listed}Complete this role. Write your answer to the path on the last line of this file. Do not run CT commands or dispatch another agent.\n${dispatch.response.path}`
+        : `${listed}Complete this role. Return the CLI response. Do not run CT commands or dispatch another agent.`)
       expect(call.argv.slice(-(dispatch.argv.length + 1), -1)).toEqual(dispatch.argv)
     }
     expect(evidence.dispatches[0].paths).toEqual(expect.arrayContaining(
