@@ -6,7 +6,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, sliceOk } = makeHelpers(() => repo)
+const { ct, writeReport, sliceOk, taskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -35,7 +35,7 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(() => JSON.parse(r.stdout)).toThrow()
   })
 
-  it('a program step announces its run and no dispatch', () => {
+  it('the controls step announces the commands it measures and how to run them', () => {
     ct('report', writeReport(['uno.txt']))
 
     const r = ct('next', '--output-format', 'json')
@@ -45,6 +45,25 @@ describe('ct-step next answers with the announcement under --output-format json'
       version: 1,
       kind: 'step',
       run: { issue: 7, task: 1, tasksTotal: 2, step: 'controls', attempt: 1 },
+      commands: ['test -f uno.txt'],
+      consuming: { argv: ['controls', '--plan', 'plan.md', '--issue', '7'] },
+    })
+  })
+
+  it('the global step announces the commands of section eight', () => {
+    taskOk('uno.txt')
+    taskOk('dos.txt')
+    ct('reconcile')
+
+    const r = ct('next', '--output-format', 'json')
+
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'step',
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'global', attempt: 1 },
+      commands: ['test -f uno.txt && test -f dos.txt'],
+      consuming: { argv: ['global', '--plan', 'plan.md', '--issue', '7'] },
     })
   })
 

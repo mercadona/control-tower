@@ -399,6 +399,12 @@ if (existsSync(stateFile)) {
 
 const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 const currentTask = () => tasks.find((t) => t.n === run.task)
+// The argv a measuring step's announcement carries as `consuming`: what a
+// program-answering road runs to close that step, not the shell commands the
+// step measures. `verb` plus the positional arguments the verb takes, then
+// this run's own `--plan`/`--issue` — the same two flags every verb of this
+// program already requires.
+const consumingArgv = (verb, ...positional) => [verb, ...positional, '--plan', planPath, '--issue', String(issue)]
 
 // ---------------------------------------------------------------------------
 // The telemetry: append-only, TWO destinations, and a failure of its own brings
@@ -632,7 +638,7 @@ function nextVerb() {
       break
     }
     case STEPS.CONTROLS:
-      announcement = StepAnnouncement.program(stepRunFields)
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: t.commands, consuming: { argv: consumingArgv('controls') } })
       out('MEASURE THE TASK (the implementer does not do it, and its word does not count):')
       for (const c of t.commands) out(`  $ ${c}`)
       if (t.testsAdded.length) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
@@ -704,7 +710,7 @@ function nextVerb() {
     // §3.7-A: the plan's end to end, after the last commit. It is run by the
     // PROGRAM — never by an agent evaluating itself.
     case STEPS.GLOBAL:
-      announcement = StepAnnouncement.program(stepRunFields)
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: globalVerification.commands, consuming: { argv: consumingArgv('global') } })
       out("RUN THE PLAN'S GLOBAL VERIFICATION (no agent runs it, the program runs it):")
       if (globalVerification.commands.length) {
         for (const c of globalVerification.commands) out(`  $ ${c}`)
