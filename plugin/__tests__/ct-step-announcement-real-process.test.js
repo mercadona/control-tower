@@ -5,6 +5,9 @@ import { realpathSync, renameSync } from 'node:fs'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
+const MAX_DISCARDS = 6
+const RUN_STAYS_OPEN = 0
+
 let repo
 const { ct, writeReport, writeRaw, sliceOk, taskOk, judgeTask, judgeSlice, writeVerdict, writeSliceVerdict } = makeHelpers(() => repo)
 
@@ -209,26 +212,23 @@ describe('ct-step next answers with the announcement under --output-format json'
     })
   })
 
-  it('a spent discard budget announces the refusal that stops the run', () => {
+  it('the submission past a spent discard budget announces the refusal that stops the run, and each submission that spent it left the run open at judge', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    // MAX_DISCARDS is 6: six unreadable verdicts spend the whole budget
-    // (`run.discards` reaches 6, the run stays open at `judge` every time), and
-    // the seventh submission is the one the run refuses to go on asking for —
-    // `run.discards` is still 6 when that refusal is announced.
-    for (let i = 0; i < 6; i++) judgeTask(writeRaw('not json'))
 
-    const r = judgeTask(writeRaw('not json'), '--output-format', 'json')
+    const spendingTheWholeBudget = Array.from({ length: MAX_DISCARDS }, () => judgeTask(writeRaw('not json')))
+    const onePastTheWholeBudget = judgeTask(writeRaw('not json'), '--output-format', 'json')
 
-    expect(r.status).toBe(3)
-    expect(JSON.parse(r.stdout)).toEqual({
+    expect(spendingTheWholeBudget.map(({ status }) => status)).toEqual(Array(MAX_DISCARDS).fill(RUN_STAYS_OPEN))
+    expect(onePastTheWholeBudget.status).toBe(3)
+    expect(JSON.parse(onePastTheWholeBudget.stdout)).toEqual({
       version: 1,
       kind: 'refusal',
       state: 'blocked-judge',
       outcome: 'discarded',
       exit: 3,
-      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', discards: 6 },
-      detail: '6 discards in this run: it stops instead of going on asking for answers that cannot be read',
+      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', discards: MAX_DISCARDS },
+      detail: `${MAX_DISCARDS} discards in this run: it stops instead of going on asking for answers that cannot be read`,
     })
   })
 
