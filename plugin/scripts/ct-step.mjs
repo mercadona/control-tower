@@ -169,7 +169,7 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
 The sequence is decided by run-machine.js: a verb that is not the step that is due
 exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
 
-  --output-format json     next answers with one JSON object on stdout instead of prose`
+  --output-format json     every verb answers with one JSON object on stdout instead of prose`
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
@@ -185,19 +185,17 @@ if (typeof issueRaw !== 'string' || !/^\d+$/.test(issueRaw)) {
 }
 const issue = Number(issueRaw)
 
-// The announcement flag (Slice 1, Task 3). `json` turns it on; any other
-// value — `true` included, which is what a flag given with no value reads as
-// — is a usage error, the same family as an unreadable --plan or a
-// non-numeric --issue. Only "next" answers with an announcement: any other
-// verb under the flag refuses before it does anything else.
+// The announcement flag (Slice 1, Task 3; every verb since Slice 3, Task 1).
+// `json` turns it on; any other value — `true` included, which is what a flag
+// given with no value reads as — is a usage error, the same family as an
+// unreadable --plan or a non-numeric --issue. Every verb answers with an
+// announcement under the flag: `next` with a `step`, and every consuming verb
+// with the `transition` or `refusal` of the closure it just reached.
 const outputFormatRaw = arg('--output-format', null)
 if (outputFormatRaw !== null && outputFormatRaw !== 'json') {
   die(`unknown --output-format: ${JSON.stringify(outputFormatRaw)}\n\n${USAGE}`, EXIT.USAGE)
 }
 const announcing = outputFormatRaw === 'json'
-if (announcing && verb !== 'next') {
-  die('only "ct-step next" answers with an announcement', EXIT.USAGE)
-}
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const git = (argv, { allowFail = false } = {}) => {
@@ -2759,12 +2757,37 @@ try {
   if (transition.state === RUN_STATES.OPEN) {
     out('')
     out(`next: task ${run.task}/${run.tasksTotal}, step ${run.step} — ask with "ct-step next"`)
+    // The run stays open: the closure that just applied is a `transition`, not
+    // a `refusal` — there is no non-zero code to carry.
+    if (announcing) {
+      safeWrite(1, StepAnnouncement.transition({
+        issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
+        state: transition.state, outcome, exit: EXIT.OK,
+      }).text())
+    }
     process.exit(EXIT.OK)
   }
 
+  // The footer sentence is kept in a `const` because a refusal quotes it
+  // verbatim as `detail` — the prose and the JSON say the same thing, once.
+  const detail = `run ${transition.state}: task ${run.task}/${run.tasksTotal}, ${run.discards} discard(s)`
   out('')
-  out(`run ${transition.state}: task ${run.task}/${run.tasksTotal}, ${run.discards} discard(s)`)
-  process.exit(exitCodeOf(transition.state, before, outcome))
+  out(detail)
+  // `exitCodeOf` runs ONCE, after the footer's `out` lines, so its own
+  // DELIVERED line (`the tasks committed, …`) keeps printing right after them
+  // and before the announcement — the prose road is untouched.
+  const code = exitCodeOf(transition.state, before, outcome)
+  if (announcing) {
+    const closure = {
+      issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
+      state: transition.state, outcome, exit: code,
+    }
+    const announcement = code === EXIT.OK
+      ? StepAnnouncement.transition(closure)
+      : StepAnnouncement.refusal({ ...closure, detail })
+    safeWrite(1, announcement.text())
+  }
+  process.exit(code)
 } catch (e) {
   save()
   err(`unforeseen exception: ${e.stack || e.message}`)
