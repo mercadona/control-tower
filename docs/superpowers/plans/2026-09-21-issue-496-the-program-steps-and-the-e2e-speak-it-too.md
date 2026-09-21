@@ -510,9 +510,14 @@ test "$(grep -c 'RunAnnouncement.of' backend/src/infrastructure/run-dispatch.ts)
 
 ## 8. Global verification
 
-The two suites below prove the slice end to end. The five program steps announce their fields,
-the reconcile verb announces its round, and both prose roads still answer. Read the diff of
-`ct-step.mjs` with human eyes. Check that no `out()` line says something else.
+The two suites below prove the slice end to end. The five program steps announce their fields
+and the reconcile verb announces its round. Read the diff of `ct-step.mjs` with human eyes.
+Check that no `out()` line says something else.
+
+**The third command is red when this slice closes, and slice 5's task 2 turns it green.** Slice
+3's task 4 put the flag on the consuming verbs. So `ct-step reconcile` prints JSON alone, and
+`RunDispatch.#material` still reaches `#edits` through a prose probe. Slice 5's task 2 owns
+that route by name. So slice 4 closes with one declared red, and `ct-step global` meets it.
 
 The block names files rather than whole suites, and §9.15 says why. Two whole-suite tests time
 out on a loaded machine, and neither belongs to this slice.
@@ -520,7 +525,7 @@ out on a loaded machine, and neither belongs to this slice.
 ```bash
 cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-announcement-real-process.test.js __tests__/e2e-ct-step.test.js   # expected: exit 0 — every program step announces its fields
 cd backend && npm run typecheck   # expected: exit 0 — the whole graph is sound
-cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 0 — both field roads and both prose roads answer
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 1 until slice 5 task 2 — the announced roads answer and the dispatch routing is still prose-gated
 test -z "$(grep -L 'AnnouncedStep' backend/src/infrastructure/ct-run-machine.ts)"   # expected: exit 0 — the reader reached the boundary that needed it
 test -z "$(git status --porcelain)"   # expected: exit 0 — every task committed its work
 ```
@@ -530,11 +535,13 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
 1. No groomed GitHub issue exists for this slice, so row 4 of «Tabla de slices» and its two
    `Acepta` criteria are the frozen input. Provenance: the kickoff brief, which also forbids
    opening one.
-2. The backend keeps no flag on `#nextArgv` or `#runnerArgv`, so each new field road sits beside
-   its prose road until slice 5. Provenance: own call, forced by measurement. Under the flag
-   `out` is a no-op. So the prose of every step disappears at once, while slice 2's `#printed`
-   and slice 3's regexes still read prose. Slice 5's own criterion says nobody could delete
-   `RunConsumingCommand` earlier, which holds only while the prose road still runs.
+2. This assumption said the backend keeps no flag on `#nextArgv` or `#runnerArgv`. Slice 3's
+   task 4 put the flag on the consuming verbs, and `#nextArgv` alone keeps today's argv.
+   Provenance: the coordinating session measured it on `a511bc59`. Under the flag `out` is a
+   no-op, so a consuming verb prints no prose at all, while `next` still prints all of it. So
+   each field road of a consuming verb is the only road, and `RunConsumingCommand` still serves
+   `next`. Slice 5's own criterion says nobody could delete it earlier, which holds because
+   `next` keeps its prose.
 3. Slice 3 edits different branches of `OracleBoundary.read` at the same time as this slice: its
    refusal branch and its `next:` and `run delivered:` patterns. This slice owns
    `#plainCommand` and the reconciler branch at lines 313-325. Whoever reconciles takes both
@@ -595,3 +602,8 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     there would kill the `AnnouncedStep` road slice 2 landed. So Task 5's reconciler branch
     stays reachable, and the two readers need no order between them. Provenance: Task 4's
     reviewer raised the risk, and slice 3's own implementer measured the answer.
+
+17. Task 3's `Tests:` names `'prose keeps its own road while the backend asks for no flag'`.
+    Slice 3's task 4 deleted that test, and its own review verified the deletion as the one it
+    justified. The name claimed something the flag made false. Provenance: the coordinating
+    session measured it with `git diff` over that commit.
