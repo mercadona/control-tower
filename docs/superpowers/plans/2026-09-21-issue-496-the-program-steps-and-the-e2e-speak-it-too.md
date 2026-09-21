@@ -31,7 +31,7 @@ reader for an announced step.
   response channel.
 - `AnnouncedStep.read(stdout)` lives in `ct-run-machine.ts` and answers `null` for prose.
 - `OracleBoundary.#plainCommand` returns the announced `consuming.argv` when an announcement
-  arrives, and keeps the prose road while the backend asks for no flag.
+  arrives, and keeps the prose road a human still reads with no flag.
 - The reconciler branch of `OracleBoundary.read` does the same with the announced round.
 - `ct-step` with no flag prints what it prints today, word for word.
 
@@ -72,7 +72,7 @@ reader for an announced step.
 | The manifest check | it leaves the field road: `ct-step` builds the argv from the `--plan` and `--issue` the backend gave it |
 | The refusal message of both field roads | `ct-step output is not understood: <stdout>`, the bytes the prose road already refuses with |
 | The prose road | it stays on both branches, unchanged, until slice 5 |
-| What the backend passes to `ct-step` | no flag: `#nextArgv` and `#runnerArgv` keep today's argv |
+| What the backend passes to `ct-step` | the flag on `#runnerArgv`, which slice 3's task 4 adds; `#nextArgv` keeps today's argv |
 | The consuming command of the field road | `RunConsumingCommand.forEdits(argv)`, a static beside `edits` |
 | Feature flag | none, because this repository's `flag-discipline` default is off |
 
