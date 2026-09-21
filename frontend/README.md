@@ -76,47 +76,26 @@ backend's run and the other two endpoints refuse that id with
 `app/coordinating-session` (`CoordinatingSessionStatus`, rendered by `Home`
 beside `SessionsPanel`) is the page's single owner of coordinating-session
 opening, polling and closure. It polls `GET /coordinating-session` every two
-seconds (`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) and renders the backend's
-`timeline` as a compact vertical `system-ui/timeline` — the session's
-chronological history (opened, resumed, working, waiting for a permission
-prompt, completed, ended), each with a timestamp, and only the last event
-marked current. It never renders the raw Markdown of an assistant message: a
-permission prompt's own short question is the only free text a timeline item
-carries, and a completed turn shows a fixed label instead of the session's
-`last_assistant_message`. The whole timeline is what the backend answers on
-every poll, so a page reload rebuilds it from that field rather than from
-anything kept only in React state, and it survives a backend restart the same
-way the conversation itself does. An `unresumable` or `ended` conversation
-still shows its banner, with the timeline it had kept underneath it.
-Both the request form and gate 2 delegate their opening to that owner. Its
-synchronous mutation guard blocks both entrances before either request settles;
-an uncertain response stays occupied until a later authoritative read confirms
-the slot idle. Every held response carries an opaque target, and mutation
-generations prevent reads started before an open or close from repainting an
-older target.
+seconds (`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`). The backend's
+`timeline` field carries the session's chronological history (opened,
+resumed, working, waiting for a permission prompt, completed, ended); the
+page does not render it — `askStateOf` reads only `timeline.at(-1).kind` to
+derive `liveAsk`, which feeds `GateSequence`. `CoordinatingSessionStatus`
+itself renders nothing for a live session: it shows a banner only for
+`unresumable` or `ended`, the only two states the UI needs to say the
+conversation could not be recovered or has ended. Both the request form and
+gate 2 delegate their opening to that owner. Its synchronous mutation guard
+blocks both entrances before either request settles; an uncertain response
+stays occupied until a later authoritative read confirms the slot idle. Every
+held response carries an opaque target, and mutation generations prevent
+reads started before an open or close from repainting an older target.
 
 The session header offers **Cancelar la sesión** for a live target and **Cerrar
 sesión** for ended or unresumable state. Closure sends the exact conversation
 and target to `POST /coordinating-session/close`; **Cancelando…** remains visible
 until a matching durable acknowledgement arrives. A refusal or unreadable
-answer retains the target, its timeline and an actionable retry. Confirmed
-closure removes only that target's terminal presentation, timeline and gates.
-
-The visible timeline carries no `aria-live` of its own — every poll can
-rewrite the whole list, and a live region over all of it would have assistive
-technology repeat the entire history on each update. A single visually
-hidden `role="status"` element (`.coordinating-session-status__visually-hidden`,
-the same clip-rect technique `Banner` already uses for its type label)
-announces only the current event's own text, the same pattern
-`ImplementProgress` already uses for its stage announcement.
-
-`system-ui/timeline` (`Timeline`) is this repository's mirror of
-`logistics-ui`'s Timeline component, alongside the other `system-ui/*`
-mirrors under [The look](#the-look-the-logistics-design-system): a vertical
-list of items, each a marker on a connecting line, a label, an optional
-timestamp and an optional detail line, with the current item's marker and
-label in the brand colour and every earlier one muted. It declares no
-`min-width`, so it renders correctly at the panel's narrowest width.
+answer retains the target and an actionable retry. Confirmed closure removes
+only that target's terminal presentation and gates.
 
 `Home` lays out a right column (`home__side`), a sibling of `main` rather than
 an overlay, that holds a `Drawer` titled **Sesión coordinadora** with
@@ -282,7 +261,7 @@ the repo moves to the organisation:
 - the other directories under `src/system-ui/` — `banner`, `breadcrumbs`,
   `button`, `collapsable-card`, `drawer`, `form-field`, `icons`, `input`,
   `loading`, `menu-item`, `menu-section`, `nav-header`, `navbar`, `navigation`,
-  `panel`, `tabs`, `tag`, `text-area`, `timeline`, `top-bar` and `workflow-step`
+  `panel`, `tabs`, `tag`, `text-area`, `top-bar` and `workflow-step`
   — are **mirrors** of `logistics-ui`'s components, with the same tokens and a
   subset of their props. The day the package arrives, the import changes. The `tabs` one traces
   `packages/logistics-ui/src/components/Tabs` at `4d946b4`: the ARIA tabs

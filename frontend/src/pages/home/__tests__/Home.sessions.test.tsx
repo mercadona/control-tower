@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -159,15 +159,5 @@ describe('Home · sessions panel', () => {
       expect.objectContaining({ method: 'POST' }),
     ))
     expect(scrolling).toHaveBeenCalled()
-  })
-
-  it("shows the coordinating session's live question", async () => {
-    stubFetch(NO_ACTIVE_PLANS, CoordinatingSessionMother.waiting())
-
-    openHome()
-
-    await waitFor(() => expect(document.querySelector('.timeline')).not.toBeNull())
-    const timeline = document.querySelector('.timeline') as HTMLElement
-    expect(within(timeline).getByText((text) => text.includes(CoordinatingSessionMother.QUESTION))).toBeInTheDocument()
   })
 })

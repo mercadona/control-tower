@@ -803,7 +803,7 @@ describe('Home · restore workflow', () => {
     }))
     openHome()
     await act(async () => vi.advanceTimersByTimeAsync(0))
-    expect(screen.getAllByText('Trabajando')).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeInTheDocument()
     expect(changes.activeReadCount()).toBe(1)
     await act(async () => changes.answerWith(HeadlessPlanMother.empty()))
     await act(async () => vi.advanceTimersByTimeAsync(2000))
