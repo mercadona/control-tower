@@ -92,7 +92,12 @@ class OracleMother {
   static controlsArgv(): readonly string[] {
     return [
       OracleMother.CT_STEP, 'controls', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
+  }
+
+  static consumingControlsArgv(): readonly string[] {
+    return ['controls', '--plan', OracleMother.PLAN, '--issue', '332']
   }
 
   static reportArgv(): readonly string[] {
@@ -105,6 +110,7 @@ class OracleMother {
   static reconcileArgv(): readonly string[] {
     return [
       OracleMother.CT_STEP, 'reconcile', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
   }
 
@@ -136,8 +142,24 @@ class OracleMother {
       step: STEPS.CONTROLS,
       attempt: 1,
       commands: ['npm run lint', 'npm test'],
-      consuming: { argv: OracleMother.controlsArgv().slice(1) },
+      consuming: { argv: OracleMother.consumingControlsArgv() },
     }).text()
+  }
+
+  static openTransition(): string {
+    return '{"version":1,"kind":"transition","state":"open","outcome":"done","exit":0,'
+      + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"implement","discards":0}}\n'
+  }
+
+  static deliveredTransition(): string {
+    return '{"version":1,"kind":"transition","state":"delivered","outcome":"done","exit":0,'
+      + '"run":{"issue":332,"task":3,"tasksTotal":3,"step":"slice-judge","discards":0}}\n'
+  }
+
+  static controlsRefusal(): string {
+    return '{"version":1,"kind":"refusal","state":"blocked-controls","outcome":"failed","exit":4,'
+      + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"controls","discards":0},'
+      + '"detail":"run blocked-controls: task 1/3, 0 discard(s)"}\n'
   }
 
   static implementReportPath(): string {
@@ -167,20 +189,10 @@ class OracleMother {
     return `slice of issue 332 — the 3 tasks committed\nstep: reconcile (attempt 1)\n\nRECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):\n  ct-step reconcile --plan ${OracleMother.PLAN} --issue 332\nIf there is a conflict, the verb itself says who to dispatch.\n`
   }
 
-  static nextMarker(): string {
-    return `controls: done (log at ${OracleMother.WORKTREE}/.agent/run-332/task-1-controls.log)\n\nnext: task 1/3, step implement — ask with "ct-step next"\n`
-  }
-
-  static delivered(): string {
-    return 'run delivered: the 3 tasks of issue 332 are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.\n'
-  }
-
-  static unmergeableReconciliation(): string {
-    return `reconcile: unmergeable-tree — git could not start the merge with "main": this is not a content conflict, it is the slice's own tree (uncommitted changes, or something half-finished).\nDISPATCH THE SLICE'S AGENT (it has Bash) to leave the tree clean, and ask again with ct-step next.\n\nnext: task 3/3, step reconcile — ask with "ct-step next"\n`
-  }
-
-  static committedMarkersReconciliation(): string {
-    return `reconcile: markers-committed — HEAD is already a merge commit, made outside this verb, and 1 of its file(s) carry conflict markers INSIDE the commit:\n  - backend/src/example.ts\nThere is no live merge to conclude and no round to discard: the pull request would carry the markers inside, and if the conflict falls in a file the controls do not compile, it comes out green.\nDISPATCH THE SLICE'S AGENT (it has Bash) to remove the markers and commit the fix, and ask again with ct-step next.\n\nnext: task 3/3, step reconcile — ask with "ct-step next"\n`
+  static reconcileRefusal(): string {
+    return '{"version":1,"kind":"refusal","state":"blocked-reconcile","outcome":"failed","exit":13,'
+      + '"run":{"issue":332,"task":3,"tasksTotal":3,"step":"reconcile","discards":0},'
+      + '"detail":"run blocked-reconcile: task 3/3, 0 discard(s)"}\n'
   }
 
   static output(code: number, stdout: string, stderr = ''): ProcessOutput {
@@ -283,6 +295,170 @@ describe('CtRunMachine', () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
+  it('a transition that leaves the run open asks for the next step', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-open-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const measured = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), measured,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.openTransition()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+    const dispatched = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(measured, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), dispatched,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.implementAnnouncement()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+    const machine = fixture.machine()
+
+    const instruction = await machine.advance(
+      OracleMother.watch(), new RunInstruction({ kind: 'command', ticket: asked }),
+    )
+
+    expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket: dispatched }))
+    expect(fixture.asked).toEqual([])
+  })
+
+  it('a transition of delivered closes the run', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-delivered-transition-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.deliveredTransition()))
+    const machine = fixture.machine()
+
+    const closed = await machine.advance(OracleMother.watch(), await machine.open(OracleMother.watch()))
+
+    expect(closed.work).toEqual({ kind: 'delivered' })
+    expect((await machine.inspect(OracleMother.watch())).fact).toEqual({ kind: 'delivered' })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a refusal reaches the instruction as its own diagnostic', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-refusal-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(
+      4, OracleMother.controlsRefusal(), 'npm run lint exited 1\n',
+    ))
+    const machine = fixture.machine()
+
+    const refused = await machine.advance(OracleMother.watch(), await machine.open(OracleMother.watch()))
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
+        + ' — run blocked-controls: task 1/3, 0 discard(s)',
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a non-zero exit with no announcement says so', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-unannounced-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const measured = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), measured,
+      OracleMother.receipt(
+        OracleMother.output(4, 'controls: 2 of 3 commands failed\n', 'npm run lint exited 1\n'),
+        OracleMother.RUN_BYTES,
+        OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(instruction.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step exited 4 without announcing a run state;'
+        + ' stdout: "controls: 2 of 3 commands failed\\n"; stderr: "npm run lint exited 1\\n"',
+    })
+    expect(fixture.asked).toEqual([])
+  })
+
+  it('the consuming argv asks for the announcement', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-flagged-argv-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncement())
+    })
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.deliveredTransition()))
+    const machine = fixture.machine()
+
+    await machine.advance(OracleMother.watch(), await machine.open(OracleMother.watch()))
+
+    expect(fixture.asked).toEqual([
+      {
+        argv: [
+          OracleMother.CT_STEP, 'next', '--plan', OracleMother.PLAN, '--issue', '332',
+        ],
+        cwd: OracleMother.WORKTREE,
+      },
+      {
+        argv: [
+          OracleMother.CT_STEP, 'controls', '--plan', OracleMother.PLAN, '--issue', '332',
+          '--output-format', 'json',
+        ],
+        cwd: OracleMother.WORKTREE,
+      },
+    ])
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[1], 'request.json'), 'utf8')).toBe(
+      OracleMother.request(OracleMother.TICKETS[0], [
+        OracleMother.CT_STEP, 'controls', '--plan', OracleMother.PLAN, '--issue', '332',
+        '--output-format', 'json',
+      ]),
+    )
+  })
+
   it('oracle exit nine survives the adapter unchanged', async () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-nine-')))
     roots.push(fixture.root)
@@ -311,7 +487,7 @@ describe('CtRunMachine', () => {
 
     expect(refusal.work).toEqual({
       kind: 'refused',
-      detail: 'ct-step exited 9; stdout: ""; stderr: "\\\"controls\\\" is not the step that is due: the run is at \\"implement\\" (task 1/3). Ask with \\"ct-step next\\".\\n"',
+      detail: 'ct-step exited 9 without announcing a run state; stdout: ""; stderr: "\\\"controls\\\" is not the step that is due: the run is at \\"implement\\" (task 1/3). Ask with \\"ct-step next\\".\\n"',
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
     const entries = await fixture.journal.entries(OracleMother.watch())
@@ -345,12 +521,12 @@ describe('CtRunMachine', () => {
       await expect(readFile(fixture.operation(OracleMother.TICKETS[1], 'receipt.json'), 'utf8'))
         .rejects.toMatchObject({ code: 'ENOENT' })
       fixture.runBytes = '{"step":"implement","task":1}\n'
-      return OracleMother.output(0, OracleMother.nextMarker())
+      return OracleMother.output(0, OracleMother.openTransition())
     })
     fixture.answer(OracleMother.nextArgv(), async () => {
       expect(await readFile(fixture.operation(OracleMother.TICKETS[1], 'receipt.json'), 'utf8')).toBe(
         OracleMother.receipt(
-          OracleMother.output(0, OracleMother.nextMarker()),
+          OracleMother.output(0, OracleMother.openTransition()),
           OracleMother.RUN_BYTES,
           '{"step":"implement","task":1}\n',
         ),
@@ -384,7 +560,7 @@ describe('CtRunMachine', () => {
     const machine = fixture.machine()
     const first = await machine.open(OracleMother.watch())
     expect(first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
-    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.nextMarker()))
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.openTransition()))
 
     await machine.advance(OracleMother.watch(), first)
 
@@ -420,27 +596,6 @@ describe('CtRunMachine', () => {
       detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
-  })
-
-  it('prose keeps its own road while the backend asks for no flag', async () => {
-    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-prose-road-')))
-    roots.push(fixture.root)
-    await fixture.establish()
-    fixture.runBytes = null
-    fixture.answer(OracleMother.nextArgv(), () => {
-      fixture.runBytes = OracleMother.RUN_BYTES
-      return OracleMother.output(0, OracleMother.controlsAnnouncement())
-    })
-    const machine = fixture.machine()
-    const first = await machine.open(OracleMother.watch())
-    expect(first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
-    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.nextMarker()))
-
-    await machine.advance(OracleMother.watch(), first)
-
-    expect(await readFile(fixture.operation(OracleMother.TICKETS[1], 'request.json'), 'utf8')).toBe(
-      OracleMother.request(OracleMother.TICKETS[0], OracleMother.controlsArgv()),
-    )
   })
 
   it('absent establishment defers plan gates until open after publication', async () => {
@@ -506,31 +661,27 @@ describe('CtRunMachine', () => {
   })
 
   it('unsupported slice-agent reconciliation refuses before another next', async () => {
-    for (const output of [
-      OracleMother.unmergeableReconciliation(),
-      OracleMother.committedMarkersReconciliation(),
-    ]) {
-      const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-slice-agent-')))
-      roots.push(fixture.root)
-      await fixture.establish()
-      fixture.runBytes = null
-      fixture.answer(OracleMother.nextArgv(), () => {
-        fixture.runBytes = OracleMother.RUN_BYTES
-        return OracleMother.output(0, OracleMother.reconcileAnnouncement())
-      })
-      fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, output))
-      const machine = fixture.machine()
-      const reconcile = await machine.open(OracleMother.watch())
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-slice-agent-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+    })
+    fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(13, OracleMother.reconcileRefusal()))
+    const machine = fixture.machine()
+    const reconcile = await machine.open(OracleMother.watch())
 
-      expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
-        kind: 'refused',
-        detail: `ct-step requested unsupported slice-agent reconciliation: ${JSON.stringify(output)}`,
-      }))
-      expect(fixture.asked).toEqual([
-        { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
-        { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
-      ])
-    }
+    expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
+      kind: 'refused',
+      detail: 'ct-step refused: the run is blocked-reconcile with outcome failed (exit 13)'
+        + ' — run blocked-reconcile: task 3/3, 0 discard(s)',
+    }))
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
+    ])
   })
 
   it('a pending forked or malformed command chain cannot resume', async () => {
@@ -590,12 +741,23 @@ describe('CtRunMachine', () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-delivered-')))
     roots.push(fixture.root)
     await fixture.establish()
-    const ticket = await fixture.journal.begin(
+    const asked = await fixture.journal.begin(
       OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
     )
     await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const ticket = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
       OracleMother.watch(), ticket,
-      OracleMother.receipt(OracleMother.output(0, OracleMother.delivered()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES),
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.deliveredTransition()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
     )
 
     const machine = fixture.machine()

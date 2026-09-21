@@ -10,6 +10,7 @@ import {
 } from '../domain/ports/run-machine.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
+import { RunAnnouncement, type RunClosure } from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
@@ -355,13 +356,20 @@ class OracleBoundary {
       return OracleResult.refused(`command ${command.ticket} has no receipt and cannot be replayed`)
     }
     const output = command.receipt.output
+    let announcement: RunAnnouncement | null
+    try {
+      announcement = RunAnnouncement.of(output.stdout)
+    } catch (cause) {
+      if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
+      throw cause
+    }
+    if (announcement !== null && announcement.closure !== null) {
+      return OracleBoundary.#closure(announcement, announcement.closure)
+    }
     if (output.code !== 0) {
       return OracleResult.refused(
-        `ct-step exited ${output.code}; stdout: ${JSON.stringify(output.stdout)}; stderr: ${JSON.stringify(output.stderr)}`,
+        `ct-step exited ${output.code} without announcing a run state; stdout: ${JSON.stringify(output.stdout)}; stderr: ${JSON.stringify(output.stderr)}`,
       )
-    }
-    if (OracleBoundary.#delivered(output.stdout)) {
-      return OracleResult.delivered()
     }
     if (output.stdout.includes("DISPATCH THE SLICE'S AGENT (it has Bash)")) {
       return OracleResult.refused(
@@ -409,14 +417,15 @@ class OracleBoundary {
       default:
         return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
     }
-    if (/^next: task \d+\/\d+, step [a-z-]+ — ask with "ct-step next"$/m.test(output.stdout)) {
-      return OracleResult.next()
-    }
     return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
   }
 
-  static #delivered(stdout: string): boolean {
-    return new RegExp(`(?:^|\\n)run ${OracleBoundary.#escape(RUN_STATES.DELIVERED)}:`).test(stdout)
+  static #closure(announcement: RunAnnouncement, closure: RunClosure): OracleResult {
+    if (announcement.kind === ANNOUNCEMENT_KINDS.TRANSITION) {
+      if (closure.state === RUN_STATES.OPEN) return OracleResult.next()
+      if (closure.state === RUN_STATES.DELIVERED) return OracleResult.delivered()
+    }
+    return OracleResult.refused(announcement.diagnostic)
   }
 
   static #fileCall(
@@ -457,10 +466,6 @@ class OracleBoundary {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.command(ticket, announced.argv)
-  }
-
-  static #escape(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 }
 
@@ -721,7 +726,7 @@ export class CtRunMachine extends RunMachine {
   }
 
   #runnerArgv(argv: readonly string[]): readonly string[] {
-    return Object.freeze([this.ctStep, ...argv])
+    return Object.freeze([this.ctStep, ...argv, '--output-format', 'json'])
   }
 
   #runPath(watch: PlanWatch): string {

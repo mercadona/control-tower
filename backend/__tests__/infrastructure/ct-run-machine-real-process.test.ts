@@ -18,7 +18,7 @@ describe('CT run machine real process', () => {
     expect(stale.code).toBe(9)
     expect(stale.instruction.work).toEqual({
       kind: 'refused',
-      detail: expect.stringContaining('ct-step exited 9'),
+      detail: expect.stringContaining('ct-step exited 9 without announcing a run state'),
     })
   })
 
@@ -62,7 +62,7 @@ describe('CT run machine real process', () => {
     expect(evidence.conflictBytes).toContain('<<<<<<<')
     expect(evidence.stagedTaskDiff).toContain('synthetic model response')
     expect(evidence.sliceDiff).toContain('work.txt')
-    expect(evidence.delivered).toContain('run delivered:')
+    expect(evidence.delivered).toContain('"kind":"transition","state":"delivered"')
     expect(evidence.promptPaths).toEqual(evidence.reconciler.consumer.paths)
     expect(evidence.reconciler.consumer.callId).not.toBe('')
     expect(evidence.reconciler.consumer.conversation).toBe(RunDriverMother.CONVERSATION)

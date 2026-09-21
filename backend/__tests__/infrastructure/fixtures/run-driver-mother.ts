@@ -568,6 +568,7 @@ export class RunDriverMother {
         }
       }
       instruction = await calls.step.execute(new ExecuteRunInstructionParams({ watch: this.watch, instruction }))
+      RunDriverMother.#requireAdvance(instruction)
     }
   }
 
@@ -615,6 +616,7 @@ export class RunDriverMother {
         }
       }
       const next = await calls.step.execute(new ExecuteRunInstructionParams({ watch: this.watch, instruction }))
+      RunDriverMother.#requireAdvance(next)
       if (next.work.kind === 'delivered') {
         if (reconciler === null) throw new Error('reconciler producer material was not captured')
         const crossing = await this.#crossing(reconciler)
@@ -685,7 +687,7 @@ export class RunDriverMother {
           const receipt = JSON.parse(
             await readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8'),
           ) as { stdout: string }
-          if (receipt.stdout.includes('run delivered:')) return receipt.stdout
+          if (receipt.stdout.includes('"kind":"transition","state":"delivered"')) return receipt.stdout
         }
         return null
       } catch (cause) {
@@ -1511,6 +1513,12 @@ export class RunDriverMother {
 
   static hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
+  }
+
+  static #requireAdvance(instruction: RunInstruction): void {
+    if (instruction.work.kind === 'refused') {
+      throw new Error(`the real run refused instead of advancing: ${instruction.work.detail}`)
+    }
   }
 
   static async #until<T>(read: () => Promise<T | null>, diagnostic: () => string): Promise<T> {

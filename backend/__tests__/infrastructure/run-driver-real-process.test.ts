@@ -62,7 +62,7 @@ describe('run driver real process', () => {
     expect(evidence.attemptSteps).toEqual(evidence.consumingSteps)
     expect(evidence.pullRequestRefusals).toHaveLength(3)
     expect(evidence.pullRequestRefusals.every((stderr) => stderr.includes('unlisted gh request'))).toBe(true)
-    expect(evidence.delivered).toContain('run delivered:')
+    expect(evidence.delivered).toContain('"kind":"transition","state":"delivered"')
     expect(evidence.publication).toContain(`Source: ${RunDriverMother.PLAN}`)
     const owned = fixture.holdOwnedProcess()
     await fixture.dispose()

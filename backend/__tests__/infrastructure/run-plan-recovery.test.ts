@@ -1385,6 +1385,7 @@ class FiniteBridge {
     const reportArgv = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'report', response, '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const nextArgv = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
@@ -1400,7 +1401,8 @@ class FiniteBridge {
         run.bytes = '{"task":1,"step":"judge"}\n'
         return new ProcessOutput({
           code: 0,
-          stdout: 'implement: accepted\n\nnext: task 1/1, step judge — ask with "ct-step next"\n',
+          stdout: '{"version":1,"kind":"transition","state":"open","outcome":"done","exit":0,'
+            + '"run":{"issue":332,"task":1,"tasksTotal":1,"step":"implement","discards":0}}\n',
           stderr: '',
         })
       }
