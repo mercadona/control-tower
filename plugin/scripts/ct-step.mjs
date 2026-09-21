@@ -73,11 +73,11 @@ import { PluginManifest } from './plugin-manifest.js'
 import {
   readVerdict, readReport, outcomeOfVerdict, commitMessage, findingLocation,
   readE2eReport, E2E_SCHEMA,
-  IMPLEMENTER_TOOLS, IMPLEMENTER_MODEL, JUDGE_TOOLS, PACKAGE_SECTIONS,
+  PACKAGE_SECTIONS,
   readSliceVerdict, outcomeOfSliceVerdict, sliceVerdictCommitMessage,
-  SLICE_JUDGE_TOOLS, SLICE_PACKAGE_SECTIONS, RECONCILER_TOOLS,
+  SLICE_PACKAGE_SECTIONS, RECONCILER_TOOLS,
   REVIEW_TOKEN_LABEL, reviewToken, reviewTokenLine, reviewTokenOf,
-  readAdvice, ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS,
+  readAdvice, ADVICE_PACKAGE_SECTIONS,
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { ControlTowerState } from './control-tower-state.js'
@@ -102,8 +102,12 @@ import { StepSeal } from './dispatch-gate.js'
 // Slice 1, Task 3: the structured announcement `next` prints under
 // `--output-format json`, alongside (not instead of) the prose. Pure module,
 // no disk and no process of its own — see step-announcement.js.
-import { StepAnnouncement, AnnouncedResponse, INPUT_ROLES } from './step-announcement.js'
+import { StepAnnouncement, AnnouncedResponse, AnnouncedInput, INPUT_ROLES, INPUT_KINDS } from './step-announcement.js'
+// Slice 2: the announcement of a dispatch step is the SOURCE, and the prose is
+// written out of it. Every heading, label and consuming verb of those steps
+// lives in step-prose.js, once, and this file no longer types any of them.
 import { DispatchProse } from './step-prose.js'
+import { AgentDefinition } from './judge-agent-definition.js'
 
 const PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -404,6 +408,22 @@ const currentTask = () => tasks.find((t) => t.n === run.task)
 // this run's own `--plan`/`--issue` — the same two flags every verb of this
 // program already requires.
 const consumingArgv = (verb, ...positional) => [verb, ...positional, '--plan', planPath, '--issue', String(issue)]
+// The name of the subagent a dispatch step announces, taken from the agent
+// definition on disk — the file `RoleBytes` already locates for every
+// dispatching step, and the same bytes the backend parses. A map of step to
+// name here would be that partition written twice, which is precisely the
+// duplication this slice removes. A definition that cannot be parsed stops
+// `next` through the top-level handler, and the backend refuses the same file
+// for the same reason.
+const announcedAgent = (step) => AgentDefinition.parse(readFileSync(join(PLUGIN_ROOT, RoleBytes.filesOf(step)[0]), 'utf8')).name
+// One optional input: present it as its one element, or as no element at all.
+// There is no sentinel any more — an absent input leaves no element in the
+// announcement and no line in the prose.
+const announcedIfPresent = (role, path) => (path ? [new AnnouncedInput({ role, kind: INPUT_KINDS.LITERAL, path })] : [])
+// `DispatchProse.render` hands back three parts: the heading, the material
+// lines and the consuming line. The first two go out together; the third goes
+// where each step already printed it, after whatever else it has to say.
+const outProseMaterial = (prose) => { out(prose.heading); for (const line of prose.material) out(line) }
 
 // ---------------------------------------------------------------------------
 // The telemetry: append-only, TWO destinations, and a failure of its own brings
@@ -605,34 +625,47 @@ function nextVerb() {
   } else {
     out(`task ${run.task}/${run.tasksTotal} — ${t.name}`)
   }
-  out(`step: ${run.step} (attempt ${currentAttempt()})`)
+  out(DispatchProse.stepLine(run.step, currentAttempt()))
   out('')
   // Slice 1, Task 3: the announcement is built on BOTH roads — with the flag
   // off included — and only PRINTED under the flag. Building it always is
   // deliberate: a step this program cannot announce reddens the whole
-  // existing suite, not one flagged run, which is what keeps the contract
-  // honest while nothing reads it yet.
+  // existing suite, not one flagged run.
+  //
+  // Slice 2, Task 3: at a dispatch step it is no longer a contract nothing
+  // reads. The prose of that step is RENDERED from it, so the structure is the
+  // one source and both roads carry one value — reword `step-prose.js` and the
+  // two move together, because there is nothing typed here left to diverge.
   let announcement
   const stepRunFields = { issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, attempt: currentAttempt() }
   switch (run.step) {
     case STEPS.IMPLEMENT: {
       const brief = writeBrief()
       const reportPath = join(workDir, `task-${run.task}-report.json`)
-      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, reportPath) })
-      // The list comes out of the constant and is not typed again: the hand copy
-      // of the judge's already diverged once, and `ct-step next` ended up
-      // announcing tools that were not those of the agent being dispatched.
-      out(`DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:`)
-      out(`  - the rubric from ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
-      out(`  - the task's brief: ${brief}`)
-      out(`  - that it write its report to: ${reportPath}`)
+      // §2: the implementer carries NO agent name — its declared material is a
+      // prompt, not a subagent definition.
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.RUBRIC, kind: INPUT_KINDS.LITERAL, path: join(PLUGIN_ROOT, 'prompts', 'task-implementer.md') }),
+          new AnnouncedInput({ role: INPUT_ROLES.BRIEF, kind: INPUT_KINDS.LITERAL, path: brief }),
+        ],
+        response: AnnouncedResponse.of(run.step, reportPath),
+        consuming: { argv: consumingArgv('report', reportPath) },
+      })
+      // The heading and the labels come out of the announcement, not out of a
+      // template typed here: the hand copy of the judge's already diverged
+      // once, and `ct-step next` ended up announcing tools that were not those
+      // of the agent being dispatched.
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       if (run.lastFindings) {
         out('')
         out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
       }
       out('')
-      out(`When it comes back:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       out('Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.')
       break
     }
@@ -648,18 +681,25 @@ function nextVerb() {
       const packagePath = writeReviewPackage()
       const judgeBrief = writeJudgeBrief()
       const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
-      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, verdictPath) })
-      out(`DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`)
-      out(`  - the review package: ${packagePath}`)
-      out(`  - the task's brief: ${judgeBrief}`)
-      out(`  - the logs of the controls, ALREADY green, in case it wants them: ${run.lastControlsLog ?? '(none)'}`)
-      out(`  - that it write its verdict to: ${verdictPath}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath }),
+          new AnnouncedInput({ role: INPUT_ROLES.BRIEF, kind: INPUT_KINDS.LITERAL, path: judgeBrief }),
+          ...announcedIfPresent(INPUT_ROLES.CONTROLS_LOG, run.lastControlsLog),
+        ],
+        response: AnnouncedResponse.of(run.step, verdictPath),
+        consuming: { argv: consumingArgv('verdict', verdictPath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       // The `review_token` is NOT asked of it: this program writes it when it
       // reads the verdict, with the value it computed itself. Asking the judge
       // for it meant asking it to copy 64 hex characters from a line the program
       // had just written, and one copying slip cost a whole opus verdict.
       out('')
-      out(`When it comes back:  ct-step verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       out('Do not pass it the OUTPUT of the controls: a dirty lint must not dirty its judgement.')
       break
     }
@@ -670,13 +710,18 @@ function nextVerb() {
     case STEPS.ADVISE: {
       const packagePath = writeAdviceReviewPackage()
       const advicePath = join(workDir, `task-${run.task}-advice.json`)
-      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, advicePath) })
-      out(`DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`)
-      out(`  - the advisor's package: ${packagePath}`)
-      out(`  - that it write its advice to: ${advicePath}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath })],
+        response: AnnouncedResponse.of(run.step, advicePath),
+        consuming: { argv: consumingArgv('advice', advicePath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       out('')
       out("The judge has vetoed this task twice. On accepting the advice, the program returns the tree to the last commit for the task's paths and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
-      out(`When it comes back:  ct-step advice ${advicePath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       break
     }
     case STEPS.COMMIT:
@@ -724,15 +769,22 @@ function nextVerb() {
     case STEPS.SLICE_JUDGE: {
       const packagePath = writeSliceReviewPackage()
       const verdictPath = join(workDir, 'slice-verdict.json')
-      announcement = StepAnnouncement.dispatch({ ...stepRunFields, response: AnnouncedResponse.of(run.step, verdictPath) })
-      out(`DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`)
-      out(`  - the slice's review package: ${packagePath}`)
-      out(`  - the plan: ${planPath}`)
-      out(`  - the log of the Global verification, ALREADY green, in case it wants it: ${run.lastGlobalLog ?? '(N/A declared)'}`)
-      out(`  - the verdict of every task, already committed: docs/superpowers/verdicts/issue-${issue}-task-*.json`)
-      out(`  - that it write its verdict to: ${verdictPath}`)
-        out('')
-      out(`When it comes back:  ct-step slice-verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath }),
+          new AnnouncedInput({ role: INPUT_ROLES.PLAN, kind: INPUT_KINDS.LITERAL, path: planPath }),
+          ...announcedIfPresent(INPUT_ROLES.GLOBAL_LOG, run.lastGlobalLog),
+          new AnnouncedInput({ role: INPUT_ROLES.VERDICTS, kind: INPUT_KINDS.GLOB, path: `docs/superpowers/verdicts/issue-${issue}-task-*.json` }),
+        ],
+        response: AnnouncedResponse.of(run.step, verdictPath),
+        consuming: { argv: consumingArgv('slice-verdict', verdictPath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
+      out('')
+      out(prose.consuming)
       break
     }
     case STEPS.E2E:

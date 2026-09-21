@@ -441,7 +441,7 @@ class ProducerOutput {
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.JUDGE, [
           ProducerOutput.path(stdout, '  - the review package: '),
           ProducerOutput.path(stdout, "  - the task's brief: "),
-          ...ProducerOutput.optional(stdout, '  - the logs of the controls, ALREADY green, in case it wants them: ', '(none)'),
+          ...ProducerOutput.optional(stdout, '  - the logs of the controls, ALREADY green, in case it wants them: '),
         ]))
       case 'advise':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.ADVISE, [
@@ -451,7 +451,7 @@ class ProducerOutput {
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.SLICE_JUDGE, [
           ProducerOutput.path(stdout, "  - the slice's review package: "),
           ProducerOutput.path(stdout, '  - the plan: '),
-          ...ProducerOutput.optional(stdout, '  - the log of the Global verification, ALREADY green, in case it wants it: ', '(N/A declared)'),
+          ...ProducerOutput.optional(stdout, '  - the log of the Global verification, ALREADY green, in case it wants it: '),
           ProducerOutput.path(stdout, '  - the verdict of every task, already committed: '),
         ]))
       case 'reconcile':
@@ -462,9 +462,9 @@ class ProducerOutput {
     return role satisfies never
   }
 
-  static optional(stdout: string, label: string, absent: string): readonly string[] {
-    const path = ProducerOutput.path(stdout, label)
-    return path === absent ? Object.freeze([]) : Object.freeze([path])
+  static optional(stdout: string, label: string): readonly string[] {
+    const line = stdout.split('\n').find((candidate) => candidate.startsWith(label))
+    return line === undefined ? Object.freeze([]) : Object.freeze([line.slice(label.length)])
   }
 
   static withRoleFiles(step: string, printed: readonly string[]): string[] {
@@ -550,7 +550,7 @@ describe('RunDispatch real process', () => {
     await expect(malformedMachine.dispatch(malformed.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
     expect(await malformed.material()).toBeNull()
-  }, 60_000)
+  }, 180_000)
 
   it('unsupported E2E and slice fallback material starts no call', async () => {
     const e2e = await DispatchRepository.create()

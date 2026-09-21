@@ -5,8 +5,8 @@ import { isAbsolute, join } from 'node:path'
 import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.js'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
-import { RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
-import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
+import { INPUT_ROLES, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
+import { DispatchMaterialRead, DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import {
   ADVICE_SCHEMA,
   ADVISOR_TOOLS,
@@ -175,23 +175,20 @@ export class RunDispatch {
     if (asked.stdout.includes('DISPATCH ct-reconciler') || asked.stdout.includes('REDISPATCH ct-reconciler')) {
       return RunDispatch.#edits(asked)
     }
-    const step = /^step: ([a-z-]+) \(attempt \d+\)$/m.exec(asked.stdout)?.[1]
+    const step = DispatchProse.stepOf(asked.stdout)
     switch (step) {
-      case STEPS.IMPLEMENT:
-        const rubric = RunDispatch.#literal(asked.stdout, '  - the rubric from ')
+      case STEPS.IMPLEMENT: {
+        const material = RunDispatch.#read(asked.stdout, step)
+        const rubric = RunDispatch.#pathOf(material, INPUT_ROLES.RUBRIC)
         const declaredRubric = join(asked.pluginRoot, RoleBytes.filesOf(step)[0])
-        if (rubric.path !== declaredRubric) {
-          throw new RunNotUnderstood(`the printed implementer rubric ${rubric.path} does not match ${declaredRubric}`)
+        if (rubric !== declaredRubric) {
+          throw new RunNotUnderstood(`the printed implementer rubric ${rubric} does not match ${declaredRubric}`)
         }
         return RunDispatch.#structured({
           role: 'implement',
           step,
-          stdout: asked.stdout,
-          command: asked.command,
+          material,
           pluginRoot: asked.pluginRoot,
-          announced: `DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:`,
-          inputs: [rubric, RunDispatch.#literal(asked.stdout, "  - the task's brief: ")],
-          responseLabel: '  - that it write its report to: ',
           argv: [
             '--tools', IMPLEMENTER_TOOLS,
             '--allowedTools', IMPLEMENTER_TOOLS,
@@ -199,52 +196,32 @@ export class RunDispatch {
             '--json-schema', JSON.stringify(REPORT_SCHEMA),
           ],
         })
+      }
       case STEPS.JUDGE:
         return RunDispatch.#defined({
           role: 'judge',
           step,
-          stdout: asked.stdout,
-          command: asked.command,
+          material: RunDispatch.#read(asked.stdout, step),
           pluginRoot: asked.pluginRoot,
           tools: JUDGE_TOOLS,
-          announced: `DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`,
-          inputs: [
-            RunDispatch.#literal(asked.stdout, '  - the review package: '),
-            RunDispatch.#literal(asked.stdout, "  - the task's brief: "),
-            ...RunDispatch.#optionalLiteral(asked.stdout, '  - the logs of the controls, ALREADY green, in case it wants them: ', '(none)'),
-          ],
-          responseLabel: '  - that it write its verdict to: ',
           schema: null,
         })
       case STEPS.ADVISE:
         return RunDispatch.#defined({
           role: 'advise',
           step,
-          stdout: asked.stdout,
-          command: asked.command,
+          material: RunDispatch.#read(asked.stdout, step),
           pluginRoot: asked.pluginRoot,
           tools: ADVISOR_TOOLS,
-          announced: `DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`,
-          inputs: [RunDispatch.#literal(asked.stdout, "  - the advisor's package: ")],
-          responseLabel: '  - that it write its advice to: ',
           schema: ADVICE_SCHEMA,
         })
       case STEPS.SLICE_JUDGE:
         return RunDispatch.#defined({
           role: 'slice-judge',
           step,
-          stdout: asked.stdout,
-          command: asked.command,
+          material: RunDispatch.#read(asked.stdout, step),
           pluginRoot: asked.pluginRoot,
           tools: SLICE_JUDGE_TOOLS,
-          announced: `DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`,
-          inputs: [
-            RunDispatch.#literal(asked.stdout, "  - the slice's review package: "),
-            RunDispatch.#literal(asked.stdout, '  - the plan: '),
-            ...RunDispatch.#optionalLiteral(asked.stdout, '  - the log of the Global verification, ALREADY green, in case it wants it: ', '(N/A declared)'),
-            RunDispatch.#glob(asked.stdout, '  - the verdict of every task, already committed: '),
-          ],
-          responseLabel: '  - that it write its verdict to: ',
           schema: null,
         })
       case STEPS.E2E:
@@ -257,7 +234,7 @@ export class RunDispatch {
           throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${JSON.stringify(asked.stdout)}`)
         }
         return RunDispatch.#edits(asked)
-      case undefined:
+      case null:
         throw new RunNotUnderstood(`ct-step output has no dispatch role: ${JSON.stringify(asked.stdout)}`)
       default:
         throw new RunNotUnderstood(`ct-step requested unsupported ${step} material`)
@@ -267,37 +244,26 @@ export class RunDispatch {
   static #structured(asked: {
     role: 'implement',
     step: string,
-    stdout: string,
-    command: RunConsumingCommand,
+    material: DispatchMaterialRead,
     pluginRoot: string,
-    announced: string,
-    inputs: readonly DispatchInput[],
-    responseLabel: string,
     argv: readonly string[],
   }): DispatchMaterial {
-    RunDispatch.#requireAnnouncement(asked.stdout, asked.announced)
-    const response = RunDispatch.#response(asked.step, asked.stdout, asked.responseLabel, asked.command)
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, asked.inputs),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material)),
       argv: Object.freeze([...asked.argv]),
-      response,
+      response: RunDispatch.#response(asked.step, asked.material),
     })
   }
 
   static #defined(asked: {
     role: Exclude<RunRole, 'implement' | 'reconcile'>,
     step: string,
-    stdout: string,
-    command: RunConsumingCommand,
+    material: DispatchMaterialRead,
     pluginRoot: string,
     tools: string,
-    announced: string,
-    inputs: readonly DispatchInput[],
-    responseLabel: string,
     schema: object | null,
   }): DispatchMaterial {
-    RunDispatch.#requireAnnouncement(asked.stdout, asked.announced)
     const files = RoleBytes.filesOf(asked.step)
     const definition = RunDispatch.#definition(join(asked.pluginRoot, files[0]))
     const tools = definition.tools.join(', ')
@@ -314,9 +280,9 @@ export class RunDispatch {
     if (asked.schema !== null) argv.push('--json-schema', JSON.stringify(asked.schema))
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, asked.inputs),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material)),
       argv: Object.freeze(argv),
-      response: RunDispatch.#response(asked.step, asked.stdout, asked.responseLabel, asked.command),
+      response: RunDispatch.#response(asked.step, asked.material),
     })
   }
 
@@ -348,19 +314,37 @@ export class RunDispatch {
 
   static #reconciliationInputs(stdout: string): readonly DispatchInput[] {
     try {
-      return DispatchProse.read({ stdout, step: STEPS.RECONCILE }).inputs.map(
-        (input: { kind: string, path: string }): DispatchInput => {
-          if (input.kind === 'literal') return Object.freeze({ kind: 'literal', path: input.path })
-          if (input.kind === 'glob') return Object.freeze({ kind: 'glob', path: input.path })
-          throw new RunNotUnderstood(`the reconciliation input kind "${input.kind}" is not supported`)
-        },
-      )
+      return RunDispatch.#inputsOf(DispatchProse.read({ stdout, step: STEPS.RECONCILE }))
     } catch (cause) {
       if (cause instanceof UnreadableStepProse) {
         throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${cause.detail}`)
       }
       throw cause
     }
+  }
+
+  static #read(stdout: string, step: string): DispatchMaterialRead {
+    try {
+      return DispatchProse.read({ stdout, step })
+    } catch (cause) {
+      if (cause instanceof UnreadableStepProse) {
+        throw new RunNotUnderstood(`ct-step output has no readable ${step} material: ${cause.detail}`)
+      }
+      throw cause
+    }
+  }
+
+  static #inputsOf(material: DispatchMaterialRead): readonly DispatchInput[] {
+    return material.inputs.map((input: { kind: string, path: string }): DispatchInput => {
+      if (input.kind === 'literal') return Object.freeze({ kind: 'literal', path: input.path })
+      if (input.kind === 'glob') return Object.freeze({ kind: 'glob', path: input.path })
+      throw new RunNotUnderstood(`the dispatch input kind "${input.kind}" is not supported`)
+    })
+  }
+
+  static #pathOf(material: DispatchMaterialRead, role: string): string | null {
+    const input = material.inputs.find((candidate: { role: string }) => candidate.role === role)
+    return input === undefined ? null : input.path
   }
 
   static #withRoleFiles(step: string, pluginRoot: string, inputs: readonly DispatchInput[]): readonly DispatchInput[] {
@@ -375,45 +359,14 @@ export class RunDispatch {
     return Object.freeze(material)
   }
 
-  static #literal(stdout: string, label: string): DispatchInput {
-    return Object.freeze({ kind: 'literal', path: RunDispatch.#printed(stdout, label) })
-  }
-
-  static #glob(stdout: string, label: string): DispatchInput {
-    return Object.freeze({ kind: 'glob', path: RunDispatch.#printed(stdout, label) })
-  }
-
-  static #optionalLiteral(stdout: string, label: string, absent: string): readonly DispatchInput[] {
-    const path = RunDispatch.#printed(stdout, label)
-    return path === absent ? Object.freeze([]) : Object.freeze([{ kind: 'literal', path }])
-  }
-
-  static #printed(stdout: string, label: string): string {
-    const values = stdout.split('\n').filter((line) => line.startsWith(label)).map((line) => line.slice(label.length))
-    if (values.length !== 1 || values[0].length === 0 || values[0].includes('\0')) {
-      throw new RunNotUnderstood(`ct-step output has no unique ${JSON.stringify(label)} path: ${JSON.stringify(stdout)}`)
-    }
-    return values[0]
-  }
-
-  static #response(step: string, stdout: string, label: string, command: RunConsumingCommand): RunResponse {
-    const announced = RunDispatch.#printed(stdout, label)
-    if (command.responsePath === null || command.responsePath !== announced) {
-      throw new RunNotUnderstood('the announced response path conflicts with the consuming command')
-    }
+  static #response(step: string, material: DispatchMaterialRead): RunResponse {
     switch (RESPONSE_KIND_BY_STEP[step]) {
       case RESPONSE_KINDS.FILE:
-        return Object.freeze({ kind: 'file', path: announced })
+        return Object.freeze({ kind: 'file', path: material.response.path })
       case RESPONSE_KINDS.STRUCTURED:
-        return Object.freeze({ kind: 'structured', path: announced })
+        return Object.freeze({ kind: 'structured', path: material.response.path })
       default:
         throw new RunNotUnderstood(`the step "${step}" does not answer through a printed response path`)
-    }
-  }
-
-  static #requireAnnouncement(stdout: string, announcement: string): void {
-    if (stdout.split('\n').filter((line) => line === announcement).length !== 1) {
-      throw new RunNotUnderstood(`ct-step output has incompatible role material: ${JSON.stringify(stdout)}`)
     }
   }
 
