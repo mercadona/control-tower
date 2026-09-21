@@ -86,21 +86,6 @@ describe('DispatchProse.render writes the prose from the announcement', () => {
     ])
   })
 
-  it('a consuming argv element with whitespace makes render refuse', () => {
-    const announcement = StepAnnouncement.dispatch({
-      issue: 42,
-      task: 1,
-      tasksTotal: 3,
-      step: STEPS.JUDGE,
-      attempt: 1,
-      inputs: [packageInput, briefInput],
-      response: AnnouncedResponse.of(STEPS.JUDGE, '.agent/task-1-verdict.json'),
-      consuming: { argv: ['verdict', '.agent/task-1-verdict.json', '--plan', 'plan file.md', '--issue', '42'] },
-    })
-
-    expect(() => DispatchProse.render(announcement)).toThrow(UnreadableStepProse)
-  })
-
   it('a reconcile dispatch with no declared heading or response label makes render refuse', () => {
     const announcement = StepAnnouncement.dispatch({
       issue: 42,
@@ -158,6 +143,41 @@ describe('DispatchProse.read parses the prose back into the material an announce
     const material = [...lines.material]
     material[0] = '  - the review package: '
     const stdout = [lines.heading, ...material, lines.consuming].join('\n')
+
+    expect(() => DispatchProse.read({ stdout, step: STEPS.JUDGE })).toThrow(UnreadableStepProse)
+  })
+
+  it('a consuming argv element with a space survives the round trip', () => {
+    const announcement = StepAnnouncement.dispatch({
+      issue: 42,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.JUDGE,
+      attempt: 1,
+      inputs: [packageInput, briefInput],
+      response: AnnouncedResponse.of(STEPS.JUDGE, '/tmp/ct step/.agent/run-42/task-1-verdict.json'),
+      consuming: { argv: ['verdict', '/tmp/ct step/.agent/run-42/task-1-verdict.json', '--plan', 'plan.md', '--issue', '42'] },
+    })
+    const lines = DispatchProse.render(announcement)
+    expect(lines.consuming).toBe('When it comes back:  ct-step verdict /tmp/ct step/.agent/run-42/task-1-verdict.json --plan plan.md --issue 42')
+    const stdout = [lines.heading, ...lines.material, lines.consuming].join('\n')
+
+    const read = DispatchProse.read({ stdout, step: STEPS.JUDGE })
+
+    expect(read.response).toEqual({
+      kind: RESPONSE_KIND_OF_STEP[STEPS.JUDGE],
+      path: '/tmp/ct step/.agent/run-42/task-1-verdict.json',
+    })
+    expect(read.consuming).toEqual({
+      argv: ['verdict', '/tmp/ct step/.agent/run-42/task-1-verdict.json', '--plan', 'plan.md', '--issue', '42'],
+    })
+  })
+
+  it('a consuming line whose positional is not the response path is refused', () => {
+    const announcement = DispatchAnnouncements.judge([packageInput, briefInput])
+    const lines = DispatchProse.render(announcement)
+    const forgedConsuming = 'When it comes back:  ct-step verdict .agent/forged-verdict.json --plan .agent/task-1-verdict.json --issue 42'
+    const stdout = [lines.heading, ...lines.material, forgedConsuming].join('\n')
 
     expect(() => DispatchProse.read({ stdout, step: STEPS.JUDGE })).toThrow(UnreadableStepProse)
   })

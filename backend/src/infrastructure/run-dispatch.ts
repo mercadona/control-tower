@@ -335,6 +335,9 @@ export class RunDispatch {
   }
 
   static #response(step: string, material: DispatchMaterialRead): RunResponse {
+    if (material.consuming === null || material.consuming.argv[1] !== material.response.path) {
+      throw new RunNotUnderstood('the announced response path conflicts with the consuming command')
+    }
     switch (RESPONSE_KIND_BY_STEP[step]) {
       case RESPONSE_KINDS.FILE:
         return Object.freeze({ kind: 'file', path: material.response.path })

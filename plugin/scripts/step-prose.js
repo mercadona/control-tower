@@ -97,7 +97,6 @@ export class DispatchProse {
     if (!heading || !responseLabel) {
       throw new UnreadableStepProse(`the step "${step}" declares no dispatch prose`)
     }
-    DispatchProse.#requireNoWhitespaceInArgv(consuming.argv, step)
     const material = (dispatch.inputs || []).map((input) => DispatchProse.inputLine(step, input.role, input.path))
     material.push(responseLabel + dispatch.response.path)
     return new StepProseLines({
@@ -156,12 +155,13 @@ export class DispatchProse {
     if (consumingMatches.length !== 1) {
       throw new UnreadableStepProse(`the consuming line appears ${consumingMatches.length} times, not once`)
     }
-    const argv = DispatchProse.#valueOf(consumingMatches[0], DispatchProse.CONSUMING_PREFIX, 'the consuming line').split(' ')
-    if (!argv.includes(response.path)) {
-      throw new UnreadableStepProse(`the consuming argv names no path that matches the declared response "${response.path}"`)
-    }
+    const command = DispatchProse.#valueOf(consumingMatches[0], DispatchProse.CONSUMING_PREFIX, 'the consuming line')
 
-    return new DispatchMaterialRead({ inputs, response, consuming: { argv } })
+    return new DispatchMaterialRead({
+      inputs,
+      response,
+      consuming: { argv: DispatchProse.#consumingArgv(command, response.path) },
+    })
   }
 
   static inputLine(step, role, path) {
@@ -177,16 +177,23 @@ export class DispatchProse {
     return match ? match[1] : null
   }
 
+  static #consumingArgv(command, responsePath) {
+    const verbEnd = command.indexOf(' ')
+    if (verbEnd === -1) {
+      throw new UnreadableStepProse(`the consuming line "${command}" names no response path after its verb`)
+    }
+    const verb = command.slice(0, verbEnd)
+    const positional = `${verb} ${responsePath}`
+    if (command !== positional && !command.startsWith(`${positional} `)) {
+      throw new UnreadableStepProse(`the consuming line does not carry the declared response "${responsePath}" as its positional`)
+    }
+    const flags = command.slice(positional.length)
+    return [verb, responsePath, ...(flags === '' ? [] : flags.slice(1).split(' '))]
+  }
+
   static #requireOnce(lines, exact, label) {
     const count = lines.filter((line) => line === exact).length
     if (count !== 1) throw new UnreadableStepProse(`${label} appears ${count} times, not once`)
-  }
-
-  static #requireNoWhitespaceInArgv(argv, step) {
-    const withWhitespace = argv.find((element) => /\s/.test(element))
-    if (withWhitespace !== undefined) {
-      throw new UnreadableStepProse(`the consuming argv of step "${step}" carries an element with whitespace: "${withWhitespace}"`)
-    }
   }
 
   static #valueOf(line, prefix, label) {

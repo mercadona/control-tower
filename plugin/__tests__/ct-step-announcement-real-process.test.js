@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { join } from 'node:path'
-import { realpathSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { realpathSync, renameSync } from 'node:fs'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
@@ -279,6 +279,30 @@ describe('ct-step next answers with the announcement under --output-format json'
       run: { issue: 7, task: 2, tasksTotal: 2, step: 'e2e', attempt: 1 },
       commands: [],
       consuming: { argv: ['e2e', '<file.json>', '--plan', 'plan.md', '--issue', '7'] },
+    })
+  })
+})
+
+describe('ct-step next in a checkout whose directory name carries a space', () => {
+  beforeEach(() => {
+    const spaced = join(dirname(repo), `${basename(repo)} with a space`)
+    renameSync(repo, spaced)
+    repo = spaced
+  })
+
+  it('a dispatch step announces and prints in a checkout whose path holds a space', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+
+    const prose = ct('next')
+    const announced = ct('next', '--output-format', 'json')
+
+    const verdict = join(realpathSync(repo), '.agent', 'run-7', 'task-1-verdict.json')
+    expect(prose.status).toBe(0)
+    expect(prose.stdout).toContain(`When it comes back:  ct-step verdict ${verdict} --plan plan.md --issue 7`)
+    expect(announced.status).toBe(0)
+    expect(JSON.parse(announced.stdout).consuming).toEqual({
+      argv: ['verdict', verdict, '--plan', 'plan.md', '--issue', '7'],
     })
   })
 })
