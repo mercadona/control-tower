@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
+import { ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION } from '../../../plugin/scripts/step-announcement.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import {
   RunEstablishment, RunMachine, type RunEstablishmentValue,
@@ -291,6 +292,62 @@ class JsonContract {
   }
 }
 
+export class AnnouncedStep {
+  readonly step: string
+  readonly commands: readonly string[] | null
+  readonly argv: readonly string[]
+  readonly responseKind: string | null
+
+  private constructor(asked: {
+    step: string,
+    commands: readonly string[] | null,
+    argv: readonly string[],
+    responseKind: string | null,
+  }) {
+    this.step = asked.step
+    this.commands = asked.commands
+    this.argv = asked.argv
+    this.responseKind = asked.responseKind
+    Object.freeze(this)
+  }
+
+  static read(stdout: string): AnnouncedStep | null {
+    let value: unknown
+    try {
+      value = JSON.parse(stdout)
+    } catch {
+      return null
+    }
+    const announcement = AnnouncedStep.#object(value)
+    if (announcement === undefined
+      || announcement.version !== ANNOUNCEMENT_VERSION
+      || announcement.kind !== ANNOUNCEMENT_KINDS.STEP) {
+      return null
+    }
+    const step = AnnouncedStep.#object(announcement.run)?.step
+    if (typeof step !== 'string') return null
+    const commands = AnnouncedStep.#stringArray(announcement.commands)
+    const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
+    const responseKindField = AnnouncedStep.#object(AnnouncedStep.#object(announcement.dispatch)?.response)?.kind
+    return new AnnouncedStep({
+      step,
+      commands,
+      argv,
+      responseKind: typeof responseKindField === 'string' ? responseKindField : null,
+    })
+  }
+
+  static #object(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  }
+
+  static #stringArray(value: unknown): readonly string[] | null {
+    return Array.isArray(value) ? Object.freeze([...value]) as readonly string[] : null
+  }
+}
+
 class OracleBoundary {
   static read(command: JournalCommand, manifest: RunManifest): OracleResult {
     if (command.receipt === null) {
@@ -325,7 +382,8 @@ class OracleBoundary {
         throw cause
       }
     }
-    const step = /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
+    const step = AnnouncedStep.read(output.stdout)?.step
+      ?? /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
     switch (step) {
       case STEPS.IMPLEMENT:
         return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.IMPLEMENT, 'report')
@@ -389,12 +447,23 @@ class OracleBoundary {
     step: string,
     verb: string,
   ): OracleResult {
+    const announced = AnnouncedStep.read(stdout)
+    if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step, verb)
     const expected = `ct-step ${verb} --plan ${manifest.plan} --issue ${manifest.issue}`
     if (!stdout.split('\n').some((line) => line.trim() === expected || line === `Run it with:  ${expected}`)
       || !stdout.includes(`step: ${step} (`)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.command(ticket, [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)])
+  }
+
+  static #announcedCommand(
+    stdout: string, announced: AnnouncedStep, ticket: string, step: string, verb: string,
+  ): OracleResult {
+    if (announced.step !== step || announced.commands === null || announced.argv[0] !== verb) {
+      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
+    }
+    return OracleResult.command(ticket, announced.argv)
   }
 
   static #escape(value: string): string {

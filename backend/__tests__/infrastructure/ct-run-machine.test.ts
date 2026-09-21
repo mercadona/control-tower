@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { STEPS } from '../../../plugin/scripts/run-machine.js'
+import { StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { RunEstablishment } from '../../src/domain/ports/run-machine.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -123,6 +125,18 @@ class OracleMother {
 
   static controlsAnnouncement(): string {
     return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 332\n`
+  }
+
+  static controlsAnnouncementJson(): string {
+    return StepAnnouncement.program({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.CONTROLS,
+      attempt: 1,
+      commands: ['npm run lint', 'npm test'],
+      consuming: { argv: OracleMother.controlsArgv().slice(1) },
+    }).text()
   }
 
   static implementAnnouncement(): string {
@@ -336,6 +350,77 @@ describe('CtRunMachine', () => {
     const effects = fixture.asked.length
     expect(await machine.advance(OracleMother.watch(), first)).toEqual(next)
     expect(fixture.asked).toHaveLength(effects)
+  })
+
+  it('the announced controls step hands over the argv it published', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncementJson())
+    })
+    const machine = fixture.machine()
+    const first = await machine.open(OracleMother.watch())
+    expect(first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.nextMarker()))
+
+    await machine.advance(OracleMother.watch(), first)
+
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[1], 'request.json'), 'utf8')).toBe(
+      OracleMother.request(OracleMother.TICKETS[0], OracleMother.controlsArgv()),
+    )
+  })
+
+  it('an announced step with no consuming argv is refused instead of run', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-no-argv-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = StepAnnouncement.program({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.CONTROLS,
+      attempt: 1,
+      commands: ['npm run lint', 'npm test'],
+      consuming: undefined,
+    }).text()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+    const machine = fixture.machine()
+
+    const first = await machine.open(OracleMother.watch())
+
+    expect(first.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('prose keeps its own road while the backend asks for no flag', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-prose-road-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncement())
+    })
+    const machine = fixture.machine()
+    const first = await machine.open(OracleMother.watch())
+    expect(first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.nextMarker()))
+
+    await machine.advance(OracleMother.watch(), first)
+
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[1], 'request.json'), 'utf8')).toBe(
+      OracleMother.request(OracleMother.TICKETS[0], OracleMother.controlsArgv()),
+    )
   })
 
   it('absent establishment defers plan gates until open after publication', async () => {
