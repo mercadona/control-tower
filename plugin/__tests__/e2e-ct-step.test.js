@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -497,6 +497,114 @@ describe('ct-step reconcile', () => {
       const r = step(dir, ['global'])
       expect(r.status).toBe(9)
       expect(r.stderr).toMatch(/reconcile/)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  // #496 — the conflict is the one dispatch `ct-step next` cannot announce: it
+  // does not exist until the merge has been tried, so it is THIS verb that
+  // says who to dispatch and with what. Under the flag that sentence is a
+  // structured announcement, and the round is the real one — a real conflict
+  // against a real `origin`, like every other test of this verb.
+  it('a conflicting round announces the reconciler package and the edits channel', () => {
+    const dir = worktreeInConflict({ reconcileRetries: 0 })
+    try {
+      const r = step(dir, ['reconcile', '--output-format', 'json'])
+
+      expect(r.status).toBe(0)
+      // ONE object, and it is the dispatch. The transition that keeps the run
+      // at `reconcile` is suppressed instead of printed underneath: a round
+      // that dispatches answers with who to call, once — which is the count
+      // the whole contract rests on, so it is asserted and not just read past.
+      const lines = r.stdout.trim().split('\n')
+      expect(lines).toHaveLength(1)
+      const announcement = JSON.parse(lines[0])
+      expect(announcement).toEqual({
+        version: 1,
+        kind: 'step',
+        run: { issue: 4, task: 1, tasksTotal: 1, step: 'reconcile', attempt: 1 },
+        dispatch: {
+          inputs: [{
+            role: 'reconciliation-package',
+            kind: 'literal',
+            // `realpathSync`: the fixture lives under the symlinked /var of
+            // macOS and ct-step resolves its own root through git, which
+            // answers with the real path.
+            path: join(realpathSync(dir), '.agent', 'run-4', 'reconcile-package-1.md'),
+          }],
+          response: { kind: 'edits', path: null },
+        },
+        consuming: { argv: ['reconcile', '--plan', 'docs/superpowers/plans/plan.md', '--issue', '4'] },
+      })
+      // The announced package is on disk, and the run still advanced: the
+      // announcement is handed up on the way out of the verb, it does not
+      // replace what the verb does.
+      expect(existsSync(join(dir, '.agent', 'run-4', 'reconcile-package-1.md'))).toBe(true)
+      const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(run.step).toBe('reconcile')
+      expect(run.reconcileRetries).toBe(1)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  // The second and third rounds of the ladder dispatch the reconciler too,
+  // with a NEW package that carries why the previous round was discarded — so
+  // they announce it exactly like the first one. Measured because a sweep
+  // found it: with only the test above, deleting the announcement of the
+  // redispatch left the suite green and the last two rounds of every conflict
+  // mute while the first one spoke.
+  it('a redispatched round announces the new package it wrote', () => {
+    const dir = worktreeInConflict({ reconcileRetries: 0 })
+    try {
+      step(dir, ['reconcile']) // round 1: CONFLICTING, writes reconcile-package-1.md
+      // Round 2: nobody resolved anything, so git's markers are still in place
+      // and the round is discarded — with budget left, it is still the
+      // reconciler's turn, with the package that names the discard.
+      const r = step(dir, ['reconcile', '--output-format', 'json'])
+
+      expect(r.status).toBe(0)
+      // One object here too, and for the same reason: the redispatch is the
+      // whole answer of a discarded round that still has budget.
+      const lines = r.stdout.trim().split('\n')
+      expect(lines).toHaveLength(1)
+      const announcement = JSON.parse(lines[0])
+      expect(announcement).toEqual({
+        version: 1,
+        kind: 'step',
+        run: { issue: 4, task: 1, tasksTotal: 1, step: 'reconcile', attempt: 1 },
+        dispatch: {
+          inputs: [{
+            role: 'reconciliation-package',
+            kind: 'literal',
+            path: join(realpathSync(dir), '.agent', 'run-4', 'reconcile-package-2.md'),
+          }],
+          response: { kind: 'edits', path: null },
+        },
+        consuming: { argv: ['reconcile', '--plan', 'docs/superpowers/plans/plan.md', '--issue', '4'] },
+      })
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  // The other half of the same contract: a round with nobody to dispatch
+  // announces NO dispatch — not an empty one, and not a dispatch of a package
+  // it never wrote. The denial is of the object itself (one line on stdout,
+  // and it is the transition), not of a substring of its serialization.
+  it('a round with nobody to dispatch still advances the run under the flag', () => {
+    const dir = worktreeAtReconcile()
+    try {
+      const r = step(dir, ['reconcile', '--output-format', 'json'])
+
+      expect(r.status).toBe(0)
+      const lines = r.stdout.trim().split('\n')
+      expect(lines).toHaveLength(1)
+      expect(JSON.parse(lines[0])).toEqual({
+        version: 1,
+        kind: 'transition',
+        state: 'open',
+        outcome: 'done',
+        exit: 0,
+        run: { issue: 4, task: 1, tasksTotal: 1, step: 'reconcile', discards: 0 },
+      })
+      const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(run.step).toBe('global')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 

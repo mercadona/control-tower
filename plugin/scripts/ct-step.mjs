@@ -2041,6 +2041,29 @@ function handoverToSliceAgent() {
   out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
 }
 
+// The announcement of a round that dispatches `ct-reconciler`. It is THIS verb
+// that carries it and not `next`: a conflict does not exist until the merge has
+// been tried, so the round just measured is the only place that knows whether
+// there is anybody to dispatch, with which package and through which channel.
+//
+// It is built HERE and not in each of the two branches that dispatch, for the
+// same reason `handoverToSliceAgent` exists right above: the fresh CONFLICTING
+// and the discarded round being redispatched say THE SAME thing — the same
+// package, the same `edits` channel and the same verb that consumes them — and
+// writing it twice is what would leave one of the two halves behind on the
+// next change.
+function announcedReconcilerRound(packagePath) {
+  return StepAnnouncement.dispatch({
+    issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, attempt: currentAttempt(),
+    inputs: [new AnnouncedInput({ role: INPUT_ROLES.RECONCILIATION_PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath })],
+    // The reconciler answers with EDITS on the files in dispute: there is no
+    // path to read it back from, and it is the program that validates the tree
+    // afterwards (`BranchReconciliation.conclude()`).
+    response: AnnouncedResponse.of(STEPS.RECONCILE, null),
+    consuming: { argv: consumingArgv('reconcile') },
+  })
+}
+
 // Idempotent through MERGE_HEAD (Task 7): with no merge under way, it starts
 // the next round against the base; with one half done, it concludes the
 // resolution the session has already left in the index. The state of "which
@@ -2076,6 +2099,12 @@ function reconcileVerb() {
   // retry the two copies would have stopped agreeing: the verb would announce
   // another round and the table would close the run.
   const budgetLeft = !reconcileBudgetSpent(run)
+  // Built on both roads and never printed here: on the way out it is handed to
+  // the dispatcher, which has the single print site (see the bottom of this
+  // function). A round with nobody to dispatch leaves it unbuilt — there is no
+  // dispatch to announce, and the closure of the round is the transition the
+  // dispatcher publishes on its own.
+  let announcement
   switch (round.outcome) {
     case ReconcileOutcome.UP_TO_DATE:
       out(`reconcile: up-to-date (the base "${branch}" has not moved)`)
@@ -2094,7 +2123,12 @@ function reconcileVerb() {
       for (const f of round.files) out(`  - ${f}`)
       out('')
       if (budgetLeft) {
-        const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
+        // ONE call to `nextReconcileAttempt()`: the package it numbers is the
+        // package it writes, so a second call would already count it and
+        // answer the next number.
+        const attempt = nextReconcileAttempt()
+        const packagePath = writeReconcileReviewPackage({ branch, round, attempt })
+        announcement = announcedReconcilerRound(packagePath)
         out(`DISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) to resolve the conflict: have it leave the files resolved, with no conflict markers, and without touching anything outside that list — it cannot stage, commit or abort the merge: this program does that on concluding. Give it:`)
         out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
         out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}  (it concludes the half-finished merge — MERGE_HEAD decides, nothing else needs saying).`)
@@ -2142,7 +2176,9 @@ function reconcileVerb() {
         handoverToSliceAgent()
         break
       }
-      const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
+      const attempt = nextReconcileAttempt()
+      const packagePath = writeReconcileReviewPackage({ branch, round, attempt })
+      announcement = announcedReconcilerRound(packagePath)
       out(`REDISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) with the new package:`)
       out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
       out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
@@ -2151,6 +2187,16 @@ function reconcileVerb() {
     default:
       throw new Error(`reconciliation round with an outcome that has no message: "${round.outcome}"`)
   }
+  // HANDED UP instead of printed here. The contract is one JSON object per
+  // invocation ("One JSON object per invocation, on stdout, nothing else", in
+  // this phase's design), and this is the only verb that announces a dispatch
+  // and then RETURNS into the dispatcher, which publishes a closure of its own:
+  // printing it here made a dispatching round answer with two. The dispatch is
+  // the one that survives, because it says everything the suppressed transition
+  // said —the run stays open at this same step— plus who to call and with which
+  // package. A round with nobody to dispatch leaves this `null` and keeps its
+  // transition.
+  dispatchAnnouncement = announcement || null
   return outcomeOfReconcile(round.outcome)
 }
 
@@ -2787,6 +2833,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
 // ---------------------------------------------------------------------------
 // Apply the outcome to the table, and say what comes now.
 // ---------------------------------------------------------------------------
+// The dispatch announcement of the verb just applied, when the round it
+// measured dispatched a subagent instead of closing. `reconcileVerb` — the one
+// verb that dispatches and then returns in here — fills it, and the print site
+// below publishes IT in place of the transition: ONE object per invocation, the
+// same shape `next` has at a dispatch step by exiting before any transition
+// exists. It is declared here, next to the print site that owns it, and not by
+// the verb, which cannot reach the dispatcher's scope.
+//
+// Only the OPEN transition reads it, and that is deliberate: a round that
+// dispatches always leaves the run open at `reconcile` (`afterReconcile`, with
+// the budget unspent), so the one closure that can arrive on top of a dispatch
+// is the discard refusal right below — and there the REFUSAL is the truth,
+// because the run stops and nobody is going to be dispatched after all.
+let dispatchAnnouncement = null
+
 try {
   if (verb === 'next') nextVerb()
 
@@ -2835,11 +2896,18 @@ try {
     out(`next: task ${run.task}/${run.tasksTotal}, step ${run.step} — ask with "ct-step next"`)
     // The run stays open: the closure that just applied is a `transition`, not
     // a `refusal` — there is no non-zero code to carry.
+    //
+    // A verb that DISPATCHED answers with its dispatch and with nothing else:
+    // the transition would be the second object of one invocation, and it adds
+    // nothing — `state: open` at the step the dispatch already names. It is
+    // suppressed HERE, and only when there really was a dispatch, so every
+    // round that closes instead of dispatching keeps publishing its own.
     if (announcing) {
-      safeWrite(1, StepAnnouncement.transition({
+      const announcement = dispatchAnnouncement || StepAnnouncement.transition({
         issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
         state: transition.state, outcome, exit: EXIT.OK,
-      }).text())
+      })
+      safeWrite(1, announcement.text())
     }
     process.exit(EXIT.OK)
   }
