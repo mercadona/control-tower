@@ -26,7 +26,8 @@ base of this branch.
 ### Desired end state
 
 - No module under `backend/src` carries any of the twenty-eight prose fragments of the retired
-  contract. One census test owns that list, and a second test proves the census fires.
+  contract. Task 1 censuses the twenty-two its siblings retire, and task 2 adds the six it
+  retires itself. One census test owns the list, and a second test proves the census fires.
 - Neither `backend/src/infrastructure/run-dispatch.ts` nor
   `backend/src/infrastructure/ct-run-machine.ts` scans `ct-step`'s stdout as text.
 - `CtRunMachine.dispatch` reads no sentence of that stdout, and the two refusals it printed
