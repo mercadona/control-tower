@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/mercadona/control-tower/compare/backend-v0.4.0...backend-v0.4.1) (2026-09-21)
+
+
+### Correcciones
+
+* **backend:** the chain starts itself, because a coordinating session registers its checkout ([#492](https://github.com/mercadona/control-tower/issues/492)) ([35303a1](https://github.com/mercadona/control-tower/commit/35303a16f2cae9b2c88efce37fe568975b8661df))
+* **ci:** nothing the two documents promise can go missing in silence, and the release workflow stops describing a fault it does not have ([#483](https://github.com/mercadona/control-tower/issues/483)) ([fa7b95f](https://github.com/mercadona/control-tower/commit/fa7b95fe4c02ff15a15648b6192975b9e2ab8286))
+
 ## [0.4.0](https://github.com/mercadona/control-tower/compare/backend-v0.3.0...backend-v0.4.0) (2026-09-20)
 
 
