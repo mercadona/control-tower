@@ -408,6 +408,54 @@ test "$(grep -c 'static structured' backend/src/infrastructure/run-dispatch.ts)"
 cd backend && env -u CT_STATE_DIR npx vitest run --testTimeout=180000 __tests__/infrastructure/run-dispatch-real-process.test.ts __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 0 — the loop resolves and refuses
 ```
 
+### Task 5 — the consuming line stops being lossy
+
+**Objective:** The prose carries a path with a space, and no reader splits that line.
+
+**Files:** `plugin/scripts/step-prose.js` (modify),
+`plugin/__tests__/step-prose.test.js` (modify),
+`plugin/__tests__/ct-step-announcement-real-process.test.js` (modify),
+`backend/src/infrastructure/run-dispatch.ts` (modify)
+
+No code — this task deletes two guards and restores one, and the review of task 3 names all
+three by file and line.
+
+`render` refuses an argv element that carries whitespace. Task 3 put `render` on the real road,
+so a checkout whose path holds a space now exits 10 at every dispatch step. The parent commit
+ran there. Delete that refusal.
+
+`read` splits the consuming line on spaces, and the split serves one membership check.
+`RunConsumingCommand.structured` already reads that line by prefix and suffix, without loss, so
+the check needs no split. Delete the split and test the path against the line.
+
+`#response` compared the consuming command's response path by position, and task 3 left it
+testing membership. A forged stdout whose positional is wrong, and whose plan argument equals
+the response path, passes where it used to refuse. Restore the positional check.
+
+**TDD:** `it('a dispatch step announces and prints in a checkout whose path holds a space')`.
+Drive `ct-step next` at the judge step, in a repository whose directory name carries a space.
+Expect exit 0. Expect the rendered `When it comes back:` line with that path, and the
+announcement's `consuming.argv` equal to the literal six elements.
+
+Then `it('a consuming line whose positional is not the response path is refused')`.
+
+**Tests:** added to `plugin/__tests__/step-prose.test.js`: `'a consuming argv element with a
+space survives the round trip'`, `'a consuming line whose positional is not the response path
+is refused'`. Added to `plugin/__tests__/ct-step-announcement-real-process.test.js`: `'a
+dispatch step announces and prints in a checkout whose path holds a space'`. Removed on
+purpose: `'a consuming argv element with whitespace makes render refuse'`, whose subject this
+task deletes.
+
+**Verification:** The module's suite proves the round trip and the positional refusal. The
+real-process suite proves the loop starts where it used to die. The backend suite proves the
+sealing refusals still refuse.
+
+```bash
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/step-prose.test.js   # expected: exit 0 — a space survives and a wrong positional refuses
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-announcement-real-process.test.js   # expected: exit 0 — the loop starts in a path with a space
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — the five sealing refusals hold
+```
+
 ## 8. Global verification
 
 The two suites prove the slice end to end. The plugin suite proves the announcement and the
