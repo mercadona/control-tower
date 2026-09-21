@@ -345,8 +345,8 @@ cd backend && env -u CT_STATE_DIR npx vitest run --testTimeout=180000 __tests__/
 `RunConsumingCommand.structured` leaves with its last caller.
 
 **Files:** `backend/src/infrastructure/ct-run-machine.ts` (modify),
-`backend/src/infrastructure/run-dispatch.ts` (modify)
-
+`backend/src/infrastructure/run-dispatch.ts` (modify),
+`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify)
 Current state (backend/src/infrastructure/ct-run-machine.ts, lines 370-378):
 
 ```ts
