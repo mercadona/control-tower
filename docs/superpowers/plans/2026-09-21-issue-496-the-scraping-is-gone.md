@@ -176,12 +176,13 @@ expression: three of the probes are regex source themselves.
 
 **TDD:** `it('no_module_under_backend_src_carries_a_fragment_of_the_retired_prose_contract')`.
 Expect the census over `backend/src` to equal the empty list. Then
-`it('the_census_fires_on_a_tree_that_carries_one_fragment_of_each_family')` over a temporary
-tree of four files, one family each: expect the four pairs of file and fragment.
+`it('the_census_fires_on_a_tree_that_carries_every_fragment_of_the_contract')` over a temporary
+tree of four files, one family each: expect the twenty-two pairs of file and fragment. Four
+pairs leave eighteen entries proved only by absence, so a typo in one of them is invisible.
 
 **Tests:** added, in `backend/__tests__/retired-prose-contract.test.ts`:
 `'no_module_under_backend_src_carries_a_fragment_of_the_retired_prose_contract'`,
-`'the_census_fires_on_a_tree_that_carries_one_fragment_of_each_family'`. Removed on purpose:
+`'the_census_fires_on_a_tree_that_carries_every_fragment_of_the_contract'`. Removed on purpose:
 none.
 
 **Verification:** The census is green over the real tree. It is red over the synthetic one. The
