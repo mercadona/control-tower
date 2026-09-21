@@ -222,10 +222,9 @@ cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-announcement-r
 cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-oracle.test.js __tests__/e2e-ct-step.test.js   # expected: exit 0 — the prose road is untouched
 ```
 
-### Task 2 — a spent discard budget refuses in the contract
+### Task 2 — the two closures that skip the transition answer in the contract
 
-**Objective:** The refusal of a spent discard budget prints its state, its outcome and its
-exit.
+**Objective:** The two closures that exit before `after()` runs print their own shape.
 
 **Files:** `plugin/scripts/ct-step.mjs` (modify),
 `plugin/__tests__/ct-step-announcement-real-process.test.js` (modify)
@@ -246,6 +245,18 @@ and the `die` message as `detail`. Hold that message in a `const` and pass it to
 stderr line and the `detail` stay one sentence. Under `announcing`, write the refusal to stdout
 with `safeWrite` before the `die` call. `die` keeps its message and its code on both roads.
 
+A delivered run is the second closure of the same family. It needs no block: slice 1 created
+the code it changes, so this branch's base does not carry it.
+
+In `plugin/scripts/ct-step.mjs`, the `run.closed === RUN_STATES.DELIVERED` branch answers
+`next` before `after()` runs. So it holds no transition either. Slice 1 left a `die` there
+under the flag, with a comment that names a later slice as the owner. This task is that owner.
+
+Replace that `die` with a transition. It carries `state: RUN_STATES.DELIVERED`, `outcome:
+OUTCOMES.DONE` and `exit: EXIT.OK`, and `safeWrite` puts it on stdout before the exit. The
+`out` line below it keeps its words and its place. The backend task that retires `#delivered`
+reads what this task writes.
+
 **TDD:** `it('a spent discard budget announces the refusal that stops the run')` — six
 unreadable verdicts through `writeRaw('not json')`, each one answered with `ct('verdict', …)`,
 and the sixth one under the flag. Expect exit 3. Expect a literal with `kind: 'refusal'`,
@@ -253,7 +264,7 @@ and the sixth one under the flag. Expect exit 3. Expect a literal with `kind: 'r
 with `6 discards in this run:`.
 
 **Tests:** added to `plugin/__tests__/ct-step-announcement-real-process.test.js`: `'a spent
-discard budget announces the refusal that stops the run'`. Nothing removed.
+discard budget announces the refusal that stops the run'`, `'a delivered run announces the transition that closes it'`. Nothing removed.
 
 **Verification:** The first command proves the refusal and keeps the rest of the file green.
 The second proves the stderr road of the same branch still says what it said.
