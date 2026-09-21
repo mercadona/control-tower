@@ -115,7 +115,6 @@ export class StepAnnouncement {
 
   static program({ issue, task, tasksTotal, step, attempt, commands, consuming }) {
     StepAnnouncement.#requireDeclared(step, STEPS, 'step')
-    StepAnnouncement.#requireCommands(commands)
     const announcement = {
       version: ANNOUNCEMENT_VERSION,
       kind: ANNOUNCEMENT_KINDS.STEP,
@@ -171,12 +170,6 @@ export class StepAnnouncement {
   static #requireResponse(response) {
     if (response === undefined) {
       throw new MalformedAnnouncement('a dispatch step needs a response')
-    }
-  }
-
-  static #requireCommands(commands) {
-    if (commands === undefined || (Array.isArray(commands) && commands.length === 0)) {
-      throw new MalformedAnnouncement('a program step needs at least one command')
     }
   }
 

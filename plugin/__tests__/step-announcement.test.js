@@ -129,14 +129,18 @@ describe('the announcement declares its whole shape', () => {
     })).toThrow(MalformedAnnouncement)
   })
 
-  it('a program step with no commands is malformed', () => {
-    expect(() => StepAnnouncement.program({
+  it('a program step with no commands renders a line with no commands key', () => {
+    const announcement = StepAnnouncement.program({
       issue: 42,
       task: 2,
       tasksTotal: 5,
       step: STEPS.CONTROLS,
       attempt: 1,
-    })).toThrow(MalformedAnnouncement)
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"step","run":{"issue":42,"task":2,"tasksTotal":5,"step":"controls","attempt":1}}\n'
+    )
   })
 
   it('an announcement of an undeclared state is malformed', () => {
