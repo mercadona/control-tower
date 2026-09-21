@@ -18,6 +18,7 @@ import {
   SLICE_JUDGE_TOOLS,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../domain/exceptions.ts'
+import { RunAnnouncement } from './run-announcement.ts'
 
 const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
 
@@ -225,7 +226,7 @@ export class RunDispatch {
   }): DispatchMaterial {
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material)),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material.inputs)),
       argv: Object.freeze([...asked.argv]),
       response: RunDispatch.#response(asked.step, asked.material),
     })
@@ -255,7 +256,7 @@ export class RunDispatch {
     if (asked.schema !== null) argv.push('--json-schema', JSON.stringify(asked.schema))
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material)),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material.inputs)),
       argv: Object.freeze(argv),
       response: RunDispatch.#response(asked.step, asked.material),
     })
@@ -288,14 +289,24 @@ export class RunDispatch {
   }
 
   static #reconciliationInputs(stdout: string): readonly DispatchInput[] {
+    const announced = RunDispatch.#announcedReconciliationInputs(stdout)
+    if (announced.length > 0) return announced
     try {
-      return RunDispatch.#inputsOf(DispatchProse.read({ stdout, step: STEPS.RECONCILE }))
+      return RunDispatch.#inputsOf(DispatchProse.read({ stdout, step: STEPS.RECONCILE }).inputs)
     } catch (cause) {
       if (cause instanceof UnreadableStepProse) {
         throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${cause.detail}`)
       }
       throw cause
     }
+  }
+
+  static #announcedReconciliationInputs(stdout: string): readonly DispatchInput[] {
+    const announced = RunAnnouncement.of(stdout)?.inputs ?? null
+    if (announced === null) return Object.freeze([])
+    return RunDispatch.#inputsOf(
+      announced.filter((input) => input.role === INPUT_ROLES.RECONCILIATION_PACKAGE),
+    )
   }
 
   static #read(stdout: string, step: string): DispatchMaterialRead {
@@ -309,12 +320,12 @@ export class RunDispatch {
     }
   }
 
-  static #inputsOf(material: DispatchMaterialRead): readonly DispatchInput[] {
-    return material.inputs.map((input: { kind: string, path: string }): DispatchInput => {
+  static #inputsOf(inputs: readonly { readonly kind: string, readonly path: string }[]): readonly DispatchInput[] {
+    return Object.freeze(inputs.map((input): DispatchInput => {
       if (input.kind === 'literal') return Object.freeze({ kind: 'literal', path: input.path })
       if (input.kind === 'glob') return Object.freeze({ kind: 'glob', path: input.path })
       throw new RunNotUnderstood(`the dispatch input kind "${input.kind}" is not supported`)
-    })
+    }))
   }
 
   static #pathOf(material: DispatchMaterialRead, role: string): string | null {

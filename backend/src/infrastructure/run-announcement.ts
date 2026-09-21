@@ -8,6 +8,12 @@ export type RunClosure = {
   readonly exit: number,
 }
 
+export type AnnouncedInput = {
+  readonly role: string,
+  readonly kind: string,
+  readonly path: string,
+}
+
 type AnnouncementKind = 'step' | 'transition' | 'refusal'
 
 export class RunAnnouncement {
@@ -18,17 +24,20 @@ export class RunAnnouncement {
   readonly kind: AnnouncementKind
   readonly step: string
   readonly closure: RunClosure | null
+  readonly inputs: readonly AnnouncedInput[] | null
   readonly diagnostic: string
 
   private constructor(asked: {
     kind: AnnouncementKind,
     step: string,
     closure: RunClosure | null,
+    inputs: readonly AnnouncedInput[] | null,
     diagnostic: string,
   }) {
     this.kind = asked.kind
     this.step = asked.step
     this.closure = asked.closure
+    this.inputs = asked.inputs
     this.diagnostic = asked.diagnostic
     Object.freeze(this)
   }
@@ -43,6 +52,7 @@ export class RunAnnouncement {
       kind,
       step,
       closure,
+      inputs: RunAnnouncement.#inputsOf(record, kind),
       diagnostic: RunAnnouncement.#diagnosticOf(kind, step, closure, record),
     })
   }
@@ -100,6 +110,30 @@ export class RunAnnouncement {
       }
     }
     return Object.freeze({ state, outcome, exit: exit as number })
+  }
+
+  static #inputsOf(
+    record: Record<string, unknown>,
+    kind: AnnouncementKind,
+  ): readonly AnnouncedInput[] | null {
+    if (kind !== ANNOUNCEMENT_KINDS.STEP) return null
+    const dispatch = record.dispatch
+    const declared = RunAnnouncement.#isRecord(dispatch) ? dispatch.inputs : undefined
+    if (!Array.isArray(declared) || declared.length === 0) return null
+    return Object.freeze(declared.map((input) => RunAnnouncement.#inputOf(input, record)))
+  }
+
+  static #inputOf(input: unknown, record: Record<string, unknown>): AnnouncedInput {
+    const declared = RunAnnouncement.#isRecord(input) ? input : {}
+    const role = declared.role
+    const kind = declared.kind
+    const path = declared.path
+    if (typeof role !== 'string' || typeof kind !== 'string' || typeof path !== 'string') {
+      throw new RunNotUnderstood(
+        `the announcement declares an input without a role, a kind and a path: ${JSON.stringify(record)}`,
+      )
+    }
+    return Object.freeze({ role, kind, path })
   }
 
   static #diagnosticOf(
