@@ -6,6 +6,7 @@ import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
+import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import {
   ADVICE_SCHEMA,
   ADVISOR_TOOLS,
@@ -333,9 +334,7 @@ export class RunDispatch {
     if (tools !== RECONCILER_TOOLS) throw new RunNotUnderstood('the reconcile definition tools do not match the plugin contract')
     return new DispatchMaterial({
       role: 'reconcile',
-      inputs: RunDispatch.#withRoleFiles(STEPS.RECONCILE, asked.pluginRoot, [
-        RunDispatch.#literal(asked.stdout, '  - the reconciliation package: '),
-      ]),
+      inputs: RunDispatch.#withRoleFiles(STEPS.RECONCILE, asked.pluginRoot, RunDispatch.#reconciliationInputs(asked.stdout)),
       argv: Object.freeze([
         '--tools', tools,
         '--allowedTools', tools,
@@ -345,6 +344,23 @@ export class RunDispatch {
       ]),
       response: Object.freeze({ kind: 'edits' }),
     })
+  }
+
+  static #reconciliationInputs(stdout: string): readonly DispatchInput[] {
+    try {
+      return DispatchProse.read({ stdout, step: STEPS.RECONCILE }).inputs.map(
+        (input: { kind: string, path: string }): DispatchInput => {
+          if (input.kind === 'literal') return Object.freeze({ kind: 'literal', path: input.path })
+          if (input.kind === 'glob') return Object.freeze({ kind: 'glob', path: input.path })
+          throw new RunNotUnderstood(`the reconciliation input kind "${input.kind}" is not supported`)
+        },
+      )
+    } catch (cause) {
+      if (cause instanceof UnreadableStepProse) {
+        throw new RunNotUnderstood(`ct-step output has no supported reconciliation material: ${cause.detail}`)
+      }
+      throw cause
+    }
   }
 
   static #withRoleFiles(step: string, pluginRoot: string, inputs: readonly DispatchInput[]): readonly DispatchInput[] {

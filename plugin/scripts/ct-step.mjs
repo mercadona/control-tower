@@ -102,7 +102,8 @@ import { StepSeal } from './dispatch-gate.js'
 // Slice 1, Task 3: the structured announcement `next` prints under
 // `--output-format json`, alongside (not instead of) the prose. Pure module,
 // no disk and no process of its own — see step-announcement.js.
-import { StepAnnouncement, AnnouncedResponse } from './step-announcement.js'
+import { StepAnnouncement, AnnouncedResponse, INPUT_ROLES } from './step-announcement.js'
+import { DispatchProse } from './step-prose.js'
 
 const PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -2031,7 +2032,7 @@ function reconcileVerb() {
       if (budgetLeft) {
         const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
         out(`DISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) to resolve the conflict: have it leave the files resolved, with no conflict markers, and without touching anything outside that list — it cannot stage, commit or abort the merge: this program does that on concluding. Give it:`)
-        out(`  - the reconciliation package: ${packagePath}`)
+        out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
         out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}  (it concludes the half-finished merge — MERGE_HEAD decides, nothing else needs saying).`)
       } else {
         handoverToSliceAgent()
@@ -2079,7 +2080,7 @@ function reconcileVerb() {
       }
       const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
       out(`REDISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) with the new package:`)
-      out(`  - the reconciliation package: ${packagePath}`)
+      out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
       out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       break
     }

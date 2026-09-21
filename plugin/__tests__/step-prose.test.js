@@ -5,6 +5,10 @@ import {
   StepProseLines,
   DispatchMaterialRead,
   DispatchProse,
+  STEP_HEADINGS,
+  INPUT_LABELS,
+  RESPONSE_LABELS,
+  LABELS_ONLY_STEPS,
 } from '../scripts/step-prose.js'
 import {
   INPUT_ROLES,
@@ -183,6 +187,35 @@ describe('DispatchProse.read parses the prose back into the material an announce
       kind: INPUT_KINDS.GLOB,
       path: 'docs/superpowers/verdicts/issue-42-task-*.json',
     })
+  })
+})
+
+describe('DispatchProse and the reconciliation package label', () => {
+  it('the reconciliation package line and the path the backend takes share one declared label', () => {
+    const line = DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, '/tmp/p.md')
+
+    expect(line).toBe('  - the reconciliation package: /tmp/p.md')
+
+    const read = DispatchProse.read({ stdout: line, step: STEPS.RECONCILE })
+
+    expect(read.inputs).toEqual([
+      { role: INPUT_ROLES.RECONCILIATION_PACKAGE, kind: INPUT_KINDS.LITERAL, path: '/tmp/p.md' },
+    ])
+    expect(read.response).toBe(null)
+    expect(read.consuming).toBe(null)
+  })
+})
+
+describe('DispatchProse keeps INPUT_LABELS coupled to the heading and response maps', () => {
+  it('every step of INPUT_LABELS outside LABELS_ONLY_STEPS has an entry in STEP_HEADINGS and in RESPONSE_LABELS', () => {
+    const drift = []
+    for (const step of INPUT_LABELS.keys()) {
+      if (LABELS_ONLY_STEPS.has(step)) continue
+      if (!STEP_HEADINGS.has(step)) drift.push({ step, missingFrom: 'STEP_HEADINGS' })
+      if (!RESPONSE_LABELS.has(step)) drift.push({ step, missingFrom: 'RESPONSE_LABELS' })
+    }
+
+    expect(drift).toEqual([])
   })
 })
 

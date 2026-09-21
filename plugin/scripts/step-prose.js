@@ -8,14 +8,14 @@ import {
   SLICE_JUDGE_TOOLS,
 } from './step-contracts.js'
 
-const STEP_HEADINGS = new Map([
+export const STEP_HEADINGS = new Map([
   [STEPS.IMPLEMENT, `DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:`],
   [STEPS.JUDGE, `DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`],
   [STEPS.ADVISE, `DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`],
   [STEPS.SLICE_JUDGE, `DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`],
 ])
 
-const INPUT_LABELS = new Map([
+export const INPUT_LABELS = new Map([
   [STEPS.IMPLEMENT, new Map([
     [INPUT_ROLES.RUBRIC, '  - the rubric from '],
     [INPUT_ROLES.BRIEF, "  - the task's brief: "],
@@ -39,12 +39,14 @@ const INPUT_LABELS = new Map([
   ])],
 ])
 
-const RESPONSE_LABELS = new Map([
+export const RESPONSE_LABELS = new Map([
   [STEPS.IMPLEMENT, '  - that it write its report to: '],
   [STEPS.JUDGE, '  - that it write its verdict to: '],
   [STEPS.ADVISE, '  - that it write its advice to: '],
   [STEPS.SLICE_JUDGE, '  - that it write its verdict to: '],
 ])
+
+export const LABELS_ONLY_STEPS = new Set([STEPS.RECONCILE])
 
 const OPTIONAL_INPUT_ROLES = new Set([INPUT_ROLES.CONTROLS_LOG, INPUT_ROLES.GLOBAL_LOG])
 
@@ -78,8 +80,8 @@ export class StepProseLines {
 export class DispatchMaterialRead {
   constructor({ inputs, response, consuming }) {
     this.inputs = Object.freeze(inputs.map((input) => Object.freeze({ ...input })))
-    this.response = Object.freeze({ ...response })
-    this.consuming = Object.freeze({ argv: Object.freeze([...consuming.argv]) })
+    this.response = response === null ? null : Object.freeze({ ...response })
+    this.consuming = consuming === null ? null : Object.freeze({ argv: Object.freeze([...consuming.argv]) })
     Object.freeze(this)
   }
 }
@@ -106,14 +108,17 @@ export class DispatchProse {
   }
 
   static read({ stdout, step }) {
-    const heading = STEP_HEADINGS.get(step)
     const labels = INPUT_LABELS.get(step)
+    if (!labels) {
+      throw new UnreadableStepProse(`the step "${step}" declares no dispatch prose`)
+    }
+    const heading = STEP_HEADINGS.get(step)
     const responseLabel = RESPONSE_LABELS.get(step)
-    if (!heading || !labels || !responseLabel) {
+    if (!LABELS_ONLY_STEPS.has(step) && (!heading || !responseLabel)) {
       throw new UnreadableStepProse(`the step "${step}" declares no dispatch prose`)
     }
     const lines = String(stdout ?? '').split('\n')
-    DispatchProse.#requireOnce(lines, heading, `the heading of step "${step}"`)
+    if (heading) DispatchProse.#requireOnce(lines, heading, `the heading of step "${step}"`)
 
     const inputs = []
     for (const [role, prefix] of labels) {
@@ -132,6 +137,10 @@ export class DispatchProse {
         kind: KIND_OF_ROLE.get(role),
         path: DispatchProse.#valueOf(matches[0], prefix, `the "${role}" input`),
       })
+    }
+
+    if (!responseLabel) {
+      return new DispatchMaterialRead({ inputs, response: null, consuming: null })
     }
 
     const responseMatches = lines.filter((line) => line.startsWith(responseLabel))
