@@ -127,7 +127,7 @@ Task 1 adds a census over `backend/src` with a literal inventory, plus a synthet
 proves the census fires. Task 2 grows that inventory by six fragments, adds a second census
 over the mechanism, and then cuts the code. Task 3 adds a real-process test in the plugin,
 under the `-real-process` marker `plugin/conventions/testing.md` demands, and joins it to
-`BornConforming.PATHS`.
+`BornConforming.PATHS`. Task 4 widens that test to the two verbs `next` never reaches.
 
 Every assertion of the three tasks states its expectation as a literal.
 `backend/__tests__/infrastructure/run-dispatch-real-process.test.ts` once asserted the composed
@@ -317,6 +317,56 @@ not this tree. The guard of the list accepts the new file and its marker.
 ```bash
 cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-prose-unchanged-real-process.test.js   # expected: exit 0 — the nine steps agree
 cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/conforming-modules.test.js   # expected: exit 0 — the new file conforms and its marker is real
+```
+
+### Task 4 — the verbs outside `next` print the bytes the base printed too
+
+**Objective:** The suite measures the reconcile verb's prose and the consuming footer against
+the branch base.
+
+**Files:** `plugin/__tests__/fixtures/worktree-in-conflict.js` (create),
+`plugin/__tests__/e2e-ct-step.test.js` (modify),
+`plugin/__tests__/ct-step-prose-unchanged-real-process.test.js` (modify)
+
+Current state (plugin/__tests__/ct-step-prose-unchanged-real-process.test.js, lines 25-26):
+
+```js
+  static of(pluginRoot, repo, step) {
+    const printed = spawnSync('node', [join(pluginRoot, 'scripts', 'ct-step.mjs'), 'next', '--plan', 'plan.md', '--issue', '7'], {
+```
+
+`PrintedProse.of` drives `next` alone. Task 3 measures nine steps through it. `nextVerb` exits
+before the closure footer, so three `out(` substitutions of this branch stay outside its reach.
+They are `ct-step.mjs:2133` and `:2183`, the reconciliation package line the `reconcile` verb
+prints, and `:2919`, the `run <state>: …` footer a consuming verb prints.
+
+`worktreeInConflict` is a local function of `e2e-ct-step.test.js`, at line 100. It moves whole
+to `plugin/__tests__/fixtures/worktree-in-conflict.js`, and both files import it. The e2e file
+keeps its eight call sites and its comments, because `BornConforming.PATHS` does not name it.
+
+A second factory, `PrintedProse.ofVerb(pluginRoot, repo, argv)`, drives any verb with the same
+environment, the same normaliser and the same exit-code check. It drops the step check, because
+a verb announces no step.
+
+**A mutating verb needs its own repository.** `reconcile` performs the merge, so one fixture
+cannot serve both roots: each root drives its own conflict, built by the same factory. The same
+holds for the footer.
+
+**TDD:** `it('the_reconcile_verb_prints_the_bytes_the_branch_base_printed')`, one equality over
+the two transcripts of `reconcile --plan plan.md --issue 7`. Then
+`it('the_consuming_footer_prints_the_bytes_the_branch_base_printed')` over `controls`.
+
+**Tests:** added to `plugin/__tests__/ct-step-prose-unchanged-real-process.test.js`:
+`'the_reconcile_verb_prints_the_bytes_the_branch_base_printed'`,
+`'the_consuming_footer_prints_the_bytes_the_branch_base_printed'`. Removed on purpose: none.
+
+**Verification:** The suite proves both verbs. The e2e suite proves the moved fixture still
+serves its eight call sites. The guard proves the file still carries no prose.
+
+```bash
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/ct-step-prose-unchanged-real-process.test.js   # expected: exit 0 — five tests, both verbs measured
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/e2e-ct-step.test.js   # expected: exit 0 — the moved fixture still serves the e2e
+cd plugin && env -u CT_STATE_DIR npx vitest run __tests__/conforming-modules.test.js   # expected: exit 0 — the file stays conforming
 ```
 
 ## 8. Global verification
