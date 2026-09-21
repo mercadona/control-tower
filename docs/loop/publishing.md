@@ -1,8 +1,8 @@
 # How a change reaches a session
 
 Written because the question that leads here is always the same one: *I merged
-it, why is it not running?* Every step below has been measured, and two of them
-are the ones that actually catch people.
+it, why is it not running?* Every step below has been measured, and three of
+them are the ones that actually catch people.
 
 ## The chain
 
@@ -18,8 +18,9 @@ are the ones that actually catch people.
 4. **Somebody merges it.** That merge is what creates the tags and the GitHub
    releases. It is a human gate, like the loop's other three: publishing is a
    decision, not a consequence.
-5. **A session re-fetches the plugin** — and only then does the change exist for
-   anybody else.
+5. **Somebody re-fetches the plugin on their machine.** No session does this by
+   itself: it is two commands and a restart, below. Only then does the change
+   exist for anybody else.
 
 ## The first thing that catches people: the release pull request looks unchecked
 
@@ -75,6 +76,39 @@ at a frozen cache directory with five commands and no agents, while the session
 reading it had twelve skills and four agents. It was describing an install that
 had not executed for six weeks.
 
+## The third thing: nothing re-fetches on its own
+
+Step 5 is not something that happens to you. Measured on 2026-09-21 on a
+`source: github` machine: its marketplace clone sat at `a2d2515` from
+17 September, four days and one publication behind, and **eleven sessions had
+run in that window without moving it**.
+
+It takes two commands, in this order, and the second one says so itself —
+`claude plugin update --help` is *"Update a plugin to the latest version
+(restart required to apply)"*:
+
+```sh
+claude plugin marketplace update control-tower   # refreshes the catalogue
+claude plugin update control-tower-loop          # installs it; restart to apply
+```
+
+**The first one alone changes nothing that executes.** On that machine it moved
+the catalogue to 0.59.0 and left the install at 0.58.0. They are two steps, and
+the refresh is the one that looks like progress.
+
+Two more things it is cheaper to read here than to find out:
+
+- `claude plugin update` acts on **one scope**. It moved the `user` install and
+  left a `project` one, in another repository, on the previous version. A
+  project-scoped install needs its own `--scope project`.
+- **The version that ships is not the commit that was tagged.** The marketplace
+  clones the **default branch**, so the catalogue serves today's `main` under
+  the version number today's `main` declares. `plugin-v0.59.0` is `26932c59`;
+  the cache that update materialised is `faff87e5`, four commits later. So
+  whoever updates between two releases receives post-release commits under the
+  older number — and, because the cache is keyed by version, an install that
+  already holds that number re-fetches nothing at all until the next bump.
+
 ## What to check when your change is not running
 
 | Question | How to answer it |
@@ -84,3 +118,4 @@ had not executed for six weeks.
 | Is its run held? | `gh pr checks` printing nothing is the tell, not an absence of runs |
 | Was it published? | `gh api repos/mercadona/control-tower/releases --jq '.[0].tag_name'` |
 | Does your machine even use versions? | the marketplace source, above |
+| Is your own copy the published one? | `claude plugin list`, then the two commands above |
