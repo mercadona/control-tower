@@ -195,6 +195,12 @@ class OracleMother {
       + '"detail":"run blocked-reconcile: task 3/3, 0 discard(s)"}\n'
   }
 
+  static discardRefusal(): string {
+    return '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"discarded","exit":3,'
+      + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"implement","discards":6},'
+      + '"detail":"6 discards in this run: it stops instead of going on asking for answers that cannot be read"}\n'
+  }
+
   static output(code: number, stdout: string, stderr = ''): ProcessOutput {
     return new ProcessOutput({ code, stdout, stderr })
   }
@@ -383,8 +389,79 @@ describe('CtRunMachine', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
         + ' — run blocked-controls: task 1/3, 0 discard(s)',
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an announced refusal carries its state outcome and exit to the inspection', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-classified-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const dispatched = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), dispatched,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.implementAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const consumed = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(dispatched, OracleMother.reportArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), consumed,
+      OracleMother.receipt(
+        OracleMother.output(3, OracleMother.discardRefusal()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const inspection = await fixture.machine().inspect(OracleMother.watch())
+
+    expect(inspection.fact).toEqual({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-judge with outcome discarded (exit 3)'
+        + ' — 6 discards in this run: it stops instead of going on asking for answers that cannot be read',
+      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3 },
+    })
+    expect(fixture.asked).toEqual([])
+  })
+
+  it('a refusal with no announcement carries a null closure', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-unclassified-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const measured = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), measured,
+      OracleMother.receipt(
+        OracleMother.output(4, 'controls: 2 of 3 commands failed\n', 'npm run lint exited 1\n'),
+        OracleMother.RUN_BYTES,
+        OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const inspection = await fixture.machine().inspect(OracleMother.watch())
+
+    expect(inspection.fact).toEqual({
+      kind: 'uncertain',
+      detail: 'ct-step exited 4 without announcing a run state;'
+        + ' stdout: "controls: 2 of 3 commands failed\\n"; stderr: "npm run lint exited 1\\n"',
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([])
   })
 
   it('a non-zero exit with no announcement says so', async () => {
@@ -418,6 +495,7 @@ describe('CtRunMachine', () => {
       kind: 'refused',
       detail: 'ct-step exited 4 without announcing a run state;'
         + ' stdout: "controls: 2 of 3 commands failed\\n"; stderr: "npm run lint exited 1\\n"',
+      closure: null,
     })
     expect(fixture.asked).toEqual([])
   })
@@ -488,6 +566,7 @@ describe('CtRunMachine', () => {
     expect(refusal.work).toEqual({
       kind: 'refused',
       detail: 'ct-step exited 9 without announcing a run state; stdout: ""; stderr: "\\\"controls\\\" is not the step that is due: the run is at \\"implement\\" (task 1/3). Ask with \\"ct-step next\\".\\n"',
+      closure: null,
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
     const entries = await fixture.journal.entries(OracleMother.watch())
@@ -594,6 +673,7 @@ describe('CtRunMachine', () => {
     expect(first.work).toEqual({
       kind: 'refused',
       detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
   })
@@ -646,6 +726,7 @@ describe('CtRunMachine', () => {
     expect(uncertain.fact).toEqual({
       kind: 'uncertain',
       detail: 'the established run has unexplained plugin activity before its first command',
+      closure: null,
     })
     await expect(unexplained.machine().open(OracleMother.watch())).rejects.toThrow(
       'the established run has unexplained plugin activity before its first command',
@@ -677,6 +758,7 @@ describe('CtRunMachine', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-reconcile with outcome failed (exit 13)'
         + ' — run blocked-reconcile: task 3/3, 0 discard(s)',
+      closure: { state: 'blocked-reconcile', outcome: 'failed', exit: 13 },
     }))
     expect(fixture.asked).toEqual([
       { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
@@ -701,12 +783,14 @@ describe('CtRunMachine', () => {
     expect(pendingInspection.fact).toEqual({
       kind: 'uncertain',
       detail: `command ${OracleMother.TICKETS[0]} has no receipt and cannot be replayed`,
+      closure: null,
     })
     expect(Object.isFrozen(pendingInspection)).toBe(true)
     expect(Object.isFrozen(pendingInspection.fact)).toBe(true)
     expect((await pending.machine().open(OracleMother.watch())).work).toEqual({
       kind: 'refused',
       detail: `command ${OracleMother.TICKETS[0]} has no receipt and cannot be replayed`,
+      closure: null,
     })
     expect(pending.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
 

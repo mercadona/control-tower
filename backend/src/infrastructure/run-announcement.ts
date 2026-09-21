@@ -1,12 +1,9 @@
 import { RunNotUnderstood } from '../domain/exceptions.ts'
 import { ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION } from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
+import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 
-export type RunClosure = {
-  readonly state: string,
-  readonly outcome: string,
-  readonly exit: number,
-}
+export type { RunClosure }
 
 export type AnnouncedInput = {
   readonly role: string,

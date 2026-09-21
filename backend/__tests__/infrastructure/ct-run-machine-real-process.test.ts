@@ -19,6 +19,7 @@ describe('CT run machine real process', () => {
     expect(stale.instruction.work).toEqual({
       kind: 'refused',
       detail: expect.stringContaining('ct-step exited 9 without announcing a run state'),
+      closure: null,
     })
   })
 

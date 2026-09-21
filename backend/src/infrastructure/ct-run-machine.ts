@@ -18,14 +18,14 @@ import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 type InspectionFact =
   | { readonly kind: 'absent' | 'delivered' | 'unstarted' }
   | { readonly kind: 'active', readonly instruction: RunInstruction }
-  | { readonly kind: 'uncertain', readonly detail: string }
+  | { readonly kind: 'uncertain', readonly detail: string, readonly closure: RunClosure | null }
 
 type OracleEffect =
   | { readonly kind: 'call', readonly ticket: string, readonly argv: readonly string[], readonly command: RunConsumingCommand | null }
   | { readonly kind: 'command', readonly ticket: string, readonly argv: readonly string[] }
   | { readonly kind: 'next' }
   | { readonly kind: 'delivered' }
-  | { readonly kind: 'refused', readonly detail: string }
+  | { readonly kind: 'refused', readonly detail: string, readonly closure: RunClosure | null }
 
 class OracleResult {
   readonly effect: OracleEffect
@@ -51,8 +51,8 @@ class OracleResult {
     return new OracleResult({ kind: 'delivered' })
   }
 
-  static refused(detail: string): OracleResult {
-    return new OracleResult({ kind: 'refused', detail })
+  static refused(detail: string, closure: RunClosure | null = null): OracleResult {
+    return new OracleResult({ kind: 'refused', detail, closure })
   }
 }
 
@@ -425,7 +425,7 @@ class OracleBoundary {
       if (closure.state === RUN_STATES.OPEN) return OracleResult.next()
       if (closure.state === RUN_STATES.DELIVERED) return OracleResult.delivered()
     }
-    return OracleResult.refused(announcement.diagnostic)
+    return OracleResult.refused(announcement.diagnostic, closure)
   }
 
   static #fileCall(
@@ -483,7 +483,7 @@ export class RunInspection {
         this.fact = Object.freeze({ kind: fact.kind, instruction: fact.instruction })
         break
       case 'uncertain':
-        this.fact = Object.freeze({ kind: fact.kind, detail: fact.detail })
+        this.fact = Object.freeze({ kind: fact.kind, detail: fact.detail, closure: fact.closure })
         break
       default:
         this.fact = fact satisfies never
@@ -578,6 +578,7 @@ export class CtRunMachine extends RunMachine {
         : new RunInspection({
           kind: 'uncertain',
           detail: 'the established run has unexplained plugin activity before its first command',
+          closure: null,
         })
     }
     const instruction = this.#instruction(state.commands[state.commands.length - 1], state.manifest)
@@ -585,7 +586,11 @@ export class CtRunMachine extends RunMachine {
       case 'delivered':
         return new RunInspection({ kind: 'delivered' })
       case 'refused':
-        return new RunInspection({ kind: 'uncertain', detail: instruction.work.detail })
+        return new RunInspection({
+          kind: 'uncertain',
+          detail: instruction.work.detail,
+          closure: instruction.work.closure,
+        })
       case 'call':
       case 'command':
         return new RunInspection({ kind: 'active', instruction })
@@ -655,7 +660,11 @@ export class CtRunMachine extends RunMachine {
     argv: readonly string[],
   ): Promise<RunInstruction> {
     if (argv.length === 0) {
-      return new RunInstruction({ kind: 'refused', detail: 'ct-step did not print an executable consuming verb' })
+      return new RunInstruction({
+        kind: 'refused',
+        detail: 'ct-step did not print an executable consuming verb',
+        closure: null,
+      })
     }
     const plan = await this.read(join(watch.located.path, manifest.plan))
     if (plan === null) throw new RunNotAdvanced(`the run plan ${manifest.plan} could not be read`)
@@ -796,7 +805,7 @@ export class CtRunMachine extends RunMachine {
       case 'delivered':
         return new RunInstruction({ kind: effect.kind })
       case 'refused':
-        return new RunInstruction({ kind: effect.kind, detail: effect.detail })
+        return new RunInstruction({ kind: effect.kind, detail: effect.detail, closure: effect.closure })
     }
     return effect satisfies never
   }

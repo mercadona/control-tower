@@ -718,7 +718,7 @@ describe('RunPlanRecovery projection', () => {
   ])('%s remains inspect-only', async (_name, detail) => {
     const tested = new ProjectionScenario()
     const watch = tested.watches[0]
-    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail }))
+    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail, closure: null }))
 
     await tested.recovery.recover()
 
@@ -840,7 +840,7 @@ describe('RunPlanRecovery projection', () => {
     const watch = tested.watches[0]
     await tested.recovery.recover()
     expect(tested.reviews.started).toEqual([watch])
-    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'inspect only' }))
+    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'inspect only', closure: null }))
     await tested.recovery.recover()
     tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'delivered' }))
     await tested.recovery.recover()
@@ -913,7 +913,7 @@ describe('RunPlanRecovery projection', () => {
     try {
       await recovery.recover()
       expect(reads).toBe(1)
-      tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'replace watcher' }))
+      tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'replace watcher', closure: null }))
       await recovery.recover()
       tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'delivered' }))
       await recovery.recover()
