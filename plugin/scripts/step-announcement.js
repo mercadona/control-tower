@@ -1,6 +1,12 @@
-import { STEPS } from './run-machine.js'
+import { STEPS, RUN_STATES, OUTCOMES } from './run-machine.js'
 
 export const ANNOUNCEMENT_VERSION = 1
+
+export const ANNOUNCEMENT_KINDS = Object.freeze({
+  STEP: 'step',
+  TRANSITION: 'transition',
+  REFUSAL: 'refusal',
+})
 
 export const RESPONSE_KINDS = Object.freeze({
   FILE: 'file',
@@ -83,5 +89,116 @@ export class AnnouncedInput {
     this.kind = kind
     this.path = path
     Object.freeze(this)
+  }
+}
+
+export class StepAnnouncement {
+  #announcement
+
+  constructor(announcement) {
+    this.#announcement = Object.freeze(announcement)
+    Object.freeze(this)
+  }
+
+  static dispatch({ issue, task, tasksTotal, step, attempt, agent, inputs, response, consuming }) {
+    StepAnnouncement.#requireDeclared(step, STEPS, 'step')
+    StepAnnouncement.#requireResponse(response)
+    const announcement = {
+      version: ANNOUNCEMENT_VERSION,
+      kind: ANNOUNCEMENT_KINDS.STEP,
+      run: StepAnnouncement.#stepRun({ issue, task, tasksTotal, step, attempt }),
+      dispatch: StepAnnouncement.#dispatchBody({ agent, inputs, response }),
+    }
+    StepAnnouncement.#withConsuming(announcement, consuming)
+    return new StepAnnouncement(announcement)
+  }
+
+  static program({ issue, task, tasksTotal, step, attempt, commands, consuming }) {
+    StepAnnouncement.#requireDeclared(step, STEPS, 'step')
+    StepAnnouncement.#requireCommands(commands)
+    const announcement = {
+      version: ANNOUNCEMENT_VERSION,
+      kind: ANNOUNCEMENT_KINDS.STEP,
+      run: StepAnnouncement.#stepRun({ issue, task, tasksTotal, step, attempt }),
+      commands,
+    }
+    StepAnnouncement.#withConsuming(announcement, consuming)
+    return new StepAnnouncement(announcement)
+  }
+
+  static transition({ issue, task, tasksTotal, step, discards, state, outcome, exit }) {
+    StepAnnouncement.#requireDeclared(step, STEPS, 'step')
+    StepAnnouncement.#requireDeclared(state, RUN_STATES, 'run state')
+    StepAnnouncement.#requireDeclared(outcome, OUTCOMES, 'outcome')
+    return new StepAnnouncement({
+      version: ANNOUNCEMENT_VERSION,
+      kind: ANNOUNCEMENT_KINDS.TRANSITION,
+      state,
+      outcome,
+      exit,
+      run: StepAnnouncement.#closureRun({ issue, task, tasksTotal, step, discards }),
+    })
+  }
+
+  static refusal({ issue, task, tasksTotal, step, discards, state, outcome, exit, detail }) {
+    StepAnnouncement.#requireDeclared(step, STEPS, 'step')
+    StepAnnouncement.#requireDeclared(state, RUN_STATES, 'run state')
+    StepAnnouncement.#requireDeclared(outcome, OUTCOMES, 'outcome')
+    if (typeof detail !== 'string' || detail === '') {
+      throw new MalformedAnnouncement('a refusal needs a non-empty detail')
+    }
+    return new StepAnnouncement({
+      version: ANNOUNCEMENT_VERSION,
+      kind: ANNOUNCEMENT_KINDS.REFUSAL,
+      state,
+      outcome,
+      exit,
+      run: StepAnnouncement.#closureRun({ issue, task, tasksTotal, step, discards }),
+      detail,
+    })
+  }
+
+  text() {
+    return `${JSON.stringify(this.#announcement)}\n`
+  }
+
+  static #requireDeclared(value, vocabulary, label) {
+    if (!Object.values(vocabulary).includes(value)) {
+      throw new MalformedAnnouncement(`"${value}" is not a declared ${label}`)
+    }
+  }
+
+  static #requireResponse(response) {
+    if (response === undefined) {
+      throw new MalformedAnnouncement('a dispatch step needs a response')
+    }
+  }
+
+  static #requireCommands(commands) {
+    if (commands === undefined || (Array.isArray(commands) && commands.length === 0)) {
+      throw new MalformedAnnouncement('a program step needs at least one command')
+    }
+  }
+
+  static #stepRun({ issue, task, tasksTotal, step, attempt }) {
+    return { issue, task, tasksTotal, step, attempt }
+  }
+
+  static #closureRun({ issue, task, tasksTotal, step, discards }) {
+    return { issue, task, tasksTotal, step, discards }
+  }
+
+  static #dispatchBody({ agent, inputs, response }) {
+    const dispatch = {}
+    if (agent !== undefined && agent !== null) dispatch.agent = agent
+    if (Array.isArray(inputs) && inputs.length > 0) dispatch.inputs = inputs
+    dispatch.response = response
+    return dispatch
+  }
+
+  static #withConsuming(announcement, consuming) {
+    if (consuming && Array.isArray(consuming.argv) && consuming.argv.length > 0) {
+      announcement.consuming = { argv: [...consuming.argv] }
+    }
   }
 }
