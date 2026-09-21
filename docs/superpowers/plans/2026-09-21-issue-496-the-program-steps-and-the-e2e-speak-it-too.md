@@ -576,6 +576,12 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     the `reconciliation-package` input and stops there, rather than write a second announced
     road inside the one method slice 2 rewrites. Provenance: own call, and
     `plugin/conventions/decisions.md` on the helper that leaves a decision in two places.
+
+    **This assumption did not hold, and Task 6 answers it.** Slice 2's Task 4 took only the
+    consuming argv from the announcement. `#material` still reads prose for the four dispatch
+    roles, and that is right. Slice 3 puts the flag on the consuming verbs alone, so `next`
+    keeps its prose. Only the reconcile round loses its prose, because `reconcile` is a
+    consuming verb. Provenance: the coordinating session measured it on `360f8181`.
 15. §8 names files rather than whole suites. Provenance: measured on this worktree with no
     change of mine, while two other agents ran their own suites on this machine. The whole
     backend suite times out at `run-dispatch-real-process.test.ts:538`, the tautological argv
@@ -583,3 +589,9 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     `ct-init.test.js:1103`. Both are timeouts under load, not red assertions, and this slice
     touches neither file. A whole-suite command in §8 would block `ct-step global` for the same
     reason.
+
+16. Slice 3's Task 4 classifies closures alone. Its own text reads as though an announcement of
+    kind `step` reaches `refused`. Its implementer departed from that on purpose: a refusal
+    there would kill the `AnnouncedStep` road slice 2 landed. So Task 5's reconciler branch
+    stays reachable, and the two readers need no order between them. Provenance: Task 4's
+    reviewer raised the risk, and slice 3's own implementer measured the answer.
