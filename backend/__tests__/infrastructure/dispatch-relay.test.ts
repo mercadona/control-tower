@@ -81,12 +81,15 @@ class Relaying {
   readonly dispatchAsked: DispatchAsked[]
   readonly written: string[]
   readonly inFlight: WorkInFlight
+  readonly during: (inFlight: WorkInFlight) => void
 
-  constructor({ spec, dispatch = Mother.dispatching(Mother.started()), inFlight = new WorkInFlight() }: {
+  constructor({ spec, dispatch = Mother.dispatching(Mother.started()), inFlight = new WorkInFlight(), during = () => {} }: {
     spec: EpicSpec | null | Error,
     dispatch?: StartMilestonePlanResult | Error,
     inFlight?: WorkInFlight,
+    during?: (inFlight: WorkInFlight) => void,
   }) {
+    this.during = during
     this.specAnswer = spec
     this.dispatchAnswer = dispatch
     this.dispatchAsked = []
@@ -101,6 +104,7 @@ class Relaying {
         : Promise.resolve(this.specAnswer),
       dispatch: (asked) => {
         this.dispatchAsked.push(asked)
+        this.during(this.inFlight)
         return this.dispatchAnswer instanceof Error
           ? Promise.reject(this.dispatchAnswer)
           : Promise.resolve(this.dispatchAnswer)
@@ -173,6 +177,26 @@ describe('DispatchRelay', () => {
     expect(readFailure.written).toEqual([
       RelayLine.refused(Mother.REPOSITORY, new DispatchNotRead('gh could not read the complete issue table')),
     ])
+  })
+
+  it('the clock never refuses the cabin: a request can reserve the repository while the relay is dispatching', async () => {
+    let reservedMidDispatch: string | null = null
+
+    await new Relaying({
+      spec: Mother.frozenSpec(),
+      during: (inFlight) => { reservedMidDispatch = inFlight.reserve(Mother.REPOSITORY.text) },
+    }).run()
+
+    expect(reservedMidDispatch).toBe(Reservation.RESERVED)
+  })
+
+  it('two relays of the same repository still exclude each other', async () => {
+    const inFlight = new WorkInFlight()
+    inFlight.reserve(DispatchRelay.ownKeyFor(Mother.REPOSITORY))
+
+    const relaying = await new Relaying({ spec: Mother.frozenSpec(), inFlight }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
   })
 
   it('a reservation another start holds stops the relay and survives it', async () => {

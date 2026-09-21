@@ -29,6 +29,8 @@ export class RelayLine {
 }
 
 export class DispatchRelay {
+  static readonly OWN_KEY_PREFIX = 'relay:'
+
   readonly spec: EpicSpecRead
   readonly dispatch: MilestoneDispatched
   readonly inFlight: WorkInFlight
@@ -59,7 +61,10 @@ export class DispatchRelay {
     const milestone = DispatchRelay.#milestoneOf(found)
     if (milestone === null) return
 
-    if (this.inFlight.reserve(repository.text) === Reservation.IN_PROGRESS) return
+    if (this.inFlight.holds(repository.text)) return
+
+    const own = DispatchRelay.ownKeyFor(repository)
+    if (this.inFlight.reserve(own) === Reservation.IN_PROGRESS) return
     try {
       const dispatched = await this.dispatch({ repository, root, milestone })
       for (const started of dispatched.started) this.stderr(RelayLine.dispatched(started))
@@ -69,8 +74,12 @@ export class DispatchRelay {
       if (failure instanceof DispatchNotAvailable) return
       this.stderr(RelayLine.refused(repository, failure))
     } finally {
-      this.inFlight.release(repository.text)
+      this.inFlight.release(own)
     }
+  }
+
+  static ownKeyFor(repository: RepositoryName): string {
+    return `${DispatchRelay.OWN_KEY_PREFIX}${repository.text}`
   }
 
   static #milestoneOf(spec: EpicSpec | null): string | null {
