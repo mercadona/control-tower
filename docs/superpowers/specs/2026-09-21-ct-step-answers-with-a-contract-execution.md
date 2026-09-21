@@ -153,7 +153,11 @@ Falsifiable three ways, and each slice below carries the measurement:
 
 | Slice | specReviewedSha | codeReviewedSha | uiScreenshot | Gate cerrado con |
 |-------|-----------------|-----------------|--------------|------------------|
-| 1 | – | – | – | – |
-| 2 | – | – | – | – |
-| 3 | – | – | – | – |
-| 4 | – | – | – | – |
+| 1 | 1d56d74d | bef434b4 | – | six task reviews; no CT gate, because no slice was groomed |
+| 2 | 1d56d74d | – | – | – |
+| 3 | 1d56d74d | – | – | – |
+| 4 | 1d56d74d | – | – | – |
+| 5 | 1d56d74d | – | – | – |
+
+The table carried four rows for five slices. Row 5 is added here, and `uiScreenshot` stays
+empty for every row on purpose: this branch changes no frontend module.
