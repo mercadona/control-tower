@@ -729,6 +729,52 @@ describe('RunPlanRecovery projection', () => {
     })
   })
 
+  it('a spent discard budget is reported apart from red controls', async () => {
+    const spent = RecoveryMother.watch(331, '1')
+    const red = RecoveryMother.watch(332, '2')
+    const unclassified = RecoveryMother.watch(333, '3')
+    const tested = new ProjectionScenario([spent, red, unclassified])
+    tested.machine.inspections.set(spent.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-judge with outcome discarded (exit 3)',
+      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3 },
+    }))
+    tested.machine.inspections.set(red.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)',
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
+    }))
+    tested.machine.inspections.set(unclassified.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step exited 9 without announcing a run state',
+      closure: null,
+    }))
+
+    await tested.recovery.recover()
+
+    const projected = tested.activePlans.known()
+    expect(projected).toHaveLength(3)
+    expect(projected[0].refusal).toEqual({ state: 'blocked-judge', outcome: 'discarded', exit: 3 })
+    expect(projected[1].refusal).toEqual({ state: 'blocked-controls', outcome: 'failed', exit: 4 })
+    expect(Object.hasOwn(projected[2], 'refusal')).toBe(false)
+  })
+
+  it('a refusal with no classification projects no refusal key', async () => {
+    const tested = new ProjectionScenario()
+    const watch = tested.watches[0]
+    tested.machine.inspections.set(watch.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step exited 9 without announcing a run state',
+      closure: null,
+    }))
+
+    await tested.recovery.recover()
+
+    const projected = tested.activePlans.known()[0]
+    expect(Object.keys(projected)).toEqual(['phase', 'acceptsChange', 'request', 'plan', 'diagnostic', 'recovery'])
+    expect(projected.diagnostic).toBe('ct-step exited 9 without announcing a run state')
+  })
+
   it('a driver implementation must name a journal ticket exactly once', async () => {
     const missing = new ProjectionScenario()
     const watch = missing.watches[0]
