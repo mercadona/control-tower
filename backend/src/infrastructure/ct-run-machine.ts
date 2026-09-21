@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import { ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION } from '../../../plugin/scripts/step-announcement.js'
+import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import {
   RunEstablishment, RunMachine, type RunEstablishmentValue,
@@ -386,13 +387,13 @@ class OracleBoundary {
       ?? /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
     switch (step) {
       case STEPS.IMPLEMENT:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.IMPLEMENT, 'report')
+        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.IMPLEMENT)
       case STEPS.JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.JUDGE, 'verdict')
+        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.JUDGE)
       case STEPS.ADVISE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.ADVISE, 'advice')
+        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.ADVISE)
       case STEPS.SLICE_JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.SLICE_JUDGE, 'slice-verdict')
+        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.SLICE_JUDGE)
       case STEPS.E2E:
         return OracleResult.call(command.ticket, [])
       case STEPS.CONTROLS:
@@ -421,21 +422,13 @@ class OracleBoundary {
   static #fileCall(
     stdout: string,
     ticket: string,
-    manifest: RunManifest,
     step: string,
-    verb: 'report' | 'verdict' | 'advice' | 'slice-verdict',
   ): OracleResult {
     try {
-      const command = RunConsumingCommand.structured({
-        stdout,
-        plan: manifest.plan,
-        issue: manifest.issue,
-        step,
-        verb,
-      })
-      return OracleResult.call(ticket, command.argv, command)
+      const material = DispatchProse.read({ stdout, step })
+      return OracleResult.call(ticket, [...material.consuming!.argv])
     } catch (cause) {
-      if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
+      if (cause instanceof UnreadableStepProse) return OracleResult.refused(cause.message)
       throw cause
     }
   }
@@ -610,12 +603,7 @@ export class CtRunMachine extends RunMachine {
     const effect = OracleBoundary.read(command, state.manifest).effect
     if (effect.kind === 'refused') throw new RunNotUnderstood(effect.detail)
     if (effect.kind !== 'call') throw new RunNotUnderstood(`ticket ${ticket} does not carry dispatch material`)
-    if (effect.command === null) {
-      if (command.receipt.output.stdout.includes('step: e2e (')) {
-        throw new RunNotUnderstood('ct-step requested unsupported E2E material')
-      }
-      throw new RunNotUnderstood(`ticket ${ticket} has no validated consuming command`)
-    }
+    if (effect.argv.length === 0) throw new RunNotUnderstood('ct-step requested unsupported E2E material')
     const resolved = await RunDispatch.resolve({
       ticket,
       stdout: command.receipt.output.stdout,

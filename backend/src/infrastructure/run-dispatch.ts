@@ -71,31 +71,6 @@ export class RunConsumingCommand {
     Object.freeze(this)
   }
 
-  static structured(asked: {
-    stdout: string,
-    plan: string,
-    issue: number,
-    step: string,
-    verb: 'report' | 'verdict' | 'advice' | 'slice-verdict',
-  }): RunConsumingCommand {
-    const prefix = `${RunConsumingCommand.#PREFIX}${asked.verb} `
-    const suffix = ` --plan ${asked.plan} --issue ${asked.issue}`
-    const lines = RunConsumingCommand.#lines(asked.stdout)
-    if (lines.length !== 1
-      || !lines[0].startsWith(prefix)
-      || !lines[0].endsWith(suffix)
-      || !asked.stdout.includes(`step: ${asked.step} (`)) {
-      throw new RunNotUnderstood(`ct-step output has no unique consuming command: ${JSON.stringify(asked.stdout)}`)
-    }
-    const responsePath = lines[0].slice(prefix.length, -suffix.length)
-    if (responsePath.length === 0) {
-      throw new RunNotUnderstood(`ct-step output has an empty response path: ${JSON.stringify(asked.stdout)}`)
-    }
-    return new RunConsumingCommand([
-      asked.verb, responsePath, '--plan', asked.plan, '--issue', String(asked.issue),
-    ], responsePath)
-  }
-
   static edits(asked: { stdout: string, plan: string, issue: number }): RunConsumingCommand {
     const command = `${RunConsumingCommand.#PREFIX}reconcile --plan ${asked.plan} --issue ${asked.issue}`
     const lines = RunConsumingCommand.#lines(asked.stdout)
@@ -137,7 +112,7 @@ export class RunDispatch {
   static async resolve(asked: {
     ticket: string,
     stdout: string,
-    command: RunConsumingCommand,
+    command: RunConsumingCommand | null,
     cwd: string,
     pluginRoot: string,
     sealed: string | null,
@@ -169,7 +144,7 @@ export class RunDispatch {
 
   static #material(asked: {
     stdout: string,
-    command: RunConsumingCommand,
+    command: RunConsumingCommand | null,
     pluginRoot: string,
   }): DispatchMaterial {
     if (asked.stdout.includes('DISPATCH ct-reconciler') || asked.stdout.includes('REDISPATCH ct-reconciler')) {
@@ -288,10 +263,10 @@ export class RunDispatch {
 
   static #edits(asked: {
     stdout: string,
-    command: RunConsumingCommand,
+    command: RunConsumingCommand | null,
     pluginRoot: string,
   }): DispatchMaterial {
-    if (asked.command.responsePath !== null || asked.command.argv[0] !== 'reconcile') {
+    if (asked.command === null || asked.command.responsePath !== null || asked.command.argv[0] !== 'reconcile') {
       throw new RunNotUnderstood('reconciliation material has an incompatible consuming command')
     }
     const files = RoleBytes.filesOf(STEPS.RECONCILE)

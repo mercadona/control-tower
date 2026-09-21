@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
-import { StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
+import { INPUT_ROLES, StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
+import { DispatchProse, RESPONSE_LABELS, STEP_HEADINGS } from '../../../plugin/scripts/step-prose.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { RunEstablishment } from '../../src/domain/ports/run-machine.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -139,8 +140,27 @@ class OracleMother {
     }).text()
   }
 
+  static implementReportPath(): string {
+    return `${OracleMother.WORKTREE}/.agent/run-332/task-1-report.json`
+  }
+
   static implementAnnouncement(): string {
-    return `task 1/3 — execute oracle\nstep: implement (attempt 1)\n\nDISPATCH AN IMPLEMENTER (subagent with model sonnet — tools: Read, Write, Edit, Grep, Glob, Bash, Skill) with:\n\nWhen it comes back:  ct-step report ${OracleMother.WORKTREE}/.agent/run-332/task-1-report.json --plan ${OracleMother.PLAN} --issue 332\nDo NOT commit yourself, and do not ask the implementer to commit: ct-step commits.\n`
+    const reportPath = OracleMother.implementReportPath()
+    const rubricPath = '/plugin/prompts/task-implementer.md'
+    const briefPath = `${OracleMother.WORKTREE}/.agent/run-332/task-1-brief.md`
+    return [
+      'task 1/3 — execute oracle',
+      DispatchProse.stepLine(STEPS.IMPLEMENT, 1),
+      '',
+      STEP_HEADINGS.get(STEPS.IMPLEMENT),
+      DispatchProse.inputLine(STEPS.IMPLEMENT, INPUT_ROLES.RUBRIC, rubricPath),
+      DispatchProse.inputLine(STEPS.IMPLEMENT, INPUT_ROLES.BRIEF, briefPath),
+      `${RESPONSE_LABELS.get(STEPS.IMPLEMENT)}${reportPath}`,
+      '',
+      `${DispatchProse.CONSUMING_PREFIX}report ${reportPath} --plan ${OracleMother.PLAN} --issue 332`,
+      'Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.',
+      '',
+    ].join('\n')
   }
 
   static reconcileAnnouncement(): string {
