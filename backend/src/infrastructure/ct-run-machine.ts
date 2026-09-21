@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
-import { ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION } from '../../../plugin/scripts/step-announcement.js'
+import {
+  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, RESPONSE_KINDS,
+} from '../../../plugin/scripts/step-announcement.js'
 import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import {
@@ -375,6 +377,17 @@ class OracleBoundary {
       return OracleResult.refused(
         `ct-step requested unsupported slice-agent reconciliation: ${JSON.stringify(output.stdout)}`,
       )
+    }
+    const round = AnnouncedStep.read(output.stdout)
+    if (round !== null && round.responseKind === RESPONSE_KINDS.EDITS) {
+      try {
+        return OracleResult.call(command.ticket, round.argv, RunConsumingCommand.forEdits(round.argv))
+      } catch (cause) {
+        if (cause instanceof RunNotUnderstood) {
+          return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+        }
+        throw cause
+      }
     }
     const reconcileCommand = `When it comes back:  ct-step reconcile --plan ${manifest.plan} --issue ${manifest.issue}`
     if ((output.stdout.includes('DISPATCH ct-reconciler') || output.stdout.includes('REDISPATCH ct-reconciler'))

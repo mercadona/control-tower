@@ -83,6 +83,13 @@ export class RunConsumingCommand {
     ], null)
   }
 
+  static forEdits(argv: readonly string[]): RunConsumingCommand {
+    if (argv[0] !== 'reconcile') {
+      throw new RunNotUnderstood(`the announced consuming argv does not consume a reconciliation: ${JSON.stringify(argv)}`)
+    }
+    return new RunConsumingCommand(argv, null)
+  }
+
   static #lines(stdout: string): readonly string[] {
     return Object.freeze(stdout.split('\n').filter((line) => line.startsWith(RunConsumingCommand.#PREFIX)))
   }

@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
-import { INPUT_ROLES, StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
+import {
+  AnnouncedInput, AnnouncedResponse, INPUT_KINDS, INPUT_ROLES, StepAnnouncement,
+} from '../../../plugin/scripts/step-announcement.js'
 import { DispatchProse, RESPONSE_LABELS, STEP_HEADINGS } from '../../../plugin/scripts/step-prose.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { RunEstablishment } from '../../src/domain/ports/run-machine.ts'
@@ -14,7 +16,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
+import { AnnouncedStep, CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { ProcessOutput, type ToolRunner } from '../../src/infrastructure/tool-runner.ts'
@@ -187,6 +189,32 @@ class OracleMother {
 
   static reconcileAnnouncement(): string {
     return `slice of issue 332 — the 3 tasks committed\nstep: reconcile (attempt 1)\n\nRECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):\n  ct-step reconcile --plan ${OracleMother.PLAN} --issue 332\nIf there is a conflict, the verb itself says who to dispatch.\n`
+  }
+
+  static reconcilerRoundJson(): string {
+    return OracleMother.#reconcilerRound(['reconcile', '--plan', OracleMother.PLAN, '--issue', '332'])
+  }
+
+  static foreignVerbRoundJson(): string {
+    return OracleMother.#reconcilerRound(['commit', '--plan', OracleMother.PLAN, '--issue', '332'])
+  }
+
+  static #reconcilerRound(argv: readonly string[]): string {
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 3,
+      tasksTotal: 3,
+      step: STEPS.RECONCILE,
+      attempt: 1,
+      agent: undefined,
+      inputs: [new AnnouncedInput({
+        role: INPUT_ROLES.RECONCILIATION_PACKAGE,
+        kind: INPUT_KINDS.LITERAL,
+        path: `${OracleMother.WORKTREE}/.agent/run-332/reconcile-package-1.md`,
+      })],
+      response: AnnouncedResponse.of(STEPS.RECONCILE, null),
+      consuming: { argv },
+    }).text()
   }
 
   static reconcileRefusal(): string {
@@ -764,6 +792,55 @@ describe('CtRunMachine', () => {
       { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
       { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
     ])
+  })
+
+  it('the announced reconciler round answers with a call and not with a command', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-reconciler-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+    })
+    fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, OracleMother.reconcilerRoundJson()))
+    const machine = fixture.machine()
+    const reconcile = await machine.open(OracleMother.watch())
+
+    expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(
+      new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[1] }),
+    )
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
+    ])
+  })
+
+  it('the announced round publishes the reconcile argv and the edits channel', () => {
+    const announced = AnnouncedStep.read(OracleMother.reconcilerRoundJson())
+
+    expect(announced?.responseKind).toBe('edits')
+    expect(announced?.argv).toEqual(['reconcile', '--plan', OracleMother.PLAN, '--issue', '332'])
+  })
+
+  it('an edits round whose first argument is a foreign verb is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-foreign-edits-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const foreign = OracleMother.foreignVerbRoundJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+    })
+    fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, foreign))
+    const machine = fixture.machine()
+    const reconcile = await machine.open(OracleMother.watch())
+
+    expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(foreign)}`,
+    }))
   })
 
   it('a pending forked or malformed command chain cannot resume', async () => {
