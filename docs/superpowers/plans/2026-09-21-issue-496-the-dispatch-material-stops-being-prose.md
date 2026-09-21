@@ -215,8 +215,13 @@ test "$(grep -c 'DISPATCH THE JUDGE' plugin/scripts/step-prose.js)" -eq 1   # ex
 reads that path through the same table.
 
 **Files:** `plugin/scripts/ct-step.mjs` (modify),
-`backend/src/infrastructure/run-dispatch.ts` (modify)
+`backend/src/infrastructure/run-dispatch.ts` (modify),
+`plugin/scripts/step-prose.js` (modify), `plugin/__tests__/step-prose.test.js` (modify)
 
+`step-prose.js` is on the list for one reason. Task 1's `read` refuses a step that declares no
+heading and no response label. Until slice 4 gives `reconcile` both, `reconcile` is that step.
+So the call this task prescribes needs a declared exception there. The first version of this
+list left those two files out, and the task did not fit inside it.
 Current state (plugin/scripts/ct-step.mjs, lines 2077-2079):
 
 ```js
