@@ -337,12 +337,19 @@ if (existsSync(stateFile)) {
   // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
     if (verb === 'next') {
-      // Under the flag `out` writes nothing, so falling through to it here would
-      // exit 0 with an empty stdout — silence reported as success, which is the
-      // one shape the closed decision forbids. There is no announcement to make
-      // instead: a `delivered` transition is a later slice's work, not this
-      // one's. Refuse, in the same family as the two refusals above.
-      if (announcing) die('ct-step next has no announcement for a delivered run yet', EXIT.USAGE)
+      // A delivered run has already reached its terminal transition: there is
+      // no step left to apply, so `next` announces the same closure a
+      // consuming verb would have announced on delivering it — `state:
+      // DELIVERED`, `outcome: DONE`, `exit: OK` — instead of the usage refusal
+      // this branch held before this task answered it. `safeWrite` puts it on
+      // stdout before the process exits, same as every other closure in this
+      // file; the `out` line right below keeps saying what it always said.
+      if (announcing) {
+        safeWrite(1, StepAnnouncement.transition({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.DELIVERED, outcome: OUTCOMES.DONE, exit: EXIT.OK,
+        }).text())
+      }
       out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
@@ -2786,7 +2793,18 @@ try {
 
   if (run.discards >= MAX_DISCARDS && outcome === OUTCOMES.DISCARDED) {
     save()
-    die(`${run.discards} discards in this run: it stops instead of going on asking for answers that cannot be read`, EXIT.NO_VERDICT)
+    // This branch runs before `after()`, so no transition exists yet to
+    // publish — it announces the pair `exitCodeOf` maps to `EXIT.NO_VERDICT`
+    // itself: `BLOCKED_JUDGE`/`DISCARDED`. The message is held in a `const` so
+    // the stderr line and the `detail` stay one sentence.
+    const message = `${run.discards} discards in this run: it stops instead of going on asking for answers that cannot be read`
+    if (announcing) {
+      safeWrite(1, StepAnnouncement.refusal({
+        issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+        state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.DISCARDED, exit: EXIT.NO_VERDICT, detail: message,
+      }).text())
+    }
+    die(message, EXIT.NO_VERDICT)
   }
 
   const before = run.step

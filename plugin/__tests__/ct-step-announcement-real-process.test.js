@@ -6,7 +6,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, sliceOk, taskOk, judgeTask, judgeSlice, writeVerdict, writeSliceVerdict } = makeHelpers(() => repo)
+const { ct, writeReport, writeRaw, sliceOk, taskOk, judgeTask, judgeSlice, writeVerdict, writeSliceVerdict } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -193,12 +193,42 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(r.stderr).toMatch(/unknown --output-format/)
   })
 
-  it('a delivered run refuses the flag instead of answering with silence', () => {
+  it('a delivered run announces the transition that closes it', () => {
     sliceOk()
 
     const r = ct('next', '--output-format', 'json')
 
-    expect(r.status).toBe(2)
-    expect(r.stdout).toBe('')
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'transition',
+      state: 'delivered',
+      outcome: 'done',
+      exit: 0,
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'slice-judge', discards: 0 },
+    })
+  })
+
+  it('a spent discard budget announces the refusal that stops the run', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    // MAX_DISCARDS is 6: six unreadable verdicts spend the whole budget
+    // (`run.discards` reaches 6, the run stays open at `judge` every time), and
+    // the seventh submission is the one the run refuses to go on asking for —
+    // `run.discards` is still 6 when that refusal is announced.
+    for (let i = 0; i < 6; i++) judgeTask(writeRaw('not json'))
+
+    const r = judgeTask(writeRaw('not json'), '--output-format', 'json')
+
+    expect(r.status).toBe(3)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'refusal',
+      state: 'blocked-judge',
+      outcome: 'discarded',
+      exit: 3,
+      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', discards: 6 },
+      detail: '6 discards in this run: it stops instead of going on asking for answers that cannot be read',
+    })
   })
 })
