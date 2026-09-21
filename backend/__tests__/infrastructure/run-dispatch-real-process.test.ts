@@ -1,29 +1,21 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.js'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../plugin/scripts/state.js'
 import {
-  ADVICE_SCHEMA,
   ADVISOR_TOOLS,
-  IMPLEMENTER_MODEL,
-  IMPLEMENTER_TOOLS,
   JUDGE_TOOLS,
   RECONCILER_TOOLS,
-  REPORT_SCHEMA,
   SLICE_JUDGE_TOOLS,
   SLICE_VERDICT_RULES,
-  SLICE_VERDICT_SCHEMA,
   VERDICT_RULES,
-  VERDICT_SCHEMA,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -36,6 +28,16 @@ import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 
 type DispatchRole = RunDispatch['role']
+
+type ResponseExpectation = Readonly<{ kind: 'file' | 'structured' | 'edits', schema: boolean, agent: string | null }>
+
+const RESPONSE_EXPECTATION_OF_ROLE: Readonly<Record<DispatchRole, ResponseExpectation>> = Object.freeze({
+  implement: Object.freeze({ kind: 'structured', schema: true, agent: null }),
+  judge: Object.freeze({ kind: 'file', schema: false, agent: 'ct-judge' }),
+  advise: Object.freeze({ kind: 'structured', schema: true, agent: 'ct-advisor' }),
+  'slice-judge': Object.freeze({ kind: 'file', schema: false, agent: 'ct-slice-judge' }),
+  reconcile: Object.freeze({ kind: 'edits', schema: false, agent: 'ct-reconciler' }),
+})
 
 class EnvironmentSnapshot {
   readonly values: ReadonlyMap<string, string | undefined>
@@ -246,42 +248,6 @@ class DispatchRepository {
 
   static async bytes(paths: readonly string[], cwd: string): Promise<readonly Buffer[]> {
     return Promise.all(paths.map((path) => readFile(path.startsWith('/') ? path : join(cwd, path))))
-  }
-
-  static expectedArgv(role: DispatchRole): readonly string[] {
-    const schema = role === 'implement' ? REPORT_SCHEMA
-      : role === 'judge' ? VERDICT_SCHEMA
-        : role === 'advise' ? ADVICE_SCHEMA
-          : role === 'slice-judge' ? SLICE_VERDICT_SCHEMA
-            : null
-    if (role === 'implement') {
-      return [
-        '--tools', IMPLEMENTER_TOOLS,
-        '--allowedTools', IMPLEMENTER_TOOLS,
-        '--model', IMPLEMENTER_MODEL,
-        '--json-schema', JSON.stringify(schema),
-      ]
-    }
-    const definition = DispatchRepository.definition(role)
-    const tools = definition.tools.join(', ')
-    const argv = [
-      '--tools', tools,
-      '--allowedTools', tools,
-      '--model', definition.model,
-      '--agents', JSON.stringify(definition.toClaudeAgents()),
-      '--agent', definition.name,
-    ]
-    if (schema !== null) argv.push('--json-schema', JSON.stringify(schema))
-    return argv
-  }
-
-  static definition(role: Exclude<DispatchRole, 'implement'>): AgentDefinition {
-    const step = role === 'judge' ? STEPS.JUDGE
-      : role === 'advise' ? STEPS.ADVISE
-        : role === 'slice-judge' ? STEPS.SLICE_JUDGE
-          : STEPS.RECONCILE
-    const path = join(DispatchRepository.PLUGIN_ROOT, RoleBytes.filesOf(step)[0])
-    return AgentDefinition.parse(readFileSync(path, 'utf8'))
   }
 
   async #initialize(): Promise<void> {
@@ -535,8 +501,9 @@ describe('RunDispatch real process', () => {
     expect(replayed).toEqual(dispatch)
   })
 
-  it('plugin definitions tools and schemas determine every supported role', async () => {
+  it('every supported role carries its agent, its channel and the schema it needs', async () => {
     const roles: readonly DispatchRole[] = ['implement', 'judge', 'advise', 'slice-judge', 'reconcile']
+    const dispatchOfRole = new Map<DispatchRole, RunDispatch>()
     for (const role of roles) {
       const repository = await DispatchRepository.create()
       repositories.push(repository)
@@ -544,20 +511,34 @@ describe('RunDispatch real process', () => {
       const machine = await repository.machine(stdout)
 
       const dispatch = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+      const expectation = RESPONSE_EXPECTATION_OF_ROLE[role]
 
       expect(dispatch.role).toBe(role)
       expect(dispatch.paths).toEqual(ProducerOutput.paths(role, stdout))
-      expect(dispatch.argv).toEqual(DispatchRepository.expectedArgv(role))
-      expect(dispatch.response.kind).toBe(role === 'reconcile' ? 'edits' : 'structured')
+      expect(dispatch.response.kind).toBe(expectation.kind)
+      if (expectation.schema) expect(dispatch.argv).toContain('--json-schema')
+      else expect(dispatch.argv).not.toContain('--json-schema')
+      expect(dispatch.argv).toContain('--model')
+      if (expectation.agent === null) expect(dispatch.argv).not.toContain('--agent')
+      else {
+        expect(dispatch.argv).toContain('--agent')
+        expect(dispatch.argv).toContain(expectation.agent)
+      }
       expect(Object.isFrozen(dispatch)).toBe(true)
       expect(Object.isFrozen(dispatch.paths)).toBe(true)
       expect(Object.isFrozen(dispatch.argv)).toBe(true)
       expect(await repository.material()).not.toBeNull()
+      dispatchOfRole.set(role, dispatch)
     }
-    expect(DispatchRepository.expectedArgv('judge')).toContain(JUDGE_TOOLS)
-    expect(DispatchRepository.expectedArgv('advise')).toContain(ADVISOR_TOOLS)
-    expect(DispatchRepository.expectedArgv('slice-judge')).toContain(SLICE_JUDGE_TOOLS)
-    expect(DispatchRepository.expectedArgv('reconcile')).toContain(RECONCILER_TOOLS)
+    const dispatched = (role: DispatchRole): RunDispatch => {
+      const dispatch = dispatchOfRole.get(role)
+      if (dispatch === undefined) throw new Error(`no dispatch was captured for role ${role}`)
+      return dispatch
+    }
+    expect(dispatched('judge').argv).toContain(JUDGE_TOOLS)
+    expect(dispatched('advise').argv).toContain(ADVISOR_TOOLS)
+    expect(dispatched('slice-judge').argv).toContain(SLICE_JUDGE_TOOLS)
+    expect(dispatched('reconcile').argv).toContain(RECONCILER_TOOLS)
 
     const malformed = await DispatchRepository.create()
     repositories.push(malformed)

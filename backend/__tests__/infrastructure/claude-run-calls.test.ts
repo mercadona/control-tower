@@ -13,8 +13,6 @@ import {
   IMPLEMENTER_MODEL,
   IMPLEMENTER_TOOLS,
   REPORT_SCHEMA,
-  SLICE_VERDICT_SCHEMA,
-  VERDICT_SCHEMA,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotAdvanced } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -342,7 +340,7 @@ describe('ClaudeRunCalls', () => {
       }),
       RunCallMother.dispatch({
         ticket: 'judge', role: 'judge', paths: [prepared[1], ...RunCallMother.roleFiles(STEPS.JUDGE)],
-        argv: RunCallMother.definedArgv(STEPS.JUDGE, VERDICT_SCHEMA), responsePath: responsePaths[1],
+        argv: RunCallMother.definedArgv(STEPS.JUDGE), responsePath: responsePaths[1],
       }),
       RunCallMother.dispatch({
         ticket: 'advise', role: 'advise', paths: [prepared[2], ...RunCallMother.roleFiles(STEPS.ADVISE)],
@@ -350,7 +348,7 @@ describe('ClaudeRunCalls', () => {
       }),
       RunCallMother.dispatch({
         ticket: 'slice-judge', role: 'slice-judge', paths: [prepared[3], ...RunCallMother.roleFiles(STEPS.SLICE_JUDGE)],
-        argv: RunCallMother.definedArgv(STEPS.SLICE_JUDGE, SLICE_VERDICT_SCHEMA), responsePath: responsePaths[3],
+        argv: RunCallMother.definedArgv(STEPS.SLICE_JUDGE), responsePath: responsePaths[3],
       }),
       RunCallMother.dispatch({
         ticket: 'reconcile', role: 'reconcile', paths: [prepared[4], ...RunCallMother.roleFiles(STEPS.RECONCILE)],
@@ -379,6 +377,9 @@ describe('ClaudeRunCalls', () => {
       expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch.paths))
     })
     expect(scenario.descriptor(0).argv).toContain(JSON.stringify(REPORT_SCHEMA))
+    expect(scenario.descriptor(1).argv).not.toContain('--json-schema')
+    expect(scenario.descriptor(2).argv).toContain(JSON.stringify(ADVICE_SCHEMA))
+    expect(scenario.descriptor(3).argv).not.toContain('--json-schema')
     expect(scenario.descriptor(4).argv).not.toContain('--json-schema')
     expect(scenario.descriptor(1).argv).not.toContain('Agent')
     expect(await Promise.all(prepared.map((path) => readFile(path)))).toEqual(before)

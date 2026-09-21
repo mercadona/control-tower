@@ -48,11 +48,13 @@ describe('run driver real process', () => {
     expect(evidence.dispatches[1].paths).toEqual(expect.arrayContaining(
       RoleBytes.filesOf(STEPS.JUDGE).map((path) => expect.stringContaining(path)),
     ))
-    expect(evidence.dispatches[1].argv).toContain(JSON.stringify(VERDICT_SCHEMA))
+    expect(evidence.dispatches[1].argv).not.toContain(JSON.stringify(VERDICT_SCHEMA))
+    expect(evidence.dispatches[1].argv).not.toContain('--json-schema')
     expect(evidence.dispatches[2].paths).toEqual(expect.arrayContaining(
       RoleBytes.filesOf(STEPS.SLICE_JUDGE).map((path) => expect.stringContaining(path)),
     ))
-    expect(evidence.dispatches[2].argv).toContain(JSON.stringify(SLICE_VERDICT_SCHEMA))
+    expect(evidence.dispatches[2].argv).not.toContain(JSON.stringify(SLICE_VERDICT_SCHEMA))
+    expect(evidence.dispatches[2].argv).not.toContain('--json-schema')
     expect(evidence.attemptSteps).toEqual(evidence.consumingSteps)
     expect(evidence.pullRequestRefusals).toHaveLength(3)
     expect(evidence.pullRequestRefusals.every((stderr) => stderr.includes('unlisted gh request'))).toBe(true)

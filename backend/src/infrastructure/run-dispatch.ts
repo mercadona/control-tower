@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.js'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
+import { RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
 import {
   ADVICE_SCHEMA,
   ADVISOR_TOOLS,
@@ -14,13 +15,16 @@ import {
   RECONCILER_TOOLS,
   REPORT_SCHEMA,
   SLICE_JUDGE_TOOLS,
-  SLICE_VERDICT_SCHEMA,
-  VERDICT_SCHEMA,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../domain/exceptions.ts'
 
+const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
+
 type RunRole = 'implement' | 'judge' | 'advise' | 'slice-judge' | 'reconcile'
-type RunResponse = { readonly kind: 'structured', readonly path: string } | { readonly kind: 'edits' }
+type RunResponse =
+  | { readonly kind: 'file', readonly path: string }
+  | { readonly kind: 'structured', readonly path: string }
+  | { readonly kind: 'edits' }
 type DispatchInput = { readonly kind: 'literal' | 'glob', readonly path: string }
 
 class DispatchMaterial {
@@ -209,7 +213,7 @@ export class RunDispatch {
             ...RunDispatch.#optionalLiteral(asked.stdout, '  - the logs of the controls, ALREADY green, in case it wants them: ', '(none)'),
           ],
           responseLabel: '  - that it write its verdict to: ',
-          schema: VERDICT_SCHEMA,
+          schema: null,
         })
       case STEPS.ADVISE:
         return RunDispatch.#defined({
@@ -240,7 +244,7 @@ export class RunDispatch {
             RunDispatch.#glob(asked.stdout, '  - the verdict of every task, already committed: '),
           ],
           responseLabel: '  - that it write its verdict to: ',
-          schema: SLICE_VERDICT_SCHEMA,
+          schema: null,
         })
       case STEPS.E2E:
         throw new RunNotUnderstood('ct-step requested unsupported E2E material')
@@ -271,7 +275,7 @@ export class RunDispatch {
     argv: readonly string[],
   }): DispatchMaterial {
     RunDispatch.#requireAnnouncement(asked.stdout, asked.announced)
-    const response = RunDispatch.#response(asked.stdout, asked.responseLabel, asked.command)
+    const response = RunDispatch.#response(asked.step, asked.stdout, asked.responseLabel, asked.command)
     return new DispatchMaterial({
       role: asked.role,
       inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, asked.inputs),
@@ -290,7 +294,7 @@ export class RunDispatch {
     announced: string,
     inputs: readonly DispatchInput[],
     responseLabel: string,
-    schema: object,
+    schema: object | null,
   }): DispatchMaterial {
     RunDispatch.#requireAnnouncement(asked.stdout, asked.announced)
     const files = RoleBytes.filesOf(asked.step)
@@ -299,18 +303,19 @@ export class RunDispatch {
     if (tools !== asked.tools) {
       throw new RunNotUnderstood(`the ${asked.role} definition tools do not match the plugin contract`)
     }
+    const argv = [
+      '--tools', tools,
+      '--allowedTools', tools,
+      '--model', definition.model,
+      '--agents', JSON.stringify(definition.toClaudeAgents()),
+      '--agent', definition.name,
+    ]
+    if (asked.schema !== null) argv.push('--json-schema', JSON.stringify(asked.schema))
     return new DispatchMaterial({
       role: asked.role,
       inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, asked.inputs),
-      argv: Object.freeze([
-        '--tools', tools,
-        '--allowedTools', tools,
-        '--model', definition.model,
-        '--agents', JSON.stringify(definition.toClaudeAgents()),
-        '--agent', definition.name,
-        '--json-schema', JSON.stringify(asked.schema),
-      ]),
-      response: RunDispatch.#response(asked.stdout, asked.responseLabel, asked.command),
+      argv: Object.freeze(argv),
+      response: RunDispatch.#response(asked.step, asked.stdout, asked.responseLabel, asked.command),
     })
   }
 
@@ -375,12 +380,19 @@ export class RunDispatch {
     return values[0]
   }
 
-  static #response(stdout: string, label: string, command: RunConsumingCommand): RunResponse {
+  static #response(step: string, stdout: string, label: string, command: RunConsumingCommand): RunResponse {
     const announced = RunDispatch.#printed(stdout, label)
     if (command.responsePath === null || command.responsePath !== announced) {
       throw new RunNotUnderstood('the announced response path conflicts with the consuming command')
     }
-    return Object.freeze({ kind: 'structured', path: announced })
+    switch (RESPONSE_KIND_BY_STEP[step]) {
+      case RESPONSE_KINDS.FILE:
+        return Object.freeze({ kind: 'file', path: announced })
+      case RESPONSE_KINDS.STRUCTURED:
+        return Object.freeze({ kind: 'structured', path: announced })
+      default:
+        throw new RunNotUnderstood(`the step "${step}" does not answer through a printed response path`)
+    }
   }
 
   static #requireAnnouncement(stdout: string, announcement: string): void {

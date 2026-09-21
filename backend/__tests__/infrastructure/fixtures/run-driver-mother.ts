@@ -20,9 +20,7 @@ import {
   RECONCILER_TOOLS,
   REPORT_SCHEMA,
   SLICE_JUDGE_TOOLS,
-  SLICE_VERDICT_SCHEMA,
   SLICE_VERDICT_RULES,
-  VERDICT_SCHEMA,
   VERDICT_RULES,
 } from '../../../../plugin/scripts/step-contracts.js'
 import { AgentDefinition } from '../../../../plugin/scripts/judge-agent-definition.js'
@@ -1334,7 +1332,7 @@ export class RunDriverMother {
         roleFiles: RoleBytes.filesOf(STEPS.IMPLEMENT).map((path) => join(RunDriverMother.#PLUGIN, path)),
       },
       'ct-judge': {
-        argv: definedArgv(STEPS.JUDGE, JUDGE_TOOLS, VERDICT_SCHEMA),
+        argv: definedArgv(STEPS.JUDGE, JUDGE_TOOLS),
         roleFiles: RoleBytes.filesOf(STEPS.JUDGE).map((path) => join(RunDriverMother.#PLUGIN, path)),
       },
       'ct-advisor': {
@@ -1342,7 +1340,7 @@ export class RunDriverMother {
         roleFiles: RoleBytes.filesOf(STEPS.ADVISE).map((path) => join(RunDriverMother.#PLUGIN, path)),
       },
       'ct-slice-judge': {
-        argv: definedArgv(STEPS.SLICE_JUDGE, SLICE_JUDGE_TOOLS, SLICE_VERDICT_SCHEMA),
+        argv: definedArgv(STEPS.SLICE_JUDGE, SLICE_JUDGE_TOOLS),
         roleFiles: RoleBytes.filesOf(STEPS.SLICE_JUDGE).map((path) => join(RunDriverMother.#PLUGIN, path)),
       },
       'ct-reconciler': {
