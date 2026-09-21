@@ -1,0 +1,149 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative, sep } from 'node:path'
+
+type Finding = { readonly file: string, readonly fragment: string }
+
+class RetiredProseContract {
+  static PACKAGE_LABELS = [
+    '  - the rubric from ',
+    "  - the task's brief: ",
+    '  - that it write its report to: ',
+    '  - the review package: ',
+    '  - the logs of the controls, ALREADY green, in case it wants them: ',
+    '  - that it write its verdict to: ',
+    "  - the advisor's package: ",
+    '  - that it write its advice to: ',
+    "  - the slice's review package: ",
+    '  - the plan: ',
+    '  - the log of the Global verification, ALREADY green, in case it wants it: ',
+    '  - the verdict of every task, already committed: ',
+    '  - the reconciliation package: ',
+  ]
+
+  static ABSENCE_SENTINELS = ['(none)', '(N/A declared)']
+
+  static DISPATCH_SENTENCES = [
+    'DISPATCH AN IMPLEMENTER',
+    'DISPATCH THE JUDGE',
+    'DISPATCH THE ADVISOR',
+    'DISPATCH THE SLICE JUDGE',
+  ]
+
+  static STDOUT_PATTERNS = [String.raw`^step: (`, String.raw`next: task `, String.raw`(?:^|\\n)run `]
+
+  static FRAGMENTS: readonly string[] = [
+    ...RetiredProseContract.PACKAGE_LABELS,
+    ...RetiredProseContract.ABSENCE_SENTINELS,
+    ...RetiredProseContract.DISPATCH_SENTENCES,
+    ...RetiredProseContract.STDOUT_PATTERNS,
+  ]
+}
+
+class ProseCensus {
+  static MODULE_EXTENSION = '.ts'
+
+  readonly root: string
+
+  constructor(root: string) {
+    this.root = root
+  }
+
+  findings(): Finding[] {
+    return this.modules().sort().flatMap((file) => this.findingsIn(file))
+  }
+
+  modules(directory: string = this.root): string[] {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(directory, entry.name)
+      if (entry.isDirectory()) return this.modules(full)
+      return entry.name.endsWith(ProseCensus.MODULE_EXTENSION) ? [ProseCensus.pathOf(this.root, full)] : []
+    })
+  }
+
+  findingsIn(file: string): Finding[] {
+    const text = readFileSync(join(this.root, file), 'utf8')
+    return RetiredProseContract.FRAGMENTS
+      .filter((fragment) => text.includes(fragment))
+      .map((fragment) => ({ file, fragment }))
+  }
+
+  static pathOf(root: string, full: string): string {
+    return relative(root, full).split(sep).join('/')
+  }
+
+  static named(findings: Finding[]): string {
+    return findings.map((finding) => `${finding.file} carries ${JSON.stringify(finding.fragment)}`).join(', ')
+  }
+}
+
+class TreeCarryingEveryFragmentOfTheContract {
+  static MODULES = [
+    { path: 'labelled-package.ts', fragments: RetiredProseContract.PACKAGE_LABELS },
+    { path: 'sentinel.ts', fragments: RetiredProseContract.ABSENCE_SENTINELS },
+    { path: 'infrastructure/dispatched-role.ts', fragments: RetiredProseContract.DISPATCH_SENTENCES },
+    { path: 'infrastructure/stdout-pattern.ts', fragments: RetiredProseContract.STDOUT_PATTERNS },
+  ]
+
+  static make(): string {
+    const root = mkdtempSync(join(tmpdir(), 'retired-prose-contract-'))
+    for (const module of TreeCarryingEveryFragmentOfTheContract.MODULES) {
+      const full = join(root, module.path)
+      mkdirSync(dirname(full), { recursive: true })
+      writeFileSync(full, TreeCarryingEveryFragmentOfTheContract.textOf(module.fragments))
+    }
+    return root
+  }
+
+  static textOf(fragments: readonly string[]): string {
+    return fragments.map((fragment) => `out("${fragment}")\n`).join('')
+  }
+}
+
+describe('the prose contract that slices 2, 3 and 4 retire', () => {
+  const temporaryTrees: string[] = []
+
+  afterEach(() => {
+    for (const tree of temporaryTrees.splice(0)) rmSync(tree, { recursive: true, force: true })
+  })
+
+  it('no_module_under_backend_src_carries_a_fragment_of_the_retired_prose_contract', () => {
+    const alive = new ProseCensus(join(import.meta.dirname, '..', 'src')).findings()
+
+    expect(alive, ProseCensus.named(alive)).toEqual([])
+  })
+
+  it('the_census_fires_on_a_tree_that_carries_every_fragment_of_the_contract', () => {
+    const root = TreeCarryingEveryFragmentOfTheContract.make()
+    temporaryTrees.push(root)
+
+    expect(new ProseCensus(root).findings()).toEqual([
+      { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH AN IMPLEMENTER' },
+      { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE JUDGE' },
+      { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE ADVISOR' },
+      { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE SLICE JUDGE' },
+      { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`^step: (` },
+      { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`next: task ` },
+      { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`(?:^|\\n)run ` },
+      { file: 'labelled-package.ts', fragment: '  - the rubric from ' },
+      { file: 'labelled-package.ts', fragment: "  - the task's brief: " },
+      { file: 'labelled-package.ts', fragment: '  - that it write its report to: ' },
+      { file: 'labelled-package.ts', fragment: '  - the review package: ' },
+      { file: 'labelled-package.ts', fragment: '  - the logs of the controls, ALREADY green, in case it wants them: ' },
+      { file: 'labelled-package.ts', fragment: '  - that it write its verdict to: ' },
+      { file: 'labelled-package.ts', fragment: "  - the advisor's package: " },
+      { file: 'labelled-package.ts', fragment: '  - that it write its advice to: ' },
+      { file: 'labelled-package.ts', fragment: "  - the slice's review package: " },
+      { file: 'labelled-package.ts', fragment: '  - the plan: ' },
+      {
+        file: 'labelled-package.ts',
+        fragment: '  - the log of the Global verification, ALREADY green, in case it wants it: ',
+      },
+      { file: 'labelled-package.ts', fragment: '  - the verdict of every task, already committed: ' },
+      { file: 'labelled-package.ts', fragment: '  - the reconciliation package: ' },
+      { file: 'sentinel.ts', fragment: '(none)' },
+      { file: 'sentinel.ts', fragment: '(N/A declared)' },
+    ])
+  })
+})
