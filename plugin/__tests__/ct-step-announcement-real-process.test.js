@@ -231,4 +231,54 @@ describe('ct-step next answers with the announcement under --output-format json'
       detail: '6 discards in this run: it stops instead of going on asking for answers that cannot be read',
     })
   })
+
+  it('the commit step announces no command of its own and the verb that closes it', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    judgeTask(writeVerdict('PASS'))
+
+    const r = ct('next', '--output-format', 'json')
+
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'step',
+      run: { issue: 7, task: 1, tasksTotal: 2, step: 'commit', attempt: 1 },
+      commands: [],
+      consuming: { argv: ['commit', '--plan', 'plan.md', '--issue', '7'] },
+    })
+  })
+
+  it('the reconcile step announces the verb that reconciles the branch', () => {
+    taskOk('uno.txt')
+    taskOk('dos.txt')
+
+    const r = ct('next', '--output-format', 'json')
+
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'step',
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'reconcile', attempt: 1 },
+      commands: [],
+      consuming: { argv: ['reconcile', '--plan', 'plan.md', '--issue', '7'] },
+    })
+  })
+
+  it('the e2e step announces the report placeholder its prose prints', () => {
+    rmSyncBestEffort(repo)
+    repo = makeRepo({ e2e: ['the journey'] })
+    sliceOk()
+
+    const r = ct('next', '--output-format', 'json')
+
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout)).toEqual({
+      version: 1,
+      kind: 'step',
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'e2e', attempt: 1 },
+      commands: [],
+      consuming: { argv: ['e2e', '<file.json>', '--plan', 'plan.md', '--issue', '7'] },
+    })
+  })
 })

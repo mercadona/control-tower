@@ -415,6 +415,11 @@ const currentTask = () => tasks.find((t) => t.n === run.task)
 // this run's own `--plan`/`--issue` — the same two flags every verb of this
 // program already requires.
 const consumingArgv = (verb, ...positional) => [verb, ...positional, '--plan', planPath, '--issue', String(issue)]
+// `ct-step` does not choose the e2e report's path — whoever crosses the
+// journeys writes it and names it on the `e2e` verb — so this is the one
+// value the prose and the consuming argv of that step share instead of each
+// carrying its own copy of the same bytes.
+const E2E_REPORT_PLACEHOLDER = '<file.json>'
 // The name of the subagent a dispatch step announces, taken from the agent
 // definition on disk — the file `RoleBytes` already locates for every
 // dispatching step, and the same bytes the backend parses. A map of step to
@@ -732,7 +737,7 @@ function nextVerb() {
       break
     }
     case STEPS.COMMIT:
-      announcement = StepAnnouncement.program(stepRunFields)
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('commit') } })
       out('COMITEA LA TAREA:')
       out(`  ct-step commit --plan ${planPath} --issue ${issue}`)
       out('The message is composed by the plugin and validated against the closing keywords.')
@@ -753,7 +758,7 @@ function nextVerb() {
     // there is a conflict, it is the verb that says who to dispatch, not
     // `next`.
     case STEPS.RECONCILE:
-      announcement = StepAnnouncement.program(stepRunFields)
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('reconcile') } })
       out('RECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):')
       out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       out('If there is a conflict, the verb itself says who to dispatch.')
@@ -795,7 +800,7 @@ function nextVerb() {
       break
     }
     case STEPS.E2E:
-      announcement = StepAnnouncement.program(stepRunFields)
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('e2e', E2E_REPORT_PLACEHOLDER) } })
       // There is no brief and no package to write: no task subagent is
       // dispatched here, the whole slice is crossed with the environment already
       // brought up by whoever is driving. `AGENTS.md` is the place with the
@@ -821,7 +826,7 @@ function nextVerb() {
         out(`  - ${verdict}: ${fields.join(', ')}`)
       }
       out('Close it with:')
-      out(`  ct-step e2e <file.json> --plan ${planPath} --issue ${issue}`)
+      out(`  ct-step e2e ${E2E_REPORT_PLACEHOLDER} --plan ${planPath} --issue ${issue}`)
       break
     default:
       die(`the state has a step this version does not know: ${run.step}`, EXIT.UNNAMED)
