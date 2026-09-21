@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/mercadona/control-tower/compare/frontend-v0.3.0...frontend-v0.4.0) (2026-09-21)
+
+
+### Funcionalidades
+
+* **frontend:** the session terminal fills the drawer ([#495](https://github.com/mercadona/control-tower/issues/495)) ([a2a08f2](https://github.com/mercadona/control-tower/commit/a2a08f280ffe3c708a5772ff983b55f84ba1fa54))
+
+
+### Correcciones
+
+* **backend:** the chain starts itself, because a coordinating session registers its checkout ([#492](https://github.com/mercadona/control-tower/issues/492)) ([35303a1](https://github.com/mercadona/control-tower/commit/35303a16f2cae9b2c88efce37fe568975b8661df))
+
 ## [0.3.0](https://github.com/mercadona/control-tower/compare/frontend-v0.2.0...frontend-v0.3.0) (2026-09-20)
 
 
