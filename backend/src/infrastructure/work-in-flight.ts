@@ -12,6 +12,10 @@ export class WorkInFlight {
     this.#underWay = new Set<string>()
   }
 
+  holds(key: string): boolean {
+    return this.#underWay.has(key)
+  }
+
   reserve(key: string): ReservationValue {
     if (this.#underWay.has(key)) return Reservation.IN_PROGRESS
     this.#underWay.add(key)

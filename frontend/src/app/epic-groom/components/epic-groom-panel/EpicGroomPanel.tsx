@@ -38,7 +38,7 @@ const RESLICING_MERGED =
 const CREATED = 'Issues del epic'
 const PROMOTE = 'Autorizar el trabajo'
 const PROMOTING = 'Autorizando el trabajo'
-const AUTHORISED = 'Trabajo autorizado: el loop ya puede despachar el primer slice.'
+const AWAITING_DISPATCH = 'Trabajo autorizado: el primer slice sale en el próximo barrido.'
 const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const NO_COORDINATING_SESSION = 'No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.'
@@ -61,6 +61,8 @@ const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'resliced', 'groomable', 'partially-groomed', 'groomed',
 ]
 
+const dispatchedCount = (count: number): string =>
+  count === 1 ? 'Trabajo en marcha: 1 slice despachado.' : `Trabajo en marcha: ${count} slices despachados.`
 const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
 const planItem = (issue: GroomPlanIssue, home: string): string =>
@@ -68,6 +70,7 @@ const planItem = (issue: GroomPlanIssue, home: string): string =>
 const issueItem = (issue: EpicIssue): string => `#${issue.number} · ${issue.title}`
 
 const EpicGroomPanelLabels = {
+  dispatchedCount,
   planCount,
   partialCount,
   planItem,
@@ -80,9 +83,12 @@ type EpicGroomPanelProps = {
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<import('app/epic-groom/EpicGroom.types').GroomSessionOutcome>
+  dispatched?: number
 }
 
-const EpicGroomPanel = ({ target, liveAsk, openingBlocked, operationBusy, openSession }: EpicGroomPanelProps) => {
+const EpicGroomPanel = ({
+  target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
+}: EpicGroomPanelProps) => {
   const askBlocked = liveAsk === null ? openingBlocked : liveAsk !== 'ready'
   const presses = useGatePresses({ target, askBlocked, operationBusy, openSession })
   const { acted, refusal, session, reslicing } = presses
@@ -313,7 +319,9 @@ const EpicGroomPanel = ({ target, liveAsk, openingBlocked, operationBusy, openSe
             </li>
           ))}
         </ul>
-        <p className="epic-groom-panel__authorised">{AUTHORISED}</p>
+        <p className="epic-groom-panel__authorised">
+          {dispatched === 0 ? AWAITING_DISPATCH : EpicGroomPanelLabels.dispatchedCount(dispatched)}
+        </p>
       </div>
     )
   }

@@ -29,9 +29,12 @@ type GateSequenceProps = {
   openingBlocked: boolean
   operationBusy: boolean
   openSession: (key: string, target: string) => Promise<GroomSessionOutcome>
+  dispatched?: number
 }
 
-const GateSequence = ({ target, liveAsk, openingBlocked, operationBusy, openSession }: GateSequenceProps) => {
+const GateSequence = ({
+  target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
+}: GateSequenceProps) => {
   const specFreezeRead = useSpecFreeze(target)
   const epicGroomRead = useEpicGroom(false, target)
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
@@ -83,6 +86,7 @@ const GateSequence = ({ target, liveAsk, openingBlocked, operationBusy, openSess
           openingBlocked={openingBlocked}
           operationBusy={operationBusy}
           openSession={openSession}
+          dispatched={dispatched}
         />
       </CollapsableCard>
     </div>

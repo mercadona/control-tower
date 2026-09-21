@@ -9,6 +9,7 @@ import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
   CoordinatingOperation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -36,6 +37,7 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
       conversations: new Conversations(),
       sessionHooks: new SessionHooks(),
       records: new ConversationRecords(),
+      checkouts: new CheckoutRegistry(),
     })
     this.asked = []
     this.answer = answer

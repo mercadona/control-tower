@@ -2,7 +2,7 @@ import { Reservation, WorkInFlight } from './work-in-flight.ts'
 import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
 import type { PlanStarted } from '../application/actions/start-plan.ts'
 import type { SliceNotStarted, StartMilestonePlanResult } from '../application/actions/start-milestone-plan.ts'
-import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
+import { EpicSpec } from '../domain/value-objects/epic-spec.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
@@ -29,6 +29,8 @@ export class RelayLine {
 }
 
 export class DispatchRelay {
+  static readonly OWN_KEY_PREFIX = 'relay:'
+
   readonly spec: EpicSpecRead
   readonly dispatch: MilestoneDispatched
   readonly inFlight: WorkInFlight
@@ -47,11 +49,22 @@ export class DispatchRelay {
   }
 
   async relay(root: CheckoutRoot, repository: RepositoryName): Promise<void> {
-    const found = await this.spec(root)
+    let found: EpicSpec | null
+    try {
+      found = await this.spec(root)
+    } catch (failure) {
+      if (!(failure instanceof PlanFailure)) throw failure
+      this.stderr(RelayLine.refused(repository, failure))
+
+      return
+    }
     const milestone = DispatchRelay.#milestoneOf(found)
     if (milestone === null) return
 
-    if (this.inFlight.reserve(repository.text) === Reservation.IN_PROGRESS) return
+    if (this.inFlight.holds(repository.text)) return
+
+    const own = DispatchRelay.ownKeyFor(repository)
+    if (this.inFlight.reserve(own) === Reservation.IN_PROGRESS) return
     try {
       const dispatched = await this.dispatch({ repository, root, milestone })
       for (const started of dispatched.started) this.stderr(RelayLine.dispatched(started))
@@ -61,8 +74,12 @@ export class DispatchRelay {
       if (failure instanceof DispatchNotAvailable) return
       this.stderr(RelayLine.refused(repository, failure))
     } finally {
-      this.inFlight.release(repository.text)
+      this.inFlight.release(own)
     }
+  }
+
+  static ownKeyFor(repository: RepositoryName): string {
+    return `${DispatchRelay.OWN_KEY_PREFIX}${repository.text}`
   }
 
   static #milestoneOf(spec: EpicSpec | null): string | null {

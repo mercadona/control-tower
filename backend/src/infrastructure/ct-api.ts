@@ -641,12 +641,14 @@ class CtApi {
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
+      checkouts,
     })
     const recoverCoordinatingSession = new RecoverCoordinatingSession({
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
       liveSessions,
+      checkouts,
       newId: randomUUID,
       now: () => new Date().toISOString(),
       stderr: (line) => process.stderr.write(line),

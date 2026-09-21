@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   OpenCoordinatingSession, OpenCoordinatingSessionParams,
 } from '../../src/application/actions/open-coordinating-session.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import type { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import type { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -138,6 +140,22 @@ class ConversationRecordsDouble extends ConversationRecords {
   }
 }
 
+class CheckoutRegistryDouble extends CheckoutRegistry {
+  remembered: RegisteredCheckout[]
+  steps: string[]
+
+  constructor() {
+    super()
+    this.remembered = []
+    this.steps = []
+  }
+
+  remember(checkout: RegisteredCheckout): void {
+    this.remembered.push(checkout)
+    this.steps.push('remember')
+  }
+}
+
 class Flow {
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static ROOT = new CheckoutRoot('/repo')
@@ -150,6 +168,7 @@ class Flow {
   conversations: ConversationsDouble
   sessionHooks: SessionHooksDouble
   records: ConversationRecordsDouble
+  checkouts: CheckoutRegistryDouble
   steps: string[]
 
   constructor({ userStories, workspace }: {
@@ -161,11 +180,13 @@ class Flow {
     this.conversations = new ConversationsDouble()
     this.sessionHooks = new SessionHooksDouble()
     this.records = new ConversationRecordsDouble()
+    this.checkouts = new CheckoutRegistryDouble()
     this.steps = []
     this.workspace.steps = this.steps
     this.conversations.steps = this.steps
     this.sessionHooks.steps = this.steps
     this.records.steps = this.steps
+    this.checkouts.steps = this.steps
   }
 
   async run(story: UserStoryKey | UserStoryUrl | null = Flow.STORY, comment: PlanComment | null = null) {
@@ -306,5 +327,31 @@ describe('OpenCoordinatingSession', () => {
       PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
+  })
+
+  it('registers the checkout so the sweep surveys it before anything has been dispatched', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered).toHaveLength(1)
+    expect(flow.checkouts.remembered[0].repository).toBe(Flow.REPOSITORY)
+  })
+
+  it('registers the root the workspace confirmed and not the one the request named', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered[0].root).toBe(Flow.CANONICAL_ROOT)
+  })
+
+  it('registers the checkout before the conversation starts, so a session that fails to start is still swept', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.steps.indexOf('remember')).toBeGreaterThanOrEqual(0)
+    expect(flow.steps.indexOf('remember')).toBeLessThan(flow.steps.indexOf('start'))
   })
 })

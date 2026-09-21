@@ -19,7 +19,7 @@ export type StartedEntrypoint = {
 
 export type Refusal = { status: number | null, said: string[] }
 export type StartedPlan = { agent: string, issue: { number: number } }
-export type StartedMilestone = { started: StartedPlan[], failed: { issue: { number: number } }[] }
+export type ListedActivePlan = { plan: StartedPlan }
 export type CapturedLaunch = { argv: string[], prompt: string, pid: number }
 export type RecordedLaunch = {
   agent: string,
@@ -241,9 +241,40 @@ export class TheCoordinatingSession {
   }
 }
 
+export class TheActivePlans {
+  static readonly PATH = '/active-plans'
+
+  readonly status: number
+  readonly text: string
+
+  constructor(asked: { status: number, text: string }) {
+    this.status = asked.status
+    this.text = asked.text
+  }
+
+  static async listedBy(port: number): Promise<TheActivePlans> {
+    const answered = await fetch(`http://127.0.0.1:${port}${TheActivePlans.PATH}`)
+
+    return new TheActivePlans({ status: answered.status, text: await answered.text() })
+  }
+
+  planFor(issue: number): StartedPlan {
+    const listed = (JSON.parse(this.text) as { plans: ListedActivePlan[] }).plans
+    const matching = listed.filter((active) => active.plan.issue.number === issue)
+    if (matching.length !== 1) {
+      throw new Error(`expected one active plan for issue ${issue}, got ${matching.length} in ${this.text}`)
+    }
+
+    return matching[0].plan
+  }
+}
+
 export class ActualHeadlessRuntime {
   static readonly REPOSITORY = 'acme/widget'
   static readonly MILESTONE = 'Fixture milestone'
+  static readonly SLICE_ISSUE = 42
+  static readonly LAUNCHED_BY_THE_CHAIN = 1
+  static readonly LAUNCHED_BY_BOTH_ENTRANCES = 2
   static readonly COORDINATOR = '22222222-2222-4222-8222-222222222222'
   static readonly WRONG_AGENT = '33333333-3333-4333-8333-333333333333'
   static readonly ISSUE_BODY_UNITS = ToolRunner.PIPE_BUFFER_BYTES * 32
@@ -442,12 +473,12 @@ export class ActualHeadlessRuntime {
     await writeFile(join(bin, 'gh'), [
       '#!/usr/bin/env node',
       'const argv = process.argv.slice(2)',
-      `const issue = { number: 42, html_url: 'https://github.com/acme/widget/issues/42', title: '#1 Fixture slice', body: 'x'.repeat(${ActualHeadlessRuntime.ISSUE_BODY_UNITS}) + '\\n<!-- ct-order:1 -->', milestone: { number: 1, title: 'Fixture milestone' }, labels: [{ name: 'status:ready' }] }`,
+      `const issue = { number: ${ActualHeadlessRuntime.SLICE_ISSUE}, html_url: 'https://github.com/acme/widget/issues/${ActualHeadlessRuntime.SLICE_ISSUE}', title: '#1 Fixture slice', body: 'x'.repeat(${ActualHeadlessRuntime.ISSUE_BODY_UNITS}) + '\\n<!-- ct-order:1 -->', milestone: { number: 1, title: ${JSON.stringify(ActualHeadlessRuntime.MILESTONE)} }, labels: [{ name: 'status:ready' }] }`,
       "const node = { number: issue.number, url: issue.html_url, title: issue.title, body: issue.body, state: 'OPEN', stateReason: null, milestone: { ...issue.milestone, description: null }, labels: { nodes: issue.labels } }",
       "const page = (nodes) => JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])",
       "if (argv[0] === 'issue' && argv[1] === 'create') console.log('https://github.com/acme/widget/issues/41')",
-      "else if (argv[0] === 'issue' && argv[1] === 'view') { const number = Number(argv[2]); console.log(JSON.stringify({ number, title: number === 42 ? '#1 Fixture slice' : 'Loose fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: number === 42 ? { title: 'Fixture milestone' } : null })) }",
-      "else if (argv[0] === 'issue' && argv[1] === 'list') console.log(JSON.stringify([{ number: 42, url: issue.html_url, title: issue.title, labels: issue.labels, state: 'OPEN', body: '<!-- ct-order:1 -->' }]))",
+      `else if (argv[0] === 'issue' && argv[1] === 'view') { const number = Number(argv[2]); console.log(JSON.stringify({ number, title: number === issue.number ? '#1 Fixture slice' : 'Loose fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: number === issue.number ? { title: ${JSON.stringify(ActualHeadlessRuntime.MILESTONE)} } : null })) }`,
+      "else if (argv[0] === 'issue' && argv[1] === 'list') console.log(JSON.stringify([{ number: issue.number, url: issue.html_url, title: issue.title, labels: issue.labels, state: 'OPEN', body: '<!-- ct-order:1 -->' }]))",
       "else if (argv[0] === 'api' && argv[1].includes('/contents/')) console.log(JSON.stringify({ sha: process.env.CT_FIXTURE_SPEC_SHA }))",
       `else if (argv[0] === 'api' && argv[1] === 'graphql' && argv.includes(${JSON.stringify(`query=${issuesQueryFor(['CLOSED'])}`)})) console.log(page([]))`,
       `else if (argv[0] === 'api' && argv[1] === 'graphql' && argv.includes(${JSON.stringify(`query=${issuesQueryFor(['OPEN'])}`)})) console.log(page([node]))`,
