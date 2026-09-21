@@ -1,5 +1,7 @@
 import { CoordinatingConversation } from '../../domain/value-objects/coordinating-conversation.ts'
 import { PhasePrompt } from '../../domain/value-objects/phase-prompt.ts'
+import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
+import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { ConversationRecords } from '../../domain/ports/conversation-records.ts'
 import type { Conversations } from '../../domain/ports/conversations.ts'
@@ -54,23 +56,27 @@ export class OpenCoordinatingSession {
   readonly conversations: Conversations
   readonly sessionHooks: SessionHooks
   readonly records: ConversationRecords
+  readonly checkouts: CheckoutRegistry
 
-  constructor({ userStories, workspace, conversations, sessionHooks, records }: {
+  constructor({ userStories, workspace, conversations, sessionHooks, records, checkouts }: {
     userStories: UserStories,
     workspace: Workspace,
     conversations: Conversations,
     sessionHooks: SessionHooks,
     records: ConversationRecords,
+    checkouts: CheckoutRegistry,
   }) {
     this.userStories = userStories
     this.workspace = workspace
     this.conversations = conversations
     this.sessionHooks = sessionHooks
     this.records = records
+    this.checkouts = checkouts
   }
 
   async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
     const root = await this.workspace.confirmForSession({ root: params.root, repository: params.repository })
+    this.checkouts.remember(new RegisteredCheckout({ repository: params.repository, root }))
     const story = params.story === null ? null : await this.userStories.detail(params.story)
 
     const conversation = new CoordinatingConversation({

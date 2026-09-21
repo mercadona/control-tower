@@ -12,13 +12,14 @@ const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
 
 const renderPanel = (
   onSessionOpened: (opened: OpenedCoordinatingSession) => void = vi.fn(),
-  { openingBlocked = false, operationBusy = false, liveAsk = null as LiveAsk | null } = {},
+  { openingBlocked = false, operationBusy = false, liveAsk = null as LiveAsk | null, dispatched = 0 } = {},
 ) =>
   render(<EpicGroomPanel
     target={EpicGroomMother.TARGET}
     openingBlocked={openingBlocked}
     operationBusy={operationBusy}
     liveAsk={liveAsk}
+    dispatched={dispatched}
     openSession={async (key, target) => {
       const outcome = await EpicGroomClient.openSession(key, target)
       if (outcome.kind === 'opened') onSessionOpened(outcome.opened)
@@ -482,8 +483,37 @@ describe('EpicGroomPanel', () => {
       headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-coordinating-target': EpicGroomMother.TARGET },
     })
     expect(
-      await screen.findByText('Trabajo autorizado: el loop ya puede despachar el primer slice.'),
+      await screen.findByText('Trabajo autorizado: el primer slice sale en el próximo barrido.'),
     ).toBeInTheDocument()
+  })
+
+  it('an authorised gate with nothing dispatched yet says the first slice is still to come', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(EpicGroomMother.authorised().body, { status: 200 })))
+
+    renderPanel(vi.fn(), { dispatched: 0 })
+
+    expect(
+      await screen.findByText('Trabajo autorizado: el primer slice sale en el próximo barrido.'),
+    ).toBeInTheDocument()
+  })
+
+  it('an authorised gate counts what the loop already dispatched instead of promising it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(EpicGroomMother.authorised().body, { status: 200 })))
+
+    renderPanel(vi.fn(), { dispatched: 2 })
+
+    expect(await screen.findByText('Trabajo en marcha: 2 slices despachados.')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Trabajo autorizado: el primer slice sale en el próximo barrido.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a single dispatched slice is counted in the singular', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(EpicGroomMother.authorised().body, { status: 200 })))
+
+    renderPanel(vi.fn(), { dispatched: 1 })
+
+    expect(await screen.findByText('Trabajo en marcha: 1 slice despachado.')).toBeInTheDocument()
   })
 
   it('a promotion refused after a successful groom keeps the groomed issues on screen', async () => {

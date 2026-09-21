@@ -148,7 +148,7 @@ describe('Home and the gate sequence', () => {
     await user.click(gate2Toggle)
 
     expect(gate2Toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Trabajo autorizado: el loop ya puede despachar el primer slice.')).toBeInTheDocument()
+    expect(screen.getByText('Trabajo autorizado: el primer slice sale en el próximo barrido.')).toBeInTheDocument()
   })
 
   it('exposes disclosure aria attributes wired to the content region and supports keyboard activation', async () => {

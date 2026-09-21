@@ -641,6 +641,7 @@ class CtApi {
       conversations: claudeConversations,
       sessionHooks,
       records: conversationRecords,
+      checkouts,
     })
     const recoverCoordinatingSession = new RecoverCoordinatingSession({
       conversations: claudeConversations,

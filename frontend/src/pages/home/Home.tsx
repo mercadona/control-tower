@@ -60,6 +60,7 @@ const Home = () => {
   const restoredRef = useRef(workflow !== null)
   const [reconciliation, setReconciliation] = useState<Reconciliation>(workflow === null ? 'not-required' : 'checking')
   const [slicesInFlight, setSlicesInFlight] = useState<ActivePlan[]>([])
+  const [dispatchedSlices, setDispatchedSlices] = useState(0)
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
@@ -205,6 +206,7 @@ const Home = () => {
 
       const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
       const adopted = adoptFromRead(plans)
+      setDispatchedSlices(plans.length)
       setSlicesInFlight(plans.filter((plan) => plan !== adopted))
     })()
     recoveryInFlightRef.current = request
@@ -672,6 +674,7 @@ const Home = () => {
             openingBlocked={coordinatingSession.blocksOpening}
             operationBusy={coordinatingSession.operationBusy}
             openSession={coordinatingSession.openGroom}
+            dispatched={dispatchedSlices}
           />
 
           {workflow !== null && (
