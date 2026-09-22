@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AnnouncedStep, RunAnnouncement, StepProse } from '../../src/infrastructure/run-announcement.ts'
+import { AnnouncedStep, RunAnnouncement } from '../../src/infrastructure/run-announcement.ts'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 
 class AnnouncementMother {
@@ -376,15 +376,5 @@ describe('AnnouncedStep', () => {
 
     expect(round?.step).toBe('slice-judge')
     expect(round?.inputs.map((input) => input.role)).toEqual(['package', 'plan', 'verdicts'])
-  })
-})
-
-describe('StepProse', () => {
-  it('the step of the prose comes from the declared vocabulary', () => {
-    expect(StepProse.step(AnnouncementMother.dispatchProse('judge'))).toBe('judge')
-  })
-
-  it('a step name outside the vocabulary answers null', () => {
-    expect(StepProse.step(AnnouncementMother.dispatchProse('made-up-step'))).toBeNull()
   })
 })

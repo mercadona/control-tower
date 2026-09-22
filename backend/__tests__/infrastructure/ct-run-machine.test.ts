@@ -8,7 +8,6 @@ import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
   AnnouncedInput, AnnouncedResponse, INPUT_KINDS, INPUT_ROLES, StepAnnouncement,
 } from '../../../plugin/scripts/step-announcement.js'
-import { DispatchProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { RunEstablishment } from '../../src/domain/ports/run-machine.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -18,7 +17,7 @@ import { RunInstruction } from '../../src/domain/value-objects/run-instruction.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
-import { AnnouncedStep, StepProse } from '../../src/infrastructure/run-announcement.ts'
+import { AnnouncedStep } from '../../src/infrastructure/run-announcement.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { ProcessOutput, type ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 
@@ -133,14 +132,6 @@ class OracleMother {
     return [
       OracleMother.DISPATCH_CHECK, '332', '--repo', 'mercadona/control-tower-plugin', '--check-plan',
     ]
-  }
-
-  static controlsAnnouncementOfAnotherIssue(): string {
-    return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 331\n`
-  }
-
-  static controlsAnnouncementWithoutAConsumingLine(): string {
-    return 'task 1/3 — execute oracle\nstep: controls\n'
   }
 
   static controlsAnnouncementJson(): string {
@@ -343,10 +334,6 @@ class OracleMother {
       response: AnnouncedResponse.of(STEPS.SLICE_JUDGE, OracleMother.sliceVerdictPath()),
       consuming: { argv },
     }).text()
-  }
-
-  static undeclaredStepAnnouncement(): string {
-    return 'task 1/3 — execute oracle\nstep: judge2 (attempt 1)\n'
   }
 
   static reconcileAnnouncement(): string {
@@ -911,59 +898,6 @@ describe('CtRunMachine', () => {
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
   })
 
-  it('a printed consuming command that names another issue is refused', async () => {
-    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-foreign-issue-')))
-    roots.push(fixture.root)
-    await fixture.establish()
-    const asked = await fixture.journal.begin(
-      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
-    )
-    await fixture.journal.finish(
-      OracleMother.watch(), asked,
-      OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncementOfAnotherIssue()), null, OracleMother.RUN_BYTES,
-      ),
-    )
-
-    const instruction = await fixture.machine().open(OracleMother.watch())
-
-    expect(instruction.work).toEqual({
-      kind: 'refused',
-      detail: 'ct-step output is not understood: "task 1/3 — execute oracle\\nstep: controls (attempt 1)\\n\\n'
-        + 'MEASURE THE TASK (the implementer does not do it, and its word does not count):\\n\\n'
-        + 'Run it with:  ct-step controls --plan docs/superpowers/plans/2026-09-17-issue-332-machine.md'
-        + ' --issue 331\\n"',
-      closure: null,
-    })
-    expect(fixture.asked).toEqual([])
-  })
-
-  it('a transcript that prints no consuming command at all is refused', async () => {
-    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-no-consuming-line-')))
-    roots.push(fixture.root)
-    await fixture.establish()
-    const asked = await fixture.journal.begin(
-      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
-    )
-    await fixture.journal.finish(
-      OracleMother.watch(), asked,
-      OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncementWithoutAConsumingLine()),
-        null,
-        OracleMother.RUN_BYTES,
-      ),
-    )
-
-    const instruction = await fixture.machine().open(OracleMother.watch())
-
-    expect(instruction.work).toEqual({
-      kind: 'refused',
-      detail: 'ct-step output is not understood: "task 1/3 — execute oracle\\nstep: controls\\n"',
-      closure: null,
-    })
-    expect(fixture.asked).toEqual([])
-  })
-
   it('absent establishment defers plan gates until open after publication', async () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-absent-')))
     roots.push(fixture.root)
@@ -1462,15 +1396,5 @@ describe('CtRunMachine', () => {
     const instruction = await fixture.machine().open(OracleMother.watch())
 
     expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
-  })
-
-  it('both prose readers name the same step for the same bytes', () => {
-    expect(StepProse.step(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
-    expect(DispatchProse.stepOf(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
-  })
-
-  it('a step name with a digit is not a declared step', () => {
-    expect(StepProse.step(OracleMother.undeclaredStepAnnouncement())).toBe(null)
-    expect(DispatchProse.stepOf(OracleMother.undeclaredStepAnnouncement())).toBe(null)
   })
 })

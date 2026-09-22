@@ -43,12 +43,15 @@ class RetiredProseContract {
 
   static CONSUMING_LINES = ['When it comes back', 'Run it with:']
 
+  static PROSE_DELEGATIONS = ['DispatchProse', 'StepProse', 'ConsumingProse']
+
   static FRAGMENTS: readonly string[] = [
     ...RetiredProseContract.PACKAGE_LABELS,
     ...RetiredProseContract.ABSENCE_SENTINELS,
     ...RetiredProseContract.DISPATCH_SENTENCES,
     ...RetiredProseContract.STDOUT_PATTERNS,
     ...RetiredProseContract.CONSUMING_LINES,
+    ...RetiredProseContract.PROSE_DELEGATIONS,
   ]
 }
 
@@ -65,6 +68,7 @@ class StdoutScanning {
 
   static MODULES = [
     'infrastructure/ct-run-machine.ts',
+    'infrastructure/run-announcement.ts',
     'infrastructure/run-dispatch.ts',
   ]
 
@@ -130,6 +134,7 @@ class TreeCarryingEveryFragmentOfTheContract {
     { path: 'infrastructure/dispatched-role.ts', fragments: RetiredProseContract.DISPATCH_SENTENCES },
     { path: 'infrastructure/stdout-pattern.ts', fragments: RetiredProseContract.STDOUT_PATTERNS },
     { path: 'infrastructure/consuming-line.ts', fragments: RetiredProseContract.CONSUMING_LINES },
+    { path: 'infrastructure/prose-delegation.ts', fragments: RetiredProseContract.PROSE_DELEGATIONS },
   ]
 
   static make(): string {
@@ -189,6 +194,9 @@ describe('the prose contract that slices 2, 3 and 4 retire', () => {
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH THE SLICE JUDGE' },
       { file: 'infrastructure/dispatched-role.ts', fragment: "DISPATCH THE SLICE'S AGENT" },
       { file: 'infrastructure/dispatched-role.ts', fragment: 'DISPATCH ct-reconciler' },
+      { file: 'infrastructure/prose-delegation.ts', fragment: 'DispatchProse' },
+      { file: 'infrastructure/prose-delegation.ts', fragment: 'StepProse' },
+      { file: 'infrastructure/prose-delegation.ts', fragment: 'ConsumingProse' },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`^step: (` },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`next: task ` },
       { file: 'infrastructure/stdout-pattern.ts', fragment: String.raw`(?:^|\\n)run ` },
@@ -233,6 +241,13 @@ describe('the prose contract that slices 2, 3 and 4 retire', () => {
       { file: 'infrastructure/ct-run-machine.ts', fragment: 'exec(asked.stdout)' },
       { file: 'infrastructure/ct-run-machine.ts', fragment: '.test(stdout)' },
       { file: 'infrastructure/ct-run-machine.ts', fragment: '.test(output.stdout)' },
+      { file: 'infrastructure/run-announcement.ts', fragment: 'stdout.includes(' },
+      { file: 'infrastructure/run-announcement.ts', fragment: 'stdout.split(' },
+      { file: 'infrastructure/run-announcement.ts', fragment: 'stdout.startsWith(' },
+      { file: 'infrastructure/run-announcement.ts', fragment: 'exec(output.stdout)' },
+      { file: 'infrastructure/run-announcement.ts', fragment: 'exec(asked.stdout)' },
+      { file: 'infrastructure/run-announcement.ts', fragment: '.test(stdout)' },
+      { file: 'infrastructure/run-announcement.ts', fragment: '.test(output.stdout)' },
       { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.includes(' },
       { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.split(' },
       { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.startsWith(' },

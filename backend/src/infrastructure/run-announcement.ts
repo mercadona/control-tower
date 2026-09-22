@@ -3,7 +3,7 @@ import {
   ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, CONSUMING_VERB_OF_STEP, INPUT_KINDS,
   MANDATORY_INPUT_ROLES_OF_STEP, RESPONSE_KIND_OF_STEP,
 } from '../../../plugin/scripts/step-announcement.js'
-import { OUTCOMES, RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
+import { OUTCOMES, RUN_STATES } from '../../../plugin/scripts/run-machine.js'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 
 export type { RunClosure }
@@ -243,31 +243,5 @@ export class AnnouncedStep {
 
   static #isStringArray(value: unknown): value is readonly string[] {
     return Array.isArray(value) && value.every((element) => typeof element === 'string')
-  }
-}
-
-export class ConsumingProse {
-  static readonly #INTRODUCTION = ':  '
-
-  static carries(stdout: string, command: string): boolean {
-    return stdout.split('\n').some((line) => ConsumingProse.#names(line.trim(), command))
-  }
-
-  static #names(line: string, command: string): boolean {
-    return line === command || line.endsWith(`${ConsumingProse.#INTRODUCTION}${command}`)
-  }
-}
-
-export class StepProse {
-  static readonly #PREFIX = 'step: '
-  static readonly #CUT = ' ('
-  static readonly #STEPS: readonly string[] = Object.values(STEPS)
-
-  static step(stdout: string): string | null {
-    const line = stdout.split('\n').find((candidate) => candidate.startsWith(StepProse.#PREFIX))
-    if (line === undefined) return null
-    const cut = line.indexOf(StepProse.#CUT)
-    const name = cut === -1 ? line.slice(StepProse.#PREFIX.length) : line.slice(StepProse.#PREFIX.length, cut)
-    return StepProse.#STEPS.includes(name) ? name : null
   }
 }

@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { STEPS } from '../../../plugin/scripts/run-machine.js'
+import { StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
 import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import {
   PlanAgentNeverLaunched,
@@ -484,7 +486,15 @@ class AgentMother {
   }
 
   static controlsAnnouncement(): string {
-    return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${AgentMother.PLAN} --issue 332\n`
+    return StepAnnouncement.program({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.CONTROLS,
+      attempt: 1,
+      commands: ['npm run lint', 'npm test'],
+      consuming: { argv: ['controls', '--plan', AgentMother.PLAN, '--issue', '332'] },
+    }).text()
   }
 
   static deliveredTransition(): string {
