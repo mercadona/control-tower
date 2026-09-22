@@ -8,7 +8,7 @@ import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
   AnnouncedInput, AnnouncedResponse, INPUT_KINDS, INPUT_ROLES, StepAnnouncement,
 } from '../../../plugin/scripts/step-announcement.js'
-import { DispatchProse, RESPONSE_LABELS, STEP_HEADINGS } from '../../../plugin/scripts/step-prose.js'
+import { DispatchProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { RunEstablishment } from '../../src/domain/ports/run-machine.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -133,10 +133,6 @@ class OracleMother {
     ]
   }
 
-  static controlsAnnouncement(): string {
-    return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 332\n`
-  }
-
   static controlsAnnouncementOfAnotherIssue(): string {
     return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 331\n`
   }
@@ -178,22 +174,9 @@ class OracleMother {
   }
 
   static implementAnnouncement(): string {
-    const reportPath = OracleMother.implementReportPath()
-    const rubricPath = '/plugin/prompts/task-implementer.md'
-    const briefPath = `${OracleMother.WORKTREE}/.agent/run-332/task-1-brief.md`
-    return [
-      'task 1/3 — execute oracle',
-      DispatchProse.stepLine(STEPS.IMPLEMENT, 1),
-      '',
-      STEP_HEADINGS.get(STEPS.IMPLEMENT),
-      DispatchProse.inputLine(STEPS.IMPLEMENT, INPUT_ROLES.RUBRIC, rubricPath),
-      DispatchProse.inputLine(STEPS.IMPLEMENT, INPUT_ROLES.BRIEF, briefPath),
-      `${RESPONSE_LABELS.get(STEPS.IMPLEMENT)}${reportPath}`,
-      '',
-      `${DispatchProse.CONSUMING_PREFIX}report ${reportPath} --plan ${OracleMother.PLAN} --issue 332`,
-      'Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.',
-      '',
-    ].join('\n')
+    return OracleMother.#implementRound(
+      AnnouncedResponse.of(STEPS.IMPLEMENT, OracleMother.implementReportPath()),
+    )
   }
 
   static judgeVerdictPath(): string {
@@ -239,6 +222,12 @@ class OracleMother {
   }
 
   static implementRoundOfAForeignResponseKindJson(): string {
+    return OracleMother.#implementRound(
+      new AnnouncedResponse({ kind: 'file', path: OracleMother.implementReportPath() }),
+    )
+  }
+
+  static #implementRound(response: AnnouncedResponse): string {
     return StepAnnouncement.dispatch({
       issue: 332,
       task: 1,
@@ -258,7 +247,7 @@ class OracleMother {
           path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-brief.md`,
         }),
       ],
-      response: new AnnouncedResponse({ kind: 'file', path: OracleMother.implementReportPath() }),
+      response,
       consuming: {
         argv: ['report', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
       },
@@ -267,23 +256,35 @@ class OracleMother {
 
   static sliceJudgeAnnouncement(): string {
     const verdictPath = `${OracleMother.WORKTREE}/.agent/run-332/slice-verdict.json`
-    return [
-      'slice of issue 332 — the 3 tasks committed',
-      'step: slice-judge (attempt 2)',
-      '',
-      STEP_HEADINGS.get(STEPS.SLICE_JUDGE),
-      DispatchProse.inputLine(
-        STEPS.SLICE_JUDGE, INPUT_ROLES.PACKAGE, `${OracleMother.WORKTREE}/.agent/slice-review-332.md`,
-      ),
-      DispatchProse.inputLine(STEPS.SLICE_JUDGE, INPUT_ROLES.PLAN, OracleMother.PLAN),
-      DispatchProse.inputLine(
-        STEPS.SLICE_JUDGE, INPUT_ROLES.VERDICTS, 'docs/superpowers/verdicts/issue-332-task-*.json',
-      ),
-      `${RESPONSE_LABELS.get(STEPS.SLICE_JUDGE)}${verdictPath}`,
-      '',
-      `${DispatchProse.CONSUMING_PREFIX}slice-verdict ${verdictPath} --plan ${OracleMother.PLAN} --issue 332`,
-      '',
-    ].join('\n')
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 3,
+      tasksTotal: 3,
+      step: STEPS.SLICE_JUDGE,
+      attempt: 2,
+      agent: 'ct-slice-judge',
+      inputs: [
+        new AnnouncedInput({
+          role: INPUT_ROLES.PACKAGE,
+          kind: INPUT_KINDS.LITERAL,
+          path: `${OracleMother.WORKTREE}/.agent/slice-review-332.md`,
+        }),
+        new AnnouncedInput({
+          role: INPUT_ROLES.PLAN,
+          kind: INPUT_KINDS.LITERAL,
+          path: OracleMother.PLAN,
+        }),
+        new AnnouncedInput({
+          role: INPUT_ROLES.VERDICTS,
+          kind: INPUT_KINDS.GLOB,
+          path: 'docs/superpowers/verdicts/issue-332-task-*.json',
+        }),
+      ],
+      response: AnnouncedResponse.of(STEPS.SLICE_JUDGE, verdictPath),
+      consuming: {
+        argv: ['slice-verdict', verdictPath, '--plan', OracleMother.PLAN, '--issue', '332'],
+      },
+    }).text()
   }
 
   static undeclaredStepAnnouncement(): string {
@@ -291,7 +292,15 @@ class OracleMother {
   }
 
   static reconcileAnnouncement(): string {
-    return `slice of issue 332 — the 3 tasks committed\nstep: reconcile (attempt 1)\n\nRECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):\n  ct-step reconcile --plan ${OracleMother.PLAN} --issue 332\nIf there is a conflict, the verb itself says who to dispatch.\n`
+    return StepAnnouncement.program({
+      issue: 332,
+      task: 3,
+      tasksTotal: 3,
+      step: STEPS.RECONCILE,
+      attempt: 1,
+      commands: [],
+      consuming: { argv: ['reconcile', '--plan', OracleMother.PLAN, '--issue', '332'] },
+    }).text()
   }
 
   static reconcilerRoundJson(): string {
@@ -442,7 +451,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     const measured = await fixture.journal.begin(
@@ -483,7 +492,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.deliveredTransition()))
@@ -506,7 +515,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     fixture.answer(OracleMother.controlsArgv(), OracleMother.output(
@@ -569,7 +578,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     const measured = await fixture.journal.begin(
@@ -605,7 +614,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     const measured = await fixture.journal.begin(
@@ -638,7 +647,7 @@ describe('CtRunMachine', () => {
     fixture.runBytes = null
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
-      return OracleMother.output(0, OracleMother.controlsAnnouncement())
+      return OracleMother.output(0, OracleMother.controlsAnnouncementJson())
     })
     fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.deliveredTransition()))
     const machine = fixture.machine()
@@ -678,7 +687,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), announced,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()),
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()),
         null,
         OracleMother.RUN_BYTES,
       ),
@@ -719,7 +728,7 @@ describe('CtRunMachine', () => {
     fixture.runBytes = null
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
-      return OracleMother.output(0, OracleMother.controlsAnnouncement())
+      return OracleMother.output(0, OracleMother.controlsAnnouncementJson())
     })
     const machine = fixture.machine()
     const first = await machine.open(OracleMother.watch())
@@ -1110,7 +1119,7 @@ describe('CtRunMachine', () => {
     )
     await forked.journal.finish(
       OracleMother.watch(), rootTicket,
-      OracleMother.receipt(OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES),
+      OracleMother.receipt(OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES),
     )
     await forked.journal.begin(
       OracleMother.watch(), OracleMother.request(rootTicket, OracleMother.controlsArgv()),
@@ -1139,7 +1148,7 @@ describe('CtRunMachine', () => {
     await fixture.journal.finish(
       OracleMother.watch(), asked,
       OracleMother.receipt(
-        OracleMother.output(0, OracleMother.controlsAnnouncement()), null, OracleMother.RUN_BYTES,
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
       ),
     )
     const ticket = await fixture.journal.begin(
@@ -1204,8 +1213,8 @@ describe('CtRunMachine', () => {
 
     const instruction = await fixture.machine().open(OracleMother.watch())
 
-    expect(StepProse.step(OracleMother.sliceJudgeAnnouncement())).toBe('slice-judge')
-    expect(DispatchProse.stepOf(OracleMother.sliceJudgeAnnouncement())).toBe('slice-judge')
+    expect(StepProse.step(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
+    expect(DispatchProse.stepOf(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
     expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
   })
 
