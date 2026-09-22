@@ -125,8 +125,14 @@ cannot be read — and resetting them would hide a judge that is illegible.
 ### `run-announcement.ts` and `RunClosure`
 
 `RunClosure` (`domain/value-objects/run-instruction.ts:1`) gains
-`findings: string | null` and `verdict: string | null`, because it is the value
-that travels from the boundary to `DriveRun`.
+`findings: string | null`, `verdict: string | null` and `task: number | null`,
+because it is the value that travels from the boundary to `DriveRun`.
+
+`task` is lifted from the announcement's existing `run.task`. It rides on the
+closure rather than being asked of the machine, because `RunMachine`
+(`domain/ports/run-machine.ts`) declares `establishment`, `open` and `advance`
+and nothing else — widening a port to carry a number for a message is the wrong
+trade.
 
 `RunAnnouncement` reads both from the record. Absent or malformed, both are
 `null`: a machine running a stale cached plugin must not break the read.
