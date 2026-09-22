@@ -64,24 +64,20 @@ export class EpicSpec {
 
   findings(): FreezeFinding[] {
     const analyzed = analyzeSpecFreeze(this.text)
-    return [
+    const lined = [
       ...EpicSpec.#linedAs(FreezeFindingCode.CLARIFICATION_MARKER, analyzed.clarifications),
       ...EpicSpec.#linedAs(FreezeFindingCode.DECISION_WITHOUT_PROVENANCE, analyzed.decisionsWithoutProvenance),
-      ...EpicSpec.#hypothesisFinding(analyzed.hypothesis),
       ...EpicSpec.#scopeFinding(analyzed.scope),
     ]
-  }
-
-  static #hypothesisFinding(reason: string): FreezeFinding[] {
-    switch (reason) {
+    switch (analyzed.hypothesis) {
       case HYPOTHESIS_REASONS.OK:
-        return []
+        return lined
       case HYPOTHESIS_REASONS.ABSENT:
-        return [new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_ABSENT, line: null, detail: null })]
+        return [...lined, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_ABSENT, line: null, detail: null })]
       case HYPOTHESIS_REASONS.EMPTY:
-        return [new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null })]
+        return [...lined, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null })]
       default:
-        throw new Error(`no freeze finding is declared for the hypothesis reason ${JSON.stringify(reason)}`)
+        throw new Error(`no freeze finding is declared for the hypothesis reason ${JSON.stringify(analyzed.hypothesis)}`)
     }
   }
 
