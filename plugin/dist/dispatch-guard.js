@@ -132,7 +132,7 @@ var StepSeal = class _StepSeal {
 };
 var DispatchGate = class _DispatchGate {
   static verdictFor(run, ctStepPath) {
-    if (run.closed) return DispatchVerdict.letThrough();
+    if (run.closed === RUN_STATES.DELIVERED) return DispatchVerdict.letThrough();
     const input = StepSeal.inputWrittenFor(run.step);
     if (input === null) return DispatchVerdict.letThrough();
     if (run.nextSeal === StepSeal.of(run)) return DispatchVerdict.letThrough();
