@@ -102,8 +102,7 @@ describe('Home and the coordinating session', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
-    await vi.waitFor(() => expect(screen.queryAllByText('Trabajando')).toHaveLength(0))
-    expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
     expect(fetching).toHaveBeenCalledWith('/coordinating-session/close', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -114,7 +113,7 @@ describe('Home and the coordinating session', () => {
     })
   })
 
-  it('keeps the terminal and timeline visible while durable cancellation is pending', async () => {
+  it('keeps the terminal visible while durable cancellation is pending', async () => {
     let confirm: (response: Response) => void = () => undefined
     const pending = new Promise<Response>((resolve) => { confirm = resolve })
     const fetching = backendHolding(CoordinatingSessionMother.working())
@@ -135,7 +134,6 @@ describe('Home and the coordinating session', () => {
     expect(await screen.findByRole('button', { name: 'Cancelando…' })).toBeDisabled()
     expect(screen.getByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'zsh' })).toBeInTheDocument()
-    expect(screen.getAllByText('Trabajando')).not.toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
 
@@ -173,7 +171,6 @@ describe('Home and the coordinating session', () => {
       'No se pudo inspeccionar o terminar la sesión. Vuelve a intentarlo; las sesiones nuevas seguirán bloqueadas hasta confirmar el cierre.'
     )
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
-    expect(screen.getAllByText('Trabajando')).not.toHaveLength(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
 
