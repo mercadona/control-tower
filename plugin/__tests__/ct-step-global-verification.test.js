@@ -111,6 +111,26 @@ describe('the telemetry the loop writes after the last task commit travels befor
     expect(r.stdout).toMatch(/slice/i)
   })
 
+  it('an interrupted global verification resumes without losing or duplicating its telemetry commit', () => {
+    const interruptOnce = 'if [ ! -f .agent/run-7/global-interrupted ]; then touch .agent/run-7/global-interrupted; kill -KILL "$PPID"; fi'
+    writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt && test -f dos.txt', `${interruptOnce}\n${CLEAN_TREE}`))
+    twoTasks()
+    const before = commits()
+
+    const interrupted = ct('global')
+    expect(interrupted.signal).toBe('SIGKILL')
+    expect(commits()).toBe(before + 1)
+    expect(ct('next').status).toBe(0)
+    expect(runState().step).toBe('global')
+    expect(runState().sliceCommits).toBe(1)
+
+    expect(ct('global').status).toBe(0)
+    expect(commits()).toBe(before + 1)
+    expect(runState().sliceCommits).toBe(1)
+    expect(runState().step).toBe('slice-judge')
+    expect(ct('next').status).toBe(0)
+  })
+
   it('a foreign path staged before global is not taken inside the telemetry commit: nothing is committed and §8 sees the dirty tree', () => {
     cleanTreePlan()
     twoTasks()

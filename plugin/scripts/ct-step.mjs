@@ -2231,6 +2231,9 @@ function commitLoopFootprint() {
   switch (outcome) {
     case FootprintOutcome.COMMITTED:
       run = { ...run, sliceCommits: (run.sliceCommits || 0) + 1 }
+      // Verification can outlive this process: persist the commit before its
+      // commands run, so an interrupted global can resume with the same count.
+      save()
       out(`telemetry committed: ${headSha().slice(0, 7)}`)
       break
     case FootprintOutcome.CLEAN:
