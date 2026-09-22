@@ -24,16 +24,18 @@ type SliceSessionProps = {
   root: string
   repo: string
   recovery?: SliceRecovery | null
+  onSelect?: () => void
 }
 
 const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_LABEL : RECOVER_LABEL)
 
-const SliceSession = ({ issue, root, repo, recovery = null }: SliceSessionProps) => {
+const SliceSession = ({ issue, root, repo, recovery = null, onSelect }: SliceSessionProps) => {
   const progress = useImplementProgress(issue, root, repo)
 
   return (
     <section className="slice-session" aria-label={`Slice #${issue}`}>
       <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
+      {onSelect !== undefined && <Button variant="secondary" onClick={onSelect}>Ver detalle</Button>}
       <ImplementProgress progress={progress} />
       {recovery !== null && (
         <div className="slice-session__recovery">

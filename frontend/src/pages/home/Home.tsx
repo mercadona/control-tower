@@ -57,6 +57,7 @@ const Home = () => {
   const restoredRef = useRef(workflow !== null)
   const [reconciliation, setReconciliation] = useState<Reconciliation>(workflow === null ? 'not-required' : 'checking')
   const [slicesInFlight, setSlicesInFlight] = useState<ActivePlan[]>([])
+  const activePlansRef = useRef<ActivePlan[]>([])
   const [dispatchedSlices, setDispatchedSlices] = useState(0)
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
@@ -122,6 +123,11 @@ const Home = () => {
     }
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
+
+  const selectSlice = (slice: ActivePlan) => {
+    selectActivePlan(slice)
+    setSlicesInFlight(activePlansRef.current.filter((active) => activePlanIdentity(active) !== activePlanIdentity(slice)))
+  }
 
   const adoptFromRead = useCallback((plans: ActivePlan[]): ActivePlan | null => {
     const current = workflowRef.current
@@ -200,6 +206,7 @@ const Home = () => {
       }
 
       const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
+      activePlansRef.current = plans
       const adopted = adoptFromRead(plans)
       setDispatchedSlices(plans.length)
       setSlicesInFlight(plans.filter((plan) => plan !== adopted))
@@ -571,6 +578,7 @@ const Home = () => {
                   root={slice.plan.root ?? slice.request.path}
                   repo={slice.plan.repo}
                   recovery={sliceRecoveryOf(slice)}
+                  onSelect={() => selectSlice(slice)}
                 />
               ))}
             </section>
