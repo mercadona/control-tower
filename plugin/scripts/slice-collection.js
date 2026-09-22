@@ -103,20 +103,20 @@ export class Delivery {
 }
 
 export class CollectionPolicy {
-  static stepFor({ delivery, hasWorktree, hasBranch, status, localTip }) {
+  static stepFor({ delivery, hasWorktree, hasBranch, status, localTip, headContainsTip = false }) {
     CollectionPolicy.#refuseTreeDisagreement(hasWorktree, status)
     CollectionPolicy.#refuseTipDisagreement(hasBranch, localTip)
     if (!hasWorktree && !hasBranch) return CollectionStep.NOTHING_LEFT
     if (delivery.state === DeliveryState.NOT_OPENED) return CollectionStep.WAIT
     if (delivery.state === DeliveryState.OPEN) return CollectionStep.WAIT
     if (delivery.state === DeliveryState.ABANDONED) return CollectionStep.WAIT
-    if (delivery.state === DeliveryState.MERGED) return CollectionPolicy.#stepForMerged(delivery, status, localTip)
+    if (delivery.state === DeliveryState.MERGED) return CollectionPolicy.#stepForMerged(delivery, status, localTip, headContainsTip)
     throw new Error(`CollectionPolicy does not describe the delivery state ${JSON.stringify(delivery.state)}`)
   }
 
-  static #stepForMerged(delivery, status, localTip) {
+  static #stepForMerged(delivery, status, localTip, headContainsTip) {
     if (status !== null && status.trim().length > 0) return CollectionStep.KEEP_DIRTY_TREE
-    if (localTip !== null && localTip !== delivery.headRefOid) return CollectionStep.KEEP_TIP_NOT_MERGED
+    if (localTip !== null && localTip !== delivery.headRefOid && !headContainsTip) return CollectionStep.KEEP_TIP_NOT_MERGED
     return CollectionStep.COLLECT
   }
 
@@ -152,6 +152,14 @@ export class CollectionCommands {
 
   static tipArgv({ mainRoot, branch }) {
     return ['-C', mainRoot, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
+  }
+
+  static fetchMergedHeadArgv({ mainRoot, number }) {
+    return ['-C', mainRoot, 'fetch', '--quiet', 'origin', `refs/pull/${number}/head`]
+  }
+
+  static headContainsTipArgv({ mainRoot, localTip, headRefOid }) {
+    return ['-C', mainRoot, 'merge-base', '--is-ancestor', localTip, headRefOid]
   }
 
   static removeWorktreeArgv({ mainRoot, worktree }) {

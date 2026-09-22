@@ -1482,7 +1482,7 @@ if (collect) {
     [CollectionOutcome.NOTHING_LEFT]: { say: dieOut, code: 0, line: () => `nothing left for #${issue}: in ${a.mainRoot} neither the worktree .worktrees/${issue} nor the branch ${a.branch} is left` },
     [CollectionOutcome.WAITING]: { say: dieOut, code: 1, line: (r) => `waiting on #${issue} (${r.delivery.state}): ${waitingFor(r.delivery)} — nothing has been touched` },
     [CollectionOutcome.KEPT_DIRTY_TREE]: { say: dieOut, code: 10, line: () => `kept #${issue}: the worktree ${a.worktree} has uncommitted changes — nothing has been deleted` },
-    [CollectionOutcome.KEPT_TIP_NOT_MERGED]: { say: dieOut, code: 10, line: (r) => `kept #${issue}: the local tip of ${a.branch} is not the commit that PR #${r.delivery.number} merged (${r.delivery.headRefOid}) — nothing has been deleted` },
+    [CollectionOutcome.KEPT_TIP_NOT_MERGED]: { say: dieOut, code: 10, line: (r) => `kept #${issue}: the local tip of ${a.branch} carries commits the head PR #${r.delivery.number} merged (${r.delivery.headRefOid}) does not contain — nothing has been deleted` },
     [CollectionOutcome.NOT_READ]: { say: dieErr, code: 3, line: (r) => `the state of #${issue} could not be read: ${r.read} failed (${r.detail}) — nothing has been touched, the next sweep tries again.` },
     [CollectionOutcome.PARTIAL]: { say: dieErr, code: 4, line: (r) => `ATTENTION: half a harvest of #${issue}: ${r.done.length ? r.done.map(doneText).join(', ') : 'no step was completed'}. It failed: ${r.detail}. Pending by hand — run each command separately: ${r.pending.map((command) => command.line).join(' ; ')}` },
   }
