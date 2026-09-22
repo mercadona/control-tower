@@ -70,6 +70,9 @@ export class ClaudeRunCalls extends RunCalls {
       requestId: `run:${dispatch.ticket}`,
     })
     const recorded = await this.calls.startedFor(invocation)
+    if (recorded === null && dispatch.response.kind === 'file') {
+      await this.#discardStaleResponse(watch.located.path, dispatch.response.path)
+    }
     const call = recorded ?? await this.calls.start(invocation)
     let completion = await this.calls.completed(call)
     if (completion === null) {
@@ -82,13 +85,24 @@ export class ClaudeRunCalls extends RunCalls {
     if (!completion.succeeded) throw new RunNotAdvanced(ClaudeRunCalls.#failureOf(completion))
     switch (dispatch.response.kind) {
       case 'edits':
+        return
       case 'file':
+        await this.#requireWrittenResponse(watch.located.path, dispatch.role, dispatch.response.path)
         return
       case 'structured':
         await this.#installResponse(watch, call, dispatch.response.path)
         return
     }
     return dispatch.response satisfies never
+  }
+
+  async #discardStaleResponse(cwd: string, printed: string): Promise<void> {
+    await this.files.fs.rm(ClaudeRunCalls.#destination(cwd, printed), { force: true })
+  }
+
+  async #requireWrittenResponse(cwd: string, role: RunDispatch['role'], printed: string): Promise<void> {
+    if (await this.files.read(ClaudeRunCalls.#destination(cwd, printed)) !== null) return
+    throw new RunNotAdvanced(`the ${role} completed without writing its response file: ${printed}`)
   }
 
   #argv(conversation: string, dispatch: RunDispatch): readonly string[] {

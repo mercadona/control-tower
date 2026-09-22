@@ -34,6 +34,7 @@ type Response = RunDispatch['response']
 type Script = Readonly<{
   stream: string,
   completion: 'success' | 'failed' | 'pending',
+  written?: Readonly<{ path: string, text: string }>,
 }>
 
 class AcceptedWorker extends ChildProcess {}
@@ -222,6 +223,9 @@ class ScriptedClaude {
     const call = new StartedPlanCall({ conversation: descriptor.conversation, id: basename(directory) })
     this.descriptors.push(descriptorPath)
     writeFileSync(join(directory, CallDescriptor.STREAM), script.stream)
+    if (script.written !== undefined) {
+      writeFileSync(join(descriptor.cwd, script.written.path), script.written.text)
+    }
     if (script.completion === 'pending') this.pending.push({ directory, call, script })
     else this.writeCompletion(directory, call, script.completion)
     const worker = new AcceptedWorker()
@@ -359,11 +363,14 @@ describe('ClaudeRunCalls', () => {
         argv: RunCallMother.definedArgv(STEPS.RECONCILE), response: { kind: 'edits' },
       }),
     ]
-    const scripts = new Map(dispatches.map((dispatch) => [
+    const scripts = new Map(dispatches.map((dispatch): [string, Script] => [
       `run:${dispatch.ticket}`,
       {
         stream: RunCallMother.stream('present', { role: dispatch.role }),
-        completion: dispatch.role === 'implement' ? 'pending' as const : 'success' as const,
+        completion: dispatch.role === 'implement' ? 'pending' : 'success',
+        ...(dispatch.response.kind === 'file'
+          ? { written: { path: dispatch.response.path, text: `${dispatch.role} wrote its own answer\n` } }
+          : {}),
       },
     ]))
     const scenario = await RunCallMother.scenario(dispatches, scripts)
@@ -394,17 +401,77 @@ describe('ClaudeRunCalls', () => {
     })
     await writeFile(dispatch.paths[0], 'the review package\n', 'utf8')
     const streamed = { ruling: 'VETO', findings: ['the stream must not reach the verdict'] }
+    const ruled = `${JSON.stringify({ ruling: 'PASS', findings: [] })}\n`
     const scenario = await RunCallMother.scenario([dispatch], new Map([
-      ['run:verdict', { stream: RunCallMother.stream('present', streamed), completion: 'success' }],
+      ['run:verdict', {
+        stream: RunCallMother.stream('present', streamed),
+        completion: 'success',
+        written: { path: responsePath, text: ruled },
+      }],
     ]))
     const verdict = join(scenario.watch.located.path, responsePath)
-    const ruled = `${JSON.stringify({ ruling: 'PASS', findings: [] })}\n`
-    await writeFile(verdict, ruled, 'utf8')
 
     await scenario.perform('verdict')
 
     expect(await readFile(verdict, 'utf8')).toBe(ruled)
     expect(existsSync(join(scenario.files.callDirectory(scenario.call()), ClaudeRunCalls.RESPONSE))).toBe(false)
+  })
+
+  it('a judge that writes nothing is refused, and the verdict of the previous attempt at the task is gone', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-stale-verdict-'))
+    RunCallMother.roots.push(root)
+    const responsePath = 'task-1-verdict.json'
+    const ruled = `${JSON.stringify({ ruling: 'FAIL', findings: [{ severity: 'high', what: 'the first attempt' }] })}\n`
+    const dispatches = ['first-attempt', 'second-attempt'].map((ticket) => RunCallMother.dispatch({
+      ticket, role: 'judge', paths: [join(root, `${ticket}-review.diff`)],
+      argv: RunCallMother.definedArgv(STEPS.JUDGE), response: { kind: 'file', path: responsePath },
+    }))
+    await Promise.all(dispatches.map((dispatch) => writeFile(dispatch.paths[0], 'the review package\n', 'utf8')))
+    const scenario = await RunCallMother.scenario(dispatches, new Map([
+      ['run:first-attempt', {
+        stream: RunCallMother.stream('missing'),
+        completion: 'success',
+        written: { path: responsePath, text: ruled },
+      }],
+      ['run:second-attempt', { stream: RunCallMother.stream('missing'), completion: 'success' }],
+    ]))
+    const verdict = join(scenario.watch.located.path, responsePath)
+
+    await scenario.perform('first-attempt')
+    const judged = await readFile(verdict, 'utf8')
+    await expect(scenario.perform('second-attempt')).rejects.toEqual(new RunNotAdvanced(
+      'the judge completed without writing its response file: task-1-verdict.json',
+    ))
+
+    expect(judged).toBe(ruled)
+    expect(existsSync(verdict)).toBe(false)
+    expect(scenario.launch.descriptors).toHaveLength(2)
+  })
+
+  it('a replayed file dispatch makes no second call and keeps the verdict its own call wrote', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-file-replay-'))
+    RunCallMother.roots.push(root)
+    const responsePath = 'slice-verdict.json'
+    const ruled = `${JSON.stringify({ ruling: 'PASS', findings: [] })}\n`
+    const dispatch = RunCallMother.dispatch({
+      ticket: 'replayed', role: 'slice-judge', paths: [join(root, 'slice-review.diff')],
+      argv: RunCallMother.definedArgv(STEPS.SLICE_JUDGE), response: { kind: 'file', path: responsePath },
+    })
+    await writeFile(dispatch.paths[0], "the slice's review package\n", 'utf8')
+    const scenario = await RunCallMother.scenario([dispatch], new Map([
+      ['run:replayed', {
+        stream: RunCallMother.stream('missing'),
+        completion: 'success',
+        written: { path: responsePath, text: ruled },
+      }],
+    ]))
+    const verdict = join(scenario.watch.located.path, responsePath)
+
+    await scenario.perform('replayed')
+    await scenario.perform('replayed')
+
+    expect(scenario.launch.descriptors).toHaveLength(1)
+    expect(await readFile(verdict, 'utf8')).toBe(ruled)
   })
 
   it('a file response path outside the prepared workspace is refused before any call', async () => {
@@ -437,7 +504,11 @@ describe('ClaudeRunCalls', () => {
     })
     await writeFile(dispatch.paths[0], "the slice's review package\n", 'utf8')
     const scenario = await RunCallMother.scenario([dispatch], new Map([
-      ['run:errand', { stream: RunCallMother.stream('missing'), completion: 'success' }],
+      ['run:errand', {
+        stream: RunCallMother.stream('missing'),
+        completion: 'success',
+        written: { path: responsePath, text: 'the slice judge wrote its own answer\n' },
+      }],
     ]))
 
     await scenario.perform('errand')
