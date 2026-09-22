@@ -166,6 +166,38 @@ because this branch changes no frontend module.
 Slice 4's `codeReviewedSha` is `a511bc59` and not `33ae4609`, although task 6 landed first: the
 coordinating session integrated them in review order, not in task order.
 
+### What the slices promised and the branch did not deliver
+
+The whole-branch review measured these against the frozen text. The criteria stand as they were
+written; this record says what happened instead, because a criterion quietly reinterpreted is
+worse than one visibly unmet.
+
+1. **Slice 5, `Acepta` 2: «`RunConsumingCommand` no longer exists».** It exists, at
+   `run-dispatch.ts:63`. Its prose half is gone — `#PREFIX`, `#lines` and the factory with a
+   `stdout` field — and `forEdits(argv)` survives, built at one site from the announcement's own
+   argv. Slice 4's task 5 added that static, and `fb38245c` amended slice 5's plan to say the
+   class survives. **The spec was not amended, and a frozen criterion is not the coordinating
+   session's to rewrite.**
+2. **Slice 3's plan §1: «One reader, `StepProse.step`, answers which step the prose names».**
+   Two readers remain, with different accepted languages, and the review measured four inputs
+   they disagree on — one of them this branch's own fixture. Task 5 gave both a membership test
+   against `STEPS`; it did not make them one reader.
+3. **Slice 1, `Acepta` 4: a real-process test that spawns `claude -p` and asserts
+   `structured_output` arrives for the advisor.** Never implemented, and slice 1's plan never
+   prescribed it. So the mechanism this whole branch rests on — that an agent must declare
+   `StructuredOutput` for `--json-schema` to travel — is measured by the controlled pair in the
+   design spec and by nothing in the suite. **That is the gap with the longest reach.**
+
+Two exceptions to slice 2's «every dispatch step carries `dispatch.agent`»: the `implement`
+step, which its own plan documents, and the reconcile round, which nothing documented until
+now.
+
+One conflict of rules, recorded rather than resolved: the Spanish `out()` lines of
+`ct-step.mjs`. `CLAUDE.md` says a diff that touches a Spanish module leaves it in English, and
+slice 5's §1 puts those lines out of scope while its task 3 measures them byte for byte so they
+cannot move. The branch obeyed the slice. The review agrees with that choice and asks for the
+exception to be written down, which this is.
+
 Three tasks did not exist when the slices were frozen. Slice 2's task 5 answers a guard that
 refused any checkout whose path carries a space. Slice 4's task 6 answers the flag silencing the
 prose `#edits` read its package from. Slice 5's task 4 answers three `out(` substitutions that
