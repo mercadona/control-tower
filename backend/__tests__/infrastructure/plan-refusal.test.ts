@@ -41,7 +41,7 @@ describe('PlanRefusal', () => {
 describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
-    'PlanProgressFailure', 'PlanStatusFailure', 'HarvestFailure', 'PlanStoryFailure',
+    'PlanProgressFailure', 'PlanningActivityFailure', 'PlanStatusFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
     'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
@@ -55,6 +55,7 @@ describe('PlanCollapse', () => {
     !FAMILIES.includes(name) &&
     !ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
+    !(thrown.prototype instanceof exceptions.PlanningActivityFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStatusFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&

@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net'
 import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
 import { PlanEventsRoute } from './plan-events-route.ts'
+import { PlanningProgressRoute } from './planning-progress-route.ts'
 import { ActivePlanPhase, ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
@@ -56,6 +57,8 @@ import type { WatchLiveSession } from '../application/queries/watch-live-session
 import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
 import type { ResizeSession } from '../application/actions/resize-session.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
+import type { ReadPlanningActivityParams } from '../application/queries/read-planning-activity.ts'
+import type { PlanningActivity } from '../domain/value-objects/planning-activity.ts'
 import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
@@ -66,6 +69,10 @@ export const LOOPBACK = '127.0.0.1'
 
 type ImplementationProgressReader = {
   execute(params: ReadImplementationProgressParams): Promise<{ readonly state: ImplementationState }>,
+}
+
+type PlanningActivityReader = {
+  execute(params: ReadPlanningActivityParams): Promise<{ readonly activity: PlanningActivity }>,
 }
 
 type SliceEscalationReader = {
@@ -122,6 +129,7 @@ export type ApiCollaborators = {
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
   planEvents?: PlanEvents | null,
+  readPlanningActivity?: PlanningActivityReader | null,
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
@@ -192,6 +200,7 @@ export class ApiServer {
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
   readonly planEvents: PlanEvents | null | undefined
+  readonly readPlanningActivity: PlanningActivityReader | null | undefined
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
@@ -225,7 +234,7 @@ export class ApiServer {
 
   constructor({
     port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementProgress, implementHistory,
-    planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
+    planEvents, readPlanningActivity, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
@@ -241,6 +250,7 @@ export class ApiServer {
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
     this.planEvents = planEvents
+    this.readPlanningActivity = readPlanningActivity
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
@@ -334,6 +344,12 @@ export class ApiServer {
       PlanEventsRoute.handledBy(this.sessions!, this.planEvents!)
     )
     app.all(PlanEventsRoute.PATH, PlanEventsRoute.refuseOtherMethods)
+    app.get(
+      PlanningProgressRoute.PATH,
+      Browsers.turnAwayForeign,
+      PlanningProgressRoute.handledBy(this.sessions!, this.readPlanningActivity!)
+    )
+    app.all(PlanningProgressRoute.PATH, PlanningProgressRoute.refuseOtherMethods)
     app.get(
       ActivePlansRoute.PATH,
       Browsers.turnAwayForeign,

@@ -96,6 +96,10 @@ export class PlanProgressFailure extends PlanFailure {}
 
 export class PlanProgressNotRead extends PlanProgressFailure {}
 
+export class PlanningActivityFailure extends PlanFailure {}
+
+export class PlanningActivityNotRead extends PlanningActivityFailure {}
+
 export class ImplementationProgressFailure extends PlanFailure {}
 
 export class ImplementationProgressNotRead extends ImplementationProgressFailure {}

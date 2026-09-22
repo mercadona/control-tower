@@ -24,6 +24,7 @@ import { DispatchRelay } from './dispatch-relay.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanEvents, PlanSessions } from './plan-events-route.ts'
+import { StreamPlanningActivities } from './stream-planning-activities.ts'
 import { ReviewWatch } from './review-watch.ts'
 import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
@@ -60,6 +61,7 @@ import { CloseCoordinatingSession } from '../application/actions/close-coordinat
 import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
+import { ReadPlanningActivity } from '../application/queries/read-planning-activity.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import { FreezeSpec } from '../application/actions/freeze-spec.ts'
@@ -501,6 +503,9 @@ class CtApi {
     })
     const sessions = new PlanSessions()
     const readPlanProgress = CtApi.#readPlanProgress(git)
+    const readPlanningActivity = new ReadPlanningActivity({
+      planningActivities: new StreamPlanningActivities({ planCalls, files, nowMs: Date.now }),
+    })
     const activePlans = new ActivePlans({ sessions })
     const planProgress = new PlanContractProgress({
       node: CtApi.#tool(process.execPath),
@@ -732,6 +737,7 @@ class CtApi {
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       sliceEscalation: readSliceEscalation,
       planEvents: CtApi.#planEvents(readPlanProgress),
+      readPlanningActivity,
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
