@@ -52,6 +52,16 @@ export const MANDATORY_INPUT_ROLES_OF_STEP = Object.freeze({
   [STEPS.RECONCILE]: Object.freeze([INPUT_ROLES.RECONCILIATION_PACKAGE]),
 })
 
+export const DECLARED_INPUT_ROLES_OF_STEP = Object.freeze({
+  [STEPS.IMPLEMENT]: Object.freeze([INPUT_ROLES.RUBRIC, INPUT_ROLES.BRIEF]),
+  [STEPS.JUDGE]: Object.freeze([INPUT_ROLES.PACKAGE, INPUT_ROLES.BRIEF, INPUT_ROLES.CONTROLS_LOG]),
+  [STEPS.ADVISE]: Object.freeze([INPUT_ROLES.PACKAGE]),
+  [STEPS.SLICE_JUDGE]: Object.freeze([
+    INPUT_ROLES.PACKAGE, INPUT_ROLES.PLAN, INPUT_ROLES.GLOBAL_LOG, INPUT_ROLES.VERDICTS,
+  ]),
+  [STEPS.RECONCILE]: Object.freeze([INPUT_ROLES.RECONCILIATION_PACKAGE]),
+})
+
 export class MalformedAnnouncement extends Error {
   constructor(detail) {
     super(`the announcement cannot be built: ${detail}`)

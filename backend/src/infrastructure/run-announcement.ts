@@ -1,7 +1,7 @@
 import { RunNotUnderstood } from '../domain/exceptions.ts'
 import {
-  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, CONSUMING_VERB_OF_STEP, INPUT_KINDS,
-  MANDATORY_INPUT_ROLES_OF_STEP, RESPONSE_KIND_OF_STEP,
+  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, CONSUMING_VERB_OF_STEP, DECLARED_INPUT_ROLES_OF_STEP,
+  INPUT_KINDS, MANDATORY_INPUT_ROLES_OF_STEP, RESPONSE_KIND_OF_STEP,
 } from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES } from '../../../plugin/scripts/run-machine.js'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
@@ -137,6 +137,7 @@ export class RunAnnouncement {
 export class AnnouncedStep {
   static readonly #INPUT_KINDS: readonly string[] = Object.values(INPUT_KINDS)
   static readonly #MANDATORY_ROLES: Readonly<Record<string, readonly string[]>> = MANDATORY_INPUT_ROLES_OF_STEP
+  static readonly #DECLARED_ROLES: Readonly<Record<string, readonly string[]>> = DECLARED_INPUT_ROLES_OF_STEP
 
   readonly step: string
   readonly commands: readonly string[] | null
@@ -205,13 +206,25 @@ export class AnnouncedStep {
       if (input === null) return null
       inputs.push(input)
     }
-    return AnnouncedStep.#carriesEveryMandatoryRole(inputs, step) ? Object.freeze(inputs) : null
+    if (!AnnouncedStep.#carriesEveryMandatoryRole(inputs, step)) return null
+    if (!AnnouncedStep.#carriesOnlyDeclaredRoles(inputs, step)) return null
+    if (!AnnouncedStep.#namesEachRoleOnce(inputs)) return null
+    return Object.freeze(inputs)
   }
 
   static #carriesEveryMandatoryRole(inputs: readonly AnnouncedInput[], step: string): boolean {
     const announced = new Set(inputs.map((input) => input.role))
     const mandatory = AnnouncedStep.#MANDATORY_ROLES[step] ?? []
     return mandatory.every((role) => announced.has(role))
+  }
+
+  static #carriesOnlyDeclaredRoles(inputs: readonly AnnouncedInput[], step: string): boolean {
+    const declared = AnnouncedStep.#DECLARED_ROLES[step] ?? []
+    return inputs.every((input) => declared.includes(input.role))
+  }
+
+  static #namesEachRoleOnce(inputs: readonly AnnouncedInput[]): boolean {
+    return new Set(inputs.map((input) => input.role)).size === inputs.length
   }
 
   static #input(candidate: unknown): AnnouncedInput | null {

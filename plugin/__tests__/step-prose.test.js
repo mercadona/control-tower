@@ -11,6 +11,7 @@ import {
 import {
   INPUT_ROLES,
   INPUT_KINDS,
+  DECLARED_INPUT_ROLES_OF_STEP,
   MANDATORY_INPUT_ROLES_OF_STEP,
   AnnouncedInput,
   AnnouncedResponse,
@@ -128,6 +129,29 @@ describe('MANDATORY_INPUT_ROLES_OF_STEP partitions the prose labels of every ste
     for (const [step, labels] of INPUT_LABELS) {
       expect(MANDATORY_INPUT_ROLES_OF_STEP[step])
         .toEqual([...labels.keys()].filter((role) => !optional.includes(role)))
+    }
+  })
+})
+
+describe('DECLARED_INPUT_ROLES_OF_STEP is the prose labels of every step, optional roles included', () => {
+  it('the declared roles of a step are the roles its prose gives a label', () => {
+    expect(DECLARED_INPUT_ROLES_OF_STEP).toEqual({
+      implement: ['rubric', 'brief'],
+      judge: ['package', 'brief', 'controls-log'],
+      advise: ['package'],
+      'slice-judge': ['package', 'plan', 'global-log', 'verdicts'],
+      reconcile: ['reconciliation-package'],
+    })
+  })
+
+  it('the declared roles and the labels of a step are the same set, and the mandatory roles a subset', () => {
+    expect(Object.keys(DECLARED_INPUT_ROLES_OF_STEP).sort()).toEqual([...INPUT_LABELS.keys()].sort())
+
+    for (const [step, labels] of INPUT_LABELS) {
+      expect([...DECLARED_INPUT_ROLES_OF_STEP[step]].sort()).toEqual([...labels.keys()].sort())
+      for (const role of MANDATORY_INPUT_ROLES_OF_STEP[step]) {
+        expect(DECLARED_INPUT_ROLES_OF_STEP[step]).toContain(role)
+      }
     }
   })
 })

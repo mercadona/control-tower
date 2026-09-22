@@ -39,6 +39,7 @@ class OracleMother {
   static readonly DISPATCH_CHECK = '/plugin/scripts/dispatch-check.mjs'
   static readonly RUN_PATH = join(OracleMother.WORKTREE, '.agent', 'run-332.json')
   static readonly RUN_BYTES = '{"step":"controls","task":1}\n'
+  static readonly FOREIGN_PATH = '/etc/hosts'
 
   static watch(): PlanWatch {
     return new PlanWatch({
@@ -199,9 +200,7 @@ class OracleMother {
   }
 
   static judgeRoundJson(): string {
-    return OracleMother.#judgeRound([
-      'verdict', OracleMother.judgeVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332',
-    ])
+    return OracleMother.#judgeRound(OracleMother.#verdictArgv())
   }
 
   static judgeRoundNamingAnotherResponsePathJson(): string {
@@ -209,6 +208,32 @@ class OracleMother {
       'verdict', `${OracleMother.WORKTREE}/.agent/run-332/task-2-verdict.json`,
       '--plan', OracleMother.PLAN, '--issue', '332',
     ])
+  }
+
+  static judgeRoundCarryingAnUndeclaredPlanRoleJson(): string {
+    return OracleMother.#judgeRound(OracleMother.#verdictArgv(), [
+      ...OracleMother.#judgeInputs(),
+      new AnnouncedInput({
+        role: INPUT_ROLES.PLAN,
+        kind: INPUT_KINDS.LITERAL,
+        path: OracleMother.FOREIGN_PATH,
+      }),
+    ])
+  }
+
+  static judgeRoundCarryingTheBriefTwiceJson(): string {
+    return OracleMother.#judgeRound(OracleMother.#verdictArgv(), [
+      ...OracleMother.#judgeInputs(),
+      new AnnouncedInput({
+        role: INPUT_ROLES.BRIEF,
+        kind: INPUT_KINDS.LITERAL,
+        path: OracleMother.FOREIGN_PATH,
+      }),
+    ])
+  }
+
+  static #verdictArgv(): readonly string[] {
+    return ['verdict', OracleMother.judgeVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332']
   }
 
   static judgeRoundAnnouncingNoInputJson(): string {
@@ -227,7 +252,25 @@ class OracleMother {
     }).text()
   }
 
-  static #judgeRound(argv: readonly string[]): string {
+  static #judgeInputs(): readonly AnnouncedInput[] {
+    return [
+      new AnnouncedInput({
+        role: INPUT_ROLES.PACKAGE,
+        kind: INPUT_KINDS.LITERAL,
+        path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-review.diff`,
+      }),
+      new AnnouncedInput({
+        role: INPUT_ROLES.BRIEF,
+        kind: INPUT_KINDS.LITERAL,
+        path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-judge-brief.md`,
+      }),
+    ]
+  }
+
+  static #judgeRound(
+    argv: readonly string[],
+    inputs: readonly AnnouncedInput[] = OracleMother.#judgeInputs(),
+  ): string {
     return StepAnnouncement.dispatch({
       issue: 332,
       task: 1,
@@ -235,18 +278,7 @@ class OracleMother {
       step: STEPS.JUDGE,
       attempt: 1,
       agent: 'ct-judge',
-      inputs: [
-        new AnnouncedInput({
-          role: INPUT_ROLES.PACKAGE,
-          kind: INPUT_KINDS.LITERAL,
-          path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-review.diff`,
-        }),
-        new AnnouncedInput({
-          role: INPUT_ROLES.BRIEF,
-          kind: INPUT_KINDS.LITERAL,
-          path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-judge-brief.md`,
-        }),
-      ],
+      inputs,
       response: AnnouncedResponse.of(STEPS.JUDGE, OracleMother.judgeVerdictPath()),
       consuming: { argv },
     }).text()
@@ -1145,6 +1177,50 @@ describe('CtRunMachine', () => {
     await fixture.establish()
     fixture.runBytes = null
     const announced = OracleMother.judgeRoundAnnouncingNoInputJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a judge round carrying a role the judge step does not declare is refused instead of dispatched', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-judge-undeclared-role-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.judgeRoundCarryingAnUndeclaredPlanRoleJson()
+    expect(announced).toContain('{"role":"plan","kind":"literal","path":"/etc/hosts"}')
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a judge round carrying the brief twice is refused instead of dispatched', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-judge-duplicated-brief-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.judgeRoundCarryingTheBriefTwiceJson()
+    expect(announced).toContain('{"role":"brief","kind":"literal","path":"/etc/hosts"}')
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
       return OracleMother.output(0, announced)

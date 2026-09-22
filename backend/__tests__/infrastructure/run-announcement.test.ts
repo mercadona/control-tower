@@ -230,6 +230,75 @@ class AnnouncementMother {
     })
   }
 
+  static judgeRoundCarryingAnUndeclaredPlanRole(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        inputs: [
+          { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/task-1-package.json' },
+          { role: 'brief', kind: 'literal', path: 'docs/superpowers/plans/2026-09-21-issue-9-brief.md' },
+          { role: 'plan', kind: 'literal', path: '/etc/hosts' },
+        ],
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
+  static judgeRoundCarryingTheBriefTwice(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        inputs: [
+          { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/task-1-package.json' },
+          { role: 'brief', kind: 'literal', path: 'docs/superpowers/plans/2026-09-21-issue-9-brief.md' },
+          { role: 'brief', kind: 'literal', path: '/etc/hosts' },
+        ],
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
+  static judgeRoundCarryingItsOptionalControlsLog(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        inputs: [
+          { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/task-1-package.json' },
+          { role: 'brief', kind: 'literal', path: 'docs/superpowers/plans/2026-09-21-issue-9-brief.md' },
+          { role: 'controls-log', kind: 'literal', path: '/repo/.agent/run-9/controls-9-1.log' },
+        ],
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
   static transitionCarryingDispatchInputs(): string {
     return JSON.stringify({
       version: 1,
@@ -354,6 +423,24 @@ describe('AnnouncedStep', () => {
 
   it('a judge round missing the brief leaves the round unread', () => {
     expect(AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingThePackageAlone())).toBeNull()
+  })
+
+  it('a judge round carrying a role the judge step does not declare leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingAnUndeclaredPlanRole())).toBeNull()
+  })
+
+  it('a judge round carrying the same role twice leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingTheBriefTwice())).toBeNull()
+  })
+
+  it('the optional role the judge step declares survives the door', () => {
+    const round = AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingItsOptionalControlsLog())
+
+    expect(round?.inputs).toEqual([
+      { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/task-1-package.json' },
+      { role: 'brief', kind: 'literal', path: 'docs/superpowers/plans/2026-09-21-issue-9-brief.md' },
+      { role: 'controls-log', kind: 'literal', path: '/repo/.agent/run-9/controls-9-1.log' },
+    ])
   })
 
   it('an announced consuming argv that carries a number leaves the round unread', () => {

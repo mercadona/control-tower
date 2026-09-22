@@ -179,9 +179,13 @@ worse than one visibly unmet.
    class survives. **The spec was not amended, and a frozen criterion is not the coordinating
    session's to rewrite.**
 2. **Slice 3's plan §1: «One reader, `StepProse.step`, answers which step the prose names».**
-   Two readers remain, with different accepted languages, and the review measured four inputs
-   they disagree on — one of them this branch's own fixture. Task 5 gave both a membership test
-   against `STEPS`; it did not make them one reader.
+   Closed inside this range, by deletion rather than by unification: **zero readers remain.**
+   When this record was written there were two, with different accepted languages, and the review
+   measured four inputs they disagree on — one of them this branch's own fixture; task 5 gave both
+   a membership test against `STEPS` without making them one reader. Then **task 6** took the prose
+   road out of `backend/src`, which removed `StepProse`, and **task 7** dropped
+   `DispatchProse.stepOf` with the rest of the parser nobody called. Nothing reads the `step:` line
+   any more, so the two readers cannot disagree.
 3. **Slice 1, `Acepta` 4: a real-process test that spawns `claude -p` and asserts
    `structured_output` arrives for the advisor.** Never implemented, and slice 1's plan never
    prescribed it. So the mechanism this whole branch rests on — that an agent must declare
