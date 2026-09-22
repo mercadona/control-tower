@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
@@ -111,10 +111,16 @@ const backendUnreachable = () => {
 }
 
 const openHome = () => {
+  const user = userEvent.setup()
   FakeEventSource.install()
   const { unmount } = render(<StrictMode><Home /></StrictMode>)
 
-  return { user: userEvent.setup(), unmount }
+  return { user, unmount }
+}
+
+const selectSliceDetail = async (user: User, issue: number) => {
+  const slice = await screen.findByRole('region', { name: `Slice #${issue}` })
+  await user.click(within(slice).getByRole('button', { name: 'Ver detalle' }))
 }
 
 const editable = async (label: string | RegExp) => {
@@ -212,6 +218,7 @@ export {
   backendPending,
   backendUnreachable,
   openHome,
+  selectSliceDetail,
   typeTicket,
   typeUserComment,
   typeRepository,
