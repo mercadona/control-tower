@@ -1108,6 +1108,45 @@ describe('RunPlanAgents', () => {
     expect(malformed.spawns()).toBe(0)
   })
 
+  it('recovery of a refused run asks ct-step again instead of giving up on the journal (#504)', async () => {
+    const tested = await sourceScenario(true)
+    await tested.journal.establish(AgentMother.WATCH, AgentMother.manifest())
+    const announced = await tested.journal.begin(
+      AgentMother.WATCH, AgentMother.request(null, AgentMother.nextArgv()),
+    )
+    await tested.journal.finish(AgentMother.WATCH, announced, AgentMother.receipt(
+      new ProcessOutput({ code: 0, stdout: AgentMother.controlsAnnouncement(), stderr: '' }), null, '{"step":"controls"}\n',
+    ))
+    const refused = await tested.journal.begin(
+      AgentMother.WATCH, AgentMother.request(announced, AgentMother.controlsArgv()),
+    )
+    await tested.journal.finish(AgentMother.WATCH, refused, AgentMother.receipt(
+      new ProcessOutput({
+        code: 4,
+        stdout: '{"version":1,"kind":"refusal","state":"blocked-controls","outcome":"failed","exit":4,'
+          + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"controls","discards":0},'
+          + '"detail":"run blocked-controls: task 1/3, 0 discard(s)"}\n',
+        stderr: '',
+      }), '{"step":"controls"}\n', '{"step":"controls"}\n',
+    ))
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+    }
+
+    await tested.agents.recover(asked)
+    await Bounded.wait(tested.oracle.promise)
+    const driving = tested.driver.driving.get(AgentMother.CONVERSATION)
+    expect(driving).toBeDefined()
+    await Bounded.wait(driving as Promise<void>)
+
+    expect(tested.evidence.asked[0]).toEqual(AgentMother.nextArgv())
+    const entries = await tested.journal.entries(AgentMother.WATCH)
+    expect(entries).toHaveLength(3)
+    expect(JSON.parse(entries[2].request)).toMatchObject({ previous: refused, argv: AgentMother.nextArgv() })
+  })
+
   it('untouched established recovery issues next without planner wait or publication', async () => {
     const tested = await sourceScenario(true)
     await tested.journal.establish(AgentMother.WATCH, AgentMother.manifest())
