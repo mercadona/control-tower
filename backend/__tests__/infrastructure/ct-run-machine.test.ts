@@ -1234,8 +1234,8 @@ describe('CtRunMachine', () => {
     expect(fixture.asked).toEqual([])
   })
 
-  it('both prose readers name the same step for the same bytes', async () => {
-    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-one-step-reader-')))
+  it('an announced slice-judge round answers with a call', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-slice-judge-')))
     roots.push(fixture.root)
     await fixture.establish()
     const ticket = await fixture.journal.begin(
@@ -1250,9 +1250,12 @@ describe('CtRunMachine', () => {
 
     const instruction = await fixture.machine().open(OracleMother.watch())
 
+    expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
+  })
+
+  it('both prose readers name the same step for the same bytes', () => {
     expect(StepProse.step(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
     expect(DispatchProse.stepOf(OracleMother.controlsAnnouncementOfAnotherIssue())).toBe('controls')
-    expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
   })
 
   it('a step name with a digit is not a declared step', () => {
