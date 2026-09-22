@@ -94,6 +94,32 @@ describe('AnotherRoundRoute', () => {
     expect(spy.asked).toEqual([])
   })
 
+  it('a whitespace-only instruction refuses as malformed instead of reaching ct-step blank', async () => {
+    const spy = new GrantSpy()
+    const port = await RunningApi.listening(spy.grant)
+
+    const response = await RunningApi.post(
+      port, '/slices/42/another-round', JSON.stringify({ repo: REPO, agent: AGENT, instruction: '   ' }),
+    )
+
+    expect(await response.json()).toMatchObject({ code: 'another-round-malformed-instruction' })
+    expect(spy.asked).toEqual([])
+  })
+
+  it('an instruction starting with -- refuses as malformed instead of ct-step reading it as a flag', async () => {
+    const spy = new GrantSpy()
+    const port = await RunningApi.listening(spy.grant)
+
+    const response = await RunningApi.post(
+      port,
+      '/slices/42/another-round',
+      JSON.stringify({ repo: REPO, agent: AGENT, instruction: '--output-format is not a word I meant' }),
+    )
+
+    expect(await response.json()).toMatchObject({ code: 'another-round-malformed-instruction' })
+    expect(spy.asked).toEqual([])
+  })
+
   it('a run the judge did not close refuses with conflict and its own code', async () => {
     const detail = 'the last verdict on #42 is not a veto, so there is no round to grant'
     const spy = new GrantSpy(new AnotherRoundNotGranted(detail))

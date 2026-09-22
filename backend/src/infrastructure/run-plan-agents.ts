@@ -1,4 +1,5 @@
 import { DriveRunParams, type DriveRun } from '../application/actions/drive-run.ts'
+import { RUN_STATES } from '../../../plugin/scripts/run-machine.js'
 import {
   AnotherRoundNotGranted,
   PlanAgentNeverLaunched,
@@ -50,7 +51,7 @@ type FixPlan = LocatedPlan & {
 }
 
 export class RunPlanAgents extends PlanAgents {
-  static readonly BLOCKED_JUDGE = 'blocked-judge'
+  static readonly BLOCKED_JUDGE = RUN_STATES.BLOCKED_JUDGE
 
   readonly legacy: PlanAgents
   readonly records: PlanRecords
@@ -251,9 +252,7 @@ export class RunPlanAgents extends PlanAgents {
       if (inspection.fact.kind !== 'uncertain'
         || inspection.fact.closure === null
         || inspection.fact.closure.state !== RunPlanAgents.BLOCKED_JUDGE) {
-        throw new AnotherRoundNotGranted(
-          `conversation ${JSON.stringify(watch.agent)} is ${inspection.fact.kind} rather than ${RunPlanAgents.BLOCKED_JUDGE}`,
-        )
+        throw new AnotherRoundNotGranted(RunPlanAgents.#notBlockedJudgeDetail(watch.agent, inspection))
       }
       const instruction = await this.machine.anotherRound(watch, asked.instruction)
       if (instruction.work.kind === 'refused') {
@@ -592,6 +591,14 @@ export class RunPlanAgents extends PlanAgents {
       throw new AnotherRoundNotGranted(cause.message)
     }
     throw cause
+  }
+
+  static #notBlockedJudgeDetail(agent: string, inspection: RunInspection): string {
+    const closedAt = inspection.fact.kind === 'uncertain' && inspection.fact.closure !== null
+      ? `closed at ${inspection.fact.closure.state}`
+      : 'no closure'
+    return `conversation ${JSON.stringify(agent)} is ${inspection.fact.kind} rather than `
+      + `${RunPlanAgents.BLOCKED_JUDGE} (${closedAt})`
   }
 }
 

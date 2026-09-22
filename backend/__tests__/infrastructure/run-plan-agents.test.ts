@@ -1592,8 +1592,36 @@ describe('RunPlanAgents', () => {
       instruction: 'Please try again.',
     }
 
-    await expect(tested.agents.anotherRound(asked)).rejects.toBeInstanceOf(AnotherRoundNotGranted)
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
 
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is active rather than blocked-judge (no closure)`,
+    )
+    expect(tested.machine.anotherRoundAsked).toEqual([])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+  })
+
+  it('an uncertain inspection with no closure is refused and journals nothing', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'the established run has unexplained plugin activity before its first command',
+      closure: null,
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again.',
+    }
+
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
+
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is uncertain rather than blocked-judge (no closure)`,
+    )
     expect(tested.machine.anotherRoundAsked).toEqual([])
     expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
   })

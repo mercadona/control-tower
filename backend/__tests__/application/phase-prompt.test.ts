@@ -69,4 +69,9 @@ describe('what the coordinating session is told about a veto that blocks a run',
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('you do not invent it')
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('you do not grant a round nobody asked for')
   })
+
+  it('tells_the_session_what_to_do_when_the_grant_call_itself_is_refused', () => {
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('tell the person what the refusal said')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('do not retry it in a loop')
+  })
 })

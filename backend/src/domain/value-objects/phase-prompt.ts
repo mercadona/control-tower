@@ -34,7 +34,8 @@ export class PhasePrompt {
     + 'with POST /slices/<issue>/another-round and {repo, agent, instruction}: the backend grants the '
     + "round and the run carries on by itself. The instruction is the person's: you do not invent it, "
     + 'you do not widen the task, and you do not grant a round nobody asked for. There is no limit on '
-    + 'rounds; the limit is the person.'
+    + 'rounds; the limit is the person. When the call is refused, tell the person what the refusal said '
+    + 'and do not retry it in a loop.'
   static readonly RECOVERY_CAPABILITIES =
     'For recovery of already-authorized work, use the origin of $CT_SESSION_HOOKS_URL as the backend URL. '
     + 'Read GET /active-plans and preserve each returned repo, issue number and agent identity. '

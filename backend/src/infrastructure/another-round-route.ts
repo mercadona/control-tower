@@ -111,7 +111,9 @@ class AnotherRoundRequest {
       return AnotherRoundRequest.refused(AnotherRoundOutcome.MALFORMED_AGENT)
     }
     const instruction = parsed[AnotherRoundRequest.INSTRUCTION_FIELD]
-    if (typeof instruction !== 'string' || instruction.length === 0) {
+    if (typeof instruction !== 'string'
+      || instruction.trim().length === 0
+      || instruction.startsWith('--')) {
       return AnotherRoundRequest.refused(AnotherRoundOutcome.MALFORMED_INSTRUCTION)
     }
 
@@ -149,7 +151,7 @@ class AnotherRoundRefusal {
     [AnotherRoundOutcome.MALFORMED_INSTRUCTION, () => new Refusal({
       status: 400,
       code: AnotherRoundOutcome.MALFORMED_INSTRUCTION,
-      detail: `${AnotherRoundRequest.INSTRUCTION_FIELD} must be a non-empty string`,
+      detail: `${AnotherRoundRequest.INSTRUCTION_FIELD} must be non-blank text that does not start with --`,
     })],
   ])
 
