@@ -19,6 +19,7 @@ import type { RecordedCall } from './recorded-call.ts'
 import type { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
 import type { ReviewWatch } from './review-watch.ts'
 import type { RunJournal } from './run-journal.ts'
+import type { RunDelivery } from '../domain/ports/run-delivery.ts'
 import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from './run-plan-agents.ts'
 
 type PlanOutcome =
@@ -38,6 +39,16 @@ type PlanOutcome =
 type WatchProvenance =
   | { readonly kind: 'proven', readonly provenance: RunProvenanceValue }
   | { readonly kind: 'unproven', readonly diagnostic: string }
+
+class RunPublication {
+  readonly work: Promise<void>
+  failure: string | null
+
+  constructor(work: Promise<void>, diagnostic: (cause: unknown) => string) {
+    this.failure = null
+    this.work = work.catch((cause) => { this.failure = diagnostic(cause) })
+  }
+}
 
 class RecoveredRunPlan {
   readonly watch: PlanWatch
@@ -60,11 +71,13 @@ export class RunPlanRecovery {
   readonly machine: CtRunMachine
   readonly journal: RunJournal
   readonly agents: RunPlanAgents
+  readonly delivery: RunDelivery
   readonly checkouts: CheckoutRegistry
   readonly activePlans: ActivePlans
   readonly reviews: ReviewWatch
   readonly nowMs: () => number
   readonly reviewing: Map<string, object>
+  readonly publications: Map<string, RunPublication>
   recovering: Promise<string | null> | null
 
   constructor(ports: {
@@ -75,6 +88,7 @@ export class RunPlanRecovery {
     machine: CtRunMachine,
     journal: RunJournal,
     agents: RunPlanAgents,
+    delivery: RunDelivery,
     checkouts: CheckoutRegistry,
     activePlans: ActivePlans,
     reviews: ReviewWatch,
@@ -87,11 +101,13 @@ export class RunPlanRecovery {
     this.machine = ports.machine
     this.journal = ports.journal
     this.agents = ports.agents
+    this.delivery = ports.delivery
     this.checkouts = ports.checkouts
     this.activePlans = ports.activePlans
     this.reviews = ports.reviews
     this.nowMs = ports.nowMs
     this.reviewing = new Map()
+    this.publications = new Map()
     this.recovering = null
   }
 
@@ -142,6 +158,7 @@ export class RunPlanRecovery {
       if (foundKeys.has(key)) continue
       this.reviews.stop({ issue: watch.issue.number, repository: watch.repository })
       this.#forgetReviewing(key)
+      this.publications.delete(key)
       this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
     }
     for (const plan of recovered) {
@@ -201,7 +218,7 @@ export class RunPlanRecovery {
         if (unfinished.some((recorded) => recorded.purpose !== 'fix')) {
           return this.#inspect(watch, `incomplete call ${unfinished[0].call.id} is not the current machine work`)
         }
-        return this.#delivered(watch, facts.filter((recorded) => recorded.purpose === 'fix'))
+        return await this.#delivered(watch, facts.filter((recorded) => recorded.purpose === 'fix'))
       case 'uncertain':
         return this.#inspect(watch, fact.detail, fact.closure)
       case 'active':
@@ -247,12 +264,8 @@ export class RunPlanRecovery {
     )
   }
 
-  #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): RecoveredRunPlan {
-    if (fixes.length === 0) {
-      return new RecoveredRunPlan(watch, {
-        phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true,
-      })
-    }
+  async #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): Promise<RecoveredRunPlan> {
+    if (fixes.length === 0) return this.#published(watch)
     const recovery = PlanRecovery.from({ calls: fixes, proof: null, cleanup: null, nowMs: this.nowMs() })
     if (recovery.successfulExecution() !== null) {
       return new RecoveredRunPlan(watch, {
@@ -275,6 +288,30 @@ export class RunPlanRecovery {
       recovery.detail,
       recovery,
     )
+  }
+
+  async #published(watch: PlanWatch): Promise<RecoveredRunPlan> {
+    const key = this.#key(watch)
+    const publication = await this.delivery.inspect(watch)
+    if (publication.kind === 'delivered') {
+      this.publications.delete(key)
+      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
+    }
+    if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
+    const started = this.publications.get(key)
+    if (started === undefined) {
+      this.publications.set(key, new RunPublication(
+        this.delivery.deliver(watch), (cause) => RunPlanRecovery.#diagnostic(cause),
+      ))
+      return this.#publishing(watch)
+    }
+    return started.failure === null ? this.#publishing(watch) : this.#continuable(watch, started.failure)
+  }
+
+  #publishing(watch: PlanWatch): RecoveredRunPlan {
+    return new RecoveredRunPlan(watch, {
+      phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange: false,
+    })
   }
 
   async #facts(history: readonly RecordedCall[]): Promise<readonly RecoveryCall[]> {

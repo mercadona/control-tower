@@ -103,8 +103,9 @@ import { RunJournal } from './run-journal.ts'
 import { CtRunMachine } from './ct-run-machine.ts'
 import { ClaudeRunMeasurements } from './claude-run-measurements.ts'
 import { ClaudeRunCalls } from './claude-run-calls.ts'
-import { RunPlanAgents } from './run-plan-agents.ts'
+import { RunPlanAgents, RunProvenance } from './run-plan-agents.ts'
 import { RunPlanRecovery } from './run-plan-recovery.ts'
+import { CheckedRunDelivery } from './checked-run-delivery.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
 import type { UserStories } from '../domain/ports/user-stories.ts'
@@ -534,6 +535,18 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
       pluginRoot: PluginTree.root(),
     })
+    const releaseRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#HARVEST_TIMEOUT_MS })
+    const runDelivery = new CheckedRunDelivery({
+      journal,
+      machine,
+      git: runGitRunner.runWholeOutput.bind(runGitRunner),
+      node: releaseRunner.runWholeOutput.bind(releaseRunner),
+      gh,
+      read: Disk.read,
+      dispatchCheck: PluginTree.dispatchCheck(),
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+    })
     const measurements = new ClaudeRunMeasurements({ files, calls })
     const runCalls = new ClaudeRunCalls({
       calls,
@@ -550,6 +563,7 @@ class CtApi {
       calls: planCalls,
       publication,
       machine,
+      delivery: runDelivery,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
       messages: new DeliverHeldMessages({
         messages: journal, calls: planCalls, measurements, escalations,
@@ -564,6 +578,7 @@ class CtApi {
       driver,
       machine,
       journal,
+      delivery: runDelivery,
       measurements,
       announcements: new SessionChangeAnnouncements({ sessions: () => coordinatingSessions }),
       newId: randomUUID,
@@ -594,6 +609,7 @@ class CtApi {
       machine,
       journal,
       agents: planAgents,
+      delivery: runDelivery,
       checkouts,
       activePlans,
       reviews: pullRequestReviews,
@@ -728,6 +744,9 @@ class CtApi {
         implementationProgress: runFileProgress,
         pullRequests,
         planIssues,
+        records,
+        delivery: runDelivery,
+        isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       sliceEscalation: readSliceEscalation,

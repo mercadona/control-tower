@@ -7,6 +7,9 @@ import type { ImplementationProgress } from '../../domain/ports/implementation-p
 import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
 import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import type { PlanRecords } from '../../domain/ports/plan-records.ts'
+import type { RunDelivery } from '../../domain/ports/run-delivery.ts'
+import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -50,15 +53,24 @@ export class ReadImplementationProgress {
   readonly implementationProgress: ImplementationProgress
   readonly pullRequests: PullRequests
   readonly planIssues: PlanIssues
+  readonly records: PlanRecords
+  readonly delivery: RunDelivery
+  readonly isDriver: (watch: PlanWatch) => Promise<boolean>
 
-  constructor({ implementationProgress, pullRequests, planIssues }: {
+  constructor({ implementationProgress, pullRequests, planIssues, records, delivery, isDriver }: {
     implementationProgress: ImplementationProgress,
     pullRequests: PullRequests,
     planIssues: PlanIssues,
+    records: PlanRecords,
+    delivery: RunDelivery,
+    isDriver: (watch: PlanWatch) => Promise<boolean>,
   }) {
     this.implementationProgress = implementationProgress
     this.pullRequests = pullRequests
     this.planIssues = planIssues
+    this.records = records
+    this.delivery = delivery
+    this.isDriver = isDriver
   }
 
   async execute(params: ReadImplementationProgressParams): Promise<ReadImplementationProgressResult> {
@@ -73,11 +85,28 @@ export class ReadImplementationProgress {
 
   async #reviewed(state: ImplementationState, params: ReadImplementationProgressParams): Promise<ImplementationState> {
     if (state.step !== ImplementationStep.DELIVERED) return state
+    const watch = await this.records.find({ issue: params.issue, repository: params.repository })
+    if (watch !== null && await this.isDriver(watch)) {
+      const delivery = await this.delivery.inspect(watch)
+      if (delivery.kind !== 'delivered') {
+        return state.underReview({
+          step: ImplementationStep.PUBLISHING,
+          pullRequest: delivery.kind === 'absent' ? null : delivery.pullRequest,
+        })
+      }
+      return this.#deliveryReviewed(state, delivery.pullRequest, params)
+    }
     const pullRequest = await this.pullRequests.openOf({
       issueNumber: params.issue, repository: params.repository,
     })
     if (pullRequest === null) return state
 
+    return this.#deliveryReviewed(state, pullRequest, params)
+  }
+
+  async #deliveryReviewed(
+    state: ImplementationState, pullRequest: ReviewedPullRequest, params: ReadImplementationProgressParams,
+  ): Promise<ImplementationState> {
     const status = await this.planIssues.statusOf({
       issueNumber: params.issue, repository: params.repository,
     })

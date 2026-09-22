@@ -29,6 +29,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+import { CompletedRunDelivery } from '../run-delivery-double.ts'
 
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
@@ -321,6 +322,7 @@ class RunFlow {
       calls: this.calls,
       publication: this.publication,
       machine: this.machine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine: this.machine, calls: this.runCalls }),
       messages: new DeliverHeldMessages({
         messages: asked.messages ?? new HeldMessagesDouble(),

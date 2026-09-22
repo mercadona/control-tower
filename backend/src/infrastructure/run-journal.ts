@@ -35,6 +35,7 @@ export class RunJournal extends SliceMessages {
   static readonly #MESSAGES = 'messages'
   static readonly #MESSAGE = 'message.json'
   static readonly #DELIVERY = 'delivery.json'
+  static readonly #PUBLICATION = 'publication'
   static readonly #MESSAGE_FIELDS: readonly string[] = Object.freeze(['askedAt', 'text', 'version'])
   static readonly #VERSION = 1
 
@@ -197,6 +198,22 @@ export class RunJournal extends SliceMessages {
     )
   }
 
+  async publicationRead(watch: PlanWatch, path: readonly string[]): Promise<string | null> {
+    return this.#readOptional(this.#publicationPath(watch, path))
+  }
+
+  async publicationWrite(watch: PlanWatch, path: readonly string[], text: string): Promise<void> {
+    await this.#publish(this.#publicationPath(watch, path), text)
+  }
+
+  async publicationList(watch: PlanWatch, path: readonly string[]): Promise<readonly string[]> {
+    const directory = this.#publicationPath(watch, path)
+    const kind = await this.#kindOf(directory)
+    if (kind === 'absent') return Object.freeze([])
+    if (kind !== 'directory') throw new RunNotUnderstood(`${directory} is not a publication directory`)
+    return Object.freeze((await this.#list(directory)).sort())
+  }
+
   async #entryAt(operations: string, ticket: string): Promise<JournalEntry> {
     const directory = join(operations, ticket)
     if (await this.#kindOf(directory) !== 'directory') {
@@ -321,6 +338,13 @@ export class RunJournal extends SliceMessages {
 
   #messagesPath(watch: PlanWatch): string {
     return join(this.#runPath(watch), RunJournal.#MESSAGES)
+  }
+
+  #publicationPath(watch: PlanWatch, parts: readonly string[]): string {
+    if (parts.some((part) => !/^[a-zA-Z0-9.-]+$/.test(part))) {
+      throw new RunNotUnderstood('the publication journal path is malformed')
+    }
+    return join(this.#runPath(watch), RunJournal.#PUBLICATION, ...parts)
   }
 
   #runPath(watch: PlanWatch): string {

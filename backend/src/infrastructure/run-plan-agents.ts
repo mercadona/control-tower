@@ -27,6 +27,8 @@ import type { ClaudeRunMeasurements } from './claude-run-measurements.ts'
 import type { CtRunMachine, RunInspection } from './ct-run-machine.ts'
 import type { RecordedCall } from './recorded-call.ts'
 import type { RunJournal } from './run-journal.ts'
+import type { RunDelivery } from '../domain/ports/run-delivery.ts'
+import { RunDeliveryFailure, RunDeliveryUncertain } from '../domain/value-objects/run-delivery.ts'
 
 export const RunProvenance: Readonly<{ LEGACY: 'legacy', DRIVER: 'driver' }> = Object.freeze({
   LEGACY: 'legacy',
@@ -54,6 +56,7 @@ export class RunPlanAgents extends PlanAgents {
   readonly driver: DriveRun
   readonly machine: CtRunMachine
   readonly journal: RunJournal
+  readonly delivery: RunDelivery
   readonly measurements: ClaudeRunMeasurements
   readonly announcements: ChangeAnnouncements
   readonly newId: () => string
@@ -69,6 +72,7 @@ export class RunPlanAgents extends PlanAgents {
     driver: DriveRun,
     machine: CtRunMachine,
     journal: RunJournal,
+    delivery: RunDelivery,
     measurements: ClaudeRunMeasurements,
     announcements: ChangeAnnouncements,
     newId: () => string,
@@ -83,6 +87,7 @@ export class RunPlanAgents extends PlanAgents {
     this.driver = ports.driver
     this.machine = ports.machine
     this.journal = ports.journal
+    this.delivery = ports.delivery
     this.measurements = ports.measurements
     this.announcements = ports.announcements
     this.newId = ports.newId
@@ -140,6 +145,11 @@ export class RunPlanAgents extends PlanAgents {
       const history = await this.transport.history(watch.agent)
       await this.#captureCompleted(history)
       const inspection = await this.machine.inspect(watch)
+      if (inspection.fact.kind === 'delivered'
+        && !(await this.#fixFacts(history)).length) {
+        await this.delivery.deliver(watch)
+        return
+      }
       const call = await this.#recoveryCall(watch, inspection, history)
       if (call === null) return
       this.#supervise(watch, call, this.#recoveredWork(watch, inspection, call))
@@ -522,6 +532,8 @@ export class RunPlanAgents extends PlanAgents {
   }
 
   static #throwRecoveryFailure(cause: unknown): never {
+    if (cause instanceof RunDeliveryUncertain) throw new PlanRecoveryConflict(cause.message)
+    if (cause instanceof RunDeliveryFailure) throw new PlanRecoveryNotRead(cause.message)
     if (cause instanceof RunNotAdvanced) throw new PlanRecoveryNotRead(cause.message)
     if (cause instanceof RunNotUnderstood) throw new PlanRecoveryNotUnderstood(cause.message)
     if (cause instanceof PlanAgentNotLaunched) throw new PlanRecoveryNotRead(cause.message)
