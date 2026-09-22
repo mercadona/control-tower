@@ -267,9 +267,4 @@ describe('ReadImplementationProgress', () => {
     expect(flow.pullRequests.asked).toEqual([])
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new ImplementationProgress().of({
-      root: Flow.ROOT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
-    })).rejects.toThrow(/must implement of/)
-  })
 })

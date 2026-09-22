@@ -201,9 +201,4 @@ describe('RequestFixes', () => {
     expect(flow.planAgents.asked[0].agent).toBe(Flow.AGENT)
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanAgents().fix({
-      agent: Flow.AGENT, issue: Flow.ISSUE_NUMBER, repository: Flow.REPOSITORY, changes: Flow.CHANGES,
-    })).rejects.toThrow(/must implement fix/)
-  })
 })

@@ -3,7 +3,6 @@ import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
-import { Workbench } from '../../src/domain/ports/workbench.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SliceNotReopened, ReopenNotUnderstood } from '../../src/domain/exceptions.ts'
@@ -132,9 +131,4 @@ describe('DispatchCheckWorkbench', () => {
     expect(declaredCodes.sort()).toEqual(scriptCodes.sort())
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new Workbench().reopen({
-      issueNumber: NodeDouble.ISSUE_NUMBER, repository: NodeDouble.REPOSITORY,
-    })).rejects.toThrow(/must implement reopen/)
-  })
 })

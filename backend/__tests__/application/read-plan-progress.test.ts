@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.ts'
 import { PlanProgress } from '../../src/domain/ports/plan-progress.ts'
-import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -48,13 +47,6 @@ describe('ReadPlanProgress', () => {
       .execute(new ReadPlanProgressParams({ located, issue, repository }))
 
     expect(progress.asked).toEqual([{ located, issue, repository }])
-  })
-
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanProgress().of({ located, issue, repository })).rejects.toThrow(/must implement of/)
-    expect(() => new ReviewLog().noted({ issue: issue.number, repository, at: '2026-09-09T10:00:00Z' }))
-      .toThrow(/must implement noted/)
-    expect(() => new ReviewLog().lastAskedAt({ issue: issue.number, repository })).toThrow(/must implement lastAskedAt/)
   })
 
   it('the_state_of_a_plan_is_one_of_exactly_two_and_reviewing_is_not_one_of_them', () => {

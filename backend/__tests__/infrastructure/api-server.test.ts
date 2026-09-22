@@ -6,6 +6,7 @@ import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
+import { RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
 import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
@@ -313,7 +314,6 @@ class FrontendFixture {
 }
 
 class RunningApi {
-  static readonly #started: ApiServer[] = []
   static readonly STORY = 'ABC-123'
   static readonly REPO = 'owner/name'
   static readonly ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
@@ -343,15 +343,11 @@ class RunningApi {
   }
 
   static async listening(options: Partial<ApiCollaborators> = {}): Promise<number> {
-    const server = RunningApi.server(options)
-    const port = await server.start()
-    RunningApi.#started.push(server)
-    return port
+    return RunningServers.started(RunningApi.server(options))
   }
 
   static async stopAll(): Promise<void> {
-    const running = RunningApi.#started.splice(0)
-    await Promise.all(running.map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 
   static async post(port: number, path: string, body: string, headers: Record<string, string> = {}): Promise<Response> {

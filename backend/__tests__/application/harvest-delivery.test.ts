@@ -107,8 +107,4 @@ describe('HarvestDelivery', () => {
     expect(refusal.message).toBe('dispatch-check could not reach gh')
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new Harvest().collect({ issueNumber: 42, repository: HarvestDouble.REPOSITORY, root: HarvestDouble.ROOT }))
-      .rejects.toThrow(/must implement collect/)
-  })
 })

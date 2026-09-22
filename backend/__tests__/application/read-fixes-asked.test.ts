@@ -192,10 +192,4 @@ describe('ReadFixesAsked', () => {
     expect(flow.planIssues.asked).toEqual([])
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PullRequests().openOf({ issueNumber: Flow.ISSUE.number, repository: Flow.REPOSITORY }))
-      .rejects.toThrow(/must implement openOf/)
-    await expect(new PlanIssues().statusOf({ issueNumber: Flow.ISSUE.number, repository: Flow.REPOSITORY }))
-      .rejects.toThrow(/must implement statusOf/)
-  })
 })

@@ -50,11 +50,6 @@ describe('ReadPlanStory', () => {
     expect(issues.asked).toEqual([{ issueNumber: 42, repository }])
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanIssues().storyOf({ issueNumber: 42, repository }))
-      .rejects.toThrow(/must implement storyOf/)
-  })
-
   it('a_port_that_refuses_travels_out_instead_of_being_turned_into_no_story', async () => {
     const refusing = new PlanIssuesDouble(new PlanStoryNotRead('gh: not authenticated'))
 

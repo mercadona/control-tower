@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ImplementationStep } from 'app/implement-progress/ImplementProgress.types'
 
-const BACKEND_VOCABULARY = join(process.cwd(), '..', 'backend', 'src', 'domain', 'value-objects', 'implementation-state.ts')
+const REPOSITORY_FOUND_FROM_THIS_FILE_AND_NEVER_FROM_THE_WORKING_DIRECTORY =
+  join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
+const BACKEND_VOCABULARY = join(
+  REPOSITORY_FOUND_FROM_THIS_FILE_AND_NEVER_FROM_THE_WORKING_DIRECTORY,
+  'backend', 'src', 'domain', 'value-objects', 'implementation-state.ts',
+)
 const DECLARATION = /export const ImplementationStep = Object\.freeze\(\{([^}]*)\} as const\)/
 const MEMBER = /^\s*[A-Z0-9_]+:\s*'([^']+)',?\s*$/
 
