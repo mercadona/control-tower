@@ -689,9 +689,7 @@ export class CtRunMachine extends RunMachine {
   }
 
   #nextArgv(manifest: RunManifest): readonly string[] {
-    return Object.freeze([
-      this.ctStep, 'next', '--plan', manifest.plan, '--issue', String(manifest.issue),
-    ])
+    return this.#runnerArgv(['next', '--plan', manifest.plan, '--issue', String(manifest.issue)])
   }
 
   #runnerArgv(argv: readonly string[]): readonly string[] {

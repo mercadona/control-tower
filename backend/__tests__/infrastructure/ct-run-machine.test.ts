@@ -89,6 +89,7 @@ class OracleMother {
   static nextArgv(): readonly string[] {
     return [
       OracleMother.CT_STEP, 'next', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
   }
 
@@ -107,6 +108,7 @@ class OracleMother {
     return [
       OracleMother.CT_STEP, 'report', `${OracleMother.WORKTREE}/.agent/run-332/task-1-report.json`,
       '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
   }
 
@@ -714,6 +716,7 @@ describe('CtRunMachine', () => {
       {
         argv: [
           OracleMother.CT_STEP, 'next', '--plan', OracleMother.PLAN, '--issue', '332',
+          '--output-format', 'json',
         ],
         cwd: OracleMother.WORKTREE,
       },
@@ -731,6 +734,30 @@ describe('CtRunMachine', () => {
         '--output-format', 'json',
       ]),
     )
+  })
+
+  it('the machine asks the next verb with the output format of the contract', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-next-format-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncementJson())
+    })
+    fixture.answer(OracleMother.controlsArgv(), OracleMother.output(0, OracleMother.deliveredTransition()))
+    const machine = fixture.machine()
+
+    await machine.advance(OracleMother.watch(), await machine.open(OracleMother.watch()))
+
+    expect(fixture.asked[0].argv).toEqual([
+      OracleMother.CT_STEP, 'next', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
+    ])
+    expect(fixture.asked[1].argv).toEqual([
+      OracleMother.CT_STEP, 'controls', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
+    ])
   })
 
   it('oracle exit nine survives the adapter unchanged', async () => {

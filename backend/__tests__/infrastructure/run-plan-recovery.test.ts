@@ -1441,6 +1441,7 @@ class FiniteBridge {
     const nextArgv = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const node = async (argv: readonly string[], options: { cwd?: string } = {}): Promise<ProcessOutput> => {
       calls.count += 1
@@ -1605,6 +1606,7 @@ class FiniteBridge {
     return [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
   }
 
@@ -1716,6 +1718,7 @@ describe('RunPlanRecovery finite bridge', () => {
     const initialNext = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const dispatchTicket = await fixture.journal.begin(
       fixture.watch,

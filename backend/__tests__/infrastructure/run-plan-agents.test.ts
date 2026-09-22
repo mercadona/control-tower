@@ -449,7 +449,10 @@ class AgentMother {
   }
 
   static nextArgv(): readonly string[] {
-    return ['/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332']
+    return [
+      '/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
+    ]
   }
 
   static controlsArgv(): readonly string[] {
@@ -1138,7 +1141,10 @@ describe('RunPlanAgents', () => {
     await pending.journal.begin(AgentMother.WATCH, `${JSON.stringify({
       version: 1,
       previous: null,
-      argv: ['/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332'],
+      argv: [
+        '/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332',
+        '--output-format', 'json',
+      ],
       cwd: AgentMother.LOCATION.path,
       planSha256: createHash('sha256').update(AgentMother.PLAN_TEXT).digest('hex'),
     })}\n`)

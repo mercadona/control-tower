@@ -214,9 +214,11 @@ class MachineRuntimeFixture {
           await readFile(join(harness, 'calls', name, 'call.json'), 'utf8'),
         ) as CallRecord))
         const operations = await readdir(join(harness, 'run', 'operations'))
-        const receipts = await Promise.all(operations.map((ticket) =>
-          readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8')))
-        if (calls.length < 2 || !receipts.some((receipt) => receipt.includes('step: implement'))) return null
+        const receipts = await Promise.all(operations.map(async (ticket) => JSON.parse(
+          await readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8'),
+        ) as { stdout: string }))
+        if (calls.length < 2
+          || !receipts.some((receipt) => receipt.stdout.includes('"step":"implement"'))) return null
         return { admission, publication, calls }
       } catch (cause) {
         if (MachineRuntimeFixture.#missing(cause)) return null
