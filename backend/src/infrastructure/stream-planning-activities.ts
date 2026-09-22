@@ -108,13 +108,11 @@ export class StreamPlanningActivities extends PlanningActivities {
   async of(watch: PlanWatch): Promise<PlanningActivity> {
     const record = await this.#recordFor(watch)
     const key = StreamPlanningActivities.#keyFor(record)
-    if (record.completion !== null) {
-      const cursor = this.#cursors.get(key) ?? StreamCursors.empty()
-      return StreamPlanningActivities.#activityFrom(
-        PlanningActivityState.FINISHED, record.completion.wallDurationMs, cursor
-      )
+    const completion = record.completion
+    const cursor = await this.#advanced(key, record, completion !== null)
+    if (completion !== null) {
+      return StreamPlanningActivities.#activityFrom(PlanningActivityState.FINISHED, completion.wallDurationMs, cursor)
     }
-    const cursor = await this.#advanced(key, record)
     return StreamPlanningActivities.#activityFrom(
       PlanningActivityState.RUNNING, this.nowMs() - Date.parse(record.startedAt), cursor
     )
@@ -129,7 +127,7 @@ export class StreamPlanningActivities extends PlanningActivities {
     }
   }
 
-  async #advanced(key: string, record: RecordedCall): Promise<StreamCursor> {
+  async #advanced(key: string, record: RecordedCall, finished: boolean): Promise<StreamCursor> {
     const path = join(this.files.callDirectory(record.call), CallDescriptor.STREAM)
     const text = await this.#read(path)
     const cursor = this.#cursors.get(key) ?? StreamCursors.empty()
@@ -139,13 +137,18 @@ export class StreamPlanningActivities extends PlanningActivities {
     }
     if (text.length < cursor.consumedChars) StreamCursors.reset(cursor)
     const unread = text.slice(cursor.consumedChars)
-    const lastNewline = unread.lastIndexOf('\n')
-    if (lastNewline !== -1) {
-      for (const line of unread.slice(0, lastNewline).split('\n')) StreamLine.apply(cursor, line)
-      cursor.consumedChars += lastNewline + 1
+    const consumable = finished ? unread.length : StreamPlanningActivities.#completeLinesLength(unread)
+    if (consumable > 0) {
+      for (const line of unread.slice(0, consumable).split('\n')) StreamLine.apply(cursor, line)
+      cursor.consumedChars += consumable
     }
     this.#cursors.set(key, cursor)
     return cursor
+  }
+
+  static #completeLinesLength(unread: string): number {
+    const lastNewline = unread.lastIndexOf('\n')
+    return lastNewline === -1 ? 0 : lastNewline + 1
   }
 
   async #read(path: string): Promise<string | null> {

@@ -283,19 +283,48 @@ describe('StreamPlanningActivities, against a real claude -p --output-format str
     expect(second.lastToolCall).toEqual({ name: 'Grep', argument: 'needle' })
   })
 
-  it('finished_never_reads_the_file', async () => {
+  it('a_trailing_line_with_no_newline_is_left_unread_while_still_running', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    subject.calls.historyRows = [Mother.running()]
+    const path = await subject.streamPath()
+    await writeFile(path, StreamLines.toolUse('Read', { file_path: 'a.txt' }).trimEnd(), 'utf8')
+
+    const activity = await subject.adapter().of(Mother.watch())
+
+    expect(activity.toolCalls).toBe(0)
+    expect(activity.lastToolCall).toBeNull()
+  })
+
+  it('a_finished_call_catches_up_the_tail_it_had_not_read_yet_including_a_line_with_no_trailing_newline', async () => {
     root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
     const subject = new Subject(root)
     subject.calls.historyRows = [Mother.finished(45_000)]
     const path = await subject.streamPath()
-    await writeFile(path, StreamLines.toolUse('Read', { file_path: 'a.txt' }), 'utf8')
+    await writeFile(path, StreamLines.toolUse('Read', { file_path: 'a.txt' }).trimEnd(), 'utf8')
 
     const activity = await subject.adapter().of(Mother.watch())
 
     expect(activity.state).toBe(PlanningActivityState.FINISHED)
     expect(activity.runningMs).toBe(45_000)
-    expect(activity.toolCalls).toBe(0)
-    expect(activity.lastToolCall).toBeNull()
+    expect(activity.toolCalls).toBe(1)
+    expect(activity.lastToolCall).toEqual({ name: 'Read', argument: 'a.txt' })
+  })
+
+  it('a_second_finished_poll_after_the_catch_up_still_answers_the_same_cumulative_counters', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    subject.calls.historyRows = [Mother.finished(45_000)]
+    const path = await subject.streamPath()
+    await writeFile(path, StreamLines.toolUse('Read', { file_path: 'a.txt' }), 'utf8')
+    const adapter = subject.adapter()
+    const first = await adapter.of(Mother.watch())
+    expect(first.toolCalls).toBe(1)
+
+    const second = await adapter.of(Mother.watch())
+
+    expect(second.toolCalls).toBe(1)
+    expect(second.lastToolCall).toEqual({ name: 'Read', argument: 'a.txt' })
   })
 
   it('a_planner_not_resolved_to_exactly_one_call_is_told_apart_from_a_read_failure', async () => {
