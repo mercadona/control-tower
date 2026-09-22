@@ -106,16 +106,19 @@ describe('what gets committed is what was approved: the index seal', () => {
 
   it('THE SLICE\'S TWIN: code staged before the slice verdict does not get into its commit', () => {
     taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    const before = commits()
+    const sliceCommitsBefore = runState().sliceCommits
     writeFileSync(join(repo, 'colado.txt'), 'nadie ha visto esto\n')
     execFileSync('git', ['add', 'colado.txt'], { cwd: repo })
     const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)                      // the verdict is valid: it delivers
     expect(runState().closed).toBe('delivered')
     expect(r.stderr).toMatch(/foreign to the machinery \(colado\.txt\)/)
-    expect(commits()).toBe(3)                     // base + 2 tasks: NO verdict commit at all
+    expect(commits()).toBe(before)                // the refused verdict adds no commit
     expect(log()).not.toMatch(/Verdict of the whole slice/)
     expect(execFileSync('git', ['log', '--oneline', '--', 'colado.txt'], { cwd: repo, encoding: 'utf8' }).trim()).toBe('')
-    expect(runState().sliceCommits ?? 0).toBe(0)    // the commit that did not happen is not counted
+    expect(sliceCommitsBefore).toBe(1)             // global committed the telemetry
+    expect(runState().sliceCommits).toBe(sliceCommitsBefore)
     // The evidence stays STAGED: taking the foreign file out and committing it is one line.
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/docs\/superpowers\/verdicts\/issue-7-slice\.json/)

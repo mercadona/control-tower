@@ -133,6 +133,7 @@ describe('a verdict issued with no review package is not a verdict', () => {
     ct('global')
     expect(existsSync(join(repo, '.agent', 'run-7', 'slice-review.diff'))).toBe(false)
 
+    const before = commits()
     const r = ct('slice-verdict', writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/slice verdict discarded: the slice's review package does not exist/)
@@ -140,7 +141,7 @@ describe('a verdict issued with no review package is not a verdict', () => {
     expect(runState().step).toBe('slice-judge')
     expect(runState().discards).toBe(1)
     expect(runState().closed ?? null).toBeNull()   // a run does not DELIVER blind
-    expect(commits()).toBe(3)                    // 1 base + 2 tasks: no verdict commit at all
+    expect(commits()).toBe(before)               // a discarded verdict adds no commit
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-slice.json'))).toBe(false)
 
     const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
