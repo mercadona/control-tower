@@ -42,8 +42,6 @@ type PlanningActivityFields = {
 }
 
 export class PlanningActivity {
-  static readonly MAX_TEXT_LENGTH = 200
-
   readonly state: PlanningActivityStateValue
   readonly runningMs: number
   readonly toolCalls: number
