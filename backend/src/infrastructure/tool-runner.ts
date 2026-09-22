@@ -21,6 +21,17 @@ export class ProcessOutput {
   }
 }
 
+export type ProcessOwnership = {
+  readonly pid: number,
+  readonly processGroup?: number,
+}
+
+export type RunOptions = {
+  readonly cwd?: string,
+  readonly onSpawn?: (ownership: ProcessOwnership) => Promise<void>,
+  readonly ownedProcessGroup?: boolean,
+}
+
 export class ToolRunner {
   static readonly #UNKNOWN_EXIT = 1
   static readonly PIPE_BUFFER_BYTES = 65536
@@ -35,7 +46,7 @@ export class ToolRunner {
     this.env = env
   }
 
-  run(argv: string[], { cwd }: { cwd?: string } = {}): Promise<ProcessOutput> {
+  run(argv: string[], { cwd }: RunOptions = {}): Promise<ProcessOutput> {
     return new Promise((resolve) => {
       execFile(this.bin, argv, { timeout: this.budgetMs, cwd, env: this.env }, (failure, stdout, stderr) => {
         resolve(new ProcessOutput({
@@ -51,11 +62,11 @@ export class ToolRunner {
     })
   }
 
-  async runWholeOutput(argv: string[], { cwd }: { cwd?: string } = {}): Promise<ProcessOutput> {
+  async runWholeOutput(argv: string[], options: RunOptions = {}): Promise<ProcessOutput> {
     const collected = join(await mkdtemp(join(tmpdir(), 'ct-whole-output-')), 'stdout')
     const sink = await open(collected, 'w')
     try {
-      const said = await this.#spawned(argv, { cwd, stdout: sink.fd })
+      const said = await this.#spawned(argv, { ...options, stdout: sink.fd })
       return new ProcessOutput({ code: said.code, stdout: await readFile(collected, 'utf8'), stderr: said.stderr })
     } finally {
       await sink.close()
@@ -63,16 +74,37 @@ export class ToolRunner {
     }
   }
 
-  #spawned(argv: string[], { cwd, stdout }: { cwd?: string, stdout: number }): Promise<{ code: number, stderr: string }> {
+  #spawned(
+    argv: string[],
+    { cwd, stdout, onSpawn, ownedProcessGroup }: RunOptions & { stdout: number },
+  ): Promise<{ code: number, stderr: string }> {
     return new Promise((resolve) => {
       const child = spawn(this.bin, argv, {
-        cwd, env: this.env, timeout: this.budgetMs, stdio: ['ignore', stdout, 'pipe'],
+        cwd, env: this.env, timeout: this.budgetMs, stdio: ['ignore', stdout, 'pipe'], detached: ownedProcessGroup,
       })
       let stderr = ''
+      let settled = false
+      const finish = (said: { code: number, stderr: string }) => {
+        if (settled) return
+        settled = true
+        resolve(said)
+      }
       child.stderr?.setEncoding('utf8')
       child.stderr?.on('data', (chunk: string) => { stderr += chunk })
-      child.on('error', (failure: Error) => resolve({ code: ToolRunner.#UNKNOWN_EXIT, stderr: stderr.trim() || failure.message }))
-      child.on('close', (code: number | null) => resolve({ code: code ?? ToolRunner.#UNKNOWN_EXIT, stderr }))
+      child.on('error', (failure: Error) => finish({ code: ToolRunner.#UNKNOWN_EXIT, stderr: stderr.trim() || failure.message }))
+      child.on('close', (code: number | null) => finish({ code: code ?? ToolRunner.#UNKNOWN_EXIT, stderr }))
+      if (onSpawn !== undefined && child.pid !== undefined) {
+        const ownership = ownedProcessGroup === true && process.platform !== 'win32'
+          ? { pid: child.pid, processGroup: child.pid }
+          : { pid: child.pid }
+        void onSpawn(ownership).catch((failure: unknown) => {
+          if (ownership.processGroup === undefined) child.kill('SIGTERM')
+          else {
+            try { process.kill(-ownership.processGroup, 'SIGTERM') } catch {}
+          }
+          finish({ code: ToolRunner.#UNKNOWN_EXIT, stderr: `process ownership could not be recorded: ${String(failure)}` })
+        })
+      }
     })
   }
 

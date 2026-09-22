@@ -380,10 +380,13 @@ the issue and releases the `area:`/`touches:` tokens, which is what unblocks the
 slices that were waiting.
 
 **The harvest.** The backend sweeps every minute and collects what a merged
-slice left behind: it closes that worktree's `cmux` session and deletes worktree
-and branch, but only if the pull request is merged, the tree clean and the local
-tip the commit that landed. If any of the three fails it touches nothing and
-says which. `/ct-harvest` then answers what the milestone cost.
+slice left behind: it deletes worktree and branch, but only if the pull request
+is merged, the tree clean and every local commit contained in the head that
+landed — a branch a bot updated before merging still counts. It asks `cmux`
+nothing (`--collect --no-workspace`): the cabin opened no workspace to close; the
+plugin's own `/ct-next` route still closes its own. If any of the three fails it
+touches nothing and says which. `/ct-harvest` then answers what the milestone
+cost.
 
 ---
 

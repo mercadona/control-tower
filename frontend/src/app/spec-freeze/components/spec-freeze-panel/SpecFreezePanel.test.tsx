@@ -60,6 +60,15 @@ describe('SpecFreezePanel', () => {
     expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
   })
 
+  it('a milestone context with no scope line shows that finding and keeps the button disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithoutScope().body, { status: 200 })))
+
+    renderPanel()
+
+    expect(await screen.findByText('El contexto del milestone no declara «Alcance:», la línea que lee el gate de alcance en cada issue')).toBeInTheDocument()
+    expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
+  })
+
   it('pressing it sends the key and then says the spec lives in a pull request the person has to merge', async () => {
     const fetching = vi
       .fn()

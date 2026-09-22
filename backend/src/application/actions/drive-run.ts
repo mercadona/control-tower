@@ -4,6 +4,7 @@ import {
 import type { ClosureAnnouncements } from '../../domain/ports/closure-announcements.ts'
 import type { PlanCalls } from '../../domain/ports/plan-calls.ts'
 import type { PlanPublication } from '../../domain/ports/plan-publication.ts'
+import type { RunDelivery } from '../../domain/ports/run-delivery.ts'
 import { RunEstablishment, type RunMachine } from '../../domain/ports/run-machine.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../../domain/value-objects/plan-call.ts'
 import type { RunClosure, RunInstruction } from '../../domain/value-objects/run-instruction.ts'
@@ -32,6 +33,7 @@ export class DriveRun {
   readonly calls: PlanCalls
   readonly publication: PlanPublication
   readonly machine: RunMachine
+  readonly delivery: RunDelivery
   readonly step: ExecuteRunInstruction
   readonly messages: DeliverHeldMessages
   readonly escalations: ReadSliceEscalation
@@ -40,12 +42,13 @@ export class DriveRun {
   readonly driving: Map<string, Promise<void>>
 
   constructor({
-    calls, publication, machine, step, messages, escalations,
+    calls, publication, machine, delivery, step, messages, escalations,
     announcements = null, stderr = () => undefined,
   }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
+    delivery: RunDelivery,
     step: ExecuteRunInstruction,
     messages: DeliverHeldMessages,
     escalations: ReadSliceEscalation,
@@ -55,6 +58,7 @@ export class DriveRun {
     this.calls = calls
     this.publication = publication
     this.machine = machine
+    this.delivery = delivery
     this.step = step
     this.messages = messages
     this.escalations = escalations
@@ -99,6 +103,7 @@ export class DriveRun {
         case 'command':
           break
         case 'delivered':
+          await this.delivery.deliver(params.watch)
           return
         case 'refused':
           await this.#announce(params.watch, instruction.work)

@@ -13,7 +13,7 @@ const CONNECTING: ImplementProgressRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 3000
 const AWAITING_REVIEWER_POLL_INTERVAL_MS = 15000
 
-const DELIVERY_STEPS: readonly ImplementationStep[] = [ImplementationStep.DELIVERED, ImplementationStep.IN_REVIEW, ImplementationStep.FIXING]
+const REVIEW_STEPS: readonly ImplementationStep[] = [ImplementationStep.DELIVERED, ImplementationStep.IN_REVIEW, ImplementationStep.FIXING]
 
 const toProgress = (outcome: ImplementProgressOutcome): ImplementProgressRead => {
   if (outcome.kind === 'read') return { phase: 'progress', ...outcome.state }
@@ -23,7 +23,7 @@ const toProgress = (outcome: ImplementProgressOutcome): ImplementProgressRead =>
 }
 
 const isAwaitingReviewer = (progress: ImplementProgressRead): boolean =>
-  progress.phase === 'progress' && DELIVERY_STEPS.includes(progress.step)
+  progress.phase === 'progress' && REVIEW_STEPS.includes(progress.step)
 
 const isFinal = (progress: ImplementProgressRead): boolean => progress.phase === 'failed'
 

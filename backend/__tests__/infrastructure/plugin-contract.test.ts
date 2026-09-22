@@ -127,6 +127,7 @@ class RunDouble {
 class StepsNoRunFileReports {
   static VALUES = Object.freeze([
     ImplementationStep.STARTING,
+    ImplementationStep.PUBLISHING,
     ImplementationStep.DELIVERED,
     ImplementationStep.IN_REVIEW,
     ImplementationStep.FIXING,

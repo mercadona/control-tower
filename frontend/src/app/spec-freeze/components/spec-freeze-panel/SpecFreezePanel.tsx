@@ -13,6 +13,7 @@ const FINDING: Record<string, string> = {
   'hypothesis-absent': 'El spec no tiene sección «## Hipótesis»',
   'hypothesis-empty': 'La sección «## Hipótesis» está vacía',
   'decision-without-provenance': 'Decisión congelada sin procedencia',
+  'scope-absent': 'El contexto del milestone no declara «Alcance:», la línea que lee el gate de alcance en cada issue',
 }
 const FREEZE = 'Congelar el spec'
 const FREEZING = 'Congelando el spec'

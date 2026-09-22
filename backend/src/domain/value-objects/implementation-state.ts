@@ -9,6 +9,7 @@ export const ImplementationStep = Object.freeze({
   GLOBAL: 'global',
   SLICE_JUDGE: 'slice-judge',
   E2E: 'e2e',
+  PUBLISHING: 'publishing',
   DELIVERED: 'delivered',
   IN_REVIEW: 'in-review',
   FIXING: 'fixing',
@@ -31,7 +32,7 @@ type ImplementationStateFields = {
 export class ImplementationState {
   static readonly TASKLESS: readonly ImplementationStepValue[] = Object.freeze([
     ImplementationStep.STARTING, ImplementationStep.RECONCILE, ImplementationStep.GLOBAL,
-    ImplementationStep.SLICE_JUDGE, ImplementationStep.E2E, ImplementationStep.DELIVERED,
+    ImplementationStep.SLICE_JUDGE, ImplementationStep.E2E, ImplementationStep.PUBLISHING, ImplementationStep.DELIVERED,
     ImplementationStep.IN_REVIEW, ImplementationStep.FIXING,
   ])
 

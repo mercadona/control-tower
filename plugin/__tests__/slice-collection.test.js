@@ -289,6 +289,13 @@ describe('Delivery, when its fields would disagree with each other', () => {
 })
 
 describe('CollectionPolicy, deciding what to do with what the slice left on disk', () => {
+  it('a_tip_the_merged_head_contains_is_collected_and_a_tip_it_does_not_contain_is_kept', () => {
+    const moved = { ...CollectionCaseMother.aMergedDeliveryWithBothArtifactsOnDisk(), localTip: '1122334455667788990011223344556677889900' }
+    expect(CollectionPolicy.stepFor({ ...moved, headContainsTip: true })).toBe(CollectionStep.COLLECT)
+    expect(CollectionPolicy.stepFor({ ...moved, headContainsTip: false })).toBe(CollectionStep.KEEP_TIP_NOT_MERGED)
+    expect(CollectionPolicy.stepFor(moved)).toBe(CollectionStep.KEEP_TIP_NOT_MERGED)
+  })
+
   it('nothing_on_disk_leaves_nothing_to_collect_even_when_the_pull_request_landed', () => {
     expect(CollectionPolicy.stepFor(CollectionCaseMother.nothingLeftOnDisk()))
       .toBe(CollectionStep.NOTHING_LEFT)

@@ -71,6 +71,7 @@ class Mother {
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly BET_LINE = '**The bet:** shipping this halves the time to freeze a spec.'
   static readonly SOURCELESS_DECISION = '- **D-1 · the gate** — one single click freezes the spec.'
+  static readonly CONTEXT = ['## Contexto del milestone', '', '- **Alcance:** `src/**`', '']
 
   static draftWithPendingClarification(): EpicSpec {
     return new EpicSpec({
@@ -86,6 +87,29 @@ class Mother {
         '',
         '- [NEEDS CLARIFICATION: who signs the freeze?]',
         Mother.BET_LINE,
+        '',
+        ...Mother.CONTEXT,
+      ].join('\n'),
+    })
+  }
+
+  static draftWithNoScope(): EpicSpec {
+    return new EpicSpec({
+      path: Mother.PATH,
+      text: [
+        '# Test epic — Execution spec',
+        '',
+        Mother.DESIGN_LINE,
+        '**Fecha de congelación:** —',
+        '**Estado:** DRAFT',
+        '',
+        '## Hipótesis',
+        '',
+        Mother.BET_LINE,
+        '',
+        '## Contexto del milestone',
+        '',
+        '- Stack: TypeScript.',
         '',
       ].join('\n'),
     })
@@ -105,6 +129,7 @@ class Mother {
         '',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -125,6 +150,7 @@ class Mother {
         '',
         '## Decisiones congeladas',
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -141,6 +167,7 @@ class Mother {
         '',
         '## Decisiones congeladas',
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -163,6 +190,7 @@ class Mother {
         '',
         Mother.SOURCELESS_DECISION,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -181,6 +209,7 @@ class Mother {
         '',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -245,6 +274,15 @@ describe('ReadSpecFreeze', () => {
     expect(read.state).toBe(SpecFreezeState.DRAFT)
     expect(read.findings).toEqual([
       new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null }),
+    ])
+  })
+
+  it('a milestone context without the scope line the gate reads answers the scope-absent finding', async () => {
+    const read = await Flow.readingSpec(Mother.draftWithNoScope()).run()
+
+    expect(read.state).toBe(SpecFreezeState.DRAFT)
+    expect(read.findings).toEqual([
+      new FreezeFinding({ code: FreezeFindingCode.SCOPE_ABSENT, line: null, detail: null }),
     ])
   })
 

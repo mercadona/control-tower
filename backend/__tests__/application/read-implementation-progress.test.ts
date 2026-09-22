@@ -3,6 +3,8 @@ import { ReadImplementationProgress, ReadImplementationProgressParams } from '..
 import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
+import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import type { ImplementationStepValue } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
@@ -10,6 +12,7 @@ import type { PlanIssueStatusValue } from '../../src/domain/value-objects/plan-i
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
+import { CompletedRunDelivery } from '../run-delivery-double.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -91,6 +94,14 @@ class PlanIssuesDouble extends PlanIssues {
   }
 }
 
+class LegacyRecords extends PlanRecords {
+  override async find(): Promise<null> { return null }
+}
+
+class DriverRecords extends PlanRecords {
+  override async find(): Promise<PlanWatch> { return {} as PlanWatch }
+}
+
 class Flow {
   static ROOT = new CheckoutRoot('/checkout')
   static ISSUE = 42
@@ -100,15 +111,24 @@ class Flow {
   implementationProgress: ImplementationProgressDouble
   pullRequests: PullRequestsDouble
   planIssues: PlanIssuesDouble
+  records: PlanRecords
+  delivery: CompletedRunDelivery
+  driver: boolean
 
-  constructor({ implementationProgress, pullRequests, planIssues }: {
+  constructor({ implementationProgress, pullRequests, planIssues, records, delivery, driver }: {
     implementationProgress?: ImplementationProgressDouble,
     pullRequests?: PullRequestsDouble,
     planIssues?: PlanIssuesDouble,
+    records?: PlanRecords,
+    delivery?: CompletedRunDelivery,
+    driver?: boolean,
   } = {}) {
     this.implementationProgress = implementationProgress ?? ImplementationProgressDouble.delivered()
     this.pullRequests = pullRequests ?? new PullRequestsDouble({ open: Flow.PULL_REQUEST })
     this.planIssues = planIssues ?? new PlanIssuesDouble(PlanIssueStatus.IN_REVIEW)
+    this.records = records ?? new LegacyRecords()
+    this.delivery = delivery ?? new CompletedRunDelivery()
+    this.driver = driver ?? false
   }
 
   static stillWorking(): Flow {
@@ -124,7 +144,10 @@ class Flow {
   }
 
   async run(): Promise<ImplementationState> {
-    const read = await new ReadImplementationProgress(this)
+    const read = await new ReadImplementationProgress({
+      ...this,
+      isDriver: async () => this.driver,
+    })
       .execute(new ReadImplementationProgressParams({
         root: Flow.ROOT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
       }))
@@ -134,6 +157,23 @@ class Flow {
 }
 
 describe('ReadImplementationProgress', () => {
+  it('a driver run completed only locally is shown as publishing, with an existing PR if known', async () => {
+    const delivery = new CompletedRunDelivery()
+    delivery.inspection = {
+      kind: 'publishing',
+      pullRequest: Flow.PULL_REQUEST,
+      diagnostic: 'checked release failed',
+    }
+    const flow = new Flow({ records: new DriverRecords(), delivery, driver: true })
+
+    const state = await flow.run()
+
+    expect(state.step).toBe(ImplementationStep.PUBLISHING)
+    expect(state.pullRequest).toEqual(Flow.PULL_REQUEST)
+    expect(flow.pullRequests.asked).toEqual([])
+    expect(flow.planIssues.asked).toEqual([])
+  })
+
   it('the_run_it_reads_is_asked_for_the_root_the_issue_and_the_repository', async () => {
     const flow = Flow.standingAt(PlanIssueStatus.IN_REVIEW)
 

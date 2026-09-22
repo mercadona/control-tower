@@ -52,6 +52,7 @@ import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+import { CompletedRunDelivery } from '../run-delivery-double.ts'
 
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
@@ -595,6 +596,7 @@ describe('RunPlanAgents', () => {
       calls,
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine: driverMachine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine: driverMachine, calls: new RefusingRunCalls() }),
       messages: new DeliverHeldMessages({
         messages: journal,
@@ -615,6 +617,7 @@ describe('RunPlanAgents', () => {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements,
       announcements,
       newId: () => '55555555-5555-4555-8555-555555555555',
@@ -715,6 +718,7 @@ describe('RunPlanAgents', () => {
       calls,
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: new RefusingRunCalls() }),
       messages: new DeliverHeldMessages({
         messages: journal,
@@ -734,6 +738,7 @@ describe('RunPlanAgents', () => {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements,
       announcements: new AnnouncementsDouble(),
       newId: () => '55555555-5555-4555-8555-555555555555',
@@ -1106,6 +1111,45 @@ describe('RunPlanAgents', () => {
       .rejects.toBeInstanceOf(PlanAgentNotResumed)
     expect(unreadable.spawns()).toBe(0)
     expect(malformed.spawns()).toBe(0)
+  })
+
+  it('recovery of a refused run asks ct-step again instead of giving up on the journal (#504)', async () => {
+    const tested = await sourceScenario(true)
+    await tested.journal.establish(AgentMother.WATCH, AgentMother.manifest())
+    const announced = await tested.journal.begin(
+      AgentMother.WATCH, AgentMother.request(null, AgentMother.nextArgv()),
+    )
+    await tested.journal.finish(AgentMother.WATCH, announced, AgentMother.receipt(
+      new ProcessOutput({ code: 0, stdout: AgentMother.controlsAnnouncement(), stderr: '' }), null, '{"step":"controls"}\n',
+    ))
+    const refused = await tested.journal.begin(
+      AgentMother.WATCH, AgentMother.request(announced, AgentMother.controlsArgv()),
+    )
+    await tested.journal.finish(AgentMother.WATCH, refused, AgentMother.receipt(
+      new ProcessOutput({
+        code: 4,
+        stdout: '{"version":1,"kind":"refusal","state":"blocked-controls","outcome":"failed","exit":4,'
+          + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"controls","discards":0},'
+          + '"detail":"run blocked-controls: task 1/3, 0 discard(s)"}\n',
+        stderr: '',
+      }), '{"step":"controls"}\n', '{"step":"controls"}\n',
+    ))
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+    }
+
+    await tested.agents.recover(asked)
+    await Bounded.wait(tested.oracle.promise)
+    const driving = tested.driver.driving.get(AgentMother.CONVERSATION)
+    expect(driving).toBeDefined()
+    await Bounded.wait(driving as Promise<void>)
+
+    expect(tested.evidence.asked[0]).toEqual(AgentMother.nextArgv())
+    const entries = await tested.journal.entries(AgentMother.WATCH)
+    expect(entries).toHaveLength(3)
+    expect(JSON.parse(entries[2].request)).toMatchObject({ previous: refused, argv: AgentMother.nextArgv() })
   })
 
   it('untouched established recovery issues next without planner wait or publication', async () => {

@@ -3,13 +3,14 @@ import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMoth
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
+import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { FakeEventSource } from './FakeEventSource'
-import { openHome, pressStart, typePath, typeRepository, typeTicket } from './helpers'
+import { openHome, pressStart, selectSliceDetail, typePath, typeRepository, typeTicket } from './helpers'
 
 type Answer = { status: number; body: string }
 
@@ -30,10 +31,12 @@ const backendFallsOver = () => {
 }
 
 const IMPLEMENT_PROGRESS = /^\/implement-progress\/(\d+)/
+const IMPLEMENT_HISTORY = /^\/implement-history\/(\d+)/
 
-const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inReview() }: {
+const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inReview(), history = () => ImplementHistoryMother.empty() }: {
   activePlans: () => Answer
   progress?: (issue: number) => Answer
+  history?: (issue: number) => Answer
 }) => {
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -46,7 +49,8 @@ const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inR
     if (url === '/epic-groom') return responseFor(NO_EPIC_GROOM)
     const asProgress = IMPLEMENT_PROGRESS.exec(url)
     if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
-    if (url.startsWith('/implement-history/')) return responseFor(ImplementProgressMother.notRead())
+    const asHistory = IMPLEMENT_HISTORY.exec(url)
+    if (asHistory !== null) return responseFor(history(Number(asHistory[1])))
     if (url === '/recover-plan' && init?.method === 'POST') return new Response('{"agent":"conversation-of-8"}', { status: 202 })
     if (url === '/cleanup-plan' && init?.method === 'POST') return new Response('{}', { status: 200 })
     throw new Error(`unexpected fetch to ${url}`)
@@ -238,6 +242,73 @@ describe('Home · the slices in flight', () => {
     expect(await screen.findByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)
     expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
+  })
+
+  it('should select another slice with its history and return to the previous slice', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    const { fetching } = backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
+      progress: (issue) => issue === 7 ? ImplementProgressMother.delivered() : ImplementProgressMother.progress(),
+      history: (issue) => issue === 7 ? ImplementHistoryMother.fullRun() : ImplementHistoryMother.empty(),
+    })
+    const { user } = openHome()
+    expect(await screen.findByText('Cierre del slice')).toBeInTheDocument()
+
+    await selectSliceDetail(user, 8)
+
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText(HeadlessPlanMother.agentFor(8))).toBeInTheDocument()
+    expect(await (await panelOf(8)).findByText('Tarea 3 de 7')).toBeInTheDocument()
+    expect(await screen.findByText('Todavía no ha terminado ningún paso')).toBeInTheDocument()
+    expect(screen.queryByText('Cierre del slice')).toBeNull()
+    expect(fetching).toHaveBeenCalledWith(
+      `/implement-history/8?root=${encodeURIComponent(StartPlanMother.PATH)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,
+    )
+    expect(WorkflowSnapshotStorage.load()?.plan.issue.number).toBe(8)
+    expect(screen.getAllByRole('heading', { name: 'Slice #8' })).toHaveLength(1)
+    expect((await panelOf(8)).queryByRole('button', { name: 'Ver detalle' })).toBeNull()
+
+    await selectSliceDetail(user, 7)
+
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+    expect(await screen.findByText('Cierre del slice')).toBeInTheDocument()
+    expect((await panelOf(8)).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
+  })
+
+  it('should restore a manual selection made when several slices were initially active', async () => {
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
+    const { user, unmount } = openHome()
+
+    await selectSliceDetail(user, 8)
+    unmount()
+    openHome()
+
+    expect(await screen.findByText(HeadlessPlanMother.agentFor(8))).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
+    expect((await panelOf(7)).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Slice #8' })).toHaveLength(1)
+  })
+
+  it('should keep the manual selection and poll only its history on subsequent updates', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
+    const { user } = openHome()
+    await screen.findByText('Todavía no ha terminado ningún paso')
+
+    fetching.mockClear()
+    await selectSliceDetail(user, 8)
+    await waitFor(() => {
+      const historyCalls = fetching.mock.calls.filter(([input]) => IMPLEMENT_HISTORY.test(String(input)))
+      expect(historyCalls.length).toBeGreaterThan(1)
+    }, { timeout: 4000 })
+
+    expect(fetching).toHaveBeenCalledWith('/active-plans')
+    const historyCalls = fetching.mock.calls.filter(([input]) => IMPLEMENT_HISTORY.test(String(input)))
+    expect(historyCalls.length).toBeGreaterThan(1)
+    expect(historyCalls.every(([input]) => String(input).startsWith('/implement-history/8?'))).toBe(true)
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: 'Slice #8' })).toHaveLength(1)
+    expect(within(screen.getByRole('region', { name: 'Slice #7' })).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
   })
 
   it('a saved workflow the backend no longer reports leaves the other slices standing', async () => {
