@@ -1,13 +1,17 @@
 import { RunNotUnderstood } from '../domain/exceptions.ts'
-import { ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION } from '../../../plugin/scripts/step-announcement.js'
+import {
+  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, INPUT_KINDS, RESPONSE_KIND_OF_STEP,
+} from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 
 export type { RunClosure }
 
+export const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
+
 export type AnnouncedInput = {
   readonly role: string,
-  readonly kind: string,
+  readonly kind: 'literal' | 'glob',
   readonly path: string,
 }
 
@@ -21,20 +25,17 @@ export class RunAnnouncement {
   readonly kind: AnnouncementKind
   readonly step: string
   readonly closure: RunClosure | null
-  readonly inputs: readonly AnnouncedInput[] | null
   readonly diagnostic: string
 
   private constructor(asked: {
     kind: AnnouncementKind,
     step: string,
     closure: RunClosure | null,
-    inputs: readonly AnnouncedInput[] | null,
     diagnostic: string,
   }) {
     this.kind = asked.kind
     this.step = asked.step
     this.closure = asked.closure
-    this.inputs = asked.inputs
     this.diagnostic = asked.diagnostic
     Object.freeze(this)
   }
@@ -49,7 +50,6 @@ export class RunAnnouncement {
       kind,
       step,
       closure,
-      inputs: RunAnnouncement.#inputsOf(record, kind),
       diagnostic: RunAnnouncement.#diagnosticOf(kind, step, closure, record),
     })
   }
@@ -109,30 +109,6 @@ export class RunAnnouncement {
     return Object.freeze({ state, outcome, exit: exit as number })
   }
 
-  static #inputsOf(
-    record: Record<string, unknown>,
-    kind: AnnouncementKind,
-  ): readonly AnnouncedInput[] | null {
-    if (kind !== ANNOUNCEMENT_KINDS.STEP) return null
-    const dispatch = record.dispatch
-    const declared = RunAnnouncement.#isRecord(dispatch) ? dispatch.inputs : undefined
-    if (!Array.isArray(declared) || declared.length === 0) return null
-    return Object.freeze(declared.map((input) => RunAnnouncement.#inputOf(input, record)))
-  }
-
-  static #inputOf(input: unknown, record: Record<string, unknown>): AnnouncedInput {
-    const declared = RunAnnouncement.#isRecord(input) ? input : {}
-    const role = declared.role
-    const kind = declared.kind
-    const path = declared.path
-    if (typeof role !== 'string' || typeof kind !== 'string' || typeof path !== 'string') {
-      throw new RunNotUnderstood(
-        `the announcement declares an input without a role, a kind and a path: ${JSON.stringify(record)}`,
-      )
-    }
-    return Object.freeze({ role, kind, path })
-  }
-
   static #diagnosticOf(
     kind: AnnouncementKind,
     step: string,
@@ -156,9 +132,12 @@ export class RunAnnouncement {
 }
 
 export class AnnouncedStep {
+  static readonly #INPUT_KINDS: readonly string[] = Object.values(INPUT_KINDS)
+
   readonly step: string
   readonly commands: readonly string[] | null
   readonly argv: readonly string[]
+  readonly inputs: readonly AnnouncedInput[]
   readonly responseKind: string | null
   readonly responsePath: string | null
 
@@ -166,12 +145,14 @@ export class AnnouncedStep {
     step: string,
     commands: readonly string[] | null,
     argv: readonly string[],
+    inputs: readonly AnnouncedInput[],
     responseKind: string | null,
     responsePath: string | null,
   }) {
     this.step = asked.step
     this.commands = asked.commands
     this.argv = asked.argv
+    this.inputs = asked.inputs
     this.responseKind = asked.responseKind
     this.responsePath = asked.responsePath
     Object.freeze(this)
@@ -194,14 +175,42 @@ export class AnnouncedStep {
     if (typeof step !== 'string') return null
     const commands = AnnouncedStep.#stringArray(announcement.commands)
     const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
-    const response = AnnouncedStep.#object(AnnouncedStep.#object(announcement.dispatch)?.response)
+    const dispatch = AnnouncedStep.#object(announcement.dispatch)
+    const inputs = AnnouncedStep.#inputs(dispatch?.inputs)
+    if (inputs === null) return null
+    const response = AnnouncedStep.#object(dispatch?.response)
     return new AnnouncedStep({
       step,
       commands,
       argv,
+      inputs,
       responseKind: typeof response?.kind === 'string' ? response.kind : null,
       responsePath: typeof response?.path === 'string' ? response.path : null,
     })
+  }
+
+  static #inputs(declared: unknown): readonly AnnouncedInput[] | null {
+    if (!Array.isArray(declared)) return Object.freeze([])
+    const inputs: AnnouncedInput[] = []
+    for (const candidate of declared) {
+      const input = AnnouncedStep.#input(candidate)
+      if (input === null) return null
+      inputs.push(input)
+    }
+    return Object.freeze(inputs)
+  }
+
+  static #input(candidate: unknown): AnnouncedInput | null {
+    const declared = AnnouncedStep.#object(candidate)
+    const role = declared?.role
+    const kind = declared?.kind
+    const path = declared?.path
+    if (typeof role !== 'string' || typeof path !== 'string' || !AnnouncedStep.#isInputKind(kind)) return null
+    return Object.freeze({ role, kind, path })
+  }
+
+  static #isInputKind(value: unknown): value is AnnouncedInput['kind'] {
+    return typeof value === 'string' && AnnouncedStep.#INPUT_KINDS.includes(value)
   }
 
   static #object(value: unknown): Record<string, unknown> | undefined {

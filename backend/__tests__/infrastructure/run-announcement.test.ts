@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RunAnnouncement, StepProse } from '../../src/infrastructure/run-announcement.ts'
+import { AnnouncedStep, RunAnnouncement, StepProse } from '../../src/infrastructure/run-announcement.ts'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 
 class AnnouncementMother {
@@ -106,6 +106,42 @@ class AnnouncementMother {
     })
   }
 
+  static reconcilerRoundOfAnUndeclaredInputKind(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'reconcile', attempt: 1 },
+      dispatch: {
+        inputs: [{ role: 'reconciliation-package', kind: 'directory', path: '.agent/reconcile-package.md' }],
+        response: { kind: 'edits', path: null },
+      },
+      consuming: { argv: ['reconcile', '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9'] },
+    })
+  }
+
+  static sliceJudgeRoundCarryingTheVerdictsGlob(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 2, tasksTotal: 2, step: 'slice-judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-slice-judge',
+        inputs: [
+          { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/slice-package.json' },
+          { role: 'plan', kind: 'literal', path: 'docs/superpowers/plans/plan.md' },
+          { role: 'verdicts', kind: 'glob', path: 'docs/superpowers/verdicts/issue-9-task-*.json' },
+        ],
+        response: { kind: 'file', path: '/repo/.agent/run-9/slice-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'slice-verdict', '/repo/.agent/run-9/slice-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
   static transitionCarryingDispatchInputs(): string {
     return JSON.stringify({
       version: 1,
@@ -190,21 +226,37 @@ describe('RunAnnouncement', () => {
   it('a transition with a non-integer exit is not understood', () => {
     expect(() => RunAnnouncement.of(AnnouncementMother.nonIntegerExit())).toThrow(RunNotUnderstood)
   })
+})
 
+describe('AnnouncedStep', () => {
   it('the announced round takes its reconciliation package from the announcement', () => {
-    const announcement = RunAnnouncement.of(AnnouncementMother.reconcilerRound())
+    const round = AnnouncedStep.read(AnnouncementMother.reconcilerRound())
 
-    expect(announcement?.inputs).toEqual([
+    expect(round?.inputs).toEqual([
       { role: 'reconciliation-package', kind: 'literal', path: '.agent/reconcile-package.md' },
     ])
   })
 
   it('an announced input with no path is refused', () => {
-    expect(() => RunAnnouncement.of(AnnouncementMother.reconcilerRoundWithoutAPath())).toThrow(RunNotUnderstood)
+    expect(AnnouncedStep.read(AnnouncementMother.reconcilerRoundWithoutAPath())).toBeNull()
+  })
+
+  it('an announced input whose kind is outside the vocabulary leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.reconcilerRoundOfAnUndeclaredInputKind())).toBeNull()
+  })
+
+  it('an announced input of kind glob survives the door', () => {
+    const round = AnnouncedStep.read(AnnouncementMother.sliceJudgeRoundCarryingTheVerdictsGlob())
+
+    expect(round?.inputs).toEqual([
+      { role: 'package', kind: 'literal', path: '/repo/.agent/run-9/slice-package.json' },
+      { role: 'plan', kind: 'literal', path: 'docs/superpowers/plans/plan.md' },
+      { role: 'verdicts', kind: 'glob', path: 'docs/superpowers/verdicts/issue-9-task-*.json' },
+    ])
   })
 
   it('an announcement of kind transition carries no inputs', () => {
-    expect(RunAnnouncement.of(AnnouncementMother.transitionCarryingDispatchInputs())?.inputs).toBeNull()
+    expect(AnnouncedStep.read(AnnouncementMother.transitionCarryingDispatchInputs())).toBeNull()
   })
 })
 

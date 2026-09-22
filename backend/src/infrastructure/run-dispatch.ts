@@ -5,7 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.js'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
-import { INPUT_ROLES, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
+import { INPUT_ROLES, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
 import { DispatchMaterialRead, DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import {
   ADVICE_SCHEMA,
@@ -18,9 +18,7 @@ import {
   SLICE_JUDGE_TOOLS,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../domain/exceptions.ts'
-import { RunAnnouncement } from './run-announcement.ts'
-
-const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
+import { AnnouncedStep, RESPONSE_KIND_BY_STEP, type AnnouncedInput } from './run-announcement.ts'
 
 type RunRole = 'implement' | 'judge' | 'advise' | 'slice-judge' | 'reconcile'
 type RunResponse =
@@ -28,6 +26,7 @@ type RunResponse =
   | { readonly kind: 'structured', readonly path: string }
   | { readonly kind: 'edits' }
 type DispatchInput = { readonly kind: 'literal' | 'glob', readonly path: string }
+type DispatchRound = Pick<AnnouncedStep, 'inputs' | 'argv' | 'responsePath'>
 
 class DispatchMaterial {
   readonly role: RunRole
@@ -138,12 +137,13 @@ export class RunDispatch {
     command: RunConsumingCommand | null,
     pluginRoot: string,
   }): DispatchMaterial {
-    if (RunDispatch.#consumesEdits(asked.command)) return RunDispatch.#edits(asked)
-    const step = DispatchProse.stepOf(asked.stdout)
+    const announced = AnnouncedStep.read(asked.stdout)
+    if (RunDispatch.#consumesEdits(asked.command)) return RunDispatch.#edits(asked, announced)
+    const step = announced?.step ?? DispatchProse.stepOf(asked.stdout)
     switch (step) {
       case STEPS.IMPLEMENT: {
-        const material = RunDispatch.#read(asked.stdout, step)
-        const rubric = RunDispatch.#pathOf(material, INPUT_ROLES.RUBRIC)
+        const round = RunDispatch.#round(asked.stdout, step, announced)
+        const rubric = RunDispatch.#pathOf(round, INPUT_ROLES.RUBRIC)
         const declaredRubric = join(asked.pluginRoot, RoleBytes.filesOf(step)[0])
         if (rubric !== declaredRubric) {
           throw new RunNotUnderstood(`the printed implementer rubric ${rubric} does not match ${declaredRubric}`)
@@ -151,7 +151,7 @@ export class RunDispatch {
         return RunDispatch.#structured({
           role: 'implement',
           step,
-          material,
+          round,
           pluginRoot: asked.pluginRoot,
           argv: [
             '--tools', IMPLEMENTER_TOOLS,
@@ -165,7 +165,7 @@ export class RunDispatch {
         return RunDispatch.#defined({
           role: 'judge',
           step,
-          material: RunDispatch.#read(asked.stdout, step),
+          round: RunDispatch.#round(asked.stdout, step, announced),
           pluginRoot: asked.pluginRoot,
           tools: JUDGE_TOOLS,
           schema: null,
@@ -174,7 +174,7 @@ export class RunDispatch {
         return RunDispatch.#defined({
           role: 'advise',
           step,
-          material: RunDispatch.#read(asked.stdout, step),
+          round: RunDispatch.#round(asked.stdout, step, announced),
           pluginRoot: asked.pluginRoot,
           tools: ADVISOR_TOOLS,
           schema: ADVICE_SCHEMA,
@@ -183,7 +183,7 @@ export class RunDispatch {
         return RunDispatch.#defined({
           role: 'slice-judge',
           step,
-          material: RunDispatch.#read(asked.stdout, step),
+          round: RunDispatch.#round(asked.stdout, step, announced),
           pluginRoot: asked.pluginRoot,
           tools: SLICE_JUDGE_TOOLS,
           schema: null,
@@ -199,25 +199,35 @@ export class RunDispatch {
     }
   }
 
+  static #round(stdout: string, step: string, announced: AnnouncedStep | null): DispatchRound {
+    if (announced !== null) return announced
+    const material = RunDispatch.#read(stdout, step)
+    return Object.freeze({
+      inputs: material.inputs,
+      argv: material.consuming === null ? Object.freeze([]) : material.consuming.argv,
+      responsePath: material.response === null ? null : material.response.path,
+    })
+  }
+
   static #structured(asked: {
     role: 'implement',
     step: string,
-    material: DispatchMaterialRead,
+    round: DispatchRound,
     pluginRoot: string,
     argv: readonly string[],
   }): DispatchMaterial {
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material.inputs)),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.round.inputs)),
       argv: Object.freeze([...asked.argv]),
-      response: RunDispatch.#response(asked.step, asked.material),
+      response: RunDispatch.#response(asked.step, asked.round),
     })
   }
 
   static #defined(asked: {
     role: Exclude<RunRole, 'implement' | 'reconcile'>,
     step: string,
-    material: DispatchMaterialRead,
+    round: DispatchRound,
     pluginRoot: string,
     tools: string,
     schema: object | null,
@@ -238,9 +248,9 @@ export class RunDispatch {
     if (asked.schema !== null) argv.push('--json-schema', JSON.stringify(asked.schema))
     return new DispatchMaterial({
       role: asked.role,
-      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.material.inputs)),
+      inputs: RunDispatch.#withRoleFiles(asked.step, asked.pluginRoot, RunDispatch.#inputsOf(asked.round.inputs)),
       argv: Object.freeze(argv),
-      response: RunDispatch.#response(asked.step, asked.material),
+      response: RunDispatch.#response(asked.step, asked.round),
     })
   }
 
@@ -251,14 +261,18 @@ export class RunDispatch {
   static #edits(asked: {
     stdout: string,
     pluginRoot: string,
-  }): DispatchMaterial {
+  }, announced: AnnouncedStep | null): DispatchMaterial {
     const files = RoleBytes.filesOf(STEPS.RECONCILE)
     const definition = RunDispatch.#definition(join(asked.pluginRoot, files[0]))
     const tools = definition.tools.join(', ')
     if (tools !== RECONCILER_TOOLS) throw new RunNotUnderstood('the reconcile definition tools do not match the plugin contract')
     return new DispatchMaterial({
       role: 'reconcile',
-      inputs: RunDispatch.#withRoleFiles(STEPS.RECONCILE, asked.pluginRoot, RunDispatch.#reconciliationInputs(asked.stdout)),
+      inputs: RunDispatch.#withRoleFiles(
+        STEPS.RECONCILE,
+        asked.pluginRoot,
+        RunDispatch.#reconciliationInputs(asked.stdout, announced),
+      ),
       argv: Object.freeze([
         '--tools', tools,
         '--allowedTools', tools,
@@ -270,9 +284,11 @@ export class RunDispatch {
     })
   }
 
-  static #reconciliationInputs(stdout: string): readonly DispatchInput[] {
-    const announced = RunDispatch.#announcedReconciliationInputs(stdout)
-    if (announced.length > 0) return announced
+  static #reconciliationInputs(stdout: string, announced: AnnouncedStep | null): readonly DispatchInput[] {
+    const round = RunDispatch.#inputsOf(
+      announced?.inputs.filter((input) => input.role === INPUT_ROLES.RECONCILIATION_PACKAGE) ?? [],
+    )
+    if (round.length > 0) return round
     try {
       return RunDispatch.#inputsOf(DispatchProse.read({ stdout, step: STEPS.RECONCILE }).inputs)
     } catch (cause) {
@@ -281,14 +297,6 @@ export class RunDispatch {
       }
       throw cause
     }
-  }
-
-  static #announcedReconciliationInputs(stdout: string): readonly DispatchInput[] {
-    const announced = RunAnnouncement.of(stdout)?.inputs ?? null
-    if (announced === null) return Object.freeze([])
-    return RunDispatch.#inputsOf(
-      announced.filter((input) => input.role === INPUT_ROLES.RECONCILIATION_PACKAGE),
-    )
   }
 
   static #read(stdout: string, step: string): DispatchMaterialRead {
@@ -302,16 +310,12 @@ export class RunDispatch {
     }
   }
 
-  static #inputsOf(inputs: readonly { readonly kind: string, readonly path: string }[]): readonly DispatchInput[] {
-    return Object.freeze(inputs.map((input): DispatchInput => {
-      if (input.kind === 'literal') return Object.freeze({ kind: 'literal', path: input.path })
-      if (input.kind === 'glob') return Object.freeze({ kind: 'glob', path: input.path })
-      throw new RunNotUnderstood(`the dispatch input kind "${input.kind}" is not supported`)
-    }))
+  static #inputsOf(inputs: readonly AnnouncedInput[]): readonly DispatchInput[] {
+    return Object.freeze(inputs.map((input): DispatchInput => Object.freeze({ kind: input.kind, path: input.path })))
   }
 
-  static #pathOf(material: DispatchMaterialRead, role: string): string | null {
-    const input = material.inputs.find((candidate: { role: string }) => candidate.role === role)
+  static #pathOf(round: DispatchRound, role: string): string | null {
+    const input = round.inputs.find((candidate) => candidate.role === role)
     return input === undefined ? null : input.path
   }
 
@@ -327,15 +331,15 @@ export class RunDispatch {
     return Object.freeze(material)
   }
 
-  static #response(step: string, material: DispatchMaterialRead): RunResponse {
-    if (material.consuming === null || material.consuming.argv[1] !== material.response.path) {
+  static #response(step: string, round: DispatchRound): RunResponse {
+    if (round.responsePath === null || round.argv[1] !== round.responsePath) {
       throw new RunNotUnderstood('the announced response path conflicts with the consuming command')
     }
     switch (RESPONSE_KIND_BY_STEP[step]) {
       case RESPONSE_KINDS.FILE:
-        return Object.freeze({ kind: 'file', path: material.response.path })
+        return Object.freeze({ kind: 'file', path: round.responsePath })
       case RESPONSE_KINDS.STRUCTURED:
-        return Object.freeze({ kind: 'structured', path: material.response.path })
+        return Object.freeze({ kind: 'structured', path: round.responsePath })
       default:
         throw new RunNotUnderstood(`the step "${step}" does not answer through a printed response path`)
     }
