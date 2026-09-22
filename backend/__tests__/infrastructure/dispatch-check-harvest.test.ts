@@ -172,12 +172,12 @@ describe('DispatchCheckHarvest', () => {
     await asked.asked('/elsewhere/clone')
 
     expect(asked.calls[0][0]).toEqual([
-      '/plugin/scripts/dispatch-check.mjs', '7', '--repo', 'owner/name', '--collect',
+      '/plugin/scripts/dispatch-check.mjs', '7', '--repo', 'owner/name', '--collect', '--no-cmux',
     ])
     expect(asked.calls[0][1]).toEqual({ cwd: '/elsewhere/clone' })
   })
 
-  it('with_a_harvest_table_the_command_asks_the_plugin_to_load_the_row_after_the_five_arguments_of_today', async () => {
+  it('with_a_harvest_table_the_command_asks_the_plugin_to_load_the_row_after_the_six_arguments_of_today', async () => {
     const asked = new HarvestDouble({
       code: 0, stdout: HarvestDouble.COLLECTED_LINE, harvestTable: HarvestDouble.TABLE,
     })
@@ -185,7 +185,7 @@ describe('DispatchCheckHarvest', () => {
     await asked.asked()
 
     expect(asked.calls[0][0]).toEqual([
-      HarvestDouble.CHECK, '7', '--repo', 'owner/name', '--collect', '--bq', HarvestDouble.TABLE,
+      HarvestDouble.CHECK, '7', '--repo', 'owner/name', '--collect', '--no-cmux', '--bq', HarvestDouble.TABLE,
     ])
   })
 

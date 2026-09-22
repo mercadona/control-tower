@@ -214,6 +214,7 @@ const reopen = has('--reopen')
 const requeue = has('--requeue')
 const checkPlan = has('--check-plan')
 const collect = has('--collect')
+const noCmux = has('--no-cmux')
 const dryRun = has('--dry-run')
 // --no-watch-merge: do not launch the merge watcher in this release.
 //
@@ -1437,7 +1438,7 @@ if (collect) {
     gh: ghRunner,
     git: localRunner('git', COLLECT_GIT_TIMEOUT_MS),
     cmux: localRunner('cmux', COLLECT_CMUX_TIMEOUT_MS),
-    findWorkspace: (cwd) => findWorkspaceByCwd(cwd),
+    findWorkspace: noCmux ? () => ({ consultado: true, ref: null }) : (cwd) => findWorkspaceByCwd(cwd),
   })
   // F20/harvest, Task 7 (corrected): with `--bq` and the guard saying
   // HARVEST, the row travels to BigQuery BEFORE `execute()` (below) deletes

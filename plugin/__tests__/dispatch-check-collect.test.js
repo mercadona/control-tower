@@ -177,6 +177,17 @@ describe('dispatch-check --collect — the harvest', () => {
     cleanup(b)
   })
 
+  it('with --no-cmux the harvest asks cmux nothing and collects with git alone, the way the cabin dispatched', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_LIST_WINDOWS_FAIL: '1' }, ['7', '--repo', 'o/r', '--collect', '--no-cmux'])
+    expect(res.status).toBe(0)
+    expect(res.stdout.trim()).toBe(`collected #7: worktree ${b.worktree} deleted, branch feat/7 deleted`)
+    expect(existsSync(b.worktree)).toBe(false)
+    expect(branches(b)).toBe('')
+    expect(invocations(b)).toBe('')
+    cleanup(b)
+  })
+
   it('cmux inconclusive: exit 3 without having deleted anything, even though the pull request is merged', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_LIST_WINDOWS_FAIL: '1' })
