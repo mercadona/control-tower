@@ -172,7 +172,7 @@ describe('DispatchCheckHarvest', () => {
     await asked.asked('/elsewhere/clone')
 
     expect(asked.calls[0][0]).toEqual([
-      '/plugin/scripts/dispatch-check.mjs', '7', '--repo', 'owner/name', '--collect', '--no-cmux',
+      '/plugin/scripts/dispatch-check.mjs', '7', '--repo', 'owner/name', '--collect', '--no-workspace',
     ])
     expect(asked.calls[0][1]).toEqual({ cwd: '/elsewhere/clone' })
   })
@@ -185,7 +185,7 @@ describe('DispatchCheckHarvest', () => {
     await asked.asked()
 
     expect(asked.calls[0][0]).toEqual([
-      HarvestDouble.CHECK, '7', '--repo', 'owner/name', '--collect', '--no-cmux', '--bq', HarvestDouble.TABLE,
+      HarvestDouble.CHECK, '7', '--repo', 'owner/name', '--collect', '--no-workspace', '--bq', HarvestDouble.TABLE,
     ])
   })
 

@@ -60,7 +60,7 @@ export class DispatchCheckHarvest extends Harvest {
     repository: RepositoryName,
     harvestTable: string | null,
   }): string[] {
-    const argv = [dispatchCheck, String(issueNumber), '--repo', repository.text, '--collect', '--no-cmux']
+    const argv = [dispatchCheck, String(issueNumber), '--repo', repository.text, '--collect', '--no-workspace']
     return harvestTable === null ? argv : [...argv, '--bq', harvestTable]
   }
 

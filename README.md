@@ -383,7 +383,7 @@ slices that were waiting.
 slice left behind: it deletes worktree and branch, but only if the pull request
 is merged, the tree clean and every local commit contained in the head that
 landed — a branch a bot updated before merging still counts. It asks `cmux`
-nothing (`--collect --no-cmux`): the cabin opened no workspace to close; the
+nothing (`--collect --no-workspace`): the cabin opened no workspace to close; the
 plugin's own `/ct-next` route still closes its own. If any of the three fails it
 touches nothing and says which. `/ct-harvest` then answers what the milestone
 cost.
