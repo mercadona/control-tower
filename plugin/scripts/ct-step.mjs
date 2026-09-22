@@ -1165,6 +1165,16 @@ function archive(kind, content) {
   }
 }
 
+// The path `archive('verdict', …)` has just written, relative to the repository
+// root so the line that travels to a person names something they can open. It
+// answers null when the file is not there: archiving is best effort (it warns
+// and carries on), and naming a file that does not exist is worse than naming
+// none.
+function archivedVerdictPath() {
+  const relative = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
+  return existsSync(join(repoRoot, relative)) ? relative : null
+}
+
 // ---------------------------------------------------------------------------
 // THE PACKAGE STILL DESCRIBES THE CUT IT CAPTURED, and the verdict is OF THAT
 // package. The two checks that tie the product to its input (slice 11); see
@@ -2925,6 +2935,13 @@ try {
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
   if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
+  // The judge's veto is persisted for the same reason the good closure is: a
+  // closure that lives only in the exit code of a process that has gone leaves
+  // the run reading `step: judge` with the budget spent, so the next `next`
+  // re-enters the judge and re-closes for free. Only this state, and only from
+  // this path: the discard budget exits above, so a persisted `blocked-judge`
+  // is always the veto — `FAILED`, `EXIT.VETOED`. `reopen` is what lifts it.
+  if (transition.state === RUN_STATES.BLOCKED_JUDGE) run = { ...run, closed: RUN_STATES.BLOCKED_JUDGE }
   save()
 
   // The e2e report is committed HERE, after persisting the state and only if
@@ -2970,9 +2987,16 @@ try {
       issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
       state: transition.state, outcome, exit: code,
     }
+    // Only the judge's closure explains itself, and only because it is the one
+    // whose reason the run is already holding: `lastVerdict` and `lastFindings`
+    // are written by `verdictVerb` and `archive` has just put the verdict on
+    // disk. Nothing is recomputed here.
+    const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
+      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
+      : {}
     const announcement = code === EXIT.OK
       ? StepAnnouncement.transition(closure)
-      : StepAnnouncement.refusal({ ...closure, detail })
+      : StepAnnouncement.refusal({ ...closure, detail, ...explained })
     safeWrite(1, announcement.text())
   }
   process.exit(code)
