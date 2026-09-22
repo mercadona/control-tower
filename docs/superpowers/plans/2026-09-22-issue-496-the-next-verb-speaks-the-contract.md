@@ -84,6 +84,8 @@ under the flag.
 | What the census may do | grow a module and a family; it never narrows its list or its walk |
 | The feature flag | none; this repository's `flag-discipline` default is off |
 | The one order the numbers do not give | tasks 8 to 11 land before task 5, which gives the announced road the traffic |
+| Where task 12 goes | next, and before task 5: its hole is open today, and tasks 9 and 11 are already in |
+| Who compares the manifest | `OracleBoundary`, on all three roads; `RunConsumingCommand` stays shut |
 | What the announced road owes | every refusal the prose road made: the roles, the verb, the manifest and an argv's elements |
 | What `manifest` does inside `OracleBoundary.read` | it stays, because task 11 compares the announced argv with it |
 
@@ -168,10 +170,14 @@ What stays unmeasured on purpose: `dispatch.agent`. No reader takes it, so no te
 it from the backend. `plugin/__tests__/ct-step-announcement-real-process.test.js` already pins
 it on the plugin side.
 
-Tasks 8 to 11 drive their cases from `OracleMother` and from `AnnouncedStep` directly. None of
+Tasks 8 to 12 drive their cases from `OracleMother` and from `AnnouncedStep` directly. None of
 them adds a real-process file. The real oracle never announces an incomplete round, a foreign
 verb, a foreign issue or a number inside an argv. So only a literal announcement reaches those
 refusals.
+
+Task 12 also names the two real-process suites, and not to reach its own refusal. They are the
+boundary the other way: a real conflict must still reach the reconciler once the branch compares
+the manifest.
 
 One dependency `run-dispatch-real-process.test.ts` leans on, and does not declare: its injection
 of a response path relies on `response.path` before `consuming.argv[1]` in the serialization. A
@@ -843,6 +849,121 @@ cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run
 cd backend && npm run typecheck   # expected: exit 0 — the widened signature resolves
 ```
 
+### Task 12 — the announced reconciler round names its own run
+
+**Objective:** The edits branch refuses a reconciler round whose plan or issue is not the
+manifest's.
+
+**Files:** `backend/src/infrastructure/ct-run-machine.ts` (modify),
+`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify)
+
+**This hole is open in production, unlike the four before it.** `reconcile` is a consuming verb,
+so `#runnerArgv` has appended the flag to it since slice 3. Tasks 8 to 11 closed holes that task
+5 was going to open. This one needs no task 5, and §9.16 measures it.
+
+Current state (backend/src/infrastructure/ct-run-machine.ts, lines 325-327):
+
+```ts
+    if (round !== null && round.responseKind === RESPONSE_KINDS.EDITS) {
+      try {
+        return OracleResult.call(command.ticket, round.argv, RunConsumingCommand.forEdits(round.argv))
+```
+
+`OracleBoundary.read` answers this round before the switch, so neither `#dispatchCall` nor
+`#announcedCommand` ever sees it. `RunConsumingCommand.forEdits` is the only guard on the road,
+and it compares `argv[0]` and nothing else.
+
+The comparison goes in this branch, beside the two task 11 placed, and it reuses
+`#namesThisRun`. The branch refuses before it builds anything, with the words it already prints.
+`RunConsumingCommand` stays shut: `RunManifest` is private to `ct-run-machine.ts`, and
+`run-dispatch.ts` cannot import it, because that import edge already runs the other way.
+
+`#namesThisRun` needs no change, and one measurement says why. A reconciler argv carries no
+response path, so `--plan` sits at index 1 and `--issue` at index 3. Both are two places earlier
+than in a dispatch round. Task 11 read them by flag name and never by position, and that is what
+makes the predicate fit a third shape.
+
+**TDD:** `it('an announced reconciler round that names another issue is refused')`. Arrange the
+reconcile round with `--issue 331` against a manifest of 332, which answers `call` today. Expect
+`refused`, and expect `fixture.asked` to hold no command after the reconcile one. The boundary
+beside it: `it('an announced reconciler round that names another plan is refused')`.
+
+**Tests:** added, in `ct-run-machine.test.ts`:
+`'an announced reconciler round that names another issue is refused'`,
+`'an announced reconciler round that names another plan is refused'`. Kept, and it is the
+boundary that proves the branch still passes its own run:
+`'the announced reconciler round answers with a call and not with a command'`. Removed on
+purpose: none.
+
+**Verification:** The edits branch compares the manifest. A real conflict still reaches the
+reconciler through the real oracle.
+
+```bash
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts __tests__/infrastructure/run-announcement.test.ts   # expected: exit 0 — the third road compares the manifest
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine-real-process.test.ts __tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — a real conflict still reaches the reconciler
+cd backend && npm run typecheck   # expected: exit 0 — the graph is sound
+```
+
+### Task 13 — the consuming verb loses its last two homes
+
+**Objective:** No module of `backend/src` spells a consuming verb that the announcement's map
+already holds.
+
+**Files:** `backend/src/infrastructure/run-dispatch.ts` (modify),
+`backend/src/infrastructure/run-announcement.ts` (modify),
+`backend/src/infrastructure/ct-run-machine.ts` (modify)
+
+Task 9 gave the step-to-verb partition one home. Two comparisons in `run-dispatch.ts` still
+spell a verb of their own, and this task retires both. It may land any time after task 9.
+
+Current state (backend/src/infrastructure/run-dispatch.ts, lines 72-77):
+
+```ts
+  static forEdits(argv: readonly string[]): RunConsumingCommand {
+    if (argv[0] !== 'reconcile') {
+      throw new RunNotUnderstood(`the announced consuming argv does not consume a reconciliation: ${JSON.stringify(argv)}`)
+    }
+    return new RunConsumingCommand(argv, null)
+  }
+```
+
+Current state (backend/src/infrastructure/run-dispatch.ts, line 258):
+
+```ts
+    return command !== null && command.responsePath === null && command.argv[0] === 'reconcile'
+```
+
+Both compare `argv[0]` with `CONSUMING_VERB_OF_STEP[STEPS.RECONCILE]` from now on. Neither guard
+goes: `forEdits` keeps the invariant of the value it builds, and `#consumesEdits` keeps the
+question that routes `#material`. Only the literal moves.
+
+That gives the map a reader in `run-dispatch.ts`. So `CONSUMING_VERB_BY_STEP`, which
+`ct-run-machine.ts` declares at line 22, moves to `run-announcement.ts` beside
+`RESPONSE_KIND_BY_STEP`, and both modules import it. Task 10 put the first alias there for this
+same reason.
+
+**The trap: `run-dispatch.ts` spells `reconcile` five times and only two of them are a verb.**
+`RunRole`, its `Exclude` and `role: 'reconcile'` name a dispatch ROLE, which is another
+vocabulary. The slice judge's step, role and verb read `slice-judge`, `slice-judge` and
+`slice-verdict`. Those three spellings stay exactly as they are.
+
+**TDD:** No TDD — this task moves two literals and one alias, and it adds no behaviour. Its red
+step is the grep below, which counts two today. The existing cases of `run-dispatch` and of the
+oracle are what prove the two guards still refuse what they refused.
+
+**Tests:** added: none. Removed on purpose: none. The guards keep the cases they have, in
+`backend/__tests__/infrastructure/run-dispatch-real-process.test.ts` and
+`backend/__tests__/infrastructure/ct-run-machine.test.ts`.
+
+**Verification:** Neither comparison spells the verb. Both guards still refuse, and the graph
+typechecks with the alias in one place.
+
+```bash
+test "$(grep -cE "argv\[0\] (===|!==) 'reconcile'" backend/src/infrastructure/run-dispatch.ts)" -eq 0   # expected: exit 0 — neither comparison spells the verb
+test "$(grep -c 'CONSUMING_VERB_BY_STEP' backend/src/infrastructure/run-announcement.ts)" -eq 1   # expected: exit 0 — the alias has one home
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts __tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — both guards still refuse
+cd backend && npm run typecheck   # expected: exit 0 — the moved alias resolves
+```
 ## 8. Global verification
 
 The eight commands below measure the slice end to end. I ran all eight on `2144dd17`, the tip
@@ -933,16 +1054,20 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     `plugin/conventions/simplicity.md` names both shapes: a second check downstream of the door,
     and a condition that cannot occur. The `responsePath === null` half stays, because the type
     needs it.
-11. **No single base makes every `Current state` block of this plan verbatim.** Provenance: I
-    measured three of them. Against the working tree at `f38f459f` one block fails: task 2's own
-    citation of `run-dispatch.ts`, whose three lines task 2 rewrote when it landed. Against
-    `2144dd17`, the tree I wrote this plan on, four fail. All four sit in tasks 8 to 10, which
-    cite what tasks 1 and 2 built. Against `916df6f3`, the merge-base with `origin/main`,
-    seventeen fail: `run-announcement.ts` and `step-prose.js` do not exist there at all.
+11. **A landed task invalidates its own citation, so no base makes this plan verbatim.**
+    Provenance: I measured four bases. Against `033173f0`, with tasks 1 to 4 and 8 to 11 in,
+    eight blocks fail. Two sit over `ct-run-machine.ts`, two over `run-announcement.ts`, two over
+    `run-dispatch.ts`, one over `ct-step.mjs` and one over `step-prose.js`. Each belongs to a
+    task that rewrote the very span it quoted.
+    
+    Against `f38f459f` one failed, against `2144dd17` four, and against `916df6f3`, the
+    merge-base with `origin/main`, twenty: `run-announcement.ts` and `step-prose.js` do not exist
+    there at all. The count grows with every task that lands, and it measures progress rather
+    than drift.
     
     No citation moves for that. A relabel would take a block out of the one check that proves
     the plan described the real repo. A rewrite would make a "before" block describe an "after"
-    tree. This is what a plan of eleven tasks costs when each task cites what the one before it
+    tree. This is what a plan of thirteen tasks costs when each task cites what the one before it
     built. The sibling plans of issue 496 carry the same entries, for the same reason. So whoever
     runs `--check-plan` from here on reads its output as a list, not as a verdict.
 12. **The mandatory-role hole, measured three ways.** Provenance: task 1's review, task 2's
@@ -977,6 +1102,20 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     The prose road does compare, at `ct-run-machine.ts:407-408`, and its only case feeds
     `controlsAnnouncementOfAnotherIssue()` — a mother task 6 deletes with the road. Task 11
     closes it, and its own case is that coverage's announced heir.
+16. **The same hole on the third road, and this one is open in production.** Provenance: task
+    11's implementer reported it, the coordinator read it in the tree, and I measured it on
+    `033173f0`. `OracleBoundary.read` answers the reconciler round in its `edits` branch, before
+    the switch, so neither `#dispatchCall` nor `#announcedCommand` ever sees it.
+    
+    `RunConsumingCommand.forEdits` is the only guard on that road, and it compares `argv[0]` and
+    nothing else. I called it with
+    `['reconcile', '--plan', 'docs/superpowers/plans/2026-09-17-issue-331-other.md', '--issue', '331']`
+    and it answered a command. `reconcile` is a consuming verb, so it has carried the flag since
+    slice 3. That is why this one needs no task 5 to become reachable.
+    
+    Task 11 put `RunConsumingCommand` out of scope, so its implementer reported rather than
+    fixed. Task 12 keeps it shut and compares in the branch instead. `RunManifest` is private to
+    `ct-run-machine.ts`, and `run-dispatch.ts` already sits on the other end of that import edge.
 14. **`#stringArray` promised more than it checked.** Provenance: task 1's review named it the
     one Minor to fix before merge, and I measured it. A `consuming.argv` of `[1, 2]` comes back
     as `argv=[1,2]` under a type that says `readonly string[]`. `CommandRequest.read` catches a
