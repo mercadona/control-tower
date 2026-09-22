@@ -1,6 +1,7 @@
 import { RunNotUnderstood } from '../domain/exceptions.ts'
 import {
-  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, INPUT_KINDS, RESPONSE_KIND_OF_STEP,
+  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, INPUT_KINDS, MANDATORY_INPUT_ROLES_OF_STEP,
+  RESPONSE_KIND_OF_STEP,
 } from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
@@ -133,6 +134,7 @@ export class RunAnnouncement {
 
 export class AnnouncedStep {
   static readonly #INPUT_KINDS: readonly string[] = Object.values(INPUT_KINDS)
+  static readonly #MANDATORY_ROLES: Readonly<Record<string, readonly string[]>> = MANDATORY_INPUT_ROLES_OF_STEP
 
   readonly step: string
   readonly commands: readonly string[] | null
@@ -176,7 +178,9 @@ export class AnnouncedStep {
     const commands = AnnouncedStep.#stringArray(announcement.commands)
     const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
     const dispatch = AnnouncedStep.#object(announcement.dispatch)
-    const inputs = AnnouncedStep.#inputs(dispatch?.inputs)
+    const inputs = dispatch === undefined
+      ? Object.freeze([])
+      : AnnouncedStep.#inputs(dispatch.inputs, step)
     if (inputs === null) return null
     const response = AnnouncedStep.#object(dispatch?.response)
     return new AnnouncedStep({
@@ -189,15 +193,21 @@ export class AnnouncedStep {
     })
   }
 
-  static #inputs(declared: unknown): readonly AnnouncedInput[] | null {
-    if (!Array.isArray(declared)) return Object.freeze([])
+  static #inputs(declared: unknown, step: string): readonly AnnouncedInput[] | null {
+    const candidates: readonly unknown[] = Array.isArray(declared) ? declared : []
     const inputs: AnnouncedInput[] = []
-    for (const candidate of declared) {
+    for (const candidate of candidates) {
       const input = AnnouncedStep.#input(candidate)
       if (input === null) return null
       inputs.push(input)
     }
-    return Object.freeze(inputs)
+    return AnnouncedStep.#carriesEveryMandatoryRole(inputs, step) ? Object.freeze(inputs) : null
+  }
+
+  static #carriesEveryMandatoryRole(inputs: readonly AnnouncedInput[], step: string): boolean {
+    const announced = new Set(inputs.map((input) => input.role))
+    const mandatory = AnnouncedStep.#MANDATORY_ROLES[step] ?? []
+    return mandatory.every((role) => announced.has(role))
   }
 
   static #input(candidate: unknown): AnnouncedInput | null {

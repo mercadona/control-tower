@@ -13,6 +13,7 @@ import {
 import {
   INPUT_ROLES,
   INPUT_KINDS,
+  MANDATORY_INPUT_ROLES_OF_STEP,
   AnnouncedInput,
   AnnouncedResponse,
   StepAnnouncement,
@@ -235,6 +236,24 @@ describe('DispatchProse keeps INPUT_LABELS coupled to the heading and response m
     }
 
     expect(drift).toEqual([])
+  })
+})
+
+describe('MANDATORY_INPUT_ROLES_OF_STEP partitions the prose labels of every step', () => {
+  it('the mandatory roles of a step are its prose labels minus the two optional ones', () => {
+    expect(MANDATORY_INPUT_ROLES_OF_STEP).toEqual({
+      implement: ['rubric', 'brief'],
+      judge: ['package', 'brief'],
+      advise: ['package'],
+      'slice-judge': ['package', 'plan', 'verdicts'],
+      reconcile: ['reconciliation-package'],
+    })
+
+    const optional = ['controls-log', 'global-log']
+    for (const [step, labels] of INPUT_LABELS) {
+      expect(MANDATORY_INPUT_ROLES_OF_STEP[step])
+        .toEqual([...labels.keys()].filter((role) => !optional.includes(role)))
+    }
   })
 })
 

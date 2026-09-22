@@ -142,6 +142,43 @@ class AnnouncementMother {
     })
   }
 
+  static judgeRoundAnnouncingNoInput(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
+  static judgeRoundAnnouncingAnEmptyInputList(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        inputs: [],
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
   static transitionCarryingDispatchInputs(): string {
     return JSON.stringify({
       version: 1,
@@ -257,6 +294,18 @@ describe('AnnouncedStep', () => {
 
   it('an announcement of kind transition carries no inputs', () => {
     expect(AnnouncedStep.read(AnnouncementMother.transitionCarryingDispatchInputs())).toBeNull()
+  })
+
+  it('a judge round that announces no input leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.judgeRoundAnnouncingNoInput())).toBeNull()
+    expect(AnnouncedStep.read(AnnouncementMother.judgeRoundAnnouncingAnEmptyInputList())).toBeNull()
+  })
+
+  it('a slice-judge round with both optional roles absent stays readable', () => {
+    const round = AnnouncedStep.read(AnnouncementMother.sliceJudgeRoundCarryingTheVerdictsGlob())
+
+    expect(round?.step).toBe('slice-judge')
+    expect(round?.inputs.map((input) => input.role)).toEqual(['package', 'plan', 'verdicts'])
   })
 })
 

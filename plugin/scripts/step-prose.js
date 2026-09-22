@@ -1,5 +1,7 @@
 import { STEPS } from './run-machine.js'
-import { INPUT_ROLES, INPUT_KINDS, RESPONSE_KIND_OF_STEP } from './step-announcement.js'
+import {
+  INPUT_ROLES, INPUT_KINDS, RESPONSE_KIND_OF_STEP, MANDATORY_INPUT_ROLES_OF_STEP,
+} from './step-announcement.js'
 import {
   IMPLEMENTER_MODEL,
   IMPLEMENTER_TOOLS,
@@ -47,8 +49,6 @@ export const RESPONSE_LABELS = new Map([
 ])
 
 export const LABELS_ONLY_STEPS = new Set([STEPS.RECONCILE])
-
-const OPTIONAL_INPUT_ROLES = new Set([INPUT_ROLES.CONTROLS_LOG, INPUT_ROLES.GLOBAL_LOG])
 
 const KIND_OF_ROLE = new Map([
   [INPUT_ROLES.PACKAGE, INPUT_KINDS.LITERAL],
@@ -127,7 +127,7 @@ export class DispatchProse {
         throw new UnreadableStepProse(`the label for the "${role}" input of step "${step}" appears ${matches.length} times`)
       }
       if (matches.length === 0) {
-        if (!OPTIONAL_INPUT_ROLES.has(role)) {
+        if (MANDATORY_INPUT_ROLES_OF_STEP[step].includes(role)) {
           throw new UnreadableStepProse(`the mandatory "${role}" input of step "${step}" has no line`)
         }
         continue

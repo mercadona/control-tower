@@ -38,6 +38,14 @@ export const RESPONSE_KIND_OF_STEP = Object.freeze({
   [STEPS.RECONCILE]: RESPONSE_KINDS.EDITS,
 })
 
+export const MANDATORY_INPUT_ROLES_OF_STEP = Object.freeze({
+  [STEPS.IMPLEMENT]: Object.freeze([INPUT_ROLES.RUBRIC, INPUT_ROLES.BRIEF]),
+  [STEPS.JUDGE]: Object.freeze([INPUT_ROLES.PACKAGE, INPUT_ROLES.BRIEF]),
+  [STEPS.ADVISE]: Object.freeze([INPUT_ROLES.PACKAGE]),
+  [STEPS.SLICE_JUDGE]: Object.freeze([INPUT_ROLES.PACKAGE, INPUT_ROLES.PLAN, INPUT_ROLES.VERDICTS]),
+  [STEPS.RECONCILE]: Object.freeze([INPUT_ROLES.RECONCILIATION_PACKAGE]),
+})
+
 export class MalformedAnnouncement extends Error {
   constructor(detail) {
     super(`the announcement cannot be built: ${detail}`)

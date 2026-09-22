@@ -196,6 +196,22 @@ class OracleMother {
     ])
   }
 
+  static judgeRoundAnnouncingNoInputJson(): string {
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.JUDGE,
+      attempt: 1,
+      agent: 'ct-judge',
+      inputs: [],
+      response: AnnouncedResponse.of(STEPS.JUDGE, OracleMother.judgeVerdictPath()),
+      consuming: {
+        argv: ['verdict', OracleMother.judgeVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
+      },
+    }).text()
+  }
+
   static #judgeRound(argv: readonly string[]): string {
     return StepAnnouncement.dispatch({
       issue: 332,
@@ -1047,6 +1063,27 @@ describe('CtRunMachine', () => {
     await fixture.establish()
     fixture.runBytes = null
     const announced = OracleMother.judgeRoundNamingAnotherResponsePathJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a judge round that announces no input is refused instead of dispatched', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-judge-without-inputs-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.judgeRoundAnnouncingNoInputJson()
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
       return OracleMother.output(0, announced)
