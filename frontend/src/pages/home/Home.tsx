@@ -391,6 +391,7 @@ const Home = () => {
     return {
       diagnostic: slice.diagnostic,
       action: slice.recovery.action,
+      refusal: slice.refusal ?? null,
       pending: recoveringSlice === identity,
       failure: sliceRecoveryFailure?.identity === identity ? sliceRecoveryFailure.detail : null,
       onAct: () => void runSliceRecovery(slice),

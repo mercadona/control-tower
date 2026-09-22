@@ -10,6 +10,7 @@ import {
   PlanAgentNotResumed, PlanProgressNotRead, RunNotAdvanced,
 } from '../../src/domain/exceptions.ts'
 import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
+import { ClosureAnnouncements, type AnnouncedClosure } from '../../src/domain/ports/closure-announcements.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
 import { SliceMessages } from '../../src/domain/ports/slice-messages.ts'
@@ -22,7 +23,7 @@ import {
   CompletedPlanCall, StartedPlanCall, type CallExecution,
 } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
-import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
+import { RunInstruction, type RunClosure } from '../../src/domain/value-objects/run-instruction.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -296,7 +297,30 @@ class RejectingRunMachine extends RunMachine {
   }
 }
 
-class RunFlow {
+class AnnouncementsSpy extends ClosureAnnouncements {
+  readonly announced: AnnouncedClosure[] = []
+  readonly failing: boolean
+  readonly heard: boolean
+
+  constructor(failing: boolean = false, heard: boolean = true) {
+    super()
+    this.failing = failing
+    this.heard = heard
+  }
+
+  static withNobodyListening(): AnnouncementsSpy {
+    return new AnnouncementsSpy(false, false)
+  }
+
+  override async announce(closure: AnnouncedClosure): Promise<boolean> {
+    this.announced.push(closure)
+    if (this.failing) throw new Error('the session went away')
+
+    return this.heard
+  }
+}
+
+class DriveRunMother {
   readonly trace: string[]
   readonly machine: RunMachine
   readonly calls: PlanCalls
@@ -312,6 +336,8 @@ class RunFlow {
     messages?: SliceMessages,
     drainCalls?: PlanCalls,
     escalations?: SliceEscalations,
+    announcements?: ClosureAnnouncements,
+    stderr?: (line: string) => void,
   }) {
     this.trace = asked.trace ?? []
     this.machine = asked.machine
@@ -333,18 +359,40 @@ class RunFlow {
       escalations: asked.escalations === undefined
         ? QuietEscalations.reader()
         : new ReadSliceEscalation({ escalations: asked.escalations }),
+      announcements: asked.announcements ?? null,
+      stderr: asked.stderr ?? (() => undefined),
     })
   }
 
   run(): Promise<void> {
     return this.driver.execute(new DriveRunParams({ watch: RunMother.WATCH, planner: RunMother.PLANNER }))
   }
+
+  static refusing({ detail, closure, announcements, stderr }: {
+    detail: string,
+    closure: RunClosure,
+    announcements: ClosureAnnouncements,
+    stderr?: (line: string) => void,
+  }): { drive: () => Promise<void> } {
+    const { driver } = new DriveRunMother({
+      machine: new RunMachineDouble({
+        trace: [],
+        opening: new RunInstruction({ kind: 'refused', detail, closure }),
+      }),
+      announcements,
+      stderr,
+    })
+    const watch = RunMother.WATCH
+    const planner = RunMother.PLANNER
+
+    return { drive: () => driver.execute(new DriveRunParams({ watch, planner })) }
+  }
 }
 
 describe('DriveRun', () => {
   it('a slice that raised a question stops the run before the next step and does not close it', async () => {
     const trace: string[] = []
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       trace,
       escalations: new ScriptedEscalations(trace, [ScriptedEscalations.raised()]),
       machine: new RunMachineDouble({
@@ -361,7 +409,7 @@ describe('DriveRun', () => {
 
   it('a question already answered lets the run carry on from the step it was on', async () => {
     const trace: string[] = []
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       trace,
       escalations: new ScriptedEscalations(trace, [SliceEscalation.none(), ScriptedEscalations.raised()]),
       machine: new RunMachineDouble({
@@ -383,7 +431,7 @@ describe('DriveRun', () => {
     const held = new HeldMessagesDouble(trace, [
       new HeldMessage({ ticket: 'ticket-1', askedAt: '2026-09-19T10:00:00.000Z', text: 'drop the flag' }),
     ])
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       trace,
       messages: held,
       machine: new RunMachineDouble({
@@ -415,7 +463,7 @@ describe('DriveRun', () => {
     const held = new HeldMessagesDouble(trace, [
       new HeldMessage({ ticket: 'ticket-1', askedAt: '2026-09-19T10:00:00.000Z', text: 'drop the flag' }),
     ])
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       trace,
       messages: held,
       drainCalls: new PlanCallsDouble(trace, RunMother.completed({ kind: 'error', diagnostic: 'the agent refused' }, 1)),
@@ -454,7 +502,7 @@ describe('DriveRun', () => {
       ]),
       establishment: RunEstablishment.ABSENT,
     })
-    const flow = new RunFlow({ machine, trace })
+    const flow = new DriveRunMother({ machine, trace })
 
     await flow.run()
 
@@ -478,7 +526,7 @@ describe('DriveRun', () => {
       establishment: RunEstablishment.ABSENT,
     })
     const failedPlanner = RunMother.completed({ kind: 'error', diagnostic: 'planner exited 23' }, 23)
-    const plannerFlow = new RunFlow({
+    const plannerFlow = new DriveRunMother({
       machine: plannerMachine,
       trace: plannerTrace,
       calls: new PlanCallsDouble(plannerTrace, failedPlanner),
@@ -493,7 +541,7 @@ describe('DriveRun', () => {
       opening: RunMother.delivered(),
       establishment: RunEstablishment.ABSENT,
     })
-    const publicationFlow = new RunFlow({
+    const publicationFlow = new DriveRunMother({
       machine: publicationMachine,
       trace: publicationTrace,
       publication: new PlanPublicationDouble(publicationTrace, new PlanProgressNotRead('publication exited 41')),
@@ -513,7 +561,7 @@ describe('DriveRun', () => {
       establishment: RunEstablishment.ABSENT,
     })
     const sentinel = new TypeError('publication sentinel')
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       machine,
       trace,
       publication: new PlanPublicationDouble(trace, sentinel),
@@ -533,7 +581,7 @@ describe('DriveRun', () => {
       opening: [RunMother.refused('oracle held the run'), RunMother.delivered()],
       establishment: establishment.promise,
     })
-    const flow = new RunFlow({ machine, trace })
+    const flow = new DriveRunMother({ machine, trace })
 
     const first = flow.run()
     const second = flow.run()
@@ -555,7 +603,7 @@ describe('DriveRun', () => {
       trace,
       opening: RunMother.refused('ct-step exited 29: receipt fork at ticket run:332'),
     })
-    const flow = new RunFlow({ machine, trace })
+    const flow = new DriveRunMother({ machine, trace })
 
     const refusal = await flow.run().catch((cause) => cause)
 
@@ -567,7 +615,7 @@ describe('DriveRun', () => {
   it('established continuation reaches the journal without planner wait or publication', async () => {
     const trace: string[] = []
     const machine = new RunMachineDouble({ trace, opening: RunMother.delivered() })
-    const flow = new RunFlow({
+    const flow = new DriveRunMother({
       machine,
       trace,
       calls: new ThrowingPlanCalls(),
@@ -577,7 +625,7 @@ describe('DriveRun', () => {
     await flow.run()
     expect(trace).toEqual(['establishment', 'open'])
 
-    const unreadable = new RunFlow({
+    const unreadable = new DriveRunMother({
       machine: new RejectingRunMachine(),
       calls: new ThrowingPlanCalls(),
       publication: new ThrowingPublication(),
@@ -603,5 +651,113 @@ describe('DriveRun', () => {
     expect(Object.isFrozen(instruction.work)).toBe(true)
     expect(Object.isFrozen(instruction)).toBe(true)
     expect(Object.isFrozen(params)).toBe(true)
+  })
+})
+
+describe('a run the judge closed', () => {
+  it('is announced to the coordinating session once, and still stops the drive', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2,
+        findings: '- [high] uno.ts:1: mal', verdict: '.agent/run-7/task-2-verdict-3.json',
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toHaveLength(1)
+    expect(announcements.announced[0]!.task).toBe(2)
+    expect(announcements.announced[0]!.findings).toBe('- [high] uno.ts:1: mal')
+  })
+
+  it('a refusal of any other state is not announced, because only the judge has a way out', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-global', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([])
+  })
+
+  it('an announcement that fails does not change what the drive throws', async () => {
+    const announcements = new AnnouncementsSpy(true)
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+  })
+
+  it('a run that spent its discards is not announced, because reopen refuses a closure the judge did not take', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 6 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([])
+  })
+
+  it('an announcement that throws leaves a line on stderr naming the slice', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: new AnnouncementsSpy(true),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toContain(`${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number}`)
+    expect(written[0]).toContain('the session went away')
+  })
+
+  it('a closure nobody was live to hear leaves a line on stderr too', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: AnnouncementsSpy.withNobodyListening(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toContain('no coordinating session was live')
+  })
+
+  it('an announcement that arrives writes nothing to stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: new AnnouncementsSpy(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([])
   })
 })

@@ -173,6 +173,7 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
   global                    runs the commands of ## 8. Global verification, after the last task
   slice-verdict <file.json>  the SLICE judge's verdict: ruling + walk + findings
   e2e <file.json>           the report of the slice's end-to-end journey
+  reopen --instruction "<text>"   grant another round after the judge's third veto
 
 The sequence is decided by run-machine.js: a verb that is not the step that is due
 exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
@@ -181,7 +182,7 @@ exits with 9 and says which one it is. The state lives in .agent/run-<issue>.jso
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
-if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e'].includes(verb)) {
+if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e', 'reopen'].includes(verb)) {
   die(`unknown verb: ${verb}\n\n${USAGE}`, EXIT.USAGE)
 }
 
@@ -357,6 +358,73 @@ if (existsSync(stateFile)) {
       process.exit(EXIT.OK)
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
+  }
+  // The judge's closure, given the shape of the good one right above: the state
+  // is READ from the file instead of rebuilt from the table, and the verbs that
+  // would transition are sequence errors. The pair (outcome, exit) is not
+  // persisted because it does not have to be — the discard budget exits before
+  // the persistence, so a `blocked-judge` on disk is always the veto.
+  if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
+    const WAY_OUT = `the judge vetoed task ${run.task} of issue ${issue} three times and the run is closed. `
+      + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+    if (verb === 'reopen') {
+      const instruction = arg('--instruction')
+      if (typeof instruction !== 'string' || instruction.trim() === '') {
+        die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
+      }
+      // The three fields a third veto leaves behind, and nothing else. The
+      // DISCARDS ARE NOT RESET: they count an answer that could not be read,
+      // which is a different failure from a judgement that said no, and clearing
+      // them here would hide a judge that is illegible behind a person's
+      // patience. The instruction travels as `lastAdvice` because that is the
+      // field the implementer's brief already appends (see adviceSection): the
+      // person's words reach the implementer by the road the adviser's already
+      // take.
+      const { closed: _lifted, ...reopened } = run
+      run = { ...reopened, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: instruction }
+      // Not `save()`: that helper is a `const` declared further down in this
+      // same module scope, and this block runs at load time, before that
+      // declaration is reached — calling it here is a temporal-dead-zone
+      // `ReferenceError`. Same write `save()` performs, inlined.
+      writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
+      out(`run reopened at task ${run.task} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      process.exit(EXIT.OK)
+    }
+    if (verb === 'next') {
+      if (announcing) {
+        // The same two fields the closing verb announced, so a second `next`
+        // is not a contentless duplicate: the backend re-announces on every
+        // re-ask, and a line with no findings and no verdict path tells the
+        // coordinating session nothing it can act on.
+        //
+        // The attempt is read with `StepSeal.attemptOf` and the path is built
+        // here instead of through `archivedVerdictPath()`: that helper reaches
+        // `currentAttempt`, a `const` arrow declared far below, and this block
+        // is top-level module code — calling it here is a temporal-dead-zone
+        // `ReferenceError`, exactly as `save()` would be. The counters are
+        // untouched by the closure, so the attempt is the one that archived
+        // the verdict.
+        const archived = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${StepSeal.attemptOf(run)}.json`)
+        safeWrite(1, StepAnnouncement.refusal({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
+          detail: WAY_OUT,
+          findings: run.lastFindings ?? null,
+          verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+        }).text())
+      }
+      out(WAY_OUT)
+      process.exit(EXIT.VETOED)
+    }
+    die(WAY_OUT, EXIT.WRONG_STEP)
+  }
+  // `reopen` outside its closure: the run is not the judge's to give back.
+  if (verb === 'reopen') {
+    die(
+      `the run of issue ${issue} is not closed at ${RUN_STATES.BLOCKED_JUDGE}: it stands at step ${run.step}, `
+      + 'so there is nothing to reopen.',
+      EXIT.WRONG_STEP,
+    )
   }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
@@ -963,6 +1031,24 @@ function writeJudgeBrief() {
 // already names them: it is what makes the paragraph actionable without
 // re-reading it.
 function adviceSection(advice) {
+  // `reopen` also writes `lastAdvice`, and it writes a plain string (the
+  // person's own words), not the adviser's `{ approach, files_to_reconsider }`
+  // shape — there is no adviser round behind a reopen, so there is nothing to
+  // walk two attempts of and no paths to list. Same heading, the person's text
+  // instead of the adviser's narrative.
+  if (typeof advice === 'string') {
+    return [
+      '',
+      '## Advice for this attempt',
+      '',
+      "The judge vetoed this task three times and the run was closed. A person read it and reopened it with an instruction of their own, instead of the adviser's:",
+      '',
+      advice,
+      '',
+      'This does not widen the task: `**Files:**` above is still its scope.',
+      '',
+    ].join('\n')
+  }
   const paths = advice.files_to_reconsider.length
     ? advice.files_to_reconsider.map((p) => `- \`${p}\``).join('\n')
     : '(none in particular)'
@@ -1163,6 +1249,16 @@ function archive(kind, content) {
   } catch (e) {
     err(`warning: ${kind} of attempt ${currentAttempt()} could not be archived (${String(e.message).trim()}): if this task reaches the advisor, its package will say so.`)
   }
+}
+
+// The path `archive('verdict', …)` has just written, relative to the repository
+// root so the line that travels to a person names something they can open. It
+// answers null when the file is not there: archiving is best effort (it warns
+// and carries on), and naming a file that does not exist is worse than naming
+// none.
+function archivedVerdictPath() {
+  const rel = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
+  return existsSync(join(repoRoot, rel)) ? rel : null
 }
 
 // ---------------------------------------------------------------------------
@@ -2925,6 +3021,13 @@ try {
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
   if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
+  // The judge's veto is persisted for the same reason the good closure is: a
+  // closure that lives only in the exit code of a process that has gone leaves
+  // the run reading `step: judge` with the budget spent, so the next `next`
+  // re-enters the judge and re-closes for free. Only this state, and only from
+  // this path: the discard budget exits above, so a persisted `blocked-judge`
+  // is always the veto — `FAILED`, `EXIT.VETOED`. `reopen` is what lifts it.
+  if (transition.state === RUN_STATES.BLOCKED_JUDGE) run = { ...run, closed: RUN_STATES.BLOCKED_JUDGE }
   save()
 
   // The e2e report is committed HERE, after persisting the state and only if
@@ -2970,9 +3073,16 @@ try {
       issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
       state: transition.state, outcome, exit: code,
     }
+    // Only the judge's closure explains itself, and only because it is the one
+    // whose reason the run is already holding: `lastVerdict` and `lastFindings`
+    // are written by `verdictVerb` and `archive` has just put the verdict on
+    // disk. Nothing is recomputed here.
+    const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
+      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
+      : {}
     const announcement = code === EXIT.OK
       ? StepAnnouncement.transition(closure)
-      : StepAnnouncement.refusal({ ...closure, detail })
+      : StepAnnouncement.refusal({ ...closure, detail, ...explained })
     safeWrite(1, announcement.text())
   }
   process.exit(code)

@@ -72,6 +72,10 @@ class RunMother {
     return RunMother.#born({ step: STEPS.SLICE_JUDGE, closed: RUN_STATES.DELIVERED })
   }
 
+  static closedAtTheJudgesVeto() {
+    return RunMother.#born({ step: STEPS.JUDGE, closed: RUN_STATES.BLOCKED_JUDGE, judgeRetries: 2 })
+  }
+
   static #sealed(run) {
     return { ...run, nextSeal: StepSeal.of(run) }
   }
@@ -158,6 +162,13 @@ describe('DispatchGate, on the three steps whose inputs next writes', () => {
 
   it('a_discard_does_not_force_asking_for_the_step_again', () => {
     expect(Gate.letsThrough(RunMother.havingAskedAndThenDiscarded(STEPS.JUDGE))).toBe(Dispatch.LET_THROUGH)
+  })
+
+  it('a_run_closed_at_the_judges_veto_is_still_denied_because_a_persisted_closure_is_not_a_delivery', () => {
+    const denial = Gate.verdictOn(RunMother.closedAtTheJudgesVeto())
+
+    expect(denial.dispatch).toBe(Dispatch.DENIED)
+    expect(denial.reason).toContain("the task's review package")
   })
 })
 

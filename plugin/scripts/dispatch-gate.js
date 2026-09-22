@@ -1,4 +1,4 @@
-import { STEPS } from './run-machine.js'
+import { RUN_STATES, STEPS } from './run-machine.js'
 
 export const Dispatch = Object.freeze({
   LET_THROUGH: 'let-through',
@@ -46,7 +46,7 @@ export class StepSeal {
 
 export class DispatchGate {
   static verdictFor(run, ctStepPath) {
-    if (run.closed) return DispatchVerdict.letThrough()
+    if (run.closed === RUN_STATES.DELIVERED) return DispatchVerdict.letThrough()
     const input = StepSeal.inputWrittenFor(run.step)
     if (input === null) return DispatchVerdict.letThrough()
     if (run.nextSeal === StepSeal.of(run)) return DispatchVerdict.letThrough()

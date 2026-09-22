@@ -109,7 +109,14 @@ export class RunAnnouncement {
         throw new RunNotUnderstood(`the refusal has no detail: ${JSON.stringify(record)}`)
       }
     }
-    return Object.freeze({ state, outcome, exit: exit as number })
+    return Object.freeze({
+      state,
+      outcome,
+      exit: exit as number,
+      task: RunAnnouncement.#taskOf(record),
+      findings: RunAnnouncement.#textOrNothing(record.findings),
+      verdict: RunAnnouncement.#textOrNothing(record.verdict),
+    })
   }
 
   static #diagnosticOf(
@@ -127,6 +134,16 @@ export class RunAnnouncement {
 
   static #isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  static #textOrNothing(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null
+  }
+
+  static #taskOf(record: Record<string, unknown>): number | null {
+    const run = record.run
+    const task = RunAnnouncement.#isRecord(run) ? run.task : undefined
+    return Number.isInteger(task) ? task as number : null
   }
 
   static #isKind(value: unknown): value is AnnouncementKind {

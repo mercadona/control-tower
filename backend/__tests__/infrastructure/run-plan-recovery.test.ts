@@ -847,12 +847,12 @@ describe('RunPlanRecovery projection', () => {
     tested.machine.inspections.set(spent.agent, new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome discarded (exit 3)',
-      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3 },
+      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3, task: null, findings: null, verdict: null },
     }))
     tested.machine.inspections.set(red.agent, new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)',
-      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: null, findings: null, verdict: null },
     }))
     tested.machine.inspections.set(unclassified.agent, new RunInspection({
       kind: 'uncertain',
@@ -864,8 +864,12 @@ describe('RunPlanRecovery projection', () => {
 
     const projected = tested.activePlans.known()
     expect(projected).toHaveLength(3)
-    expect(projected[0].refusal).toEqual({ state: 'blocked-judge', outcome: 'discarded', exit: 3 })
-    expect(projected[1].refusal).toEqual({ state: 'blocked-controls', outcome: 'failed', exit: 4 })
+    expect(projected[0].refusal).toEqual({
+      state: 'blocked-judge', outcome: 'discarded', exit: 3, task: null, findings: null, verdict: null,
+    })
+    expect(projected[1].refusal).toEqual({
+      state: 'blocked-controls', outcome: 'failed', exit: 4, task: null, findings: null, verdict: null,
+    })
     expect(Object.hasOwn(projected[2], 'refusal')).toBe(false)
     expect(Object.isFrozen(projected[0].refusal)).toBe(true)
     expect(Object.isFrozen(projected[0].recovery)).toBe(true)

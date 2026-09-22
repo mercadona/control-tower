@@ -9,6 +9,15 @@ class AnnouncementMother {
 
   static readonly UNKNOWN_VERSION = AnnouncementMother.BLOCKED_JUDGE_DISCARDED.replace('"version":1', '"version":2')
 
+  static readonly VETOED_WITH_FINDINGS =
+    '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+    + '"run":{"issue":9,"task":1,"tasksTotal":2,"step":"judge","discards":0},'
+    + '"detail":"run blocked-judge: task 1/2, 0 discard(s)",'
+    + '"findings":"- [high] uno.txt:1: mal","verdict":".agent/run-9/task-1-verdict-3.json"}'
+
+  static readonly VETOED_WITH_UNREADABLE_FINDINGS =
+    AnnouncementMother.VETOED_WITH_FINDINGS.replace('"findings":"- [high] uno.txt:1: mal"', '"findings":42')
+
   static undeclaredTransitionState(): string {
     return JSON.stringify({
       version: 1,
@@ -333,7 +342,14 @@ describe('RunAnnouncement', () => {
 
     expect(announcement?.kind).toBe('refusal')
     expect(announcement?.step).toBe('judge')
-    expect(announcement?.closure).toEqual({ state: 'blocked-judge', outcome: 'discarded', exit: 3 })
+    expect(announcement?.closure).toEqual({
+      state: 'blocked-judge',
+      outcome: 'discarded',
+      exit: 3,
+      task: 1,
+      findings: null,
+      verdict: null,
+    })
     expect(announcement?.diagnostic).toBe(
       'ct-step refused: the run is blocked-judge with outcome discarded (exit 3) — 6 discards',
     )
@@ -463,5 +479,29 @@ describe('AnnouncedStep', () => {
 
     expect(round?.step).toBe('slice-judge')
     expect(round?.inputs.map((input) => input.role)).toEqual(['package', 'plan', 'verdicts'])
+  })
+})
+
+describe('what the refusal says about the verdict that closed the run', () => {
+  it('reads the findings and the verdict path when the plugin sends them', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.VETOED_WITH_FINDINGS)
+
+    expect(announcement?.closure?.findings).toBe('- [high] uno.txt:1: mal')
+    expect(announcement?.closure?.verdict).toBe('.agent/run-9/task-1-verdict-3.json')
+    expect(announcement?.closure?.task).toBe(1)
+  })
+
+  it('a plugin too old to send them is read, because a stale cached plugin must not break the boundary', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.BLOCKED_JUDGE_DISCARDED)
+
+    expect(announcement?.closure?.findings).toBeNull()
+    expect(announcement?.closure?.verdict).toBeNull()
+  })
+
+  it('a findings field that is not text is read as nothing, not as an unreadable announcement', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.VETOED_WITH_UNREADABLE_FINDINGS)
+
+    expect(announcement?.closure?.findings).toBeNull()
+    expect(announcement?.closure?.verdict).toBe('.agent/run-9/task-1-verdict-3.json')
   })
 })

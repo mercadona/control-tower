@@ -19,3 +19,18 @@
   display: flex;
   gap: 8px;
 }
+
+.slice-session__veto {
+  margin: 0;
+}
+
+.slice-session__veto-findings {
+  margin: 0 0 var(--spacing-2, 8px);
+  white-space: pre-wrap;
+}
+
+.slice-session__veto-verdict {
+  margin: 0;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
