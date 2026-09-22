@@ -1531,7 +1531,7 @@ describe('CtRunMachine after a refusal (#504)', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
         + ' — run blocked-controls: task 1/3, 0 discard(s)',
-      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: 1, findings: null, verdict: null },
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
     expect(await fixture.journal.entries(OracleMother.watch())).toHaveLength(3)
