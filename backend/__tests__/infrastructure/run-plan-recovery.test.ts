@@ -757,6 +757,8 @@ describe('RunPlanRecovery projection', () => {
     expect(projected[0].refusal).toEqual({ state: 'blocked-judge', outcome: 'discarded', exit: 3 })
     expect(projected[1].refusal).toEqual({ state: 'blocked-controls', outcome: 'failed', exit: 4 })
     expect(Object.hasOwn(projected[2], 'refusal')).toBe(false)
+    expect(Object.isFrozen(projected[0].refusal)).toBe(true)
+    expect(Object.isFrozen(projected[0].recovery)).toBe(true)
   })
 
   it('a refusal with no classification projects no refusal key', async () => {

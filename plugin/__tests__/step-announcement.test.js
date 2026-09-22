@@ -56,6 +56,22 @@ describe('the announcement declares its whole shape', () => {
     )
   })
 
+  it('a dispatch announcement prints its consuming command as the last key of the object', () => {
+    const announcement = StepAnnouncement.dispatch({
+      issue: 42,
+      task: 1,
+      tasksTotal: 5,
+      step: STEPS.JUDGE,
+      attempt: 1,
+      response: AnnouncedResponse.of(STEPS.JUDGE, '.agent/verdict-42-1.json'),
+      consuming: { argv: ['verdict', '.agent/verdict-42-1.json', '--plan', 'plan.md', '--issue', '42'] },
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"step","run":{"issue":42,"task":1,"tasksTotal":5,"step":"judge","attempt":1},"dispatch":{"response":{"kind":"file","path":".agent/verdict-42-1.json"}},"consuming":{"argv":["verdict",".agent/verdict-42-1.json","--plan","plan.md","--issue","42"]}}\n'
+    )
+  })
+
   it('a program step prints its run and no dispatch key', () => {
     const announcement = StepAnnouncement.program({
       issue: 42,

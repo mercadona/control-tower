@@ -13,7 +13,6 @@ import {
 import {
   INPUT_ROLES,
   INPUT_KINDS,
-  RESPONSE_KIND_OF_STEP,
   AnnouncedInput,
   AnnouncedResponse,
   StepAnnouncement,
@@ -125,7 +124,7 @@ describe('DispatchProse.read parses the prose back into the material an announce
       { role: INPUT_ROLES.BRIEF, kind: INPUT_KINDS.LITERAL, path: '.agent/task-1-judge-brief.md' },
       { role: INPUT_ROLES.CONTROLS_LOG, kind: INPUT_KINDS.LITERAL, path: '.agent/controls-42-1.log' },
     ])
-    expect(read.response).toEqual({ kind: RESPONSE_KIND_OF_STEP[STEPS.JUDGE], path: '.agent/task-1-verdict.json' })
+    expect(read.response).toEqual({ kind: 'file', path: '.agent/task-1-verdict.json' })
     expect(read.consuming).toEqual({ argv: ['verdict', '.agent/task-1-verdict.json', '--plan', 'plan.md', '--issue', '42'] })
   })
 
@@ -165,7 +164,7 @@ describe('DispatchProse.read parses the prose back into the material an announce
     const read = DispatchProse.read({ stdout, step: STEPS.JUDGE })
 
     expect(read.response).toEqual({
-      kind: RESPONSE_KIND_OF_STEP[STEPS.JUDGE],
+      kind: 'file',
       path: '/tmp/ct step/.agent/run-42/task-1-verdict.json',
     })
     expect(read.consuming).toEqual({

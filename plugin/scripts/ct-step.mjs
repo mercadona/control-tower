@@ -2192,10 +2192,12 @@ function reconcileVerb() {
   // this phase's design), and this is the only verb that announces a dispatch
   // and then RETURNS into the dispatcher, which publishes a closure of its own:
   // printing it here made a dispatching round answer with two. The dispatch is
-  // the one that survives, because it says everything the suppressed transition
-  // said —the run stays open at this same step— plus who to call and with which
-  // package. A round with nobody to dispatch leaves this `null` and keeps its
-  // transition.
+  // the one that survives, because it is the one that says who to call and with
+  // which package, and a dispatch at this step is only announced while the run
+  // is open at it. It does NOT say everything the suppressed transition said:
+  // the step shape carries no `state`, and it drops the `outcome`, the `exit`
+  // and the `discards` count the transition carried. A round with nobody to
+  // dispatch leaves this `null` and keeps its transition.
   dispatchAnnouncement = announcement || null
   return outcomeOfReconcile(round.outcome)
 }

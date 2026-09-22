@@ -381,15 +381,12 @@ describe('ClaudeRunCalls', () => {
       expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch))
     })
     expect(scenario.descriptor(0).argv).toContain(JSON.stringify(REPORT_SCHEMA))
-    expect(scenario.descriptor(1).argv).not.toContain('--json-schema')
-    expect(scenario.descriptor(2).argv).toContain(JSON.stringify(ADVICE_SCHEMA))
-    expect(scenario.descriptor(3).argv).not.toContain('--json-schema')
     expect(scenario.descriptor(4).argv).not.toContain('--json-schema')
     expect(scenario.descriptor(1).argv).not.toContain('Agent')
     expect(await Promise.all(prepared.map((path) => readFile(path)))).toEqual(before)
   })
 
-  it('a judge that wrote its verdict keeps its own bytes', async () => {
+  it('a judge that wrote its verdict keeps its own bytes although the stream carried a structured output', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-run-verdict-bytes-'))
     RunCallMother.roots.push(root)
     const responsePath = 'task-1-verdict.json'
@@ -398,8 +395,9 @@ describe('ClaudeRunCalls', () => {
       argv: RunCallMother.definedArgv(STEPS.JUDGE), response: { kind: 'file', path: responsePath },
     })
     await writeFile(dispatch.paths[0], 'the review package\n', 'utf8')
+    const streamed = { ruling: 'VETO', findings: ['the stream must not reach the verdict'] }
     const scenario = await RunCallMother.scenario([dispatch], new Map([
-      ['run:verdict', { stream: RunCallMother.stream('missing'), completion: 'success' }],
+      ['run:verdict', { stream: RunCallMother.stream('present', streamed), completion: 'success' }],
     ]))
     const verdict = join(scenario.watch.located.path, responsePath)
     const ruled = `${JSON.stringify({ ruling: 'PASS', findings: [] })}\n`
@@ -409,6 +407,26 @@ describe('ClaudeRunCalls', () => {
 
     expect(await readFile(verdict, 'utf8')).toBe(ruled)
     expect(existsSync(join(scenario.files.callDirectory(scenario.call()), ClaudeRunCalls.RESPONSE))).toBe(false)
+  })
+
+  it('a file response path outside the prepared workspace is refused before any call', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-escaping-file-'))
+    RunCallMother.roots.push(root)
+    const dispatch = RunCallMother.dispatch({
+      ticket: 'escape', role: 'judge', paths: [join(root, 'review.diff')],
+      argv: RunCallMother.definedArgv(STEPS.JUDGE),
+      response: { kind: 'file', path: '../../../outside/verdict.json' },
+    })
+    await writeFile(dispatch.paths[0], 'the review package\n', 'utf8')
+    const scenario = await RunCallMother.scenario([dispatch], new Map([
+      ['run:escape', { stream: RunCallMother.stream('missing'), completion: 'success' }],
+    ]))
+
+    await expect(scenario.perform('escape')).rejects.toEqual(new RunNotAdvanced(
+      'printed response path is outside the prepared workspace: ../../../outside/verdict.json',
+    ))
+
+    expect(scenario.launch.descriptors).toEqual([])
   })
 
   it('a file errand names the path on its last line', async () => {

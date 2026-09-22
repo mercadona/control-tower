@@ -173,7 +173,7 @@ export class ActivePlans {
     if (diagnostic !== null) projected.diagnostic = diagnostic
     if (recovery !== null) projected.recovery = recovery
     if (refusal !== null) {
-      projected.refusal = { state: refusal.state, outcome: refusal.outcome, exit: refusal.exit }
+      projected.refusal = Object.freeze({ state: refusal.state, outcome: refusal.outcome, exit: refusal.exit })
     }
     return projected
   }

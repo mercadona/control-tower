@@ -66,7 +66,7 @@ export class ClaudeRunCalls extends RunCalls {
       purpose: 'implementation',
       cwd: watch.located.path,
       argv: this.#argv(watch.agent, dispatch),
-      prompt: ClaudeRunCalls.#prompt(dispatch),
+      prompt: ClaudeRunCalls.#prompt(watch, dispatch),
       requestId: `run:${dispatch.ticket}`,
     })
     const recorded = await this.calls.startedFor(invocation)
@@ -136,16 +136,23 @@ export class ClaudeRunCalls extends RunCalls {
     if (existing !== text) throw new Error(`${path} contains different bytes after immutable publication collided`)
   }
 
-  static #prompt(dispatch: RunDispatch): string {
+  static #prompt(watch: PlanWatch, dispatch: RunDispatch): string {
     const listed = `Read the listed files.\n${dispatch.paths.join('\n')}\n`
     switch (dispatch.response.kind) {
       case 'edits':
       case 'structured':
         return `${listed}${ClaudeRunCalls.ERRAND_END}`
-      case 'file':
-        return `${listed}${ClaudeRunCalls.FILE_ERRAND_END}\n${dispatch.response.path}`
+      case 'file': {
+        const printed = ClaudeRunCalls.#contained(watch.located.path, dispatch.response.path)
+        return `${listed}${ClaudeRunCalls.FILE_ERRAND_END}\n${printed}`
+      }
     }
     return dispatch.response satisfies never
+  }
+
+  static #contained(cwd: string, printed: string): string {
+    ClaudeRunCalls.#destination(cwd, printed)
+    return printed
   }
 
   static #destination(cwd: string, printed: string): string {

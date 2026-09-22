@@ -147,6 +147,22 @@ class TreeCarryingEveryFragmentOfTheContract {
   }
 }
 
+class TreeCarryingEveryScanningMechanism {
+  static make(): string {
+    const root = mkdtempSync(join(tmpdir(), 'stdout-scanning-mechanisms-'))
+    for (const module of StdoutScanning.MODULES) {
+      const full = join(root, module)
+      mkdirSync(dirname(full), { recursive: true })
+      writeFileSync(full, TreeCarryingEveryScanningMechanism.textOf())
+    }
+    return root
+  }
+
+  static textOf(): string {
+    return StdoutScanning.MECHANISMS.map((mechanism) => `${mechanism}\n`).join('')
+  }
+}
+
 describe('the prose contract that slices 2, 3 and 4 retire', () => {
   const temporaryTrees: string[] = []
 
@@ -203,5 +219,27 @@ describe('the prose contract that slices 2, 3 and 4 retire', () => {
     const scanning = new StdoutScanning(join(import.meta.dirname, '..', 'src')).findings()
 
     expect(scanning, ProseCensus.named(scanning)).toEqual([])
+  })
+
+  it('the_mechanism_census_fires_on_modules_that_carry_every_scan_it_names', () => {
+    const root = TreeCarryingEveryScanningMechanism.make()
+    temporaryTrees.push(root)
+
+    expect(new StdoutScanning(root).findings()).toEqual([
+      { file: 'infrastructure/ct-run-machine.ts', fragment: 'stdout.includes(' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: 'stdout.split(' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: 'stdout.startsWith(' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: 'exec(output.stdout)' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: 'exec(asked.stdout)' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: '.test(stdout)' },
+      { file: 'infrastructure/ct-run-machine.ts', fragment: '.test(output.stdout)' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.includes(' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.split(' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: 'stdout.startsWith(' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: 'exec(output.stdout)' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: 'exec(asked.stdout)' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: '.test(stdout)' },
+      { file: 'infrastructure/run-dispatch.ts', fragment: '.test(output.stdout)' },
+    ])
   })
 })
