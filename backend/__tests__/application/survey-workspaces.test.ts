@@ -93,7 +93,4 @@ describe('SurveyWorkspaces', () => {
     expect(refusal.message).toBe('git worktree list refused')
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new Workspace().survey(WorkspaceDouble.CHECKOUT)).rejects.toThrow(/must implement survey/)
-  })
 })

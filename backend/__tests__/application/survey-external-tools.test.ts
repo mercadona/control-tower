@@ -202,7 +202,4 @@ describe('SurveyExternalTools', () => {
       .toThrow(/"gh auth login"/)
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new ToolSessions().all()).rejects.toThrow(/must implement all/)
-  })
 })

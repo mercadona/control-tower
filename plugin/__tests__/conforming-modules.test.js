@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SpawningTests } from './fixtures/spawning-tests.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -89,9 +90,7 @@ class BornConforming {
     'intento', 'cuerpo', 'previos', 'comentario', 'comentarios', 'recorrido', 'alcance', 'sujeto',
   ]
 
-  static MARKER = '-real-process.test.js'
-
-  static RELATIVE_IMPORT = /from\s+['"](\.{1,2}\/[^'"]+)['"]/g
+  static MARKER = SpawningTests.MARKER
 
   static #numbered(path) {
     return readFileSync(join(root, path), 'utf8')
@@ -155,17 +154,8 @@ class BornConforming {
       .map(([number]) => number)
   }
 
-  static launchesRealProcesses(path, seen = new Set()) {
-    if (seen.has(path)) return false
-    seen.add(path)
-    const source = readFileSync(join(root, path), 'utf8')
-    if (/(?:from\s+['"]node:child_process['"]|require\(\s*['"]node:child_process['"]\s*\))/.test(source)) {
-      return true
-    }
-    return [...source.matchAll(BornConforming.RELATIVE_IMPORT)]
-      .map(([, specifier]) => join(dirname(path), specifier))
-      .filter((relative) => relative.startsWith('__tests__/fixtures/'))
-      .some((relative) => BornConforming.launchesRealProcesses(relative, seen))
+  static launchesRealProcesses(path) {
+    return SpawningTests.launches(root, path)
   }
 
   static withoutMarker() {

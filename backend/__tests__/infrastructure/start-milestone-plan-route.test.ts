@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
   SliceNotStarted, StartMilestonePlan, StartMilestonePlanParams, StartMilestonePlanResult,
@@ -299,7 +300,6 @@ class PlanRegistryFixture {
 }
 
 class RunningApi {
-  static readonly #servers: ApiServer[] = []
 
   static async listening(options: RunningApiOptions): Promise<number> {
     const registry = options.registry ?? new PlanRegistryFixture()
@@ -314,8 +314,7 @@ class RunningApi {
       readEpicGroom: options.readEpicGroom,
       frontendRoot: join(tmpdir(), 'ct-frontend-never-built'),
     })
-    RunningApi.#servers.push(server)
-    return await server.start()
+    return RunningServers.started(server)
   }
 
   static post(port: number, body: string): Promise<Response> {
@@ -327,8 +326,7 @@ class RunningApi {
   }
 
   static async stopAll(): Promise<void> {
-    const servers = RunningApi.#servers.splice(0)
-    await Promise.all(servers.map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 }
 

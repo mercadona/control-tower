@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import express from 'express'
-import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { RunningServers } from '../servers.ts'
 import { Browsers, JsonBody } from '../../src/infrastructure/http.ts'
 import { SliceHeldChangeRoute } from '../../src/infrastructure/slice-message-route.ts'
 import type { SliceChangeHeld } from '../../src/infrastructure/slice-message-route.ts'
@@ -35,7 +35,6 @@ class HoldSpy {
 }
 
 class RunningApi {
-  static readonly #servers: Server[] = []
 
   static async listening(hold: SliceChangeHeld): Promise<number> {
     const app = express()
@@ -47,17 +46,11 @@ class RunningApi {
       SliceHeldChangeRoute.handledBy(hold),
     )
     app.all(SliceHeldChangeRoute.PATH, SliceHeldChangeRoute.refuseOtherMethods)
-    const server = createServer(app)
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    RunningApi.#servers.push(server)
-
-    return (server.address() as AddressInfo).port
+    return RunningServers.listening(app)
   }
 
   static async stop(): Promise<void> {
-    await Promise.all(
-      RunningApi.#servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
-    )
+    await RunningServers.stopAll()
   }
 
   static post(port: number, path: string, body: string): Promise<Response> {

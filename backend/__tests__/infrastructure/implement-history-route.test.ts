@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Loopback } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
@@ -86,7 +87,7 @@ class RunningApi {
       externalTools: null,
       stderr: null,
       planEvents: RunningApi.NO_EVENTS,
-      frontendRoot: RunningApi.NO_FRONTEND,
+      frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })
     const port = await server.start()
     RunningApi.#started.push(server)

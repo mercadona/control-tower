@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { ResizeSession, ResizeSessionParams } from '../../src/application/actions/resize-session.ts'
@@ -54,8 +54,6 @@ class ResizeSessionThatFoundTheSessionGone extends ResizeSession {
 }
 
 class RunningApi {
-  static readonly #started: ApiServer[] = []
-  static readonly NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
   static readonly NO_EVENTS = new PlanEvents({
     read: () => Promise.reject(new Error('this suite never streams plan events')),
     sleep: () => Promise.resolve(),
@@ -74,17 +72,13 @@ class RunningApi {
       activePlans: undefined,
       planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
-      frontendRoot: RunningApi.NO_FRONTEND,
+      frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })
-    const port = await server.start()
-    RunningApi.#started.push(server)
-
-    return port
+    return RunningServers.started(server)
   }
 
   static async stopAll(): Promise<void> {
-    const running = RunningApi.#started.splice(0)
-    await Promise.all(running.map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 
   static async post(

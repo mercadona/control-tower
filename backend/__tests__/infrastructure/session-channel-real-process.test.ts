@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TextDecoder } from 'node:util'
+import { RunningServers } from '../servers.ts'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
@@ -43,7 +44,6 @@ class RunningApi {
     read: () => Promise.reject(new Error('this suite never streams plan events')),
     sleep: () => Promise.resolve(),
   })
-  static readonly #started: ApiServer[] = []
 
   static async openedOn(realTerminals: RealTerminals): Promise<{ port: number, session: LiveSession }> {
     const liveSessions = new PtyLiveSessions({
@@ -74,15 +74,13 @@ class RunningApi {
       stderr: undefined,
       frontendRoot: RunningApi.#NO_FRONTEND,
     })
-    const port = await server.start()
-    RunningApi.#started.push(server)
+    const port = await RunningServers.started(server)
 
     return { port, session }
   }
 
   static async stopAll(): Promise<void> {
-    const running = RunningApi.#started.splice(0)
-    await Promise.all(running.map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 
   static listed(port: number): Promise<Response> {

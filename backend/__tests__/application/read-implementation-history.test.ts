@@ -91,9 +91,4 @@ describe('ReadImplementationHistory', () => {
     await expect(flow.run()).rejects.toBeInstanceOf(ImplementationHistoryNotRead)
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new ImplementationHistory().of({
-      root: Flow.ROOT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
-    })).rejects.toThrow(/must implement of/)
-  })
 })

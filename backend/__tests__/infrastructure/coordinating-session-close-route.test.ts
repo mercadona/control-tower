@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { JsonBody } from '../../src/infrastructure/http.ts'
 import {
@@ -139,13 +140,11 @@ class RunningCloseApi {
       coordinatingSessions: registry,
       openCoordinatingSession,
     })
-    const port = await server.start()
-    RunningCloseApi.#servers.push(server)
-    return port
+    return RunningServers.started(server)
   }
 
   static async stopAll(): Promise<void> {
-    await Promise.all(RunningCloseApi.#servers.splice(0).map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 
   static post(port: number, body = CloseMother.BODY, headers: Record<string, string> = {}): Promise<Response> {
