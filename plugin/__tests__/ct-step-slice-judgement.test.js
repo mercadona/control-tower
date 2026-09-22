@@ -39,11 +39,12 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
 
   it('a PASS delivers the run and the verdict travels in its OWN commit', () => {
     atSliceJudge()
+    const before = commits()
     const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
     expect(runState().closed).toBe('delivered')
-    expect(commits()).toBe(4)
+    expect(commits()).toBe(before + 1)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(files).toMatch(/issue-7-slice\.json/)
     const saved = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-slice.json'), 'utf8'))
@@ -63,9 +64,10 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
 
   it('a FAIL closes the run with 1 and leaves NO tracked verdict: only the one that approves travels', () => {
     atSliceJudge()
+    const before = commits()
     const r = judgeSlice(writeSliceVerdict('FAIL', [{ severity: 'high', what: 'la tarea 2 deshace la 1', path: 'uno.txt', line: 1 }]))
     expect(r.status).toBe(1)
-    expect(commits()).toBe(3)
+    expect(commits()).toBe(before)
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-slice.json'))).toBe(false)
   })
 

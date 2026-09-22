@@ -1,7 +1,8 @@
 // One piece of the state machine of scripts/ct-step.mjs. The preamble —and why
 // there are nine files and not one— lives in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { writeFileSync, readFileSync } from 'node:fs'
+import { writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
@@ -46,7 +47,7 @@ describe('the Global verification is run by the program (§3.7-A)', () => {
     twoTasks()
     const r = ct('global')
     expect(r.status).toBe(11)
-    expect(commits()).toBe(3)   // nothing is un-committed: the red is for the human
+    expect(commits()).toBe(4)   // nothing is un-committed: the red is for the human; the fourth is the loop's telemetry (#501)
   })
 
   it('a command that could not be MEASURED closes with 12, which is not the same red', () => {
@@ -70,5 +71,87 @@ describe('the Global verification is run by the program (§3.7-A)', () => {
     const r = ct('next')
     expect(r.status).toBe(6)
     expect(r.stderr).toMatch(/does not execute prose/)
+  })
+})
+
+describe('the telemetry the loop writes after the last task commit travels before §8 runs (#501)', () => {
+  const CLEAN_TREE = 'test -z "$(git status --porcelain)"'
+  const TELEMETRY = 'docs/superpowers/metrics/issue-7.jsonl'
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
+  const twoTasks = () => { taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile') }
+  const cleanTreePlan = () => writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt && test -f dos.txt', CLEAN_TREE))
+  const ignoreAsCtInitDoes = (extra = '') => {
+    writeFileSync(join(repo, '.gitignore'), `.telemetria/\n/*.json\n.agent/run-*.json\n.agent/run-*/\n${extra}`)
+    git('add', '.gitignore')
+    git('commit', '-q', '-m', 'the rules ct-init writes')
+  }
+
+  beforeEach(() => { ignoreAsCtInitDoes() })
+
+  it('reconcile leaves its telemetry row uncommitted, and global commits it before measuring, so a clean-tree predicate holds', () => {
+    cleanTreePlan()
+    twoTasks()
+    expect(git('status', '--porcelain')).toBe(`M ${TELEMETRY}`)
+
+    const before = commits()
+    const r = ct('global')
+    expect(r.status).toBe(0)
+    expect(commits()).toBe(before + 1)
+    expect(git('show', '--stat', '--format=%s', 'HEAD')).toMatch(/^Telemetry of the slice \(#7\)/)
+    expect(git('show', '--name-only', '--format=', 'HEAD')).toBe(TELEMETRY)
+  })
+
+  it('the telemetry commit is counted in the state, so the slice judge does not die at PRECONDITION', () => {
+    cleanTreePlan()
+    twoTasks()
+    ct('global')
+    expect(runState().sliceCommits).toBe(1)
+    const r = ct('next')
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/slice/i)
+  })
+
+  it('an interrupted global verification resumes without losing or duplicating its telemetry commit', () => {
+    const interruptOnce = 'if [ ! -f .agent/run-7/global-interrupted ]; then touch .agent/run-7/global-interrupted; kill -KILL "$PPID"; fi'
+    writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt && test -f dos.txt', `${interruptOnce}\n${CLEAN_TREE}`))
+    twoTasks()
+    const before = commits()
+
+    const interrupted = ct('global')
+    expect(interrupted.signal).toBe('SIGKILL')
+    expect(commits()).toBe(before + 1)
+    expect(ct('next').status).toBe(0)
+    expect(runState().step).toBe('global')
+    expect(runState().sliceCommits).toBe(1)
+
+    expect(ct('global').status).toBe(0)
+    expect(commits()).toBe(before + 1)
+    expect(runState().sliceCommits).toBe(1)
+    expect(runState().step).toBe('slice-judge')
+    expect(ct('next').status).toBe(0)
+  })
+
+  it('a foreign path staged before global is not taken inside the telemetry commit: nothing is committed and §8 sees the dirty tree', () => {
+    cleanTreePlan()
+    twoTasks()
+    writeFileSync(join(repo, 'colado.txt'), 'colado\n')
+    git('add', 'colado.txt')
+    const before = commits()
+    const r = ct('global')
+    expect(r.status).toBe(11)
+    expect(commits()).toBe(before)
+    expect(r.stderr).toMatch(/colado\.txt/)
+    expect(git('diff', '--cached', '--name-only').split('\n')).toContain('colado.txt')
+  })
+
+  it('with the telemetry path gitignored nothing is pending: no commit, no warning, and the verification runs unchanged', () => {
+    ignoreAsCtInitDoes('docs/\n')
+    twoTasks()
+    const before = commits()
+    const r = ct('global')
+    expect(r.status).toBe(0)
+    expect(commits()).toBe(before)
+    expect(r.stderr).not.toMatch(/telemetry/)
+    expect(existsSync(join(repo, TELEMETRY))).toBe(true)
   })
 })

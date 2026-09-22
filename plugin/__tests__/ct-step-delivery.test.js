@@ -34,8 +34,8 @@ describe('the happy path', () => {
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
     expect(r.stdout).toMatch(/ready for the pull request/)
-    // 1 base + 2 tasks + 1 for the slice verdict, which gets a commit of its own.
-    expect(commits()).toBe(4)
+    // 1 base + 2 tasks + telemetry + the slice verdict, each in its own commit.
+    expect(commits()).toBe(5)
     expect(log()).toMatch(/Verdict of the whole slice \(#7\)/)
   })
 
@@ -139,12 +139,12 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
     expect(deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)).toEqual({ ok: true })
-    // 1 base + 2 tasks + slice verdict + e2e report.
-    expect(commits()).toBe(5)
+    // 1 base + 2 tasks + telemetry + slice verdict + e2e report.
+    expect(commits()).toBe(6)
     expect(log()).toMatch(/e2e report of issue #7/)
-    // And the slice verdict's commit was COUNTED: that is what lets the next
+    // The telemetry and slice verdict commits were COUNTED: that lets the next
     // process cross the commits without the sums going wrong.
-    expect(runState().sliceCommits).toBe(1)
+    expect(runState().sliceCommits).toBe(2)
   })
 
   it('a `git add` before the e2e does not go into the writeReport commit (slice 12)', () => {

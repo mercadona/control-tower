@@ -65,6 +65,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
+import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
 import { ReconcileOutcome, DiscardReason } from './reconcile-outcome.js'
 import { LOOP_ARTIFACT_PATTERNS, matchesPattern } from './scope.js'
 import { CONVENTIONS_FILE, yardstickSection } from './repo-yardstick.js'
@@ -2217,6 +2218,40 @@ function reconcileVerb() {
 // task's **Tests:** one — the reason is asked for in the template, no program
 // validates it), it is recorded and it moves on: demanding a command of it
 // would be F14's impossible guard applied to §8.
+// The rows `reconcile` (and a `global` that failed before) wrote after the last
+// task commit are the loop's own footprint, not the slice's: §8 measures the
+// tree the slice left, so the footprint is committed before a single command
+// runs. Otherwise a `test -z "$(git status --porcelain)"` — which the plan
+// template itself suggests — turns red on the loop's telemetry (#501). Same
+// treatment as in `commit` and `slice-verdict`: evidence that cannot travel is
+// warned about, it never decides the outcome.
+function commitLoopFootprint() {
+  const footprint = new LoopFootprint({ git, stagedPaths, exists: (path) => existsSync(join(repoRoot, path)), telemetryPath: METRICS_REL, issue })
+  const { outcome, foreign } = footprint.commitPending()
+  switch (outcome) {
+    case FootprintOutcome.COMMITTED:
+      run = { ...run, sliceCommits: (run.sliceCommits || 0) + 1 }
+      // Verification can outlive this process: persist the commit before its
+      // commands run, so an interrupted global can resume with the same count.
+      save()
+      out(`telemetry committed: ${headSha().slice(0, 7)}`)
+      break
+    case FootprintOutcome.CLEAN:
+      break
+    case FootprintOutcome.FOREIGN_INDEX:
+      err(`warning: the index carried ${foreign.length} path(s) foreign to the machinery (${foreign.join(', ')}) and the telemetry commit would take them inside without any judge having seen them — the telemetry (${METRICS_REL}) is left staged and uncommitted, and the Global verification measures the tree as it stands.`)
+      break
+    case FootprintOutcome.UNSTAGEABLE:
+      err(`warning: the telemetry (${METRICS_REL}) could not be staged — the Global verification runs without committing it. Is the path gitignored in this repo?`)
+      break
+    case FootprintOutcome.UNCOMMITTABLE:
+      err(`warning: the telemetry (${METRICS_REL}) could not be committed — the Global verification runs with it staged. Check the index before opening the pull request.`)
+      break
+    default:
+      throw new Error(`loop footprint with an outcome that has no message: "${outcome}"`)
+  }
+}
+
 function globalVerb() {
   const startedAt = Date.now()
   if (!globalVerification.commands.length) {
@@ -2224,6 +2259,7 @@ function globalVerb() {
     out('global: done (the plan declares N/A — there is no end to end to run)')
     return OUTCOMES.DONE
   }
+  commitLoopFootprint()
   const log = join(workDir, 'global-verification.log')
   const lines = []
   let result = OUTCOMES.DONE
