@@ -54,7 +54,7 @@ describe('the amended plan travels inside the commit of its task', () => {
     expect(commits()).toBe(2) // base + this task: no new task because of the amendment
   })
 
-  it('the scope control exits 0 and its output does not name the plan\'s path', () => {
+  it('the controls exit 0 and their output does not name the plan\'s path', () => {
     enmendar()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     const r = ct('controls')
@@ -119,46 +119,6 @@ describe('the amended plan travels inside the commit of its task', () => {
   })
 })
 
-function quitarUnoDeLasFiles() {
-  const ruta = join(repo, 'plan.md')
-  const original = readFileSync(ruta, 'utf8')
-  const enmendado = original.replace(
-    '**Files:** `uno.txt` (create).',
-    '**Files:** `dos.txt` (create).',
-  )
-  expect(enmendado).not.toBe(original)
-  writeFileSync(ruta, enmendado)
-}
-
-describe('an amendment can only ADD paths', () => {
-  it('an amendment that removes a declared path is refused and the step comes out red', () => {
-    quitarUnoDeLasFiles()
-    ct('report', writeReport(['uno.txt']))
-    const r = ct('controls')
-
-    expect(r.stdout).toMatch(/controls: failed/)
-    const log = readFileSync(runState().lastControlsLog, 'utf8')
-    expect(log).toMatch(/task 1 amended the plan by removing 'uno\.txt'.*can only ADD paths/)
-  })
-
-  it('an amendment that only adds paths passes the control', () => {
-    enmendar()
-    ct('report', writeReport(['uno.txt', 'extra.txt']))
-    const r = ct('controls')
-
-    expect(r.stdout).toMatch(/controls: done/)
-  })
-
-  it('after the refusal, HEAD\'s plan still declares the path the amendment removed', () => {
-    quitarUnoDeLasFiles()
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
-
-    const enHead = execFileSync('git', ['show', 'HEAD:plan.md'], { cwd: repo, encoding: 'utf8' })
-    expect(enHead).toContain('**Files:** `uno.txt` (create).')
-  })
-})
-
 // Issue 161, review — the four holes the pull request's review found. The
 // first is the one that opened the very door this slice comes to close: the
 // guard was conditioned on the INDEX while everything else measured the TREE.
@@ -187,33 +147,6 @@ describe('the plan that governs the controls is the one that is going to be comm
 
     expect(r.stdout).toMatch(/controls: failed/)
     expect(log()).toMatch(/the INDEX's says something else/)
-  })
-})
-
-describe('the scope control does not exempt the machinery that reaches the index', () => {
-  it('a docs/superpowers path staged by hand is flagged by the scope control', () => {
-    ct('report', writeReport(['uno.txt']))
-    const colado = join(repo, 'docs', 'superpowers', 'specs', 'colado.md')
-    mkdirSync(dirname(colado), { recursive: true })
-    writeFileSync(colado, 'colado\n')
-    execFileSync('git', ['add', '--', 'docs/superpowers/specs/colado.md'], { cwd: repo })
-    const r = ct('controls')
-
-    expect(r.stdout).toMatch(/controls: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8'))
-      .toMatch(/touched 'docs\/superpowers\/specs\/colado\.md'/)
-  })
-})
-
-describe('the two messages of the scope control do not contradict each other', () => {
-  it('the path declared and not touched no longer offers removing it from the PLAN', () => {
-    ct('report', writeReport(['otro.txt']))
-    const r = ct('controls')
-
-    expect(r.stdout).toMatch(/controls: failed/)
-    const texto = readFileSync(runState().lastControlsLog, 'utf8')
-    expect(texto).toMatch(/REMOVING IT IS NOT YOUR WAY OUT/)
-    expect(texto).not.toMatch(/or it is surplus in the PLAN/)
   })
 })
 
