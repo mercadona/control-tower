@@ -358,6 +358,27 @@ if (existsSync(stateFile)) {
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
   }
+  // The judge's closure, given the shape of the good one right above: the state
+  // is READ from the file instead of rebuilt from the table, and the verbs that
+  // would transition are sequence errors. The pair (outcome, exit) is not
+  // persisted because it does not have to be — the discard budget exits before
+  // the persistence, so a `blocked-judge` on disk is always the veto.
+  if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
+    const WAY_OUT = `the judge vetoed task ${run.task} of issue ${issue} three times and the run is closed. `
+      + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+    if (verb === 'next') {
+      if (announcing) {
+        safeWrite(1, StepAnnouncement.refusal({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
+          detail: WAY_OUT,
+        }).text())
+      }
+      out(WAY_OUT)
+      process.exit(EXIT.VETOED)
+    }
+    die(WAY_OUT, EXIT.WRONG_STEP)
+  }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
   // here means reimplementing on top of a task that is already committed.
