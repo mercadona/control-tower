@@ -173,7 +173,18 @@ export class ActivePlans {
     if (diagnostic !== null) projected.diagnostic = diagnostic
     if (recovery !== null) projected.recovery = recovery
     if (refusal !== null) {
-      projected.refusal = Object.freeze({ state: refusal.state, outcome: refusal.outcome, exit: refusal.exit })
+      // The fields are listed rather than spread, the way they already were:
+      // this is the wire, and a field reaches the page because somebody decided
+      // it should. `findings` and `verdict` are always present, null included,
+      // so the page never has to tell "absent" from "nothing to show".
+      projected.refusal = Object.freeze({
+        state: refusal.state,
+        outcome: refusal.outcome,
+        exit: refusal.exit,
+        task: refusal.task,
+        findings: refusal.findings,
+        verdict: refusal.verdict,
+      })
     }
     return projected
   }
