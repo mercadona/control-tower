@@ -44,10 +44,6 @@ export class DriveRun {
     step: ExecuteRunInstruction,
     messages: DeliverHeldMessages,
     escalations: ReadSliceEscalation,
-    // Optional, and null by default: this is the only dependency of the drive
-    // that changes nothing about whether the run advances, and making it
-    // required would make every construction of a DriveRun carry a double for
-    // a message.
     announcements?: ClosureAnnouncements | null,
   }) {
     this.calls = calls
@@ -104,10 +100,6 @@ export class DriveRun {
     }
   }
 
-  // Only the judge's closure, because it is the only one a person can get out
-  // of today. The failure is swallowed the way RunPlanAgents.#announce swallows
-  // its own: a message that does not arrive must not turn a closed run into a
-  // crashed backend, and the closure is on disk and on the page regardless.
   async #announce(watch: PlanWatch, refused: { closure: RunClosure | null }): Promise<void> {
     const closure = refused.closure
     if (this.announcements === null || closure === null) return
@@ -121,8 +113,6 @@ export class DriveRun {
         verdict: closure.verdict,
       })
     } catch {
-      // Nothing to do and nothing to say here: the drive is about to throw
-      // RunNotAdvanced with the refusal's own detail, which is the real news.
     }
   }
 

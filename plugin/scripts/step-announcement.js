@@ -179,10 +179,6 @@ export class StepAnnouncement {
       run: StepAnnouncement.#closureRun({ issue, task, tasksTotal, step, discards }),
       detail,
     }
-    // Both keys are OMITTED when there is nothing to say, rather than printed
-    // as null: a refusal that carries no verdict has to read exactly as it read
-    // before this task, because that is the shape a backend running against an
-    // older plugin — or an older backend reading a newer one — already handles.
     if (typeof findings === 'string' && findings !== '') announcement.findings = findings
     if (typeof verdict === 'string' && verdict !== '') announcement.verdict = verdict
     return new StepAnnouncement(announcement)

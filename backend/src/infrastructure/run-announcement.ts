@@ -136,17 +136,10 @@ export class RunAnnouncement {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 
-  // A field that is absent, empty or not text is NOTHING, and never a reason to
-  // refuse the announcement: the plugin lives in a cached copy outside this
-  // repository, so a machine that has not pulled it sends refusals without
-  // these keys. Rejecting those would turn an upgrade into an outage.
   static #textOr(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null
   }
 
-  // `run.task` has always been in the announcement. It is lifted onto the
-  // closure because that is where the message that names it is composed from,
-  // and RunMachine exposes no way to ask which task a run is on.
   static #taskOf(record: Record<string, unknown>): number | null {
     const run = record.run
     const task = RunAnnouncement.#isRecord(run) ? run.task : undefined
