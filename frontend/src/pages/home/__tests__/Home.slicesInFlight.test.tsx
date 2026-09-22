@@ -123,6 +123,19 @@ describe('Home · the slices in flight', () => {
     expect(await untouched.findByText('En revisión')).toBeInTheDocument()
   })
 
+  it('a slice the judge closed shows the closure the payload carries, and the others are untouched', async () => {
+    backendWith({ activePlans: () => HeadlessPlanMother.vetoedByTheJudge(8, 7) })
+    openHome()
+
+    const vetoed = await panelOf(8)
+    expect(await vetoed.findByText('El juez cerró este slice')).toBeInTheDocument()
+    expect(vetoed.getByText(HeadlessPlanMother.JUDGE_FINDINGS)).toBeInTheDocument()
+    expect(vetoed.getByText(HeadlessPlanMother.verdictOf(8))).toBeInTheDocument()
+
+    const untouched = await panelOf(7)
+    expect(untouched.queryByText('El juez cerró este slice')).toBeNull()
+  })
+
   it('an uncertain slice whose start never launched offers the cleanup instead', async () => {
     backendWith({ activePlans: () => HeadlessPlanMother.uncertainAmong(8, 'cleanup', 7) })
     openHome()

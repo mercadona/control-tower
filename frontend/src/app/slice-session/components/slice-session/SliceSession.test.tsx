@@ -190,6 +190,25 @@ describe('SliceSession', () => {
     expect(screen.queryByText(/^\.agent\//)).toBeNull()
   })
 
+  it('a run that spent its discards is not a veto, because no reopen gets it out', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        recovery={vetoed({
+          refusal: {
+            state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+          },
+        })}
+      />
+    )
+
+    expect(await screen.findByText('No se puede confirmar el estado de implementación')).toBeInTheDocument()
+    expect(screen.queryByText('El juez cerró este slice')).toBeNull()
+  })
+
   it('an uncertain slice with no closure is the card it always was', async () => {
     stubFetch(SliceSessionMother.progress())
     render(

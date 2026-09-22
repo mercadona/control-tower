@@ -14,6 +14,7 @@ const VETOED_HINT = 'Habla con la sesión coordinadora para decidir qué hacer.'
 const FOUND_LABEL = 'Lo que encontró el juez'
 const VERDICT_LABEL = 'Veredicto completo'
 const BLOCKED_JUDGE = 'blocked-judge'
+const VETOED = 'failed'
 
 type SliceRecovery = {
   diagnostic: string
@@ -36,7 +37,10 @@ const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_
 
 const SliceSession = ({ issue, root, repo, recovery = null }: SliceSessionProps) => {
   const progress = useImplementProgress(issue, root, repo)
-  const vetoed = recovery?.refusal?.state === BLOCKED_JUDGE ? recovery.refusal : null
+  const closure = recovery?.refusal ?? null
+  const vetoed = closure !== null && closure.state === BLOCKED_JUDGE && closure.outcome === VETOED
+    ? closure
+    : null
 
   return (
     <section className="slice-session" aria-label={`Slice #${issue}`}>
