@@ -1603,7 +1603,7 @@ describe('CtRunMachine grants another round (#521)', () => {
     })
   })
 
-  it('a reopen the plugin does not know leaves a refusal the grant can hang off', async () => {
+  it('a reopen the plugin does not know journals a refusal with a null closure and stops there', async () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-unread-')))
     roots.push(fixture.root)
     await vetoedJournal(fixture)

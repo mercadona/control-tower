@@ -223,7 +223,7 @@ it is allowed to do, and it is there on the next turn and the one after that.
 | The run is not closed at `blocked-judge` | 409 before anything is journaled, naming the state the run is in. ct-step is never spawned. |
 | Two grants racing | The second inspects, finds no `blocked-judge` closure, and is refused 409. |
 | Empty or missing `instruction` | 400 from the route's own refusal. ct-step is never spawned. |
-| A stale cached plugin with no `reopen` verb | ct-step exits with the usage refusal and no announcement. The command is already journaled, so the run reads uncertain. Recoverable: once the plugin is updated, a second grant hangs off that command and announces `open`. |
+| A stale cached plugin with no `reopen` verb | ct-step exits with the usage refusal and no announcement. The refusal is journaled with no closure, so the action refuses every later grant too; the run has to be recovered another way. Tracked as #522. |
 | Granted, then vetoed three more times | Closes and announces again. There is no limit: the limit is the person, whose decision this is. |
 | The backend restarts between the closure and the grant | Both survive — the closure is in the run file (#517) and the veto is in the journal. |
 | The session invents an instruction instead of asking | Not a failure the code can catch, and not a new trust: it is the same one `CHANGE_TO_A_SLICE` already places in the session for every change a person asks for. The prompt says the words are the person's. |
@@ -233,7 +233,7 @@ it is allowed to do, and it is there on the next turn and the one after that.
 | Surface | What is measured |
 |---|---|
 | `ct-step-reopen.test.js` | `reopen --output-format json` announces a TRANSITION to `open`; without the flag the stdout is the prose it is today. |
-| `ct-run-machine.test.ts` | the grant is journaled as the successor of the last command; the oracle answers `next`; the chain stays linear; a `reopen` the plugin does not know leaves a refusal the next grant can recover from. |
+| `ct-run-machine.test.ts` | the grant is journaled as the successor of the last command; the oracle answers `next`; the chain stays linear; a `reopen` the plugin does not know journals a refusal with a null closure and stops there. |
 | `another-round-route.test.ts` | the 202, and every refusal in the table above. |
 | `run-plan-agents.test.ts` | the inspect guard, and that a granted round resumes a run nobody drives. |
 | `session-closure-announcements.test.ts` | the line names the POST and no longer forbids acting. |
