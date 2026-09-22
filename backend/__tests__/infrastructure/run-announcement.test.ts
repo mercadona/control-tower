@@ -174,6 +174,15 @@ describe('RunAnnouncement', () => {
     expect(() => RunAnnouncement.of(AnnouncementMother.transitionNamingNoStep())).toThrow(RunNotUnderstood)
   })
 
+  it('the refusal of a transition that names no step says these words', () => {
+    expect(() => RunAnnouncement.of(AnnouncementMother.transitionNamingNoStep())).toThrowError(
+      new RunNotUnderstood(
+        'the announcement names no step in {"version":1,"kind":"transition","state":"open","outcome":"done",'
+        + '"exit":0,"run":{"issue":9,"task":2,"tasksTotal":2,"discards":0}}',
+      ),
+    )
+  })
+
   it('a transition of an undeclared outcome is not understood', () => {
     expect(() => RunAnnouncement.of(AnnouncementMother.undeclaredOutcome())).toThrow(RunNotUnderstood)
   })

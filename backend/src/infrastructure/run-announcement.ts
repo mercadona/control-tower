@@ -155,6 +155,18 @@ export class RunAnnouncement {
   }
 }
 
+export class ConsumingProse {
+  static readonly #INTRODUCTION = ':  '
+
+  static carries(stdout: string, command: string): boolean {
+    return stdout.split('\n').some((line) => ConsumingProse.#names(line.trim(), command))
+  }
+
+  static #names(line: string, command: string): boolean {
+    return line === command || line.endsWith(`${ConsumingProse.#INTRODUCTION}${command}`)
+  }
+}
+
 export class StepProse {
   static readonly #PREFIX = 'step: '
   static readonly #CUT = ' ('

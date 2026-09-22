@@ -12,7 +12,7 @@ import {
 } from '../domain/ports/run-machine.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
-import { RunAnnouncement, StepProse, type RunClosure } from './run-announcement.ts'
+import { ConsumingProse, RunAnnouncement, StepProse, type RunClosure } from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
@@ -443,7 +443,11 @@ class OracleBoundary {
   ): OracleResult {
     const announced = AnnouncedStep.read(stdout)
     if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step, verb)
-    return OracleResult.command(ticket, [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)])
+    const argv = [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)]
+    if (!ConsumingProse.carries(stdout, `ct-step ${argv.join(' ')}`)) {
+      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
+    }
+    return OracleResult.command(ticket, argv)
   }
 
   static #announcedCommand(

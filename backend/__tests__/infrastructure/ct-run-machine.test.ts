@@ -137,6 +137,14 @@ class OracleMother {
     return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 332\n`
   }
 
+  static controlsAnnouncementOfAnotherIssue(): string {
+    return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${OracleMother.PLAN} --issue 331\n`
+  }
+
+  static controlsAnnouncementWithoutAConsumingLine(): string {
+    return 'task 1/3 — execute oracle\nstep: controls\n'
+  }
+
   static controlsAnnouncementJson(): string {
     return StepAnnouncement.program({
       issue: 332,
@@ -730,6 +738,59 @@ describe('CtRunMachine', () => {
       closure: null,
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a printed consuming command that names another issue is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-foreign-issue-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncementOfAnotherIssue()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(instruction.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step output is not understood: "task 1/3 — execute oracle\\nstep: controls (attempt 1)\\n\\n'
+        + 'MEASURE THE TASK (the implementer does not do it, and its word does not count):\\n\\n'
+        + 'Run it with:  ct-step controls --plan docs/superpowers/plans/2026-09-17-issue-332-machine.md'
+        + ' --issue 331\\n"',
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([])
+  })
+
+  it('a transcript that prints no consuming command at all is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-no-consuming-line-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncementWithoutAConsumingLine()),
+        null,
+        OracleMother.RUN_BYTES,
+      ),
+    )
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(instruction.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step output is not understood: "task 1/3 — execute oracle\\nstep: controls\\n"',
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([])
   })
 
   it('absent establishment defers plan gates until open after publication', async () => {
