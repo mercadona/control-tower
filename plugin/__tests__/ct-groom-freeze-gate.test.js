@@ -62,11 +62,11 @@ describe('analyzeSpecFreeze — the pure module (three greps)', () => {
     expect(r.clarifications).toEqual([])
   })
 
-  it('the scope the gate reads is declared: an Alcance line inside the milestone context', () => {
+  it('the scope the gate reads is declared: a scope line inside the milestone context', () => {
     expect(analyzeSpecFreeze(HYPOTHESIS + CONTEXT_WITH_SCOPE + TABLE).scope).toBe('ok')
   })
 
-  it('a milestone context without the Alcance line leaves the scope absent', () => {
+  it('a milestone context without the scope line leaves the scope absent', () => {
     expect(analyzeSpecFreeze(HYPOTHESIS + CONTEXT_WITHOUT_SCOPE + TABLE).scope).toBe('absent')
   })
 
@@ -74,7 +74,7 @@ describe('analyzeSpecFreeze — the pure module (three greps)', () => {
     expect(analyzeSpecFreeze(HYPOTHESIS + TABLE).scope).toBe('absent')
   })
 
-  it('an Alcance line outside the milestone context does not count: the gate only reads that section', () => {
+  it('a scope line outside the milestone context does not count: the gate only reads that section', () => {
     expect(analyzeSpecFreeze(HYPOTHESIS + '## Otra sección\n\n- **Alcance:** `src/**`\n\n' + TABLE).scope).toBe('absent')
   })
 

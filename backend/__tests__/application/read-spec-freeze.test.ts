@@ -277,7 +277,7 @@ describe('ReadSpecFreeze', () => {
     ])
   })
 
-  it('a milestone context without the Alcance line the scope gate reads answers the scope-absent finding', async () => {
+  it('a milestone context without the scope line the gate reads answers the scope-absent finding', async () => {
     const read = await Flow.readingSpec(Mother.draftWithNoScope()).run()
 
     expect(read.state).toBe(SpecFreezeState.DRAFT)
