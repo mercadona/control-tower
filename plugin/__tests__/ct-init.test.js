@@ -2061,6 +2061,7 @@ describe('ct-init.sh', () => {
     expect(freeze.clarifications).toEqual([])
     expect(freeze.hypothesis).toBe('ok')
     expect(freeze.decisionsWithoutProvenance).toEqual([])
+    expect(freeze.scope).toBe('ok')
 
     expect(readEpicContext(md).content).not.toMatch(/<!--/)
 

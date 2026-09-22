@@ -68,10 +68,16 @@ rationale that each slice's plan needs and cannot deduce.>
      - no unclosed fence or comment (it swallows the rest of the spec, the
        slices table included)
      Typical content: stack, repo conventions, calculation rules, invariants
-     that EVERY slice must respect. -->
+     that EVERY slice must respect.
+
+     One line is not optional: `Alcance:` with the paths the milestone may
+     touch. `ct-scope-gate` reads it from every issue of the milestone, and the
+     freeze refuses a spec without it — with no declared scope the gate cannot
+     check anything, and not being able to check is not being clean. -->
 
 ## Contexto del milestone
 
+- **Alcance:** `<dir/>`, `<dir/**>` — the paths every slice of this milestone may touch; `ct-scope-gate` reads this line from each issue and fails a pull request that steps outside it.
 - Stack: <language, frameworks, versions>.
 - <Cross-cutting invariant 1>.
 - <Cross-cutting invariant 2>.

@@ -205,6 +205,7 @@ class Mother {
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly TITLE_LINE = '# Test epic — Execution spec'
   static readonly BET_LINE = '**The bet:** shipping this halves the time to freeze a spec.'
+  static readonly CONTEXT = ['## Contexto del milestone', '', '- **Alcance:** `src/**`', '']
   static readonly CORRECTED_BET_LINE =
     '**The bet:** shipping this halves the time to freeze a spec, measured over the last five milestones.'
 
@@ -223,6 +224,7 @@ class Mother {
         '- [NEEDS CLARIFICATION: who commits the freeze?]',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -241,6 +243,7 @@ class Mother {
         '',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -257,6 +260,7 @@ class Mother {
       '',
       Mother.BET_LINE,
       '',
+      ...Mother.CONTEXT,
     ].join('\n')
   }
 
@@ -285,6 +289,7 @@ class Mother {
         '',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }
@@ -320,6 +325,7 @@ class Mother {
         '',
         Mother.BET_LINE,
         '',
+        ...Mother.CONTEXT,
       ].join('\n'),
     })
   }

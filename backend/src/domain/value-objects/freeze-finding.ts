@@ -3,6 +3,7 @@ export const FreezeFindingCode = Object.freeze({
   HYPOTHESIS_ABSENT: 'hypothesis-absent',
   HYPOTHESIS_EMPTY: 'hypothesis-empty',
   DECISION_WITHOUT_PROVENANCE: 'decision-without-provenance',
+  SCOPE_ABSENT: 'scope-absent',
 } as const)
 
 export type FreezeFindingCodeValue = (typeof FreezeFindingCode)[keyof typeof FreezeFindingCode]

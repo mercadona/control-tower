@@ -52,11 +52,30 @@ function runGroom(specMd) {
   }
 }
 
+const CONTEXT_WITH_SCOPE = '## Contexto del milestone\n\n- **Alcance:** `src/**`, `tests/**`\n- Stack: node.\n\n'
+const CONTEXT_WITHOUT_SCOPE = '## Contexto del milestone\n\n- Stack: node.\n\n'
+
 describe('analyzeSpecFreeze — the pure module (three greps)', () => {
   it('freezable spec: hypothesis present and with content, zero pending items', () => {
     const r = analyzeSpecFreeze(HYPOTHESIS + TABLE)
     expect(r.hypothesis).toBe('ok')
     expect(r.clarifications).toEqual([])
+  })
+
+  it('the scope the gate reads is declared: a scope line inside the milestone context', () => {
+    expect(analyzeSpecFreeze(HYPOTHESIS + CONTEXT_WITH_SCOPE + TABLE).scope).toBe('ok')
+  })
+
+  it('a milestone context without the scope line leaves the scope absent', () => {
+    expect(analyzeSpecFreeze(HYPOTHESIS + CONTEXT_WITHOUT_SCOPE + TABLE).scope).toBe('absent')
+  })
+
+  it('a spec with no milestone context section leaves the scope absent too', () => {
+    expect(analyzeSpecFreeze(HYPOTHESIS + TABLE).scope).toBe('absent')
+  })
+
+  it('a scope line outside the milestone context does not count: the gate only reads that section', () => {
+    expect(analyzeSpecFreeze(HYPOTHESIS + '## Otra sección\n\n- **Alcance:** `src/**`\n\n' + TABLE).scope).toBe('absent')
   })
 
   it('accepts the short «## Hipótesis» heading as well as the long one', () => {
