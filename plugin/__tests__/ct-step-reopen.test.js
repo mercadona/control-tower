@@ -65,3 +65,61 @@ describe('a run the judge closed does not quietly close again', () => {
     expect(answered.stderr).toContain('reopen')
   })
 })
+
+describe('reopen is the way a person gets a run out of the judge', () => {
+  it('lifts the closure and sends the run back to the implementer', () => {
+    blocked()
+
+    const reopened = ct('reopen', '--instruction', 'redondea después de aplicar el descuento')
+
+    expect(reopened.status).toBe(0)
+    expect(runState().closed).toBeUndefined()
+    expect(runState().step).toBe('implement')
+    expect(runState().judgeRetries).toBe(0)
+  })
+
+  it('carries the person instruction to the implementer the way the adviser does', () => {
+    blocked()
+
+    ct('reopen', '--instruction', 'redondea después de aplicar el descuento')
+
+    expect(runState().lastAdvice).toContain('redondea después de aplicar el descuento')
+  })
+
+  it('does not reset the discards, because an illegible judge is a different failure', () => {
+    blocked()
+    const spent = runState().discards
+
+    ct('reopen', '--instruction', 'otra vuelta')
+
+    expect(runState().discards).toBe(spent)
+  })
+
+  it('after it, next dispatches the implementer again instead of answering a closure', () => {
+    blocked()
+    ct('reopen', '--instruction', 'otra vuelta')
+
+    const answered = ct('next')
+
+    expect(answered.status).toBe(0)
+    expect(runState().step).toBe('implement')
+  })
+
+  it('a run that is not closed at the judge has nothing to reopen', () => {
+    ct('report', writeReport(['uno.txt']))
+
+    const refused = ct('reopen', '--instruction', 'otra vuelta')
+
+    expect(refused.status).toBe(9)
+    expect(refused.stderr).toContain('not closed')
+  })
+
+  it('an instruction is required, because a reopen with nothing to say repeats the veto', () => {
+    blocked()
+
+    const refused = ct('reopen')
+
+    expect(refused.status).toBe(2)
+    expect(refused.stderr).toContain('--instruction')
+  })
+})

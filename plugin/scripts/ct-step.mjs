@@ -173,6 +173,7 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
   global                    runs the commands of ## 8. Global verification, after the last task
   slice-verdict <file.json>  the SLICE judge's verdict: ruling + walk + findings
   e2e <file.json>           the report of the slice's end-to-end journey
+  reopen --instruction "<text>"   grant another round after the judge's third veto
 
 The sequence is decided by run-machine.js: a verb that is not the step that is due
 exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
@@ -181,7 +182,7 @@ exits with 9 and says which one it is. The state lives in .agent/run-<issue>.jso
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
-if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e'].includes(verb)) {
+if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e', 'reopen'].includes(verb)) {
   die(`unknown verb: ${verb}\n\n${USAGE}`, EXIT.USAGE)
 }
 
@@ -366,6 +367,29 @@ if (existsSync(stateFile)) {
   if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
     const WAY_OUT = `the judge vetoed task ${run.task} of issue ${issue} three times and the run is closed. `
       + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+    if (verb === 'reopen') {
+      const instruction = arg('--instruction')
+      if (typeof instruction !== 'string' || instruction.trim() === '') {
+        die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
+      }
+      // The three fields a third veto leaves behind, and nothing else. The
+      // DISCARDS ARE NOT RESET: they count an answer that could not be read,
+      // which is a different failure from a judgement that said no, and clearing
+      // them here would hide a judge that is illegible behind a person's
+      // patience. The instruction travels as `lastAdvice` because that is the
+      // field the implementer's brief already appends (see adviceSection): the
+      // person's words reach the implementer by the road the adviser's already
+      // take.
+      const { closed: _lifted, ...reopened } = run
+      run = { ...reopened, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: instruction }
+      // Not `save()`: that helper is a `const` declared further down in this
+      // same module scope, and this block runs at load time, before that
+      // declaration is reached — calling it here is a temporal-dead-zone
+      // `ReferenceError`. Same write `save()` performs, inlined.
+      writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
+      out(`run reopened at task ${run.task} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      process.exit(EXIT.OK)
+    }
     if (verb === 'next') {
       if (announcing) {
         safeWrite(1, StepAnnouncement.refusal({
@@ -378,6 +402,14 @@ if (existsSync(stateFile)) {
       process.exit(EXIT.VETOED)
     }
     die(WAY_OUT, EXIT.WRONG_STEP)
+  }
+  // `reopen` outside its closure: the run is not the judge's to give back.
+  if (verb === 'reopen') {
+    die(
+      `the run of issue ${issue} is not closed at ${RUN_STATES.BLOCKED_JUDGE}: it stands at step ${run.step}, `
+      + 'so there is nothing to reopen.',
+      EXIT.WRONG_STEP,
+    )
   }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
@@ -984,6 +1016,24 @@ function writeJudgeBrief() {
 // already names them: it is what makes the paragraph actionable without
 // re-reading it.
 function adviceSection(advice) {
+  // `reopen` also writes `lastAdvice`, and it writes a plain string (the
+  // person's own words), not the adviser's `{ approach, files_to_reconsider }`
+  // shape — there is no adviser round behind a reopen, so there is nothing to
+  // walk two attempts of and no paths to list. Same heading, the person's text
+  // instead of the adviser's narrative.
+  if (typeof advice === 'string') {
+    return [
+      '',
+      '## Advice for this attempt',
+      '',
+      "The judge vetoed this task three times and the run was closed. A person read it and reopened it with an instruction of their own, instead of the adviser's:",
+      '',
+      advice,
+      '',
+      'This does not widen the task: `**Files:**` above is still its scope.',
+      '',
+    ].join('\n')
+  }
   const paths = advice.files_to_reconsider.length
     ? advice.files_to_reconsider.map((p) => `- \`${p}\``).join('\n')
     : '(none in particular)'
