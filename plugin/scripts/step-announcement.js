@@ -38,6 +38,12 @@ export const RESPONSE_KIND_OF_STEP = Object.freeze({
   [STEPS.RECONCILE]: RESPONSE_KINDS.EDITS,
 })
 
+export const CONSUMING_VERB_OF_STEP = Object.freeze({
+  [STEPS.IMPLEMENT]: 'report', [STEPS.CONTROLS]: 'controls', [STEPS.JUDGE]: 'verdict',
+  [STEPS.ADVISE]: 'advice', [STEPS.COMMIT]: 'commit', [STEPS.RECONCILE]: 'reconcile',
+  [STEPS.GLOBAL]: 'global', [STEPS.SLICE_JUDGE]: 'slice-verdict', [STEPS.E2E]: 'e2e',
+})
+
 export const MANDATORY_INPUT_ROLES_OF_STEP = Object.freeze({
   [STEPS.IMPLEMENT]: Object.freeze([INPUT_ROLES.RUBRIC, INPUT_ROLES.BRIEF]),
   [STEPS.JUDGE]: Object.freeze([INPUT_ROLES.PACKAGE, INPUT_ROLES.BRIEF]),

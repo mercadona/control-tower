@@ -102,7 +102,9 @@ import { StepSeal } from './dispatch-gate.js'
 // Slice 1, Task 3: the structured announcement `next` prints under
 // `--output-format json`, alongside (not instead of) the prose. Pure module,
 // no disk and no process of its own — see step-announcement.js.
-import { StepAnnouncement, AnnouncedResponse, AnnouncedInput, INPUT_ROLES, INPUT_KINDS } from './step-announcement.js'
+import {
+  StepAnnouncement, AnnouncedResponse, AnnouncedInput, INPUT_ROLES, INPUT_KINDS, CONSUMING_VERB_OF_STEP,
+} from './step-announcement.js'
 // Slice 2: the announcement of a dispatch step is the SOURCE, and the prose is
 // written out of it. Every heading, label and consuming verb of those steps
 // lives in step-prose.js, once, and this file no longer types any of them.
@@ -614,10 +616,14 @@ function measure(step, measures) {
 // verdict file, like `verdict`). Both families already existed under those
 // names and renaming either of the two would break state in flight, so the
 // asymmetry is left stated rather than fixed.
-const VERB_OF = {
-  report: STEPS.IMPLEMENT, controls: STEPS.CONTROLS, verdict: STEPS.JUDGE, advice: STEPS.ADVISE, commit: STEPS.COMMIT,
-  reconcile: STEPS.RECONCILE, global: STEPS.GLOBAL, 'slice-verdict': STEPS.SLICE_JUDGE, e2e: STEPS.E2E,
-}
+//
+// One partition, one home: `CONSUMING_VERB_OF_STEP` maps each step to the verb
+// that consumes it, the backend measures an announced round against that same
+// map, and this guard reads the map backwards. A verb this file accepts is a
+// verb the announcement can name, and neither side can drift alone.
+const VERB_OF = Object.fromEntries(
+  Object.entries(CONSUMING_VERB_OF_STEP).map(([step, verb]) => [verb, step]),
+)
 function requireStep(v) {
   if (run.step !== VERB_OF[v]) {
     die(`"${v}" is not the step that is due: the run is at "${run.step}" (task ${run.task}/${run.tasksTotal}). Ask with "ct-step next".`, EXIT.WRONG_STEP)

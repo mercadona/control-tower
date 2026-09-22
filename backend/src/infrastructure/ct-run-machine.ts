@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
-  ANNOUNCEMENT_KINDS, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS,
+  ANNOUNCEMENT_KINDS, CONSUMING_VERB_OF_STEP, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS,
 } from '../../../plugin/scripts/step-announcement.js'
 import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
@@ -20,6 +20,7 @@ import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 
 const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
+const CONSUMING_VERB_BY_STEP: Readonly<Record<string, string>> = CONSUMING_VERB_OF_STEP
 
 type InspectionFact =
   | { readonly kind: 'absent' | 'delivered' | 'unstarted' }
@@ -344,13 +345,10 @@ class OracleBoundary {
       case STEPS.E2E:
         return OracleResult.refused('ct-step requested unsupported E2E material')
       case STEPS.CONTROLS:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.CONTROLS, 'controls')
       case STEPS.COMMIT:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.COMMIT, 'commit')
       case STEPS.RECONCILE:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.RECONCILE, 'reconcile')
       case STEPS.GLOBAL:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.GLOBAL, 'global')
+        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, step)
       case null:
         break
       default:
@@ -388,6 +386,7 @@ class OracleBoundary {
     step: string,
   ): OracleResult {
     if (round.responseKind !== RESPONSE_KIND_BY_STEP[step]
+      || round.argv[0] !== CONSUMING_VERB_BY_STEP[step]
       || round.responsePath === null
       || round.argv[1] !== round.responsePath) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
@@ -400,11 +399,10 @@ class OracleBoundary {
     ticket: string,
     manifest: RunManifest,
     step: string,
-    verb: string,
   ): OracleResult {
     const announced = AnnouncedStep.read(stdout)
-    if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step, verb)
-    const argv = [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)]
+    if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step)
+    const argv = [CONSUMING_VERB_BY_STEP[step], '--plan', manifest.plan, '--issue', String(manifest.issue)]
     if (!ConsumingProse.carries(stdout, `ct-step ${argv.join(' ')}`)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
@@ -412,9 +410,11 @@ class OracleBoundary {
   }
 
   static #announcedCommand(
-    stdout: string, announced: AnnouncedStep, ticket: string, step: string, verb: string,
+    stdout: string, announced: AnnouncedStep, ticket: string, step: string,
   ): OracleResult {
-    if (announced.step !== step || announced.commands === null || announced.argv[0] !== verb) {
+    if (announced.step !== step
+      || announced.commands === null
+      || announced.argv[0] !== CONSUMING_VERB_BY_STEP[step]) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.command(ticket, announced.argv)

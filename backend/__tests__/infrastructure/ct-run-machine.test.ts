@@ -176,6 +176,14 @@ class OracleMother {
   static implementAnnouncement(): string {
     return OracleMother.#implementRound(
       AnnouncedResponse.of(STEPS.IMPLEMENT, OracleMother.implementReportPath()),
+      ['report', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
+    )
+  }
+
+  static implementRoundAnnouncingTheJudgeVerbJson(): string {
+    return OracleMother.#implementRound(
+      AnnouncedResponse.of(STEPS.IMPLEMENT, OracleMother.implementReportPath()),
+      ['verdict', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
     )
   }
 
@@ -240,10 +248,11 @@ class OracleMother {
   static implementRoundOfAForeignResponseKindJson(): string {
     return OracleMother.#implementRound(
       new AnnouncedResponse({ kind: 'file', path: OracleMother.implementReportPath() }),
+      ['report', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
     )
   }
 
-  static #implementRound(response: AnnouncedResponse): string {
+  static #implementRound(response: AnnouncedResponse, argv: readonly string[]): string {
     return StepAnnouncement.dispatch({
       issue: 332,
       task: 1,
@@ -264,14 +273,27 @@ class OracleMother {
         }),
       ],
       response,
-      consuming: {
-        argv: ['report', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
-      },
+      consuming: { argv },
     }).text()
   }
 
+  static sliceVerdictPath(): string {
+    return `${OracleMother.WORKTREE}/.agent/run-332/slice-verdict.json`
+  }
+
   static sliceJudgeAnnouncement(): string {
-    const verdictPath = `${OracleMother.WORKTREE}/.agent/run-332/slice-verdict.json`
+    return OracleMother.#sliceJudgeRound([
+      'slice-verdict', OracleMother.sliceVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332',
+    ])
+  }
+
+  static sliceJudgeRoundAnnouncingTheJudgeVerbJson(): string {
+    return OracleMother.#sliceJudgeRound([
+      'verdict', OracleMother.sliceVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332',
+    ])
+  }
+
+  static #sliceJudgeRound(argv: readonly string[]): string {
     return StepAnnouncement.dispatch({
       issue: 332,
       task: 3,
@@ -296,10 +318,8 @@ class OracleMother {
           path: 'docs/superpowers/verdicts/issue-332-task-*.json',
         }),
       ],
-      response: AnnouncedResponse.of(STEPS.SLICE_JUDGE, verdictPath),
-      consuming: {
-        argv: ['slice-verdict', verdictPath, '--plan', OracleMother.PLAN, '--issue', '332'],
-      },
+      response: AnnouncedResponse.of(STEPS.SLICE_JUDGE, OracleMother.sliceVerdictPath()),
+      consuming: { argv },
     }).text()
   }
 
@@ -1105,6 +1125,48 @@ describe('CtRunMachine', () => {
     await fixture.establish()
     fixture.runBytes = null
     const announced = OracleMother.implementRoundOfAForeignResponseKindJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an implement round that announces the judge verb is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-implement-judge-verb-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.implementRoundAnnouncingTheJudgeVerbJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a slice-judge round that announces the judge verb is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-slice-judge-judge-verb-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.sliceJudgeRoundAnnouncingTheJudgeVerbJson()
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
       return OracleMother.output(0, announced)

@@ -668,7 +668,8 @@ describe('RunDispatch real process', () => {
     repositories.push(differentStructuredVerb)
     const structuredOutput = await differentStructuredVerb.output('implement')
     const structuredMachine = await differentStructuredVerb.machine(ProducerOutput.withConsuming(structuredOutput, [
-      'verdict', 'other.json', '--plan', DispatchRepository.PLAN, '--issue', '7',
+      'verdict', ProducerOutput.responsePath(structuredOutput),
+      '--plan', DispatchRepository.PLAN, '--issue', '7',
     ]))
     await expect(structuredMachine.dispatch(differentStructuredVerb.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
