@@ -340,7 +340,7 @@ class OracleBoundary {
       case STEPS.SLICE_JUDGE:
         return round === null
           ? OracleBoundary.#fileCall(output.stdout, command.ticket, step)
-          : OracleBoundary.#dispatchCall(output.stdout, round, command.ticket, step)
+          : OracleBoundary.#dispatchCall(output.stdout, round, command.ticket, step, manifest)
       case STEPS.E2E:
         return OracleResult.refused('ct-step requested unsupported E2E material')
       case STEPS.CONTROLS:
@@ -383,14 +383,26 @@ class OracleBoundary {
     round: AnnouncedStep,
     ticket: string,
     step: string,
+    manifest: RunManifest,
   ): OracleResult {
     if (round.responseKind !== RESPONSE_KIND_BY_STEP[step]
       || round.argv[0] !== CONSUMING_VERB_BY_STEP[step]
       || round.responsePath === null
-      || round.argv[1] !== round.responsePath) {
+      || round.argv[1] !== round.responsePath
+      || !OracleBoundary.#namesThisRun(round.argv, manifest)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.call(ticket, round.argv)
+  }
+
+  static #namesThisRun(argv: readonly string[], manifest: RunManifest): boolean {
+    return OracleBoundary.#flagged(argv, '--plan') === manifest.plan
+      && OracleBoundary.#flagged(argv, '--issue') === String(manifest.issue)
+  }
+
+  static #flagged(argv: readonly string[], flag: string): string | undefined {
+    const at = argv.indexOf(flag)
+    return at === -1 ? undefined : argv[at + 1]
   }
 
   static #plainCommand(
@@ -400,7 +412,7 @@ class OracleBoundary {
     step: string,
   ): OracleResult {
     const announced = AnnouncedStep.read(stdout)
-    if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step)
+    if (announced !== null) return OracleBoundary.#announcedCommand(stdout, announced, ticket, step, manifest)
     const argv = [CONSUMING_VERB_BY_STEP[step], '--plan', manifest.plan, '--issue', String(manifest.issue)]
     if (!ConsumingProse.carries(stdout, `ct-step ${argv.join(' ')}`)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
@@ -409,11 +421,12 @@ class OracleBoundary {
   }
 
   static #announcedCommand(
-    stdout: string, announced: AnnouncedStep, ticket: string, step: string,
+    stdout: string, announced: AnnouncedStep, ticket: string, step: string, manifest: RunManifest,
   ): OracleResult {
     if (announced.step !== step
       || announced.commands === null
-      || announced.argv[0] !== CONSUMING_VERB_BY_STEP[step]) {
+      || announced.argv[0] !== CONSUMING_VERB_BY_STEP[step]
+      || !OracleBoundary.#namesThisRun(announced.argv, manifest)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
     return OracleResult.command(ticket, announced.argv)

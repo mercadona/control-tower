@@ -153,6 +153,20 @@ class OracleMother {
     }).text()
   }
 
+  static controlsRoundNamingAnotherPlanJson(): string {
+    return StepAnnouncement.program({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.CONTROLS,
+      attempt: 1,
+      commands: ['npm run lint', 'npm test'],
+      consuming: {
+        argv: ['controls', '--plan', 'docs/superpowers/plans/2026-09-17-issue-332-driver.md', '--issue', '332'],
+      },
+    }).text()
+  }
+
   static openTransition(): string {
     return '{"version":1,"kind":"transition","state":"open","outcome":"done","exit":0,'
       + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"implement","discards":0}}\n'
@@ -290,6 +304,12 @@ class OracleMother {
   static sliceJudgeRoundAnnouncingTheJudgeVerbJson(): string {
     return OracleMother.#sliceJudgeRound([
       'verdict', OracleMother.sliceVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332',
+    ])
+  }
+
+  static sliceJudgeRoundNamingAnotherIssueJson(): string {
+    return OracleMother.#sliceJudgeRound([
+      'slice-verdict', OracleMother.sliceVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '331',
     ])
   }
 
@@ -1167,6 +1187,48 @@ describe('CtRunMachine', () => {
     await fixture.establish()
     fixture.runBytes = null
     const announced = OracleMother.sliceJudgeRoundAnnouncingTheJudgeVerbJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an announced slice-judge round that names another issue is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-slice-judge-foreign-issue-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.sliceJudgeRoundNamingAnotherIssueJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an announced controls round that names another plan is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-controls-foreign-plan-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.controlsRoundNamingAnotherPlanJson()
     fixture.answer(OracleMother.nextArgv(), () => {
       fixture.runBytes = OracleMother.RUN_BYTES
       return OracleMother.output(0, announced)
