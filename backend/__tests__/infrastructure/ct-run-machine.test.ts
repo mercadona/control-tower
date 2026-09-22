@@ -369,6 +369,16 @@ class OracleMother {
     return OracleMother.#reconcilerRound(['commit', '--plan', OracleMother.PLAN, '--issue', '332'])
   }
 
+  static reconcilerRoundNamingAnotherIssueJson(): string {
+    return OracleMother.#reconcilerRound(['reconcile', '--plan', OracleMother.PLAN, '--issue', '331'])
+  }
+
+  static reconcilerRoundNamingAnotherPlanJson(): string {
+    return OracleMother.#reconcilerRound([
+      'reconcile', '--plan', 'docs/superpowers/plans/2026-09-17-issue-332-driver.md', '--issue', '332',
+    ])
+  }
+
   static #reconcilerRound(argv: readonly string[]): string {
     return StepAnnouncement.dispatch({
       issue: 332,
@@ -1090,6 +1100,56 @@ describe('CtRunMachine', () => {
       detail: `ct-step output is not understood: ${JSON.stringify(foreign)}`,
       closure: null,
     }))
+  })
+
+  it('an announced reconciler round that names another issue is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-reconciler-foreign-issue-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.reconcilerRoundNamingAnotherIssueJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+    })
+    fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, announced))
+    const machine = fixture.machine()
+    const reconcile = await machine.open(OracleMother.watch())
+
+    expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    }))
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
+    ])
+  })
+
+  it('an announced reconciler round that names another plan is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-reconciler-foreign-plan-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.reconcilerRoundNamingAnotherPlanJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.reconcileAnnouncement())
+    })
+    fixture.answer(OracleMother.reconcileArgv(), OracleMother.output(0, announced))
+    const machine = fixture.machine()
+    const reconcile = await machine.open(OracleMother.watch())
+
+    expect(await machine.advance(OracleMother.watch(), reconcile)).toEqual(new RunInstruction({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    }))
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.reconcileArgv(), cwd: OracleMother.WORKTREE },
+    ])
   })
 
   it('an announced judge round hands over the consuming argv the announcement carries', async () => {

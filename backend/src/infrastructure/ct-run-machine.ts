@@ -323,6 +323,9 @@ class OracleBoundary {
     }
     const round = AnnouncedStep.read(output.stdout)
     if (round !== null && round.responseKind === RESPONSE_KINDS.EDITS) {
+      if (!OracleBoundary.#namesThisRun(round.argv, manifest)) {
+        return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+      }
       try {
         return OracleResult.call(command.ticket, round.argv, RunConsumingCommand.forEdits(round.argv))
       } catch (cause) {
