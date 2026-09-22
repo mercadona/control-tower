@@ -230,7 +230,8 @@ describe('OpenCoordinatingSession', () => {
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
       Flow.COMMENT.text,
       PhasePrompt.CHANGE_TO_A_SLICE,
-  PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -247,7 +248,8 @@ describe('OpenCoordinatingSession', () => {
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       Flow.COMMENT.text,
       PhasePrompt.CHANGE_TO_A_SLICE,
-  PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
@@ -325,7 +327,8 @@ describe('OpenCoordinatingSession', () => {
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,
       PhasePrompt.CHANGE_TO_A_SLICE,
-  PhasePrompt.RECOVERY_CAPABILITIES,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
 
