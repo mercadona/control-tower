@@ -475,7 +475,10 @@ export class CtRunMachine extends RunMachine {
       }
       return this.#execute(watch, manifest, null, this.#nextArgv(manifest))
     }
-    return this.#instruction(state.commands[state.commands.length - 1], manifest)
+    const last = state.commands[state.commands.length - 1]
+    const instruction = this.#instruction(last, manifest)
+    if (instruction.work.kind !== 'refused' || instruction.work.closure === null || last.receipt === null) return instruction
+    return this.#execute(watch, manifest, last.ticket, this.#nextArgv(manifest))
   }
 
   async advance(watch: PlanWatch, instruction: RunInstruction): Promise<RunInstruction> {
