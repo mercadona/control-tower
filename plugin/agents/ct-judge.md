@@ -95,9 +95,12 @@ plan already wrote the assertion, so this is a comparison against a written
 phrase — the quality of the test belongs to item 9, and a criterion of your own
 belongs to neither.
 
-**Already mechanical:** `ct-step controls` searched the *contents* of the staged
-files for that test name — `git grep --cached` scoped to the touched paths — and
-found it. The name being there is settled; what the test asserts is yours.
+**NOTHING IS MECHANICAL HERE ANY MORE.** The program used to look up that name
+in the staged files and hand it to you settled. It stopped: the check held the
+code against a sentence of the plan, and when it went red nobody could say
+which of the two was wrong. So the name is yours as well — find it in the diff
+before you read what it asserts, and a name the plan wrote and the diff does
+not carry is a finding of this item.
 
 **When this item lacks a subject:** a `**TDD:**` line that says `No TDD` declares a task
 with no behaviour to put red. This item produces no finding then.
@@ -113,9 +116,12 @@ parameter names and order, return shape, the error raised and its message, the
 literal value of each constant, the exported name. The brief states each of
 these; you report the ones where the diff states something else.
 
-**Already mechanical:** the program checked that every file a block names is
-among the touched paths, and that any `Final text` block appears verbatim in the
-index. The symbols are what no script parses, which is why this item exists.
+**NOTHING IS MECHANICAL HERE ANY MORE.** The program used to check that every
+file a block names is among the touched paths, and that a `Final text` block
+appears verbatim in the index. Both went, for the reason above. So the files
+the blocks name are yours too: a `Contract` or a `Call site` over a file the
+diff never touches is scaffolding the plan declared and nobody wrote, and a
+`Final text` whose wording is not in the diff is the same defect in prose.
 
 ### 4. `decisiones-cerradas` — a decision that was already closed
 
@@ -278,23 +284,29 @@ and leaves alone whatever `### Out of scope` names by name. Refactors, renames,
 extra helpers, adjacent fixes: the question for each is which sentence of the
 task asks for it.
 
-**Already mechanical:** the program compared the touched paths against
-`**Files:**` — extra path, missing path, and whether each `(create)` and
-`(modify)` matches the previous commit. The paths are settled; what was written
-inside them is yours.
+**THE PATHS ARE YOURS NOW, AND THIS IS THE CHANGE THAT MOVES MOST WORK ONTO
+YOU.** The program used to compare the touched paths against `**Files:**` and
+hand you that settled — extra path, missing path, and each `(create)` and
+`(modify)` against the previous commit. It does not any more. `**Files:**` is
+documentation, the way it is upstream in superpowers, and reading it is this
+item's job: a path the diff touches and the line does not name, and a path the
+line names and the diff never touches, are both findings here. Say which of
+the two you found, because the remedy differs: surplus in the CODE, or missing
+from it.
 
 A diff of the plan file inside a task is an AMENDMENT written by the
 implementer, not a path out of scope: ruling whether it was justified belongs
-to this item, and it is the one hunk of the diff no program has checked for
-you. What the program does refuse is narrow — an amendment that REMOVES a
-route from THIS task's `**Files:**`, and nothing else. It does not look at
-this task's `**Tests:**`, `**TDD:**`, block declarations or `**Verification:**`
-commands, nor at any other task's, so an amendment that rewrites its own
-verification into a command that passes, or drops the test names it promised,
-reaches you unchecked and the controls it disarmed reported green. Read the
-plan hunk line by line: what changed, and does the sentence of the task
-justify it. The plan was committed before the run started, so what shows in
-the diff is the amended lines, not the whole plan.
+to this item, and **no program checks any part of it for you**. An amendment
+may now rewrite anything — its `**Files:**`, its `**Tests:**`, its `**TDD:**`,
+its block declarations, its `**Verification:**` commands — and every part of it
+reaches you unchecked: the only control left over the plan is that the text
+measured is the text committed, which says nothing about what that text says.
+Read the plan hunk line by line:
+what changed, and does the sentence of the task justify it. An amendment that
+rewrites its own verification into a command that passes, or drops the test
+names it promised, is a finding of this item. The plan was committed before the
+run started, so what shows in the diff is the amended lines, not the whole
+plan.
 
 ### 9. `test-desiderata` — the tests this task adds
 

@@ -20,8 +20,8 @@ this prompt or in the files it names.
      document rather than the production code the skill's Iron Law is about, and
      the law rests; the skill would have you ask a human partner about the
      exception, and here the brief has already answered. Write the tests the
-     `**Files:**` line declares and stop there: the first control vetoes a task
-     that touches a path the plan left undeclared, so a test written out of
+     `**Files:**` line declares and stop there: the judge blocks a task that
+     touches a path the plan left undeclared, so a test written out of
      obedience to the law is a test that fails the task.
    - **On how much to run, this prompt wins over the skill.** The skill asks for
      the whole suite green at each green step and again in its final checklist.
@@ -111,16 +111,22 @@ this prompt or in the files it names.
 The moment you return, `ct-step controls` runs against the paths you reported,
 cheapest check first and the commands last, in this order:
 
-1. **Scope.** The files you touched are the ones `**Files:**` declares — exactly
-   those — and every `(create)` is a file that did not exist in the previous
-   commit while every `(modify)` is one that did.
+1. **The plan that governs is the one that will be committed.** If you amended
+   the plan, the tree's text and the text about to be committed have to be the
+   same — otherwise the controls measure one thing and the commit carries
+   another.
 2. **The test names of `**Tests:**`.** Every test the task said it adds has to be
    there, and every one it said it removes has to be gone.
-3. **What the plan's blocks promise.** Every file named by a `Contract`,
-   `Call site`, `Final text` or `Current state` block is among the ones you
-   touched; the test named by `**TDD:**` exists; any `Final text` appears
-   verbatim.
-4. **The `**Verification:**` commands**, which run once everything above passed.
+3. **The `**Verification:**` commands**, which run once everything above passed.
+
+**The program stopped checking your scope.** It used to compare the files you
+touched against `**Files:**`, the files the blocks name, and the test named by
+`**TDD:**`. All three held your code against a sentence of the plan, and when
+one went red nobody could tell whether the code or the sentence was wrong — a
+plan whose `**Files:**` ended with the prose "create the empty `__init__.py`
+with `touch`" demanded a file named `touch` and killed a run. **The judge reads
+all of that now, with its own eyes**, so the boundary below is no less binding:
+it is measured by a reader instead of a script.
 
 Knowing this is meant to save you work: run the narrow tests your change needs
 while you work, and stop there. The program is about to run the whole suite
@@ -143,11 +149,13 @@ spends the context you still need.
   working. The amendment rides inside your task's own commit, and the judge
   rules on whether the sentence of the task justified it — so say in your
   report which path you added and what made it necessary. Three limits, and
-  the program enforces the first two: **additions only**, because a route you
-  take away disarms the control that measures your scope; **your own task's
-  `**Files:**` line only**, so other tasks and the plan's decisions, tests and
-  verification stay exactly as they are; and a path you add as `(create)` is a
-  new module, so its architecture rules apply to it. Any other defect of the
+  **the judge enforces all three, because no program checks them any more**:
+  **additions only**, since a route you take away is one nobody can tell you
+  ever promised; **your own task's `**Files:**` line only**, so other tasks and
+  the plan's decisions, tests and verification stay exactly as they are; and a
+  path you add as `(create)` is a new module, so its architecture rules apply
+  to it. An amendment that quietly rewrites its own `**Verification:**` or
+  drops the test names it promised is a finding the judge will make. Any other defect of the
   plan belongs in your report, and the plan keeps it.
 - **The controls and the judge are the evidence.** They mark this task green:
   the controls run, and then a judge reads the diff. Saying "all tests pass"

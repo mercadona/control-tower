@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import { deliveredRun } from '../scripts/run-machine.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
 const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
@@ -188,11 +188,16 @@ describe('where it has got to lives on disk, not in the conversation', () => {
 
 // capde's review (2026-08-19), point 2: the index accumulated between attempts
 // and the scope check looked at the report's list, not at what actually gets
-// committed. The two halves of the fix, each with its own test.
+// committed. The second half of that fix —the scope check measuring the index—
+// went with the scope control itself, which stopped being a gate: it held the
+// code against the plan's **Files:** and could not say which of the two was
+// wrong. This half stays, and its red now comes from the task's own
+// **Verification:**, which is a control that measures the code.
 describe('the index does not accumulate between attempts', () => {
   it('the out-of-scope path of attempt 1 does NOT travel in the commit of attempt 2', () => {
     // Attempt 1: the implementer touches too much; it gets staged and the check
     // catches it.
+    writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt', 'test -f uno.txt && test ! -f dos.txt'))
     ct('report', writeReport(['uno.txt', 'dos.txt']))
     expect(ct('controls').stdout).toMatch(/controls: failed/)
     // Attempt 2: the implementer WITHDRAWS what it touched too much and reports
@@ -211,15 +216,6 @@ describe('the index does not accumulate between attempts', () => {
     expect(files).not.toMatch(/dos\.txt/)
   })
 
-  it('scope measures the INDEX, not the report\'s list: what is staged without being declared is red', () => {
-    ct('report', writeReport(['uno.txt']))
-    // Something writes and stages dos.txt outside the report — it makes no difference who.
-    writeFileSync(join(repo, 'dos.txt'), 'dos\n')
-    execFileSync('git', ['add', 'dos.txt'], { cwd: repo })
-    expect(ct('controls').stdout).toMatch(/controls: failed/)
-    const logText = readFileSync(join(repo, '.agent', 'run-7', 'task-1-controls-1.log'), 'utf8')
-    expect(logText).toMatch(/dos\.txt.*does not declare it/)
-  })
 })
 
 // capde's review (2026-08-19), point 1: a prompt is not a gate. The ct-step

@@ -459,9 +459,9 @@ const outProseMaterial = (prose) => { out(prose.heading); for (const line of pro
 // dragged in by a `git add` of the implementer's. That already has an answer,
 // the same one given to the verdict: it is written and staged by the PROGRAM,
 // at a path the program decides, and it is staged at `commit` — after the
-// checks and after the judge. If it were in the index while the checks run,
-// `declaredScope` would see it as a path the plan does not declare and would
-// veto the task.
+// checks and after the judge. While the scope control existed it would have
+// seen the telemetry as a path the plan does not declare and vetoed the task;
+// the order still holds for the judge, which reads the diff.
 //
 // The local file is still the machine's accumulated record (every repo, every
 // epic); the one in the repo is this slice's, and it is the one that gets read
@@ -1525,43 +1525,48 @@ function controlsVerb() {
   const lines = []
   let result = OUTCOMES.DONE
 
-  // Scope goes ahead of everything, because it is the cheapest of all:
-  // comparing two lists of paths and looking at the previous commit's tree
-  // costs nothing, so it runs even before the test names.
-  const outOfScope = declaredScope(t)
-  if (outOfScope.length) {
-    lines.push('# scope declared by the task', ...outOfScope.map((f) => `- ${f}`), '')
+  // THE PLAN'S PROSE STOPPED BEING A GATE. Three controls used to run ahead of
+  // the names — `declaredScope` over **Files:**, `amendmentOnlyAdds` over the
+  // paths of HEAD's plan, and `declaredBlocks` over the block labels, the
+  // **TDD:** name and the `Final text` blocks. All three held the CODE against
+  // a sentence the PLAN wrote, and when they went red neither they nor anybody
+  // else could say which of the two was wrong: their own message admitted it
+  // ("two explanations are equally plausible and this control cannot arbitrate
+  // between them").
+  //
+  // The class failed three times and each time one case got patched. A plan
+  // whose **Files:** ended in prose — "create the empty `__init__.py` with
+  // `touch`" — declared a file named `touch`, and since an amendment could not
+  // remove a path, the run could only end in `blocked-controls` after three
+  // implementer attempts. Before that, a test name pulled out of an
+  // explanatory parenthesis blocked a task with a false positive
+  // (`plan-tasks.js`, trap 2), and a plan that named its own file in
+  // **Files:** was unsatisfiable by construction.
+  //
+  // What is left is what does not have the defect: `declaredTests`, whose
+  // value is measured —a task promised a function and its test, the function
+  // arrived alone and the suite stayed green on the previous commit's test—,
+  // the commands, which measure the code and not the plan, and the invariant
+  // below, which measures no claim at all. **Files:** goes back to what it is
+  // upstream in superpowers: documentation, read by the judge with its own
+  // eyes (`alcance`).
+  const governing = governingPlanIsTheCommittedOne(t)
+  if (governing.length) {
+    lines.push('# the plan that governs the controls', ...governing.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
-  // The other direction of the scope control: an amendment can only ADD paths
-  // to **Files:**, never remove them — removing one would switch the control
-  // above off from inside the plan itself.
-  const amendment = amendmentOnlyAdds(t)
-  if (amendment.length) {
-    lines.push('# amendment of the plan', ...amendment.map((f) => `- ${f}`), '')
-    result = OUTCOMES.FAILED
-  }
-
-  // Then the names, which are free too. A plan's yardstick measures that
+  // Then the names, which are free. A plan's yardstick measures that
   // nothing broke, not that what was promised was added — measured in the
   // field: a task asked for a function and its test, the function arrived
   // without the test, and the suite stayed green because the previous commit's
-  // one passed. Both controls share `inIndex`, so both can throw
+  // one passed. It goes through `inIndex`, so it can throw
   // `NameLookupDidNotRun` when the lookup itself could not run — that is not
   // a failed control, it is one that could not be measured.
   try {
     const failures = declaredTests(t)
     if (failures.length) {
       lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
-      result = OUTCOMES.FAILED
-    }
-
-    // And last what the plan's BLOCKS promise, which is still free: none of
-    // this runs a command.
-    const blocks = declaredBlocks(t)
-    if (blocks.length) {
-      lines.push('# blocks declared by the task', ...blocks.map((f) => `- ${f}`), '')
       result = OUTCOMES.FAILED
     }
   } catch (e) {
@@ -1621,21 +1626,12 @@ const stagedPaths = () => (git(['diff', '--cached', '--name-only']) || '').split
 // were the task's code would answer wrongly: the plan QUOTES verbatim the names
 // of the tests the task withdraws, so a control on names would see "it is still
 // there" for a test that really was deleted (the false positive that motivates
-// this function). The three controls that read content —`declaredScope`,
-// `declaredBlocks`, `inIndex`— filter out the plan and the rest of the
-// machinery before looking; `ajenoEnElIndice` goes on reading the raw index,
-// because to that question the plan does belong.
+// this function). `inIndex` —the one control left that reads content— filters
+// out the plan and the rest of the machinery before looking; `ajenoEnElIndice`
+// goes on reading the raw index, because to that question the plan does
+// belong.
 const workingPathsInTheIndex = () =>
   stagedPaths().filter((p) => p !== planRelPath() && !isMachineryPath(p))
-
-// AND THE VERSION FOR THE CONTROLS THAT COMPARE LISTS OF PATHS, which only
-// takes the plan out. The false positive above is one of CONTENT —the plan
-// quotes test names verbatim— and it does not happen to a comparison of paths:
-// exempting the whole machinery here would leave outside the scope control any
-// `docs/superpowers/**` path that reaches the index, which is exactly the
-// vector `scope.js` documents from dispatch 1, and would make it travel inside
-// the task's commit without any control seeing it.
-const workPathsInTheIndex = () => stagedPaths().filter((p) => p !== planRelPath())
 
 // WHAT IS NOT CODE, AND WHY THE LIST ONLY NAMES DOCUMENTATION. A task's
 // **Verification:** commands are declared by the plan and run whatever the diff
@@ -1687,84 +1683,28 @@ const foreignInIndex = (ours) => {
   return stagedPaths().filter((p) => !mine.includes(p))
 }
 
-// The task's scope is decided by the PLAN, not by the implementer: this check
-// crosses the INDEX (what is really going to be committed) against `t.files`
-// (what the task declares in **Files:**). A path on one side and not on the
-// other is a failure, and so is an action that does not square with the
-// previous commit's tree — `git cat-file -e HEAD:<path>`, not the disk,
-// because the implementer has already created the file by the time this runs.
-// A path with `action: null` is not checked against git: it is a decision of
-// the plan, not an oversight (task 1, `splitFiles`).
-//
-// Each failure's message says whether the PLAN or the CODE is what gets fixed,
-// because a plan that left a path out of its **Files:** is just as likely as
-// an implementer that touched too much, and confusing them costs a whole
-// cycle.
-function declaredScope(t) {
-  const failures = []
-  const touched = workPathsInTheIndex()
-  // The plan's own file is excluded from BOTH sides of the crossing, not just
-  // from the index. `workPathsInTheIndex` already drops it because this program
-  // stages it itself; leaving it in `declared` made a plan that names it in a
-  // **Files:** unsatisfiable — the path could never appear among what was
-  // touched, and the amendment control refuses to remove it, so the run could
-  // only sit in `blocked-controls`. The plan file belongs to the program, and
-  // no task declares it.
-  const declared = t.files.filter((f) => f.path !== planRelPath())
-
-  for (const path of touched) {
-    if (!declared.some((f) => f.path === path)) {
-      failures.push(`task ${t.n} touched '${path}' and the plan does not declare it in its **Files:** — two explanations are equally plausible and this control cannot arbitrate between them: it is surplus in the CODE, or it needs adding to the PLAN`)
-    }
-  }
-
-  for (const f of declared) {
-    if (!touched.includes(f.path)) {
-      failures.push(`the plan declares '${f.path}' in the **Files:** of task ${t.n} and it is not among what was touched: write the CODE the task promised. If it really is surplus in the PLAN, REMOVING IT IS NOT YOUR WAY OUT —an amendment can only add paths, because removing them switches this very control off— so say it in your report and leave the path in the plan`)
-      continue
-    }
-    if (f.action === null) continue
-    const existedBefore = git(['cat-file', '-e', `HEAD:${f.path}`], { allowFail: true }) !== null
-    if (f.action === 'create' && existedBefore) {
-      failures.push(`the plan declares '${f.path}' as (create) and it already existed in the previous commit — check the PLAN, the action should be (modify)`)
-    }
-    if (f.action === 'modify' && !existedBefore) {
-      failures.push(`the plan declares '${f.path}' as (modify) and it did not exist in the previous commit — check the PLAN, the action should be (create)`)
-    }
-  }
-
-  return failures
-}
-
-// The other direction of the scope control (issue 161): an amendment can ADD
-// paths to the **Files:** of its own task — that is what `declaredScope`
-// already lets through, comparing against TODAY'S INDEX — but it can never
-// REMOVE one it already declared, because that would switch the control above
-// off from inside the plan itself: deleting the surplus path from **Files:**
-// would be enough for `declaredScope` to stop seeing it.
+// THE PLAN THAT GOVERNS THE CONTROLS HAS TO BE THE ONE THAT IS GOING TO BE
+// COMMITTED. This used to be the first half of `amendmentOnlyAdds`, whose
+// second half —an amendment may only ADD paths to **Files:**— went with the
+// scope control it existed to protect. This half stays, because it is not a
+// gate over the plan's prose: it does not hold the code against a sentence,
+// it makes sure the sentence being measured is the sentence being committed.
 //
 // IT IS NOT CONDITIONED ON THE INDEX, and that was the open door. `t` comes
-// from the plan of the TREE, read when the process starts; the index is another
-// thing. With the guard conditioned on the plan being staged, editing it AFTER
-// `report` was enough: the guard did not run, `t.files` —already reduced—
-// governed `declaredScope`, and the commit took the old plan, so the judge
-// saw no amendment either. Delivering green with the committed plan
-// contradicting the code is exactly what this slice exists to prevent.
+// from the plan of the TREE, read when the process starts; the index is
+// another thing. With the guard conditioned on the plan being staged, editing
+// it AFTER `report` was enough for the controls to measure one text while the
+// commit took another. `declaredTests` and the **Verification:** commands both
+// come out of the tree's plan, so delivering green with a committed plan that
+// contradicts what was measured is still exactly what this prevents.
 //
-// Hence the first invariant, which covers both directions at once: THE PLAN
-// THAT GOVERNS THE CONTROLS HAS TO BE THE ONE THAT IS GOING TO BE COMMITTED.
-// The tree's text is compared against the index's if the plan is staged, and
-// against HEAD's if it is not.
-//
-// AND IT FAILS CLOSED, like `allWorkCommittedByCtStep` in state.js: if the plan
-// of HEAD cannot be read, or its text does not declare the task `t.n`, there is
-// nothing to compare against and that is NOT a permission — it is a control
-// that could not measure, and it is said.
-function amendmentOnlyAdds(t) {
+// AND IT FAILS CLOSED, like `allWorkCommittedByCtStep` in state.js: if the
+// plan of HEAD cannot be read there is nothing to compare against, and that is
+// NOT a permission — it is a control that could not measure, and it is said.
+function governingPlanIsTheCommittedOne(t) {
   const path = planRelPath()
-  const previous = git(['show', `HEAD:${path}`], { allowFail: true })
-  if (previous === null) {
-    return [`'${path}' could not be read at HEAD: with no committed plan there is nothing to compare the tree's against, and this control cannot measure whether task ${t.n} removed paths from its **Files:**. Commit the plan —the \`plan\` gate already asks for it before implementing— and ask for the step again.`]
+  if (git(['show', `HEAD:${path}`], { allowFail: true }) === null) {
+    return [`'${path}' could not be read at HEAD: with no committed plan there is nothing to compare the tree's against, and the controls of task ${t.n} cannot know whether the text they measure is the text that will be committed. Commit the plan —the kickoff already asks for it before implementing— and ask for the step again.`]
   }
 
   // GIT IS ASKED whether the tree and the index say the same thing, instead of
@@ -1777,14 +1717,7 @@ function amendmentOnlyAdds(t) {
     return [`the tree's plan is not the one that is going to be committed: the controls and the judge measure '${path}' of the TREE, and ${staged ? "the INDEX's says something else" : 'it is not among what is staged, so the commit would take HEAD\'s'}. Go through \`report\` again so that what is measured and what is committed are the same text.`]
   }
 
-  const previousTask = extractTasks(previous).tasks.find((tt) => tt.n === t.n)
-  if (!previousTask) {
-    return [`HEAD's plan declares no task ${t.n}, so this control cannot measure whether the amendment removed paths from its **Files:**. An amendment neither adds nor removes TASKS: that throws the run's count out.`]
-  }
-
-  return previousTask.files
-    .filter((f) => !t.files.some((tf) => tf.path === f.path))
-    .map((f) => `task ${t.n} amended the plan by removing '${f.path}' from its **Files:** — an amendment can only ADD paths: removing one switches the scope control off from inside. Put the path back in the PLAN, or write the CODE it promised.`)
+  return []
 }
 
 // A `git grep --cached` that did not answer 0 (match) or 1 (no match): git
@@ -1801,8 +1734,7 @@ class NameLookupDidNotRun extends Error {}
 // 1 of repo-pulse's slice #5) and the promised one "is already there" even
 // though nobody wrote it (a false negative, which is precisely the failure this
 // check exists to catch). With no staged files there is nowhere to look, and
-// that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
-// question, same scope, same mechanism.
+// that is a NO. Its one caller is `declaredTests`.
 function inIndex(name) {
   const scope = workingPathsInTheIndex()
   if (!scope.length) return false
@@ -1819,55 +1751,6 @@ function declaredTests(t) {
   const failures = []
   for (const n of t.testsAdded) if (!inIndex(n)) failures.push(`the task said it was adding the test '${n}' and it is not in what is staged`)
   for (const n of t.testsRemoved) if (inIndex(n)) failures.push(`the task said it was removing the test '${n}' and it is still there`)
-  return failures
-}
-
-// What the plan's BLOCKS promise has to be there, just as `declaredScope`
-// measures what **Files:** promises. Three checks, all of them narrowed to
-// what is staged for the same reason as `declaredTests`: the plan lives
-// committed inside the repo, so searching the repo is searching the plan.
-//
-//  - `blockPaths`: every `{role, path}` demands that `path` be among the
-//    touched paths. A Contract or a Call site nobody touched is scaffolding
-//    declared and never written.
-//  - `tddName`: the same `inIndex` as `declaredTests`, and the same
-//    message — the test the task promised in its **TDD:** is just as
-//    enforceable as those of **Tests:**.
-//  - `finalTexts`: the text has to appear verbatim in the INDEX of its path.
-//    It is compared against `git show :<path>` and not with `git grep`,
-//    because it is a MULTI-LINE block and `git grep` works line by line;
-//    comparing the whole staged content is what makes it possible to say
-//    WHICH line is missing, and that is half the value of this check.
-//
-// Each failure's message says whether the PLAN or the CODE is what gets fixed,
-// just as in `declaredScope`: confusing the two costs a whole cycle.
-function declaredBlocks(t) {
-  const failures = []
-  const touched = workPathsInTheIndex()
-
-  for (const { role, path } of t.blockPaths) {
-    if (!touched.includes(path)) {
-      failures.push(`task ${t.n} declares a ${role} block (${path}) and it is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
-    }
-  }
-
-  if (t.tddName && !inIndex(t.tddName)) {
-    failures.push(`the task said it was adding the test '${t.tddName}' and it is not in what is staged`)
-  }
-
-  for (const { path, text } of t.finalTexts) {
-    const staged = git(['show', `:${path}`], { allowFail: true })
-    if (staged === null) {
-      failures.push(`task ${t.n} declares a Final text (${path}) and that file is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
-      continue
-    }
-    for (const line of text.split('\n')) {
-      if (line.trim() !== '' && !staged.includes(line)) {
-        failures.push(`task ${t.n} declares Final text (${path}) and the line '${line}' is not verbatim in what is staged — it is missing from the CODE, or the PLAN quotes the text wrongly`)
-      }
-    }
-  }
-
   return failures
 }
 

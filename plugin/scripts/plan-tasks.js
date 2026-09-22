@@ -8,12 +8,21 @@
 // — and that is exactly what a conductor that does not reason needs from the
 // plan.
 //
-// This module extracts, per task: the commands of its **Verification:**, the
-// test names the task ADDS and the ones it REMOVES on purpose, the paths of
-// **Files:**, the name of the test its **TDD:** declares, the path of every
-// block carrying a role label and the literal text of its `Final text` blocks.
-// With that, the program measures the task without asking the implementer
-// whether it went well.
+// This module extracts, per task: the commands of its **Verification:** and
+// the test names the task ADDS and the ones it REMOVES on purpose. With that,
+// the program measures the task without asking the implementer whether it went
+// well.
+//
+// IT USED TO EXTRACT FOUR THINGS MORE — the paths of **Files:**, the name of
+// the test its **TDD:** declares, the path of every block carrying a role
+// label and the literal text of its `Final text` blocks — and `ct-step
+// controls` held the code against all four. They went, with the controls that
+// read them. Each one held the CODE against a sentence the PLAN wrote, and a
+// sentence can be wrong: a **Files:** paragraph ending in prose declared a
+// file named `touch`, and because an amendment may not remove a declared path,
+// that run could only end in `blocked-controls`. Upstream in superpowers
+// **Files:** is documentation, and here it is documentation again: what reads
+// it now is the judge, under `alcance`.
 //
 // PURE on purpose, like `plan-contract.js`: the markdown goes in, the list
 // comes out. Not one import.
@@ -137,103 +146,6 @@ function splitTests(text) {
     added: quotedNames(text.slice(0, cut)),
     removed: quotedNames(text.slice(cut + marker.length)),
   }
-}
-
-// The only two actions the rest of the program knows how to interpret
-// (`declaredScope`, in ct-step.mjs, only has branches for these). Just like
-// "a path with no declared action is not checked against git, and that is not a
-// problem of the plan", an action that is neither of the two is not one either:
-// better to check nothing than to check with a value nobody declared.
-const KNOWN_ACTIONS = ['create', 'modify']
-
-// Splits the **Files:** paragraph into the paths it declares, with their
-// action. Real format, measured in the plan of slice #5:
-//   **Files:** `web/package.json` (modify), `web/src/testing/setup.ts` (create)
-// The backticks are dropped; the action is optional (a path with no parenthesis
-// behind it is left with action: null), and anything that is neither "create"
-// nor "modify" is also left as null instead of sneaking through as it is.
-export function splitFiles(text) {
-  const paths = []
-  const re = /`([^`]+)`(?:\s*\(([^)]+)\))?/g
-  let m
-  while ((m = re.exec(text)) !== null) {
-    const path = m[1].trim()
-    if (!path) continue
-    const raw = m[2] ? m[2].trim() : null
-    const action = KNOWN_ACTIONS.includes(raw) ? raw : null
-    paths.push({ path, action })
-  }
-  return paths
-}
-
-// The four role labels of a block of the plan, with their path. Duplicated
-// from `plan-contract.js` (constant `ROLE_LABELS`), for the same reason as
-// `annotate`: this module does not depend on that one.
-export const ROLES = ['Current state', 'Contract', 'Call site', 'Final text']
-
-const ROLE_LABELS = [
-  ['Current state', /^Current state \(([^),]+)(?:,[^)]*)?\):\s*$/],
-  ['Contract', /^Contract \(([^),]+)(?:,[^)]*)?\):\s*$/],
-  ['Call site', /^Call site \(([^),]+)(?:,[^)]*)?\):\s*$/],
-  ['Final text', /^Final text \(([^),]+)(?:,[^)]*)?\):\s*$/],
-]
-
-function roleOf(line) {
-  for (const [role, re] of ROLE_LABELS) {
-    const m = re.exec(line)
-    if (m) return { role, path: m[1].trim() }
-  }
-  return null
-}
-
-// The body of the fence that follows a line, skipping the blank lines before
-// it. It is returned as it is, untrimmed: a `Final text` block is literal
-// content, and what has to be checked is precisely what is not touched.
-// Duplicated from `plan-contract.js`, for the same reason as `annotate`.
-function fenceBodyAfter(lines, from) {
-  let i = from
-  while (i < lines.length && lines[i].line.trim() === '') i++
-  if (i >= lines.length || !lines[i].fence || !lines[i].opens) return null
-  const body = []
-  for (let j = i + 1; j < lines.length; j++) {
-    if (lines[j].fence) return body.join('\n')
-    body.push(lines[j].line)
-  }
-  return null
-}
-
-// The test name of **TDD:** lives THE OTHER WAY ROUND than in **Tests:**: the
-// quote is INSIDE the parenthesis of the call —`test('nombre')`—, not outside
-// with a clarification behind it. Measured against task 1 of the real plan:
-// applying quotedNames to the whole paragraph returns 'jsdom' (the quote of
-// `environment: 'jsdom'`, further on in the same paragraph), because the sweep
-// by depth eats the real name along with the parentheses of `test(...)`. That
-// is why the inside of the first balanced parenthesis of the paragraph is
-// isolated first, and ON THAT inside quotedNames does hold — and it is still
-// the right sweep if the quoted name were to bring parentheses of its own.
-function firstParenBody(text) {
-  const start = text.indexOf('(')
-  if (start === -1) return null
-  let depth = 0
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '(') depth++
-    else if (text[i] === ')') {
-      depth--
-      if (depth === 0) return text.slice(start + 1, i)
-    }
-  }
-  return null
-}
-
-// "No TDD — <reason>" is a legitimate declaration: the task carries no
-// behaviour to put in red, and declares no test.
-const NO_TDD = /^No TDD\b/i
-
-function tddNameOf(text) {
-  if (NO_TDD.test(text)) return null
-  const body = firstParenBody(text)
-  const names = quotedNames(body === null ? text : body)
-  return names[0] || null
 }
 
 // Joins up the paragraph that starts at `from`: the marker's line and its
@@ -602,12 +514,6 @@ export function extractTasks(markdown) {
     let added = []
     let removed = []
     let testsDeclared = false
-    let files = []
-    let filesDeclared = false
-    let tddDeclared = false
-    let tddName = null
-    const blockPaths = []
-    const finalTexts = []
 
     body.forEach((l, i) => {
       if (!l.structural) return
@@ -625,33 +531,6 @@ export function extractTasks(markdown) {
           const split = splitTests(text)
           added = split.added
           removed = split.removed
-        }
-      }
-      if (t.startsWith(FILES) && !filesDeclared) {
-        filesDeclared = true
-        const { text } = paragraphFrom(body, i, FILES)
-        files = splitFiles(text)
-        // There is text and not one path came out: almost always because the
-        // paths do not go between backticks, which is the only thing
-        // `splitFiles` recognises. Without this warning, `declaredScope`
-        // (in ct-step.mjs) sees `files: []` and reports EVERYTHING touched as
-        // out of scope, with a message that does not mention the format — it
-        // fails on the safe side, but blindly.
-        if (text.trim() !== '' && files.length === 0) {
-          push(h.n, 'files-line', `task ${h.n} declares "${FILES}" but not one path was extracted: paths go between backticks, for example \`path/to/file.ext\` (create).`)
-        }
-      }
-      if (t.startsWith(TDD) && !tddDeclared) {
-        tddDeclared = true
-        const { text } = paragraphFrom(body, i, TDD)
-        tddName = tddNameOf(text)
-      }
-      const role = roleOf(l.line)
-      if (role) {
-        blockPaths.push(role)
-        if (role.role === 'Final text') {
-          const blockText = fenceBodyAfter(body, i + 1)
-          if (blockText !== null) finalTexts.push({ path: role.path, text: blockText })
         }
       }
     })
@@ -681,10 +560,6 @@ export function extractTasks(markdown) {
       commands: commands || [],
       testsAdded: added,
       testsRemoved: removed,
-      files,
-      tddName,
-      blockPaths,
-      finalTexts,
     }
   })
 
