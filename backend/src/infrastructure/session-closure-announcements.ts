@@ -16,9 +16,9 @@ export class SessionClosureAnnouncements extends ClosureAnnouncements {
     const which = task === null ? 'a task' : `task ${task}`
 
     return `The judge vetoed ${which} of ${repository.text}#${issue} three times and the run is `
-      + `closed at blocked-judge.${found}${where} Tell the person what failed and that another round is `
-      + `granted by ct-step's \`reopen\` verb, which takes --plan with the run's plan, --issue ${issue} and `
-      + '--instruction with what to change. Do not run it yourself.'
+      + `closed at blocked-judge.${found}${where} Tell the person what the judge found, ask them what `
+      + `to change, and send THEIR words with POST /slices/${issue}/another-round `
+      + '{repo, agent, instruction}. The instruction is theirs: you do not invent it.'
   }
 
   override async announce(closure: AnnouncedClosure): Promise<boolean> {
