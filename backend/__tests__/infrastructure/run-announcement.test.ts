@@ -179,6 +179,25 @@ class AnnouncementMother {
     })
   }
 
+  static judgeRoundCarryingThePackageAlone(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      dispatch: {
+        agent: 'ct-judge',
+        inputs: [{ role: 'package', kind: 'literal', path: '/repo/.agent/run-9/task-1-package.json' }],
+        response: { kind: 'file', path: '/repo/.agent/run-9/task-1-verdict.json' },
+      },
+      consuming: {
+        argv: [
+          'verdict', '/repo/.agent/run-9/task-1-verdict.json',
+          '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9',
+        ],
+      },
+    })
+  }
+
   static transitionCarryingDispatchInputs(): string {
     return JSON.stringify({
       version: 1,
@@ -299,6 +318,10 @@ describe('AnnouncedStep', () => {
   it('a judge round that announces no input leaves the round unread', () => {
     expect(AnnouncedStep.read(AnnouncementMother.judgeRoundAnnouncingNoInput())).toBeNull()
     expect(AnnouncedStep.read(AnnouncementMother.judgeRoundAnnouncingAnEmptyInputList())).toBeNull()
+  })
+
+  it('a judge round missing the brief leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingThePackageAlone())).toBeNull()
   })
 
   it('a slice-judge round with both optional roles absent stays readable', () => {
