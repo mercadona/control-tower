@@ -18,7 +18,9 @@ import {
   SLICE_JUDGE_TOOLS,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../domain/exceptions.ts'
-import { AnnouncedStep, RESPONSE_KIND_BY_STEP, type AnnouncedInput } from './run-announcement.ts'
+import {
+  AnnouncedStep, CONSUMING_VERB_BY_STEP, RESPONSE_KIND_BY_STEP, type AnnouncedInput,
+} from './run-announcement.ts'
 
 type RunRole = 'implement' | 'judge' | 'advise' | 'slice-judge' | 'reconcile'
 type RunResponse =
@@ -70,7 +72,7 @@ export class RunConsumingCommand {
   }
 
   static forEdits(argv: readonly string[]): RunConsumingCommand {
-    if (argv[0] !== 'reconcile') {
+    if (argv[0] !== CONSUMING_VERB_BY_STEP[STEPS.RECONCILE]) {
       throw new RunNotUnderstood(`the announced consuming argv does not consume a reconciliation: ${JSON.stringify(argv)}`)
     }
     return new RunConsumingCommand(argv, null)
@@ -255,7 +257,9 @@ export class RunDispatch {
   }
 
   static #consumesEdits(command: RunConsumingCommand | null): boolean {
-    return command !== null && command.responsePath === null && command.argv[0] === 'reconcile'
+    return command !== null
+      && command.responsePath === null
+      && command.argv[0] === CONSUMING_VERB_BY_STEP[STEPS.RECONCILE]
   }
 
   static #edits(asked: {

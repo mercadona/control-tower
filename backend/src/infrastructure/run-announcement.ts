@@ -1,7 +1,7 @@
 import { RunNotUnderstood } from '../domain/exceptions.ts'
 import {
-  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, INPUT_KINDS, MANDATORY_INPUT_ROLES_OF_STEP,
-  RESPONSE_KIND_OF_STEP,
+  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, CONSUMING_VERB_OF_STEP, INPUT_KINDS,
+  MANDATORY_INPUT_ROLES_OF_STEP, RESPONSE_KIND_OF_STEP,
 } from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
@@ -9,6 +9,8 @@ import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 export type { RunClosure }
 
 export const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
+
+export const CONSUMING_VERB_BY_STEP: Readonly<Record<string, string>> = CONSUMING_VERB_OF_STEP
 
 export type AnnouncedInput = {
   readonly role: string,
