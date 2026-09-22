@@ -1,11 +1,12 @@
 import {
   PlanAgentNotResumed, PlanProgressNotRead, RunNotAdvanced,
 } from '../../domain/exceptions.ts'
+import type { ClosureAnnouncements } from '../../domain/ports/closure-announcements.ts'
 import type { PlanCalls } from '../../domain/ports/plan-calls.ts'
 import type { PlanPublication } from '../../domain/ports/plan-publication.ts'
 import { RunEstablishment, type RunMachine } from '../../domain/ports/run-machine.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../../domain/value-objects/plan-call.ts'
-import type { RunInstruction } from '../../domain/value-objects/run-instruction.ts'
+import type { RunClosure, RunInstruction } from '../../domain/value-objects/run-instruction.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import { EscalationState } from '../../domain/value-objects/slice-escalation.ts'
@@ -25,21 +26,29 @@ export class DriveRunParams {
 }
 
 export class DriveRun {
+  static readonly BLOCKED_JUDGE = 'blocked-judge'
+
   readonly calls: PlanCalls
   readonly publication: PlanPublication
   readonly machine: RunMachine
   readonly step: ExecuteRunInstruction
   readonly messages: DeliverHeldMessages
   readonly escalations: ReadSliceEscalation
+  readonly announcements: ClosureAnnouncements | null
   readonly driving: Map<string, Promise<void>>
 
-  constructor({ calls, publication, machine, step, messages, escalations }: {
+  constructor({ calls, publication, machine, step, messages, escalations, announcements = null }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
     step: ExecuteRunInstruction,
     messages: DeliverHeldMessages,
     escalations: ReadSliceEscalation,
+    // Optional, and null by default: this is the only dependency of the drive
+    // that changes nothing about whether the run advances, and making it
+    // required would make every construction of a DriveRun carry a double for
+    // a message.
+    announcements?: ClosureAnnouncements | null,
   }) {
     this.calls = calls
     this.publication = publication
@@ -47,6 +56,7 @@ export class DriveRun {
     this.step = step
     this.messages = messages
     this.escalations = escalations
+    this.announcements = announcements
     this.driving = new Map()
   }
 
@@ -88,8 +98,31 @@ export class DriveRun {
         case 'delivered':
           return
         case 'refused':
+          await this.#announce(params.watch, instruction.work)
           throw new RunNotAdvanced(instruction.work.detail)
       }
+    }
+  }
+
+  // Only the judge's closure, because it is the only one a person can get out
+  // of today. The failure is swallowed the way RunPlanAgents.#announce swallows
+  // its own: a message that does not arrive must not turn a closed run into a
+  // crashed backend, and the closure is on disk and on the page regardless.
+  async #announce(watch: PlanWatch, refused: { closure: RunClosure | null }): Promise<void> {
+    const closure = refused.closure
+    if (this.announcements === null || closure === null) return
+    if (closure.state !== DriveRun.BLOCKED_JUDGE) return
+    try {
+      await this.announcements.announce({
+        repository: watch.repository,
+        issue: watch.issue.number,
+        task: closure.task,
+        findings: closure.findings,
+        verdict: closure.verdict,
+      })
+    } catch {
+      // Nothing to do and nothing to say here: the drive is about to throw
+      // RunNotAdvanced with the refusal's own detail, which is the real news.
     }
   }
 
