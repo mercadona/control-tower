@@ -1,5 +1,7 @@
 import { DriveRunParams, type DriveRun } from '../application/actions/drive-run.ts'
+import { RUN_STATES } from '../../../plugin/scripts/run-machine.js'
 import {
+  AnotherRoundNotGranted,
   PlanAgentNeverLaunched,
   PlanAgentNotLaunched,
   PlanAgentNotNamed,
@@ -49,6 +51,8 @@ type FixPlan = LocatedPlan & {
 }
 
 export class RunPlanAgents extends PlanAgents {
+  static readonly BLOCKED_JUDGE = RUN_STATES.BLOCKED_JUDGE
+
   readonly legacy: PlanAgents
   readonly records: PlanRecords
   readonly calls: PlanCalls
@@ -225,6 +229,38 @@ export class RunPlanAgents extends PlanAgents {
       RunPlanAgents.#throwFixFailure(cause)
     } finally {
       if (!handedOff) this.reservations.delete(watch.agent)
+    }
+  }
+
+  async anotherRound(asked: {
+    agent: string, issue: number, repository: RepositoryName, instruction: string,
+  }): Promise<void> {
+    const watch = await this.#fixWatch(asked)
+    let provenance: RunProvenanceValue
+    try {
+      provenance = await this.provenance(watch)
+    } catch (cause) {
+      RunPlanAgents.#throwAnotherRoundFailure(cause)
+    }
+    if (provenance === RunProvenance.LEGACY) {
+      throw new AnotherRoundNotGranted(
+        `conversation ${JSON.stringify(watch.agent)} predates the journal, so there is no round to grant`,
+      )
+    }
+    try {
+      const inspection = await this.machine.inspect(watch)
+      if (inspection.fact.kind !== 'uncertain'
+        || inspection.fact.closure === null
+        || inspection.fact.closure.state !== RunPlanAgents.BLOCKED_JUDGE) {
+        throw new AnotherRoundNotGranted(RunPlanAgents.#notBlockedJudgeDetail(watch.agent, inspection))
+      }
+      const instruction = await this.machine.anotherRound(watch, asked.instruction)
+      if (instruction.work.kind === 'refused') {
+        throw new AnotherRoundNotGranted(instruction.work.detail)
+      }
+      await this.#resumeIfNobodyDrives(watch)
+    } catch (cause) {
+      RunPlanAgents.#throwAnotherRoundFailure(cause)
     }
   }
 
@@ -547,6 +583,22 @@ export class RunPlanAgents extends PlanAgents {
       throw new PlanAgentNotResumed(cause.message)
     }
     throw cause
+  }
+
+  static #throwAnotherRoundFailure(cause: unknown): never {
+    if (cause instanceof RunNotAdvanced || cause instanceof RunNotUnderstood || cause instanceof PlanRecoveryConflict
+      || cause instanceof PlanAgentNotLaunched || cause instanceof PlanAgentNotNamed) {
+      throw new AnotherRoundNotGranted(cause.message)
+    }
+    throw cause
+  }
+
+  static #notBlockedJudgeDetail(agent: string, inspection: RunInspection): string {
+    const closedAt = inspection.fact.kind === 'uncertain' && inspection.fact.closure !== null
+      ? `closed at ${inspection.fact.closure.state}`
+      : 'no closure'
+    return `conversation ${JSON.stringify(agent)} is ${inspection.fact.kind} rather than `
+      + `${RunPlanAgents.BLOCKED_JUDGE} (${closedAt})`
   }
 }
 

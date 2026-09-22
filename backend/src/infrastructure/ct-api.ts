@@ -746,6 +746,7 @@ class CtApi {
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       sliceHeldChange: (changed) => planAgents.hold(changed),
+      anotherRound: (asked) => planAgents.anotherRound(asked),
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({

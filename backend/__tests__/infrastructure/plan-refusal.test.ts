@@ -3,6 +3,7 @@ import {
   PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse,
 } from '../../src/infrastructure/start-plan-route.ts'
 import { SliceMessageCollapse } from '../../src/infrastructure/slice-message-route.ts'
+import { AnotherRoundCollapse } from '../../src/infrastructure/another-round-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
@@ -49,11 +50,13 @@ describe('PlanCollapse', () => {
   ]
 
   const ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE = SliceMessageCollapse.declaredFailures()
+  const ANSWERED_BY_THE_ANOTHER_ROUND_ROUTE = AnotherRoundCollapse.declaredFailures()
 
   const startingAPlan = ([name, thrown]: [string, { prototype: object }]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&
     !FAMILIES.includes(name) &&
     !ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE.includes(name) &&
+    !ANSWERED_BY_THE_ANOTHER_ROUND_ROUTE.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PlanningActivityFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStatusFailure) &&

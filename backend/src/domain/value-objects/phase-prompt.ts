@@ -27,6 +27,15 @@ export class PhasePrompt {
     + 'Tell the person it is queued and name the ticket you got back. Do not ask them to choose between waiting '
     + 'and dropping it, do not send it again yourself, and never report a raw refusal code as the answer. '
     + 'When the backend tells you a kept change has gone out, say so to the person naming the ticket.'
+  static readonly ANOTHER_ROUND_AFTER_A_VETO =
+    "When a slice's run closes at blocked-judge, the judge has vetoed the same task three times and the "
+    + "run waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and "
+    + 'the agent, tell the person what the judge found, and ask them what to change. Send their words '
+    + 'with POST /slices/<issue>/another-round and {repo, agent, instruction}: the backend grants the '
+    + "round and the run carries on by itself. The instruction is the person's: you do not invent it, "
+    + 'you do not widen the task, and you do not grant a round nobody asked for. There is no limit on '
+    + 'rounds; the limit is the person. When the call is refused, tell the person what the refusal said '
+    + 'and do not retry it in a loop.'
   static readonly RECOVERY_CAPABILITIES =
     'For recovery of already-authorized work, use the origin of $CT_SESSION_HOOKS_URL as the backend URL. '
     + 'Read GET /active-plans and preserve each returned repo, issue number and agent identity. '
@@ -54,6 +63,7 @@ export class PhasePrompt {
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       ...PhasePrompt.#idea({ story, comment }),
       PhasePrompt.CHANGE_TO_A_SLICE,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
@@ -71,6 +81,7 @@ export class PhasePrompt {
       PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       `The milestone is "${milestone}" and its frozen execution spec is ${spec.path}.`,
       PhasePrompt.CHANGE_TO_A_SLICE,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }

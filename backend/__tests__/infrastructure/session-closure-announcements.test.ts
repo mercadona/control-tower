@@ -72,21 +72,31 @@ describe('telling the coordinating session that the judge closed a run', () => {
     expect(line).toContain('the zero amount is not covered')
   })
 
-  it('tells_the_session_to_pass_it_on_and_names_the_verb_and_the_flags_that_grant_another_round', () => {
+  it('names_the_call_that_grants_the_round_and_the_three_fields_it_takes', () => {
     const line = SessionClosureAnnouncements.lineFor(Asked.of())
 
-    expect(line).toContain('Tell the person')
-    expect(line).toContain('reopen')
-    expect(line).toContain('--plan')
-    expect(line).toContain('--issue 973')
-    expect(line).toContain('--instruction')
-    expect(line).toContain('Do not run it yourself')
+    expect(line).toContain('POST /slices/973/another-round')
+    expect(line).toContain('{repo, agent, instruction}')
   })
 
-  it('does_not_hand_over_a_command_to_paste_because_ct_step_refuses_a_reopen_without_its_plan', () => {
+  it('asks_the_session_to_put_the_question_to_the_person_instead_of_handing_over_a_command', () => {
     const line = SessionClosureAnnouncements.lineFor(Asked.of())
 
-    expect(line).not.toContain('ct-step reopen --issue')
+    expect(line).toContain('Tell the person what the judge found')
+    expect(line).toContain('ask them what to change')
+  })
+
+  it('says_the_instruction_is_the_persons_so_the_session_does_not_invent_one', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.of())
+
+    expect(line).toContain('The instruction is theirs: you do not invent it.')
+  })
+
+  it('no_longer_forbids_the_session_from_acting_because_acting_is_now_its_job', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.of())
+
+    expect(line).not.toContain('Do not run it yourself')
+    expect(line).not.toContain('ct-step')
   })
 
   it('a_veto_with_nothing_major_to_show_still_says_what_happened_and_where_to_look', () => {

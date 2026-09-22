@@ -199,3 +199,5 @@ export class EscalationFailure extends PlanFailure {}
 export class SliceEscalationNotRead extends EscalationFailure {}
 
 export class SliceEscalationNotUnderstood extends EscalationFailure {}
+
+export class AnotherRoundNotGranted extends PlanFailure {}

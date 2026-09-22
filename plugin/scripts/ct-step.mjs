@@ -387,6 +387,14 @@ if (existsSync(stateFile)) {
       // declaration is reached — calling it here is a temporal-dead-zone
       // `ReferenceError`. Same write `save()` performs, inlined.
       writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
+      // Same shape as the DELIVERED gate's own announcement (`:351-356`): a
+      // `transition` under the flag, before the prose and before the exit.
+      if (announcing) {
+        safeWrite(1, StepAnnouncement.transition({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: EXIT.OK,
+        }).text())
+      }
       out(`run reopened at task ${run.task} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
       process.exit(EXIT.OK)
     }

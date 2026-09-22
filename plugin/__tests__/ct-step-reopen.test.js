@@ -138,4 +138,25 @@ describe('reopen is the way a person gets a run out of the judge', () => {
     expect(refused.status).toBe(2)
     expect(refused.stderr).toContain('--instruction')
   })
+
+  it('under the output format flag it announces a transition that leaves the run open', () => {
+    blocked()
+
+    const reopened = ct('reopen', '--instruction', 'otra vuelta', '--output-format', 'json')
+    const announced = JSON.parse(reopened.stdout.trim().split('\n').pop())
+
+    expect(announced.kind).toBe('transition')
+    expect(announced.state).toBe('open')
+    expect(announced.outcome).toBe('done')
+    expect(announced.exit).toBe(0)
+  })
+
+  it('without the flag the stdout stays the prose a person reads', () => {
+    blocked()
+
+    const reopened = ct('reopen', '--instruction', 'otra vuelta')
+
+    expect(reopened.stdout).toContain('run reopened at task 1 of issue 7')
+    expect(reopened.stdout).not.toContain('{"version"')
+  })
 })

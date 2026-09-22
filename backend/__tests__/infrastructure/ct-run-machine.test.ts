@@ -100,6 +100,13 @@ class OracleMother {
     ]
   }
 
+  static reopenArgv(instruction: string): readonly string[] {
+    return [
+      OracleMother.CT_STEP, 'reopen', '--plan', OracleMother.PLAN, '--issue', '332',
+      '--instruction', instruction, '--output-format', 'json',
+    ]
+  }
+
   static consumingControlsArgv(): readonly string[] {
     return ['controls', '--plan', OracleMother.PLAN, '--issue', '332']
   }
@@ -426,6 +433,12 @@ class OracleMother {
     return '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"discarded","exit":3,'
       + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"implement","discards":6},'
       + '"detail":"6 discards in this run: it stops instead of going on asking for answers that cannot be read"}\n'
+  }
+
+  static judgeRefusal(): string {
+    return '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+      + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"judge","discards":0},'
+      + '"detail":"run blocked-judge: task 1/3, 0 discard(s)"}\n'
   }
 
   static output(code: number, stdout: string, stderr = ''): ProcessOutput {
@@ -1535,5 +1548,90 @@ describe('CtRunMachine after a refusal (#504)', () => {
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
     expect(await fixture.journal.entries(OracleMother.watch())).toHaveLength(3)
+  })
+})
+
+describe('CtRunMachine grants another round (#521)', () => {
+  const roots: string[] = []
+  const INSTRUCTION = 'keep the diff to the failing assertion this time'
+
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  const vetoedJournal = async (fixture: OracleFixture): Promise<string> => {
+    await fixture.establish()
+    const dispatched = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), dispatched,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.implementAnnouncement()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const vetoed = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(dispatched, OracleMother.reportArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), vetoed,
+      OracleMother.receipt(
+        OracleMother.output(1, OracleMother.judgeRefusal()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+    return vetoed
+  }
+
+  it('the grant runs the reopen verb as the successor of the last command', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-')))
+    roots.push(fixture.root)
+    const vetoed = await vetoedJournal(fixture)
+    fixture.answer(OracleMother.reopenArgv(INSTRUCTION), OracleMother.output(0, OracleMother.openTransition()))
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
+
+    const granted = await fixture.machine().anotherRound(OracleMother.watch(), INSTRUCTION)
+
+    expect(granted.work.kind).toBe('call')
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.reopenArgv(INSTRUCTION), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+    ])
+    const entries = await fixture.journal.entries(OracleMother.watch())
+    expect(entries).toHaveLength(4)
+    expect(JSON.parse(entries[2].request)).toMatchObject({
+      previous: vetoed, argv: OracleMother.reopenArgv(INSTRUCTION),
+    })
+  })
+
+  it('a reopen the plugin does not know journals a refusal with a null closure and stops there', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-unread-')))
+    roots.push(fixture.root)
+    await vetoedJournal(fixture)
+    fixture.answer(
+      OracleMother.reopenArgv(INSTRUCTION),
+      OracleMother.output(2, 'error: unknown option \'--instruction\'\n', 'ct-step: usage error\n'),
+    )
+
+    const refused = await fixture.machine().anotherRound(OracleMother.watch(), INSTRUCTION)
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step exited 2 without announcing a run state;'
+        + ' stdout: "error: unknown option \'--instruction\'\\n"; stderr: "ct-step: usage error\\n"',
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.reopenArgv(INSTRUCTION), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a run with no command at all refuses the grant instead of forking the chain', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-no-command-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+
+    await expect(fixture.machine().anotherRound(OracleMother.watch(), INSTRUCTION)).rejects.toThrow(
+      'another round has no command to grant from',
+    )
+
+    expect(fixture.asked).toEqual([])
   })
 })
