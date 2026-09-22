@@ -557,6 +557,7 @@ class CtApi {
       }),
       escalations: readSliceEscalation,
       announcements: new SessionClosureAnnouncements({ sessions: () => coordinatingSessions }),
+      stderr: (line) => process.stderr.write(line),
     })
     const planAgents = new RunPlanAgents({
       legacy: legacyPlanAgents,

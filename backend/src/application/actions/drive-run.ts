@@ -27,6 +27,7 @@ export class DriveRunParams {
 
 export class DriveRun {
   static readonly BLOCKED_JUDGE = 'blocked-judge'
+  static readonly VETOED = 'failed'
 
   readonly calls: PlanCalls
   readonly publication: PlanPublication
@@ -35,9 +36,13 @@ export class DriveRun {
   readonly messages: DeliverHeldMessages
   readonly escalations: ReadSliceEscalation
   readonly announcements: ClosureAnnouncements | null
+  readonly stderr: (line: string) => void
   readonly driving: Map<string, Promise<void>>
 
-  constructor({ calls, publication, machine, step, messages, escalations, announcements = null }: {
+  constructor({
+    calls, publication, machine, step, messages, escalations,
+    announcements = null, stderr = () => undefined,
+  }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
@@ -45,6 +50,7 @@ export class DriveRun {
     messages: DeliverHeldMessages,
     escalations: ReadSliceEscalation,
     announcements?: ClosureAnnouncements | null,
+    stderr?: (line: string) => void,
   }) {
     this.calls = calls
     this.publication = publication
@@ -53,6 +59,7 @@ export class DriveRun {
     this.messages = messages
     this.escalations = escalations
     this.announcements = announcements
+    this.stderr = stderr
     this.driving = new Map()
   }
 
@@ -103,8 +110,8 @@ export class DriveRun {
   async #announce(watch: PlanWatch, refused: { closure: RunClosure | null }): Promise<void> {
     const closure = refused.closure
     if (this.announcements === null || closure === null) return
-    if (closure.state !== DriveRun.BLOCKED_JUDGE) return
-    await DriveRun.#whetherOrNotItArrives(this.announcements.announce({
+    if (closure.state !== DriveRun.BLOCKED_JUDGE || closure.outcome !== DriveRun.VETOED) return
+    await this.#carriesOnWhetherOrNotItArrives(watch, this.announcements.announce({
       repository: watch.repository,
       issue: watch.issue.number,
       task: closure.task,
@@ -113,8 +120,18 @@ export class DriveRun {
     }))
   }
 
-  static #whetherOrNotItArrives(announcing: Promise<void>): Promise<void> {
-    return announcing.catch(() => undefined)
+  async #carriesOnWhetherOrNotItArrives(watch: PlanWatch, announcing: Promise<boolean>): Promise<void> {
+    try {
+      if (await announcing) return
+      this.stderr(DriveRun.#unheard(watch, 'no coordinating session was live to be told'))
+    } catch (cause) {
+      this.stderr(DriveRun.#unheard(watch, cause instanceof Error ? cause.message : String(cause)))
+    }
+  }
+
+  static #unheard(watch: PlanWatch, why: string): string {
+    return `drive run: ${watch.repository.text}#${watch.issue.number} closed at ${DriveRun.BLOCKED_JUDGE} `
+      + `and the closure was not announced: ${why}\n`
   }
 
   async #waiting(watch: PlanWatch): Promise<boolean> {

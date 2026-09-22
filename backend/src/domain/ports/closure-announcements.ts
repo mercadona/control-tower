@@ -9,7 +9,7 @@ export type AnnouncedClosure = {
 }
 
 export class ClosureAnnouncements {
-  async announce({ repository, issue, task }: AnnouncedClosure): Promise<void> {
+  async announce({ repository, issue, task }: AnnouncedClosure): Promise<boolean> {
     throw new Error(
       `${this.constructor.name} must implement announce({ repository, issue, task, findings, verdict }), `
       + `asked for ${repository.text}#${issue} task ${task}`

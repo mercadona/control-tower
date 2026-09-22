@@ -299,15 +299,23 @@ class RejectingRunMachine extends RunMachine {
 class AnnouncementsSpy extends ClosureAnnouncements {
   readonly announced: AnnouncedClosure[] = []
   readonly failing: boolean
+  readonly heard: boolean
 
-  constructor(failing: boolean = false) {
+  constructor(failing: boolean = false, heard: boolean = true) {
     super()
     this.failing = failing
+    this.heard = heard
   }
 
-  override async announce(closure: AnnouncedClosure): Promise<void> {
+  static withNobodyListening(): AnnouncementsSpy {
+    return new AnnouncementsSpy(false, false)
+  }
+
+  override async announce(closure: AnnouncedClosure): Promise<boolean> {
     this.announced.push(closure)
     if (this.failing) throw new Error('the session went away')
+
+    return this.heard
   }
 }
 
@@ -328,6 +336,7 @@ class DriveRunMother {
     drainCalls?: PlanCalls,
     escalations?: SliceEscalations,
     announcements?: ClosureAnnouncements,
+    stderr?: (line: string) => void,
   }) {
     this.trace = asked.trace ?? []
     this.machine = asked.machine
@@ -349,6 +358,7 @@ class DriveRunMother {
         ? QuietEscalations.reader()
         : new ReadSliceEscalation({ escalations: asked.escalations }),
       announcements: asked.announcements ?? null,
+      stderr: asked.stderr ?? (() => undefined),
     })
   }
 
@@ -356,10 +366,11 @@ class DriveRunMother {
     return this.driver.execute(new DriveRunParams({ watch: RunMother.WATCH, planner: RunMother.PLANNER }))
   }
 
-  static refusing({ detail, closure, announcements }: {
+  static refusing({ detail, closure, announcements, stderr }: {
     detail: string,
     closure: RunClosure,
     announcements: ClosureAnnouncements,
+    stderr?: (line: string) => void,
   }): { drive: () => Promise<void> } {
     const { driver } = new DriveRunMother({
       machine: new RunMachineDouble({
@@ -367,6 +378,7 @@ class DriveRunMother {
         opening: new RunInstruction({ kind: 'refused', detail, closure }),
       }),
       announcements,
+      stderr,
     })
     const watch = RunMother.WATCH
     const planner = RunMother.PLANNER
@@ -683,5 +695,67 @@ describe('a run the judge closed', () => {
     })
 
     await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+  })
+
+  it('a run that spent its discards is not announced, because reopen refuses a closure the judge did not take', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 6 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([])
+  })
+
+  it('an announcement that throws leaves a line on stderr naming the slice', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: new AnnouncementsSpy(true),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toContain(`${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number}`)
+    expect(written[0]).toContain('the session went away')
+  })
+
+  it('a closure nobody was live to hear leaves a line on stderr too', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: AnnouncementsSpy.withNobodyListening(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toContain('no coordinating session was live')
+  })
+
+  it('an announcement that arrives writes nothing to stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+      },
+      announcements: new AnnouncementsSpy(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([])
   })
 })

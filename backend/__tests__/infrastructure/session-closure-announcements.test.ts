@@ -26,7 +26,8 @@ class Asked {
   static REPOSITORY = new RepositoryName('owner/name')
   static ISSUE = 973
   static TASK = 2
-  static FINDINGS = '- [high] src/pago.ts:41: the amount is rounded before the discount'
+  static FINDINGS = '- [high] src/pago.ts:41: the amount is rounded before the discount\n'
+    + '- [medium] src/pago.ts:88: the zero amount is not covered'
   static VERDICT = '.agent/run-973/task-2-verdict-3.json'
 
   static of(over: Partial<ReturnType<typeof Asked.full>> = {}) {
@@ -64,12 +65,28 @@ describe('telling the coordinating session that the judge closed a run', () => {
     expect(SessionClosureAnnouncements.lineFor(Asked.of())).not.toContain('\n')
   })
 
-  it('tells_the_session_to_pass_it_on_and_names_the_command_that_grants_another_round', () => {
+  it('flattens_every_major_finding_into_that_one_line', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.of())
+
+    expect(line).toContain('the amount is rounded before the discount; [medium]')
+    expect(line).toContain('the zero amount is not covered')
+  })
+
+  it('tells_the_session_to_pass_it_on_and_names_the_verb_and_the_flags_that_grant_another_round', () => {
     const line = SessionClosureAnnouncements.lineFor(Asked.of())
 
     expect(line).toContain('Tell the person')
-    expect(line).toContain('ct-step reopen --issue 973')
+    expect(line).toContain('reopen')
+    expect(line).toContain('--plan')
+    expect(line).toContain('--issue 973')
+    expect(line).toContain('--instruction')
     expect(line).toContain('Do not run it yourself')
+  })
+
+  it('does_not_hand_over_a_command_to_paste_because_ct_step_refuses_a_reopen_without_its_plan', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.of())
+
+    expect(line).not.toContain('ct-step reopen --issue')
   })
 
   it('a_veto_with_nothing_major_to_show_still_says_what_happened_and_where_to_look', () => {
@@ -102,10 +119,17 @@ describe('telling the coordinating session that the judge closed a run', () => {
     expect(sessions.announced).toEqual([SessionClosureAnnouncements.lineFor(Asked.of())])
   })
 
-  it('a_session_that_is_not_there_is_not_an_error_because_the_run_is_closed_all_the_same', async () => {
+  it('a_session_that_is_not_there_is_not_an_error_but_it_answers_that_it_did_not_arrive', async () => {
     const sessions = new SessionsDouble(false)
     const announcements = new SessionClosureAnnouncements({ sessions: () => sessions.asSessions })
 
-    await expect(announcements.announce(Asked.of())).resolves.toBeUndefined()
+    await expect(announcements.announce(Asked.of())).resolves.toBe(false)
+  })
+
+  it('a_live_session_answers_that_the_line_arrived_so_the_caller_has_nothing_to_report', async () => {
+    const sessions = new SessionsDouble()
+    const announcements = new SessionClosureAnnouncements({ sessions: () => sessions.asSessions })
+
+    await expect(announcements.announce(Asked.of())).resolves.toBe(true)
   })
 })
