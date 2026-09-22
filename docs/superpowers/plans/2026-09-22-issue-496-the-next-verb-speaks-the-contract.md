@@ -83,8 +83,9 @@ under the flag.
 | What `DispatchProse` loses | `read` and `stepOf`, with no caller left anywhere |
 | What the census may do | grow a module and a family; it never narrows its list or its walk |
 | The feature flag | none; this repository's `flag-discipline` default is off |
-| The one order the numbers do not give | tasks 8, 9 and 10 land before task 5, which gives the announced road the traffic |
-| What the announced road owes | every refusal the prose road made: the roles, the verb and the elements of an argv |
+| The one order the numbers do not give | tasks 8 to 11 land before task 5, which gives the announced road the traffic |
+| What the announced road owes | every refusal the prose road made: the roles, the verb, the manifest and an argv's elements |
+| What `manifest` does inside `OracleBoundary.read` | it stays, because task 11 compares the announced argv with it |
 
 ## 3. Reference patterns
 
@@ -167,9 +168,15 @@ What stays unmeasured on purpose: `dispatch.agent`. No reader takes it, so no te
 it from the backend. `plugin/__tests__/ct-step-announcement-real-process.test.js` already pins
 it on the plugin side.
 
-Tasks 8, 9 and 10 drive their cases from `OracleMother` and from `AnnouncedStep` directly. None
-of them adds a real-process file. The real oracle never announces an incomplete round, a foreign
-verb or a number inside an argv, so only a literal announcement reaches those refusals.
+Tasks 8 to 11 drive their cases from `OracleMother` and from `AnnouncedStep` directly. None of
+them adds a real-process file. The real oracle never announces an incomplete round, a foreign
+verb, a foreign issue or a number inside an argv. So only a literal announcement reaches those
+refusals.
+
+One dependency `run-dispatch-real-process.test.ts` leans on, and does not declare: its injection
+of a response path relies on `response.path` before `consuming.argv[1]` in the serialization. A
+flipped key order would keep that case green over something else. D-12 freezes the
+announcement's shape, so the order holds. No task of this plan changes that reliance.
 
 ## 7. Tasks
 
@@ -330,13 +337,22 @@ them. In `run-plan-recovery.test.ts`, the two hand-written implement transcripts
 `FiniteBridge` answer `StepAnnouncement.dispatch(...).text()` with the same response path they
 carry today.
 
+**One case turns on this mother and splits here.**
+`'both prose readers name the same step for the same bytes'` is its only consumer. Its third
+assertion is the only one in the backend over an announced slice-judge round that answers
+`call`. Its two prose-reader assertions cannot survive a JSON mother, and the case below them
+already measures both readers. So those two go, the `call` assertion stays, and the case becomes
+`it('an announced slice-judge round answers with a call')`.
+
 **TDD:** No TDD — the fixtures move the transport of cases that already exist, and every
 assertion keeps its literal. The fixture swap is the red step. A wrong path or a wrong verb
 reddens the case that reads it.
 
-**Tests:** added: none. Removed on purpose: none. Kept with a new transport, in
-`backend/__tests__/infrastructure/ct-run-machine.test.ts`:
-`'a command request precedes execution and its receipt precedes the next effect'`,
+**Tests:** added, in `ct-run-machine.test.ts`:
+`'an announced slice-judge round answers with a call'`, which is the third assertion of
+`'both prose readers name the same step for the same bytes'`, split out before that case loses
+its mother. Removed on purpose: the two prose-reader assertions of that case. Kept with a new
+transport: `'a command request precedes execution and its receipt precedes the next effect'`,
 `'the announced controls step hands over the argv it published'`,
 `'the announced reconciler round answers with a call and not with a command'`.
 
@@ -470,9 +486,9 @@ Current state (backend/src/infrastructure/ct-run-machine.ts, lines 386-388):
 
 `OracleBoundary.read` refuses when `AnnouncedStep.read` answers `null`, with the words it
 already prints. `step` becomes `round.step`. `#fileCall` goes, and `#plainCommand` folds into
-`#announcedCommand` under the name `#programCommand(stdout, round, ticket, step, verb)`, which
-keeps the `commands === null` clause. `manifest` then has no reader inside `OracleBoundary.read`
-and leaves its five call sites. `StepProse` and `ConsumingProse` go whole from
+`#announcedCommand` under the name `#programCommand(stdout, round, ticket, step, manifest)`,
+which keeps the `commands === null` clause. **`manifest` stays**, because task 11 compares the
+announced argv with it. `StepProse` and `ConsumingProse` go whole from
 `run-announcement.ts`, and `run-dispatch.ts` drops `#read` and the prose half of
 `#reconciliationInputs`.
 
@@ -487,12 +503,11 @@ turns them green. `it('the_census_fires_on_a_tree_that_carries_every_fragment_of
 grows one synthetic module for the new family.
 
 **Tests:** added: none. Removed on purpose:
-`'a printed consuming command that names another issue is refused'`,
-`'a transcript that prints no consuming command at all is refused'`,
-`'both prose readers name the same step for the same bytes'`,
+`'a printed consuming command that names another issue is refused'`, whose announced heir task
+11 already added, `'a transcript that prints no consuming command at all is refused'` and
 `'a step name with a digit is not a declared step'`. Also the two cases of
-`describe('StepProse')` in `backend/__tests__/infrastructure/run-announcement.test.ts`. Nothing
-measures that road now.
+`describe('StepProse')` in `run-announcement.test.ts`. Task 3 already split the one case that
+measured a `call` too, so none goes with this cut.
 
 **Verification:** Every census is green over the real tree and red over the synthetic one. The
 graph typechecks, so no caller of a cut member survives.
@@ -637,7 +652,8 @@ its step consumes.
 
 **Files:** `plugin/scripts/step-announcement.js` (modify), `plugin/scripts/ct-step.mjs`
 (modify), `backend/src/infrastructure/ct-run-machine.ts` (modify),
-`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify)
+`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify),
+`backend/__tests__/infrastructure/run-dispatch-real-process.test.ts` (modify)
 
 **This task lands before task 5 too.** §9.13 carries the measurement and the history that make
 it this slice's business rather than a later issue.
@@ -669,6 +685,11 @@ already share.
 `#dispatchCall` adds `round.argv[0] !== CONSUMING_VERB_OF_STEP[step]` to the clause it has, so
 its refusal keeps its words. `#plainCommand` and `#announcedCommand` drop their `verb` parameter
 and read the map, which retires the four string literals of the switch above them.
+
+**One existing sub-part starts measuring its own name here.** The `different structured verb`
+case of `run-dispatch-real-process.test.ts` injects the verb alone from now on. Today it refuses
+on the response path, which it shares with the `conflicting response` sub-part beside it,
+because a verb-only injection would seal rather than refuse.
 
 **TDD:** `it('an implement round that announces the judge verb is refused')`. Arrange the
 implement announcement with a consuming argv of `['verdict', <its own report path>, …]`, which
@@ -755,6 +776,73 @@ cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-an
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — the five roles resolve without the removed guard
 test "$(grep -c 'RESPONSE_KIND_OF_STEP' backend/src/infrastructure/ct-run-machine.ts)" -eq 0   # expected: exit 0 — the duplicate declaration is out
 ```
+### Task 11 — the announced argv names the run it belongs to
+
+**Objective:** Both announced roads refuse a consuming argv whose plan or issue is not the
+manifest's.
+
+**Files:** `backend/src/infrastructure/ct-run-machine.ts` (modify),
+`backend/__tests__/infrastructure/ct-run-machine.test.ts` (modify)
+
+**This task lands before task 5 too.** §9.15 carries the two measurements, which two agents
+took hours apart without either seeing the other's work.
+
+Current state (backend/src/infrastructure/ct-run-machine.ts, lines 407-408):
+
+```ts
+    const argv = [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)]
+    if (!ConsumingProse.carries(stdout, `ct-step ${argv.join(' ')}`)) {
+```
+
+Contract (backend/src/infrastructure/ct-run-machine.ts):
+
+```ts
+// on OracleBoundary:
+  static #namesThisRun(argv: readonly string[], manifest: RunManifest): boolean
+  static #dispatchCall(
+    stdout: string,
+    round: AnnouncedStep,
+    ticket: string,
+    step: string,
+    manifest: RunManifest,
+  ): OracleResult
+```
+
+The prose road builds the argv it expects out of the manifest and refuses every other. The
+announced road runs the argv the announcement carries, and `#dispatchCall` does not even take
+the manifest. So an announced round may name another plan or another issue, and the machine runs
+it.
+
+`#namesThisRun` reads `--plan` and `--issue` by flag name and never by position, then compares
+them with `manifest.plan` and `String(manifest.issue)`. A flag that is absent answers `false`.
+`#dispatchCall` and `#announcedCommand` both add it to the clause they have, so their refusals
+keep their words. `#dispatchCall` takes the manifest as its fifth argument, which
+`OracleBoundary.read` already holds.
+
+**Task 6 must not undo this.** Its text keeps `manifest` inside `OracleBoundary.read`, because
+this task gives it a reader there.
+
+**TDD:** `it('an announced slice-judge round that names another issue is refused')`. Arrange the
+slice-judge announcement with `--issue 331` against a manifest of 332, which answers `call`
+today. Expect `refused`, and expect `fixture.asked` to hold the `next` call alone. The boundary
+beside it: `it('an announced controls round that names another plan is refused')`, which covers
+the program road.
+
+**Tests:** added, in `ct-run-machine.test.ts`:
+`'an announced slice-judge round that names another issue is refused'`,
+`'an announced controls round that names another plan is refused'`. The second is the announced
+heir of `'a printed consuming command that names another issue is refused'`, which task 6
+deletes with the prose road. Removed on purpose: none.
+
+**Verification:** Both roads refuse an argv of another run. The real oracle still drives the
+chain end to end.
+
+```bash
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine.test.ts   # expected: exit 0 — both roads compare the manifest
+cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/ct-run-machine-real-process.test.ts   # expected: exit 0 — the real oracle still drives the chain
+cd backend && npm run typecheck   # expected: exit 0 — the widened signature resolves
+```
+
 ## 8. Global verification
 
 The eight commands below measure the slice end to end. I ran all eight on `2144dd17`, the tip
@@ -849,12 +937,12 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     measured three of them. Against the working tree at `f38f459f` one block fails: task 2's own
     citation of `run-dispatch.ts`, whose three lines task 2 rewrote when it landed. Against
     `2144dd17`, the tree I wrote this plan on, four fail. All four sit in tasks 8 to 10, which
-    cite what tasks 1 and 2 built. Against `916df6f3`, the merge-base with `origin/main`, sixteen
-    fail, because `run-announcement.ts` and `step-prose.js` do not exist there at all.
+    cite what tasks 1 and 2 built. Against `916df6f3`, the merge-base with `origin/main`,
+    seventeen fail: `run-announcement.ts` and `step-prose.js` do not exist there at all.
     
     No citation moves for that. A relabel would take a block out of the one check that proves
     the plan described the real repo. A rewrite would make a "before" block describe an "after"
-    tree. This is what a plan of ten tasks costs when each task cites what the one before it
+    tree. This is what a plan of eleven tasks costs when each task cites what the one before it
     built. The sibling plans of issue 496 carry the same entries, for the same reason. So whoever
     runs `--check-plan` from here on reads its output as a list, not as a verdict.
 12. **The mandatory-role hole, measured three ways.** Provenance: task 1's review, task 2's
@@ -875,6 +963,20 @@ test -z "$(git status --porcelain)"   # expected: exit 0 — every task committe
     that claimed otherwise. The announced road inherited the gap, and task 5 makes that road the
     only one. So the gap becomes the whole surface. Task 9 closes it with the partition
     `ct-step.mjs` already carries.
+15. **The announced road never cross-checked the manifest, and two agents found that
+    independently.** Provenance: task 3's review, an agent working on the stale-verdict fix hours
+    earlier, and my own run. The second agent named it the one thing it most wanted a look at,
+    and it had not seen the first.
+    
+    Task 3's review mutated `--issue 332` to `331` in the announced controls argv. Seven cases
+    went red, all of them `unlisted node request`: the machine accepted the argv and tried to run
+    it. The same mutation on the slice-judge argv gave zero red. I measured the reason on
+    `f38f459f`: an announced slice-judge round carrying `--issue 331` passes all three checks of
+    `#dispatchCall`, whose signature takes no manifest at all.
+    
+    The prose road does compare, at `ct-run-machine.ts:407-408`, and its only case feeds
+    `controlsAnnouncementOfAnotherIssue()` — a mother task 6 deletes with the road. Task 11
+    closes it, and its own case is that coverage's announced heir.
 14. **`#stringArray` promised more than it checked.** Provenance: task 1's review named it the
     one Minor to fix before merge, and I measured it. A `consuming.argv` of `[1, 2]` comes back
     as `argv=[1,2]` under a type that says `readonly string[]`. `CommandRequest.read` catches a
