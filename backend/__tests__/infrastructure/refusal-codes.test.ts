@@ -3,6 +3,7 @@ import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../sr
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
+import { PlanningRequestOutcome, PlanningCollapse } from '../../src/infrastructure/planning-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
 import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
@@ -30,6 +31,7 @@ class RequestVocabularies {
       ...Object.values(MilestonePlanOutcome),
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
+      ...Object.values(PlanningRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
       ...Object.values(SessionStreamOutcome),
       ...Object.values(SessionInputOutcome),
@@ -63,6 +65,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
     EpicGroomOutcome.SPEC_NOT_FROZEN,
     CoordinatingSessionOutcome.ALREADY_LIVE,
     CoordinatingSessionOutcome.OPENING,
+    PlanningRequestOutcome.NOT_WATCHED,
   ])
 }
 
@@ -89,6 +92,7 @@ class EveryCodeTheApiEmits {
       ...new Set(RequestVocabularies.codes()),
       ...PlanCollapse.declaredCodes(),
       ...ProgressCollapse.declaredCodes(),
+      ...PlanningCollapse.declaredCodes(),
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
       ...EscalationCollapse.declaredCodes(),

@@ -72,6 +72,10 @@ export class ClaudePlanCalls extends PlanCalls {
   }
 
   async planningFor(watch: PlanWatch): Promise<StartedPlanCall> {
+    return (await this.planningRecordFor(watch)).call
+  }
+
+  async planningRecordFor(watch: PlanWatch): Promise<RecordedCall> {
     const calls = await this.#history(watch)
     const planners = calls.filter((recorded) => recorded.purpose === 'plan')
     if (planners.length !== 1) {
@@ -79,7 +83,7 @@ export class ClaudePlanCalls extends PlanCalls {
         `conversation ${JSON.stringify(watch.agent)} has ${planners.length} recorded planner calls`
       )
     }
-    return planners[0].call
+    return planners[0]
   }
 
   async implementationFor(watch: PlanWatch): Promise<StartedPlanCall | null> {

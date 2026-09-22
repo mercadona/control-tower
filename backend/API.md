@@ -15,7 +15,7 @@ code. The `curl` lines exercise those public shapes.
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
 | Endpoint authority | `backend/src/infrastructure/api-server.ts` |
-| Endpoints | 20 (`POST` 10, `GET` 10) |
+| Endpoints | 21 (`POST` 10, `GET` 11) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -259,6 +259,61 @@ frame does not close the stream; the next poll may succeed.
 
 ```
 curl -N 'http://127.0.0.1:8787/plan-events/7?repo=owner/name'
+```
+
+---
+
+## `GET /planning-progress/:issue?repo=owner/name`
+
+What the plan agent is doing while it plans, before the plan is written. The
+plan agent's own `stream-json` output already carries this — every tool call
+and every text block the agent produces — but nothing read it until the call
+ended, so a person watching the page saw only the agent's id and its branch for
+as long as the agent kept working. This route polls the same growing stream
+file the plan agent's process writes, and reports where it is now.
+
+Poll it; there is no stream. Only `repo` is required — the watch is resolved
+through the same in-memory registry `plan-events` uses, and the stream file's
+path comes from this process's own state root, never from the caller.
+
+**200 OK, while the agent is still running**
+
+```json
+{"state":"running","running_ms":372000,"tool_calls":41,
+ "last_tool":{"name":"Read","argument":"plugin/conventions/testing.md"},
+ "last_text":"Ahora escribo el plan"}
+```
+
+**200 OK, once the call has ended**
+
+```json
+{"state":"finished","running_ms":614000,"tool_calls":57,
+ "last_tool":{"name":"Write","argument":"docs/plan-500.md"},
+ "last_text":"El plan queda escrito."}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `state` | `running` \| `finished` | whether the planning call is still going |
+| `running_ms` | number | now minus the call's start; once `finished`, its whole wall duration |
+| `tool_calls` | number | tool calls seen so far; `0`, never `null` |
+| `last_tool` | `{name, argument}` \| `null` | `null` until the first tool call is seen; `argument` is `null` for a tool with no string input |
+| `last_text` | string \| `null` | the agent's last text block; `null` until one is seen |
+
+Once `state` is `finished` the body stops changing: `tool_calls`, `last_tool`
+and `last_text` hold whatever they last read, and the client can stop polling.
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `malformed-planning-issue` | 400 | `:issue` is not a positive whole number |
+| `malformed-repo` | 400 | `repo` is missing or not `owner/name` (shared on purpose with `plan-events`) |
+| `not-watched` | 400 | this process started no plan for that issue (shared on purpose with `plan-events`) |
+| `planning-progress-not-read` | 400 | the conversation has no single recorded planning call, or the stream could not be read |
+
+```
+curl -s 'http://127.0.0.1:8787/planning-progress/7?repo=owner/name'
 ```
 
 ---
@@ -2021,6 +2076,7 @@ curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/co
 |---|---|---|
 | `POST /start-plan` | `frontend/src/app/start-plan/client.ts` | `StartPlan.types.ts` |
 | `GET /plan-events` | `frontend/src/app/plan-events/client.ts` | `PlanEvents.types.ts` |
+| `GET /planning-progress` | `frontend/src/app/planning-progress/client.ts` | `PlanningProgress.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
 | `GET /implement-history` | `frontend/src/app/implement-history/client.ts` | `ImplementHistory.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
