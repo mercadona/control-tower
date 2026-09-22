@@ -37,6 +37,19 @@ describe('useImplementProgress', () => {
     expect(fetching).toHaveBeenCalledTimes(2)
   })
 
+  it('should keep the active cadence while publication is still pending', async () => {
+    const fetching = answerWith(ImplementProgressMother.publishing())
+    vi.stubGlobal('fetch', fetching)
+    vi.useFakeTimers()
+
+    renderHook(() => useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO))
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(3000)
+
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
   it('should keep polling once in review, because a reviewer can send it back to fixing', async () => {
     const fetching = answerWith(ImplementProgressMother.inReview())
     vi.stubGlobal('fetch', fetching)

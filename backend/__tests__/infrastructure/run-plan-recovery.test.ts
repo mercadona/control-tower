@@ -15,6 +15,7 @@ import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../src/application/actions/execute-run-instruction.ts'
 import { PlanRecoveryConflict } from '../../src/domain/exceptions.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
+import { RunDelivery } from '../../src/domain/ports/run-delivery.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
@@ -31,6 +32,7 @@ import { RegisteredCheckout } from '../../src/domain/value-objects/registered-ch
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import type { RunDeliveryInspection } from '../../src/domain/value-objects/run-delivery.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
@@ -57,6 +59,7 @@ import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+import { CompletedRunDelivery } from '../run-delivery-double.ts'
 
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
@@ -225,6 +228,7 @@ class RecoveryAgents extends RunPlanAgents {
       calls,
       publication,
       machine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport,
         machine,
@@ -251,6 +255,7 @@ class RecoveryAgents extends RunPlanAgents {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements: new ClaudeRunMeasurements({
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         calls: transport,
@@ -327,6 +332,47 @@ class RecoveryLegacy extends RecordedPlanRecovery {
   override async recover(): Promise<string | null> {
     this.recoveries += 1
     return null
+  }
+}
+
+class StartupRunDelivery extends RunDelivery {
+  readonly refuse: boolean
+  deliveries = 0
+  released = false
+
+  constructor(refuse = false) {
+    super()
+    this.refuse = refuse
+  }
+
+  override async deliver(): Promise<void> {
+    this.deliveries += 1
+    if (this.refuse) throw new Error('checked release refused at startup')
+    this.released = true
+  }
+
+  override async inspect(): Promise<RunDeliveryInspection> {
+    return this.released
+      ? { kind: 'delivered', pullRequest: { number: 31, url: 'https://github.com/owner/name/pull/31' } }
+      : { kind: 'publishing', pullRequest: null, diagnostic: this.refuse ? 'checked release refused at startup' : null }
+  }
+}
+
+class HeldRunDelivery extends RunDelivery {
+  deliveries = 0
+  #release: (() => void) | null = null
+
+  override async deliver(): Promise<void> {
+    this.deliveries += 1
+    await new Promise<void>((resolve) => { this.#release = resolve })
+  }
+
+  override async inspect(): Promise<RunDeliveryInspection> {
+    return { kind: 'publishing', pullRequest: null, diagnostic: null }
+  }
+
+  finish(): void {
+    this.#release?.()
   }
 }
 
@@ -454,7 +500,10 @@ class ProjectionScenario {
   readonly legacy: RecoveryLegacy
   readonly recovery: RunPlanRecovery
 
-  constructor(watches: readonly PlanWatch[] = [RecoveryMother.watch()]) {
+  constructor(
+    watches: readonly PlanWatch[] = [RecoveryMother.watch()],
+    delivery: RunDelivery = new CompletedRunDelivery(),
+  ) {
     this.watches = watches
     this.records = new RecoveryRecords(watches)
     this.calls = new RecoveryCalls()
@@ -474,6 +523,7 @@ class ProjectionScenario {
       machine: this.machine,
       journal: this.journal,
       agents: this.agents,
+      delivery,
       checkouts: this.checkouts,
       activePlans: this.activePlans,
       reviews: this.reviews,
@@ -510,9 +560,65 @@ class ProjectionScenario {
       receipt: { kind: 'present', text: '{}' },
     })))
   }
+
+  async settlePublications(): Promise<void> {
+    await Promise.all([...this.recovery.publications.values()].map((publication) => publication.work))
+  }
 }
 
 describe('RunPlanRecovery projection', () => {
+  it('continues publication during startup without a GET and starts review only after checked delivery', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new StartupRunDelivery()
+    const tested = new ProjectionScenario([watch], delivery)
+
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
+    expect(tested.machine.effects.commands).toBe(0)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: false })
+
+    await tested.settlePublications()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
+    expect(tested.reviews.started).toEqual([watch])
+  })
+
+  it('reads an in-flight publication without waiting for it to finish', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new HeldRunDelivery()
+    const tested = new ProjectionScenario([watch], delivery)
+
+    expect(await tested.recovery.recover()).toBeNull()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: false })
+    delivery.finish()
+  })
+
+  it('does not start the review observer when startup publication cannot prove checked delivery', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new StartupRunDelivery(true)
+    const tested = new ProjectionScenario([watch], delivery)
+
+    expect(await tested.recovery.recover()).toBeNull()
+    await tested.settlePublications()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
+    expect(tested.machine.effects.commands).toBe(0)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.activePlans.known()[0]).toMatchObject({
+      phase: 'uncertain',
+      diagnostic: 'checked release refused at startup',
+      recovery: { action: 'continue' },
+    })
+  })
+
   it('restart recovers a driver identity without replaying an unowned call', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-run-recovery-unowned-'))
     try {
@@ -595,6 +701,7 @@ describe('RunPlanRecovery projection', () => {
         machine: restarted.machine,
         journal: restarted.journal,
         agents: restarted.agents,
+        delivery: new CompletedRunDelivery(),
         checkouts: new RecoveryCheckouts(),
         activePlans,
         reviews,
@@ -955,6 +1062,7 @@ describe('RunPlanRecovery projection', () => {
       machine: tested.machine,
       journal: tested.journal,
       agents: tested.agents,
+      delivery: new CompletedRunDelivery(),
       checkouts: tested.checkouts,
       activePlans: tested.activePlans,
       reviews,
@@ -1032,6 +1140,7 @@ describe('RunPlanRecovery projection', () => {
       machine: tested.machine,
       journal: tested.journal,
       agents: tested.agents,
+      delivery: new CompletedRunDelivery(),
       checkouts: tested.checkouts,
       activePlans: tested.activePlans,
       reviews,
@@ -1086,6 +1195,7 @@ describe('RunPlanRecovery projection', () => {
         calls,
         publication: new PlanPublication(),
         machine,
+        delivery: new CompletedRunDelivery(),
         step: new ExecuteRunInstruction({
           machine,
           calls: new ClaudeRunCalls({ calls: transport, machine, measurements, files, pluginRoot: '/plugin' }),
@@ -1109,6 +1219,7 @@ describe('RunPlanRecovery projection', () => {
         driver,
         machine,
         journal,
+        delivery: new CompletedRunDelivery(),
         measurements,
         announcements: new SilentChangeAnnouncements(),
         newId: () => 'unused',
@@ -1137,6 +1248,7 @@ describe('RunPlanRecovery projection', () => {
         machine,
         journal,
         agents,
+        delivery: new CompletedRunDelivery(),
         checkouts: new RecoveryCheckouts(),
         activePlans,
         reviews: new RecoveryReviews(),
@@ -1521,6 +1633,7 @@ class FiniteBridge {
       calls: planCalls,
       publication: new FiniteBridgePublication(),
       machine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
       messages: new DeliverHeldMessages({
         messages: journal,
@@ -1552,6 +1665,7 @@ class FiniteBridge {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements,
       announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused-fix',
@@ -1820,6 +1934,7 @@ describe('RunPlanRecovery finite bridge', () => {
       machine: restarted.machine,
       journal: restarted.journal,
       agents: restarted.agents,
+      delivery: new CompletedRunDelivery(),
       checkouts,
       activePlans,
       reviews,
@@ -1887,6 +2002,7 @@ describe('RunPlanRecovery finite bridge', () => {
       machine: rebuilt.machine,
       journal: rebuilt.journal,
       agents: rebuilt.agents,
+      delivery: new CompletedRunDelivery(),
       checkouts: new RecoveryCheckouts(),
       activePlans: rebuiltActive,
       reviews: new RecoveryReviews(),
