@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
@@ -10,7 +10,7 @@ import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { FakeEventSource } from './FakeEventSource'
-import { openHome, pressStart, typePath, typeRepository, typeTicket } from './helpers'
+import { openHome, pressStart, selectSliceDetail, typePath, typeRepository, typeTicket } from './helpers'
 
 type Answer = { status: number; body: string }
 
@@ -231,7 +231,7 @@ describe('Home · the slices in flight', () => {
     expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
   })
 
-  it('selects another slice with its history and can return to the previous slice', async () => {
+  it('should select another slice with its history and return to the previous slice', async () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     const { fetching } = backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
@@ -241,7 +241,7 @@ describe('Home · the slices in flight', () => {
     const { user } = openHome()
     expect(await screen.findByText('Cierre del slice')).toBeInTheDocument()
 
-    await user.click((await panelOf(8)).getByRole('button', { name: 'Ver detalle' }))
+    await selectSliceDetail(user, 8)
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText(HeadlessPlanMother.agentFor(8))).toBeInTheDocument()
@@ -255,18 +255,18 @@ describe('Home · the slices in flight', () => {
     expect(screen.getAllByRole('heading', { name: 'Slice #8' })).toHaveLength(1)
     expect((await panelOf(8)).queryByRole('button', { name: 'Ver detalle' })).toBeNull()
 
-    await user.click((await panelOf(7)).getByRole('button', { name: 'Ver detalle' }))
+    await selectSliceDetail(user, 7)
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
     expect(await screen.findByText('Cierre del slice')).toBeInTheDocument()
     expect((await panelOf(8)).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
   })
 
-  it('restores a manual selection made when several slices were initially active', async () => {
+  it('should restore a manual selection made when several slices were initially active', async () => {
     backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
     const { user, unmount } = openHome()
 
-    await user.click((await panelOf(8)).getByRole('button', { name: 'Ver detalle' }))
+    await selectSliceDetail(user, 8)
     unmount()
     openHome()
 
@@ -276,16 +276,18 @@ describe('Home · the slices in flight', () => {
     expect(screen.getAllByRole('heading', { name: 'Slice #8' })).toHaveLength(1)
   })
 
-  it('keeps the manual selection and polls only its history on subsequent updates', async () => {
-    vi.useFakeTimers()
+  it('should keep the manual selection and poll only its history on subsequent updates', async () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
-    openHome()
-    await act(async () => vi.advanceTimersByTimeAsync(0))
+    const { user } = openHome()
+    await screen.findByText('Todavía no ha terminado ningún paso')
 
-    fireEvent.click(within(screen.getByRole('region', { name: 'Slice #8' })).getByRole('button', { name: 'Ver detalle' }))
     fetching.mockClear()
-    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    await selectSliceDetail(user, 8)
+    await waitFor(() => {
+      const historyCalls = fetching.mock.calls.filter(([input]) => IMPLEMENT_HISTORY.test(String(input)))
+      expect(historyCalls.length).toBeGreaterThan(1)
+    }, { timeout: 4000 })
 
     expect(fetching).toHaveBeenCalledWith('/active-plans')
     const historyCalls = fetching.mock.calls.filter(([input]) => IMPLEMENT_HISTORY.test(String(input)))
