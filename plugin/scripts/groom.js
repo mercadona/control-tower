@@ -3,6 +3,7 @@ import { isNoValueCell } from './slices.js'
 import { resolveGates, resolveE2e, gateLabels, renderGatesIssueContent } from './gates.js'
 import { locateSection, unterminatedDelimiter, normalizeToLF, SIGNAL_HEADING, E2E_HEADING, AC_PLACEHOLDER } from './gh-issue-map.js'
 import { MilestoneContextHeading } from './milestone-context.js'
+import { parseScope } from './scope.js'
 import { STATUS_LADDER } from './harvest.js'
 
 // SIGNAL_HEADING (Slice 10) is born in gh-issue-map.js (the lower layer: this
@@ -194,6 +195,7 @@ function truncationLine(specMd, loc) {
 export const HYPOTHESIS_HEADING = '## Hipótesis'
 export const NEEDS_CLARIFICATION_MARKER = '[NEEDS CLARIFICATION'
 export const HYPOTHESIS_REASONS = { OK: 'ok', ABSENT: 'ausente', EMPTY: 'vacia' }
+export const SCOPE_REASONS = Object.freeze({ OK: 'ok', ABSENT: 'absent' })
 
 // A heading of any level ends a section for this detector, the same criterion
 // the hypothesis and the decisions both apply.
@@ -256,11 +258,12 @@ export function analyzeSpecFreeze(specMd) {
     if (raw.includes(NEEDS_CLARIFICATION_MARKER)) clarifications.push({ line: i + 1, raw: raw.trim() })
   })
   const decisionsWithoutProvenance = decisionsWithoutProvenanceIn(lines)
+  const scope = parseScope(specMd || '').declared ? SCOPE_REASONS.OK : SCOPE_REASONS.ABSENT
   // A heading of exactly level 2 whose text STARTS with "Hipótesis" — it
   // covers "## Hipótesis" and "## Hipótesis del experimento" (the template). A
   // "### Hipótesis" does not count: the pre-registered grep is "## Hipótesis".
   const at = lines.findIndex((l) => /^ {0,3}##[ \t]+Hipótesis(\b|$)/.test(l))
-  if (at === -1) return { hypothesis: HYPOTHESIS_REASONS.ABSENT, clarifications, decisionsWithoutProvenance }
+  if (at === -1) return { hypothesis: HYPOTHESIS_REASONS.ABSENT, scope, clarifications, decisionsWithoutProvenance }
   const body = []
   for (let i = at + 1; i < lines.length; i++) {
     if (ANY_HEADING_RE.test(lines[i])) break
@@ -269,6 +272,7 @@ export function analyzeSpecFreeze(specMd) {
   const content = body.join('\n').replace(/<!--[\s\S]*?-->/g, '').trim()
   return {
     hypothesis: content ? HYPOTHESIS_REASONS.OK : HYPOTHESIS_REASONS.EMPTY,
+    scope,
     clarifications,
     decisionsWithoutProvenance,
   }

@@ -5,6 +5,7 @@ const ON = '2026-09-14'
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
 const MARKER_FINDING = { code: 'clarification-marker', line: 42, detail: '[NEEDS CLARIFICATION: which button?]' }
 const HYPOTHESIS_FINDING = { code: 'hypothesis-absent', line: null, detail: null }
+const SCOPE_FINDING = { code: 'scope-absent', line: null, detail: null }
 const PROVENANCE_FINDING = {
   code: 'decision-without-provenance',
   line: 13,
@@ -24,6 +25,11 @@ const noSpec = () => ({ status: 200, body: `{"status":"no-spec","target":"${TARG
 const draftWithMarker = () => ({
   status: 200,
   body: `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":${FINDINGS_JSON},"key":"${KEY}"}`,
+})
+
+const draftWithoutScope = () => ({
+  status: 200,
+  body: `{"status":"draft","target":"${TARGET}","spec":"${SPEC}","findings":[{"code":"${SCOPE_FINDING.code}","line":null,"detail":null}],"key":"${KEY}"}`,
 })
 
 const draftWithoutKey = () => ({
@@ -92,12 +98,14 @@ export const SpecFreezeMother = {
   PULL_REQUEST,
   MARKER_FINDING,
   HYPOTHESIS_FINDING,
+  SCOPE_FINDING,
   PROVENANCE_FINDING,
   NOT_FREEZABLE_DETAIL,
   NOT_FROM_THE_PAGE_DETAIL,
   none,
   noSpec,
   draftWithMarker,
+  draftWithoutScope,
   draftWithSourcelessDecision,
   draftReady,
   draftWithoutKey,

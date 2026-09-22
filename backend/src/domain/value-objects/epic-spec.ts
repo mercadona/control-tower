@@ -1,4 +1,4 @@
-import { analyzeSpecFreeze, HYPOTHESIS_REASONS } from '../../../../plugin/scripts/groom.js'
+import { analyzeSpecFreeze, HYPOTHESIS_REASONS, SCOPE_REASONS } from '../../../../plugin/scripts/groom.js'
 import { FreezeFinding, FreezeFindingCode, type FreezeFindingCodeValue } from './freeze-finding.ts'
 
 export class EpicSpec {
@@ -67,6 +67,7 @@ export class EpicSpec {
     const lined = [
       ...EpicSpec.#linedAs(FreezeFindingCode.CLARIFICATION_MARKER, analyzed.clarifications),
       ...EpicSpec.#linedAs(FreezeFindingCode.DECISION_WITHOUT_PROVENANCE, analyzed.decisionsWithoutProvenance),
+      ...EpicSpec.#scopeFinding(analyzed.scope),
     ]
     switch (analyzed.hypothesis) {
       case HYPOTHESIS_REASONS.OK:
@@ -77,6 +78,17 @@ export class EpicSpec {
         return [...lined, new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_EMPTY, line: null, detail: null })]
       default:
         throw new Error(`no freeze finding is declared for the hypothesis reason ${JSON.stringify(analyzed.hypothesis)}`)
+    }
+  }
+
+  static #scopeFinding(reason: string): FreezeFinding[] {
+    switch (reason) {
+      case SCOPE_REASONS.OK:
+        return []
+      case SCOPE_REASONS.ABSENT:
+        return [new FreezeFinding({ code: FreezeFindingCode.SCOPE_ABSENT, line: null, detail: null })]
+      default:
+        throw new Error(`no freeze finding is declared for the scope reason ${JSON.stringify(reason)}`)
     }
   }
 
