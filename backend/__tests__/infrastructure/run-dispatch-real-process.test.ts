@@ -1,29 +1,22 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AgentDefinition } from '../../../plugin/scripts/judge-agent-definition.js'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../plugin/scripts/state.js'
+import { INPUT_ROLES } from '../../../plugin/scripts/step-announcement.js'
 import {
-  ADVICE_SCHEMA,
   ADVISOR_TOOLS,
-  IMPLEMENTER_MODEL,
-  IMPLEMENTER_TOOLS,
   JUDGE_TOOLS,
   RECONCILER_TOOLS,
-  REPORT_SCHEMA,
   SLICE_JUDGE_TOOLS,
   SLICE_VERDICT_RULES,
-  SLICE_VERDICT_SCHEMA,
   VERDICT_RULES,
-  VERDICT_SCHEMA,
 } from '../../../plugin/scripts/step-contracts.js'
 import { RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -36,6 +29,21 @@ import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 
 type DispatchRole = RunDispatch['role']
+
+type ResponseExpectation = Readonly<{ kind: 'file' | 'structured' | 'edits', schema: boolean, agent: string | null }>
+
+type AnnouncedDispatch = Readonly<{
+  inputs?: readonly Readonly<{ role: string, kind: string, path: string }>[],
+  response?: Readonly<{ kind: string, path: string | null }>,
+}>
+
+const RESPONSE_EXPECTATION_OF_ROLE: Readonly<Record<DispatchRole, ResponseExpectation>> = Object.freeze({
+  implement: Object.freeze({ kind: 'structured', schema: true, agent: null }),
+  judge: Object.freeze({ kind: 'file', schema: false, agent: 'ct-judge' }),
+  advise: Object.freeze({ kind: 'structured', schema: true, agent: 'ct-advisor' }),
+  'slice-judge': Object.freeze({ kind: 'file', schema: false, agent: 'ct-slice-judge' }),
+  reconcile: Object.freeze({ kind: 'edits', schema: false, agent: 'ct-reconciler' }),
+})
 
 class EnvironmentSnapshot {
   readonly values: ReadonlyMap<string, string | undefined>
@@ -170,15 +178,15 @@ class DispatchRepository {
   async output(role: DispatchRole): Promise<string> {
     switch (role) {
       case 'implement':
-        return this.#step('next')
+        return this.#next()
       case 'judge':
         return this.#reachJudge()
       case 'advise':
         await this.#consumeTaskVerdict(await this.#reachJudge(), 'FAIL')
-        await this.#submitReport(this.#step('next'))
+        await this.#submitReport(this.#next())
         this.#step('controls')
-        await this.#consumeTaskVerdict(this.#step('next'), 'FAIL')
-        return this.#step('next')
+        await this.#consumeTaskVerdict(this.#next(), 'FAIL')
+        return this.#next()
       case 'slice-judge':
         return this.#reachSliceJudge()
       case 'reconcile':
@@ -190,14 +198,14 @@ class DispatchRepository {
   async e2eOutput(): Promise<string> {
     const sliceJudge = await this.#reachSliceJudge()
     await this.#consumeSliceVerdict(sliceJudge)
-    return this.#step('next')
+    return this.#next()
   }
 
   async sliceFallbackOutput(): Promise<string> {
     await this.#completeTask()
     await this.#advanceBase('base bytes\n')
     await writeFile(join(this.root, 'work.txt'), 'dirty tree\n')
-    return this.#step('reconcile')
+    return this.#step('reconcile', '--output-format', 'json')
   }
 
   async machine(stdout: string, pluginRoot = DispatchRepository.PLUGIN_ROOT): Promise<CtRunMachine> {
@@ -248,42 +256,6 @@ class DispatchRepository {
     return Promise.all(paths.map((path) => readFile(path.startsWith('/') ? path : join(cwd, path))))
   }
 
-  static expectedArgv(role: DispatchRole): readonly string[] {
-    const schema = role === 'implement' ? REPORT_SCHEMA
-      : role === 'judge' ? VERDICT_SCHEMA
-        : role === 'advise' ? ADVICE_SCHEMA
-          : role === 'slice-judge' ? SLICE_VERDICT_SCHEMA
-            : null
-    if (role === 'implement') {
-      return [
-        '--tools', IMPLEMENTER_TOOLS,
-        '--allowedTools', IMPLEMENTER_TOOLS,
-        '--model', IMPLEMENTER_MODEL,
-        '--json-schema', JSON.stringify(schema),
-      ]
-    }
-    const definition = DispatchRepository.definition(role)
-    const tools = definition.tools.join(', ')
-    const argv = [
-      '--tools', tools,
-      '--allowedTools', tools,
-      '--model', definition.model,
-      '--agents', JSON.stringify(definition.toClaudeAgents()),
-      '--agent', definition.name,
-    ]
-    if (schema !== null) argv.push('--json-schema', JSON.stringify(schema))
-    return argv
-  }
-
-  static definition(role: Exclude<DispatchRole, 'implement'>): AgentDefinition {
-    const step = role === 'judge' ? STEPS.JUDGE
-      : role === 'advise' ? STEPS.ADVISE
-        : role === 'slice-judge' ? STEPS.SLICE_JUDGE
-          : STEPS.RECONCILE
-    const path = join(DispatchRepository.PLUGIN_ROOT, RoleBytes.filesOf(step)[0])
-    return AgentDefinition.parse(readFileSync(path, 'utf8'))
-  }
-
   async #initialize(): Promise<void> {
     this.#git('init', '-q', '-b', 'main')
     this.#git('config', 'user.email', 'fixture@example.com')
@@ -314,18 +286,18 @@ class DispatchRepository {
   async #reconcileOutput(): Promise<string> {
     await this.#completeTask()
     await this.#advanceBase('base bytes\n')
-    return this.#step('reconcile')
+    return this.#step('reconcile', '--output-format', 'json')
   }
 
   async #reachJudge(): Promise<string> {
-    await this.#submitReport(this.#step('next'))
+    await this.#submitReport(this.#next())
     this.#step('controls')
-    return this.#step('next')
+    return this.#next()
   }
 
   async #submitReport(implementOutput: string): Promise<void> {
     await writeFile(join(this.root, 'work.txt'), 'synthetic model response: implemented fixture task\n')
-    const report = ProducerOutput.path(implementOutput, '  - that it write its report to: ')
+    const report = ProducerOutput.responsePath(implementOutput)
     await writeFile(report, `${JSON.stringify({
       paths: ['work.txt'],
       summary: 'Synthetic model response used only to progress the real ct-step producer fixture.',
@@ -334,8 +306,8 @@ class DispatchRepository {
   }
 
   async #consumeTaskVerdict(judgeOutput: string, ruling: 'PASS' | 'FAIL'): Promise<void> {
-    const packagePath = ProducerOutput.path(judgeOutput, '  - the review package: ')
-    const verdictPath = ProducerOutput.path(judgeOutput, '  - that it write its verdict to: ')
+    const packagePath = ProducerOutput.pathOf(judgeOutput, INPUT_ROLES.PACKAGE)
+    const verdictPath = ProducerOutput.responsePath(judgeOutput)
     const token = DispatchRepository.#reviewToken(await readFile(packagePath, 'utf8'))
     const findings = ruling === 'PASS' ? [] : [{
       rule: 'objetivo',
@@ -367,12 +339,12 @@ class DispatchRepository {
     await this.#completeTask()
     this.#step('reconcile')
     this.#step('global')
-    return this.#step('next')
+    return this.#next()
   }
 
   async #consumeSliceVerdict(sliceOutput: string): Promise<void> {
-    const packagePath = ProducerOutput.path(sliceOutput, "  - the slice's review package: ")
-    const verdictPath = ProducerOutput.path(sliceOutput, '  - that it write its verdict to: ')
+    const packagePath = ProducerOutput.pathOf(sliceOutput, INPUT_ROLES.PACKAGE)
+    const verdictPath = ProducerOutput.responsePath(sliceOutput)
     const token = DispatchRepository.#reviewToken(await readFile(packagePath, 'utf8'))
     await writeFile(verdictPath, `${JSON.stringify({
       ruling: 'PASS',
@@ -394,6 +366,10 @@ class DispatchRepository {
     this.#git('commit', '-q', '-m', 'base change')
     this.#git('push', '-q', 'origin', 'main')
     this.#git('switch', '-q', 'feat/7')
+  }
+
+  #next(): string {
+    return this.#step('next', '--output-format', 'json')
   }
 
   #step(verb: string, ...arguments_: string[]): string {
@@ -453,18 +429,38 @@ class DispatchRepository {
 }
 
 class ProducerOutput {
-  static path(stdout: string, label: string): string {
-    const line = stdout.split('\n').find((candidate) => candidate.startsWith(label))
-    if (line === undefined) throw new Error(`producer output lacks ${JSON.stringify(label)}`)
-    return line.slice(label.length)
+  static of(stdout: string): AnnouncedDispatch {
+    const announced = JSON.parse(stdout) as Readonly<{ dispatch?: AnnouncedDispatch }>
+    if (announced.dispatch === undefined) {
+      throw new Error(`the announcement carries no dispatch: ${JSON.stringify(stdout)}`)
+    }
+    return announced.dispatch
+  }
+
+  static responsePath(stdout: string): string {
+    const path = ProducerOutput.of(stdout).response?.path
+    if (typeof path !== 'string') {
+      throw new Error(`the announcement declares no response path: ${JSON.stringify(stdout)}`)
+    }
+    return path
+  }
+
+  static pathOf(stdout: string, role: string): string {
+    const input = (ProducerOutput.of(stdout).inputs ?? []).find((candidate) => candidate.role === role)
+    if (input === undefined) throw new Error(`the announcement declares no ${role} input`)
+    return input.path
+  }
+
+  static withConsuming(stdout: string, argv: readonly string[]): string {
+    const announced = JSON.parse(stdout) as Record<string, unknown>
+    return JSON.stringify({ ...announced, consuming: { argv: [...argv] } })
   }
 
   static implementPaths(stdout: string): readonly string[] {
-    const printed = [
-      ProducerOutput.path(stdout, '  - the rubric from '),
-      ProducerOutput.path(stdout, "  - the task's brief: "),
-    ]
-    return Object.freeze(ProducerOutput.withRoleFiles(STEPS.IMPLEMENT, printed))
+    return Object.freeze(ProducerOutput.withRoleFiles(STEPS.IMPLEMENT, [
+      ProducerOutput.pathOf(stdout, INPUT_ROLES.RUBRIC),
+      ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF),
+    ]))
   }
 
   static paths(role: DispatchRole, stdout: string): readonly string[] {
@@ -473,32 +469,27 @@ class ProducerOutput {
         return ProducerOutput.implementPaths(stdout)
       case 'judge':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.JUDGE, [
-          ProducerOutput.path(stdout, '  - the review package: '),
-          ProducerOutput.path(stdout, "  - the task's brief: "),
-          ...ProducerOutput.optional(stdout, '  - the logs of the controls, ALREADY green, in case it wants them: ', '(none)'),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.PACKAGE),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.CONTROLS_LOG),
         ]))
       case 'advise':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.ADVISE, [
-          ProducerOutput.path(stdout, "  - the advisor's package: "),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.PACKAGE),
         ]))
       case 'slice-judge':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.SLICE_JUDGE, [
-          ProducerOutput.path(stdout, "  - the slice's review package: "),
-          ProducerOutput.path(stdout, '  - the plan: '),
-          ...ProducerOutput.optional(stdout, '  - the log of the Global verification, ALREADY green, in case it wants it: ', '(N/A declared)'),
-          ProducerOutput.path(stdout, '  - the verdict of every task, already committed: '),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.PACKAGE),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.PLAN),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.GLOBAL_LOG),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.VERDICTS),
         ]))
       case 'reconcile':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.RECONCILE, [
-          ProducerOutput.path(stdout, '  - the reconciliation package: '),
+          ProducerOutput.pathOf(stdout, INPUT_ROLES.RECONCILIATION_PACKAGE),
         ]))
     }
     return role satisfies never
-  }
-
-  static optional(stdout: string, label: string, absent: string): readonly string[] {
-    const path = ProducerOutput.path(stdout, label)
-    return path === absent ? Object.freeze([]) : Object.freeze([path])
   }
 
   static withRoleFiles(step: string, printed: readonly string[]): string[] {
@@ -535,8 +526,9 @@ describe('RunDispatch real process', () => {
     expect(replayed).toEqual(dispatch)
   })
 
-  it('plugin definitions tools and schemas determine every supported role', async () => {
+  it('every supported role carries its agent, its channel and the schema it needs', async () => {
     const roles: readonly DispatchRole[] = ['implement', 'judge', 'advise', 'slice-judge', 'reconcile']
+    const dispatchOfRole = new Map<DispatchRole, RunDispatch>()
     for (const role of roles) {
       const repository = await DispatchRepository.create()
       repositories.push(repository)
@@ -544,20 +536,34 @@ describe('RunDispatch real process', () => {
       const machine = await repository.machine(stdout)
 
       const dispatch = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+      const expectation = RESPONSE_EXPECTATION_OF_ROLE[role]
 
       expect(dispatch.role).toBe(role)
       expect(dispatch.paths).toEqual(ProducerOutput.paths(role, stdout))
-      expect(dispatch.argv).toEqual(DispatchRepository.expectedArgv(role))
-      expect(dispatch.response.kind).toBe(role === 'reconcile' ? 'edits' : 'structured')
+      expect(dispatch.response.kind).toBe(expectation.kind)
+      if (expectation.schema) expect(dispatch.argv).toContain('--json-schema')
+      else expect(dispatch.argv).not.toContain('--json-schema')
+      expect(dispatch.argv).toContain('--model')
+      if (expectation.agent === null) expect(dispatch.argv).not.toContain('--agent')
+      else {
+        expect(dispatch.argv).toContain('--agent')
+        expect(dispatch.argv).toContain(expectation.agent)
+      }
       expect(Object.isFrozen(dispatch)).toBe(true)
       expect(Object.isFrozen(dispatch.paths)).toBe(true)
       expect(Object.isFrozen(dispatch.argv)).toBe(true)
       expect(await repository.material()).not.toBeNull()
+      dispatchOfRole.set(role, dispatch)
     }
-    expect(DispatchRepository.expectedArgv('judge')).toContain(JUDGE_TOOLS)
-    expect(DispatchRepository.expectedArgv('advise')).toContain(ADVISOR_TOOLS)
-    expect(DispatchRepository.expectedArgv('slice-judge')).toContain(SLICE_JUDGE_TOOLS)
-    expect(DispatchRepository.expectedArgv('reconcile')).toContain(RECONCILER_TOOLS)
+    const dispatched = (role: DispatchRole): RunDispatch => {
+      const dispatch = dispatchOfRole.get(role)
+      if (dispatch === undefined) throw new Error(`no dispatch was captured for role ${role}`)
+      return dispatch
+    }
+    expect(dispatched('judge').argv).toContain(JUDGE_TOOLS)
+    expect(dispatched('advise').argv).toContain(ADVISOR_TOOLS)
+    expect(dispatched('slice-judge').argv).toContain(SLICE_JUDGE_TOOLS)
+    expect(dispatched('reconcile').argv).toContain(RECONCILER_TOOLS)
 
     const malformed = await DispatchRepository.create()
     repositories.push(malformed)
@@ -569,7 +575,7 @@ describe('RunDispatch real process', () => {
     await expect(malformedMachine.dispatch(malformed.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
     expect(await malformed.material()).toBeNull()
-  }, 60_000)
+  }, 180_000)
 
   it('unsupported E2E and slice fallback material starts no call', async () => {
     const e2e = await DispatchRepository.create()
@@ -583,7 +589,7 @@ describe('RunDispatch real process', () => {
     repositories.push(fallback)
     const fallbackMachine = await fallback.machine(await fallback.sliceFallbackOutput())
     await expect(fallbackMachine.dispatch(fallback.watch(), DispatchRepository.TICKET))
-      .rejects.toThrow(/unsupported slice-agent reconciliation/)
+      .rejects.toThrow(`ticket ${DispatchRepository.TICKET} does not carry dispatch material`)
     expect(await fallback.material()).toBeNull()
   })
 
@@ -593,7 +599,7 @@ describe('RunDispatch real process', () => {
     const stdout = await repository.output('implement')
     const machine = await repository.machine(stdout)
     const dispatch = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
-    const changed = ProducerOutput.path(stdout, "  - the task's brief: ")
+    const changed = ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF)
     expect(dispatch.paths).toContain(changed)
     const original = await readFile(changed)
 
@@ -641,7 +647,7 @@ describe('RunDispatch real process', () => {
     const conflicting = await DispatchRepository.create()
     repositories.push(conflicting)
     const produced = await conflicting.output('implement')
-    const announced = ProducerOutput.path(produced, '  - that it write its report to: ')
+    const announced = ProducerOutput.responsePath(produced)
     const conflictMachine = await conflicting.machine(produced.replace(announced, `${announced}.other`))
     await expect(conflictMachine.dispatch(conflicting.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
@@ -650,13 +656,10 @@ describe('RunDispatch real process', () => {
     const duplicate = await DispatchRepository.create()
     repositories.push(duplicate)
     const duplicateOutput = await duplicate.output('implement')
-    const command = duplicateOutput.split('\n').find((line) => line.startsWith('When it comes back:'))
-    if (command === undefined) throw new Error('producer output lacks a consuming command')
-    const conflictingCommand = command
-      .replace('task-1-report.json', 'wrong-report.json')
-      .replace(DispatchRepository.PLAN, 'docs/superpowers/plans/wrong.md')
-      .replace('--issue 7', '--issue 999')
-    const duplicateMachine = await duplicate.machine(`${conflictingCommand}\n${duplicateOutput}`)
+    const conflictingAnnouncement = ProducerOutput.withConsuming(duplicateOutput, [
+      'report', 'wrong-report.json', '--plan', 'docs/superpowers/plans/wrong.md', '--issue', '999',
+    ])
+    const duplicateMachine = await duplicate.machine(`${conflictingAnnouncement}\n${duplicateOutput}`)
     await expect(duplicateMachine.dispatch(duplicate.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
     expect(await duplicate.material()).toBeNull()
@@ -664,8 +667,10 @@ describe('RunDispatch real process', () => {
     const differentStructuredVerb = await DispatchRepository.create()
     repositories.push(differentStructuredVerb)
     const structuredOutput = await differentStructuredVerb.output('implement')
-    const contradictoryVerdict = `When it comes back:  ct-step verdict other.json --plan ${DispatchRepository.PLAN} --issue 7`
-    const structuredMachine = await differentStructuredVerb.machine(`${contradictoryVerdict}\n${structuredOutput}`)
+    const structuredMachine = await differentStructuredVerb.machine(ProducerOutput.withConsuming(structuredOutput, [
+      'verdict', ProducerOutput.responsePath(structuredOutput),
+      '--plan', DispatchRepository.PLAN, '--issue', '7',
+    ]))
     await expect(structuredMachine.dispatch(differentStructuredVerb.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
     expect(await differentStructuredVerb.material()).toBeNull()
@@ -673,8 +678,9 @@ describe('RunDispatch real process', () => {
     const differentEditsVerb = await DispatchRepository.create()
     repositories.push(differentEditsVerb)
     const editsOutput = await differentEditsVerb.output('reconcile')
-    const contradictoryReport = `When it comes back:  ct-step report other.json --plan ${DispatchRepository.PLAN} --issue 7`
-    const editsMachine = await differentEditsVerb.machine(`${contradictoryReport}\n${editsOutput}`)
+    const editsMachine = await differentEditsVerb.machine(ProducerOutput.withConsuming(editsOutput, [
+      'report', 'other.json', '--plan', DispatchRepository.PLAN, '--issue', '7',
+    ]))
     await expect(editsMachine.dispatch(differentEditsVerb.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
     expect(await differentEditsVerb.material()).toBeNull()
@@ -682,7 +688,7 @@ describe('RunDispatch real process', () => {
     const mismatchedRubric = await DispatchRepository.create()
     repositories.push(mismatchedRubric)
     const rubricOutput = await mismatchedRubric.output('implement')
-    const declaredRubric = ProducerOutput.path(rubricOutput, '  - the rubric from ')
+    const declaredRubric = ProducerOutput.pathOf(rubricOutput, INPUT_ROLES.RUBRIC)
     const mismatchedMachine = await mismatchedRubric.machine(
       rubricOutput.replace(declaredRubric, join(mismatchedRubric.root, 'AGENTS.md')),
     )

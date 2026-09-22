@@ -75,6 +75,12 @@ class BornConforming {
     'scripts/plugin-install.js',
     'scripts/ct-install.mjs',
     '__tests__/plugin-install.test.js',
+    'scripts/step-announcement.js',
+    '__tests__/step-announcement.test.js',
+    '__tests__/ct-step-announcement-real-process.test.js',
+    '__tests__/ct-step-prose-unchanged-real-process.test.js',
+    'scripts/step-prose.js',
+    '__tests__/step-prose.test.js',
   ]
 
   static SPANISH_WORDS = [

@@ -22,11 +22,14 @@ import {
 } from '../scripts/step-contracts.js'
 import { findClosingKeywords } from '../scripts/closing-keywords.js'
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
+import { RoleBytes } from '../scripts/role-bytes.js'
+import { RESPONSE_KIND_OF_STEP, RESPONSE_KINDS } from '../scripts/step-announcement.js'
 
-const JUDGE_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-judge.md')
-const SLICE_JUDGE_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-slice-judge.md')
-const RECONCILER_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-reconciler.md')
-const ADVISOR_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-advisor.md')
+const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const JUDGE_AGENT = join(PLUGIN_ROOT, 'agents', 'ct-judge.md')
+const SLICE_JUDGE_AGENT = join(PLUGIN_ROOT, 'agents', 'ct-slice-judge.md')
+const RECONCILER_AGENT = join(PLUGIN_ROOT, 'agents', 'ct-reconciler.md')
+const ADVISOR_AGENT = join(PLUGIN_ROOT, 'agents', 'ct-advisor.md')
 
 // The `tools:` line of the reconciler's frontmatter (Branch reconciliation,
 // Task 9) — the same pattern as `judgeAgentTools()`/`sliceJudgeAgentTools()`,
@@ -1306,9 +1309,25 @@ describe("the second veto's advisor", () => {
 
   const adviceFixture = (over = {}) => ({ approach: 'tíralo y empieza por el puerto', files_to_reconsider: ['src/uno.js'], ...over })
 
-  it('the advisor cannot touch anything: it only reads', () => {
-    expect(ADVISOR_TOOLS).toBe('Read')
+  it('the advisor reaches nothing in the tree and answers through the structured channel', () => {
+    expect(ADVISOR_TOOLS).toBe('Read, StructuredOutput')
     expect(advisorAgentTools()).toBe(ADVISOR_TOOLS)
+  })
+
+  it('the channel of a step and the tools of its agent cannot drift', () => {
+    const requiredToolOfResponseKind = {
+      [RESPONSE_KINDS.STRUCTURED]: 'StructuredOutput',
+      [RESPONSE_KINDS.FILE]: 'Write',
+      [RESPONSE_KINDS.EDITS]: 'Edit',
+    }
+    const stepsWithAnAgent = RoleBytes.STEPS.filter((step) => RoleBytes.filesOf(step)[0].startsWith('agents/'))
+    expect(stepsWithAnAgent.length).toBe(4)
+    for (const step of stepsWithAnAgent) {
+      const [agentFile] = RoleBytes.filesOf(step)
+      const tools = /^tools:\s*(.+)$/m.exec(readFileSync(join(PLUGIN_ROOT, agentFile), 'utf8'))?.[1].trim()
+      const requiredTool = requiredToolOfResponseKind[RESPONSE_KIND_OF_STEP[step]]
+      expect(tools, `step "${step}" (${agentFile}) needs "${requiredTool}" for its "${RESPONSE_KIND_OF_STEP[step]}" channel, got "${tools}"`).toMatch(new RegExp(`\\b${requiredTool}\\b`))
+    }
   })
 
   it('an advice with an approach and paths is accepted, and repeated paths do not discard it', () => {

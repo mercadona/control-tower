@@ -74,11 +74,11 @@ import { PluginManifest } from './plugin-manifest.js'
 import {
   readVerdict, readReport, outcomeOfVerdict, commitMessage, findingLocation,
   readE2eReport, E2E_SCHEMA,
-  IMPLEMENTER_TOOLS, IMPLEMENTER_MODEL, JUDGE_TOOLS, PACKAGE_SECTIONS,
+  PACKAGE_SECTIONS,
   readSliceVerdict, outcomeOfSliceVerdict, sliceVerdictCommitMessage,
-  SLICE_JUDGE_TOOLS, SLICE_PACKAGE_SECTIONS, RECONCILER_TOOLS,
+  SLICE_PACKAGE_SECTIONS, RECONCILER_TOOLS,
   REVIEW_TOKEN_LABEL, reviewToken, reviewTokenLine, reviewTokenOf,
-  readAdvice, ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS,
+  readAdvice, ADVICE_PACKAGE_SECTIONS,
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { ControlTowerState } from './control-tower-state.js'
@@ -100,6 +100,17 @@ import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
 import { BaseBranch } from './slice-base.js'
 import { StepSeal } from './dispatch-gate.js'
+// Slice 1, Task 3: the structured announcement `next` prints under
+// `--output-format json`, alongside (not instead of) the prose. Pure module,
+// no disk and no process of its own — see step-announcement.js.
+import {
+  StepAnnouncement, AnnouncedResponse, AnnouncedInput, INPUT_ROLES, INPUT_KINDS, CONSUMING_VERB_OF_STEP,
+} from './step-announcement.js'
+// Slice 2: the announcement of a dispatch step is the SOURCE, and the prose is
+// written out of it. Every heading, label and consuming verb of those steps
+// lives in step-prose.js, once, and this file no longer types any of them.
+import { DispatchProse } from './step-prose.js'
+import { AgentDefinition } from './judge-agent-definition.js'
 
 const PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -134,7 +145,12 @@ const MAX_DISCARDS = 6
 function safeWrite(fd, text) {
   try { writeSync(fd, text) } catch { /* the pipe is closed: the line is lost, the exit code does not change */ }
 }
-const out = (msg) => safeWrite(1, msg + '\n')
+// `announcing` is declared further down, once the flag is parsed; `out` only
+// reads it when it is actually called, well after that assignment has run.
+// Under the flag the prose is silenced so the prose road and the JSON road
+// never share stdout — the announcement itself is written straight to stdout
+// with `safeWrite`, the same primitive this closes over.
+const out = (msg) => { if (!announcing) safeWrite(1, msg + '\n') }
 const err = (msg) => safeWrite(2, msg + '\n')
 const die = (msg, code) => { err(msg); process.exit(code) }
 
@@ -159,7 +175,9 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
   e2e <file.json>           the report of the slice's end-to-end journey
 
 The sequence is decided by run-machine.js: a verb that is not the step that is due
-exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.`
+exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
+
+  --output-format json     every verb answers with one JSON object on stdout instead of prose`
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
@@ -174,6 +192,18 @@ if (typeof issueRaw !== 'string' || !/^\d+$/.test(issueRaw)) {
   die(`--issue must be a whole number: I got ${JSON.stringify(issueRaw)}`, EXIT.USAGE)
 }
 const issue = Number(issueRaw)
+
+// The announcement flag (Slice 1, Task 3; every verb since Slice 3, Task 1).
+// `json` turns it on; any other value — `true` included, which is what a flag
+// given with no value reads as — is a usage error, the same family as an
+// unreadable --plan or a non-numeric --issue. Every verb answers with an
+// announcement under the flag: `next` with a `step`, and every consuming verb
+// with the `transition` or `refusal` of the closure it just reached.
+const outputFormatRaw = arg('--output-format', null)
+if (outputFormatRaw !== null && outputFormatRaw !== 'json') {
+  die(`unknown --output-format: ${JSON.stringify(outputFormatRaw)}\n\n${USAGE}`, EXIT.USAGE)
+}
+const announcing = outputFormatRaw === 'json'
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const git = (argv, { allowFail = false } = {}) => {
@@ -310,6 +340,19 @@ if (existsSync(stateFile)) {
   // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
     if (verb === 'next') {
+      // A delivered run has already reached its terminal transition: there is
+      // no step left to apply, so `next` announces the same closure a
+      // consuming verb would have announced on delivering it — `state:
+      // DELIVERED`, `outcome: DONE`, `exit: OK` — instead of the usage refusal
+      // this branch held before this task answered it. `safeWrite` puts it on
+      // stdout before the process exits, same as every other closure in this
+      // file; the `out` line right below keeps saying what it always said.
+      if (announcing) {
+        safeWrite(1, StepAnnouncement.transition({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.DELIVERED, outcome: OUTCOMES.DONE, exit: EXIT.OK,
+        }).text())
+      }
       out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
@@ -369,6 +412,33 @@ if (existsSync(stateFile)) {
 
 const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 const currentTask = () => tasks.find((t) => t.n === run.task)
+// The argv a measuring step's announcement carries as `consuming`: what a
+// program-answering road runs to close that step, not the shell commands the
+// step measures. `verb` plus the positional arguments the verb takes, then
+// this run's own `--plan`/`--issue` — the same two flags every verb of this
+// program already requires.
+const consumingArgv = (verb, ...positional) => [verb, ...positional, '--plan', planPath, '--issue', String(issue)]
+// `ct-step` does not choose the e2e report's path — whoever crosses the
+// journeys writes it and names it on the `e2e` verb — so this is the one
+// value the prose and the consuming argv of that step share instead of each
+// carrying its own copy of the same bytes.
+const E2E_REPORT_PLACEHOLDER = '<file.json>'
+// The name of the subagent a dispatch step announces, taken from the agent
+// definition on disk — the file `RoleBytes` already locates for every
+// dispatching step, and the same bytes the backend parses. A map of step to
+// name here would be that partition written twice, which is precisely the
+// duplication this slice removes. A definition that cannot be parsed stops
+// `next` through the top-level handler, and the backend refuses the same file
+// for the same reason.
+const announcedAgent = (step) => AgentDefinition.parse(readFileSync(join(PLUGIN_ROOT, RoleBytes.filesOf(step)[0]), 'utf8')).name
+// One optional input: present it as its one element, or as no element at all.
+// There is no sentinel any more — an absent input leaves no element in the
+// announcement and no line in the prose.
+const announcedIfPresent = (role, path) => (path ? [new AnnouncedInput({ role, kind: INPUT_KINDS.LITERAL, path })] : [])
+// `DispatchProse.render` hands back three parts: the heading, the material
+// lines and the consuming line. The first two go out together; the third goes
+// where each step already printed it, after whatever else it has to say.
+const outProseMaterial = (prose) => { out(prose.heading); for (const line of prose.material) out(line) }
 
 // ---------------------------------------------------------------------------
 // The telemetry: append-only, TWO destinations, and a failure of its own brings
@@ -547,10 +617,14 @@ function measure(step, measures) {
 // verdict file, like `verdict`). Both families already existed under those
 // names and renaming either of the two would break state in flight, so the
 // asymmetry is left stated rather than fixed.
-const VERB_OF = {
-  report: STEPS.IMPLEMENT, controls: STEPS.CONTROLS, verdict: STEPS.JUDGE, advice: STEPS.ADVISE, commit: STEPS.COMMIT,
-  reconcile: STEPS.RECONCILE, global: STEPS.GLOBAL, 'slice-verdict': STEPS.SLICE_JUDGE, e2e: STEPS.E2E,
-}
+//
+// One partition, one home: `CONSUMING_VERB_OF_STEP` maps each step to the verb
+// that consumes it, the backend measures an announced round against that same
+// map, and this guard reads the map backwards. A verb this file accepts is a
+// verb the announcement can name, and neither side can drift alone.
+const VERB_OF = Object.fromEntries(
+  Object.entries(CONSUMING_VERB_OF_STEP).map(([step, verb]) => [verb, step]),
+)
 function requireStep(v) {
   if (run.step !== VERB_OF[v]) {
     die(`"${v}" is not the step that is due: the run is at "${run.step}" (task ${run.task}/${run.tasksTotal}). Ask with "ct-step next".`, EXIT.WRONG_STEP)
@@ -570,30 +644,52 @@ function nextVerb() {
   } else {
     out(`task ${run.task}/${run.tasksTotal} — ${t.name}`)
   }
-  out(`step: ${run.step} (attempt ${currentAttempt()})`)
+  out(DispatchProse.stepLine(run.step, currentAttempt()))
   out('')
+  // Slice 1, Task 3: the announcement is built on BOTH roads — with the flag
+  // off included — and only PRINTED under the flag. Building it always is
+  // deliberate: a step this program cannot announce reddens the whole
+  // existing suite, not one flagged run.
+  //
+  // Slice 2, Task 3: at a dispatch step it is no longer a contract nothing
+  // reads. The prose of that step is RENDERED from it, so the structure is the
+  // one source and both roads carry one value — reword `step-prose.js` and the
+  // two move together, because there is nothing typed here left to diverge.
+  let announcement
+  const stepRunFields = { issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, attempt: currentAttempt() }
   switch (run.step) {
     case STEPS.IMPLEMENT: {
       const brief = writeBrief()
       const reportPath = join(workDir, `task-${run.task}-report.json`)
-      // The list comes out of the constant and is not typed again: the hand copy
-      // of the judge's already diverged once, and `ct-step next` ended up
-      // announcing tools that were not those of the agent being dispatched.
-      out(`DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:`)
-      out(`  - the rubric from ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
-      out(`  - the task's brief: ${brief}`)
-      out(`  - that it write its report to: ${reportPath}`)
+      // §2: the implementer carries NO agent name — its declared material is a
+      // prompt, not a subagent definition.
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.RUBRIC, kind: INPUT_KINDS.LITERAL, path: join(PLUGIN_ROOT, 'prompts', 'task-implementer.md') }),
+          new AnnouncedInput({ role: INPUT_ROLES.BRIEF, kind: INPUT_KINDS.LITERAL, path: brief }),
+        ],
+        response: AnnouncedResponse.of(run.step, reportPath),
+        consuming: { argv: consumingArgv('report', reportPath) },
+      })
+      // The heading and the labels come out of the announcement, not out of a
+      // template typed here: the hand copy of the judge's already diverged
+      // once, and `ct-step next` ended up announcing tools that were not those
+      // of the agent being dispatched.
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       if (run.lastFindings) {
         out('')
         out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
       }
       out('')
-      out(`When it comes back:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       out('Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.')
       break
     }
     case STEPS.CONTROLS:
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: t.commands, consuming: { argv: consumingArgv('controls') } })
       out('MEASURE THE TASK (the implementer does not do it, and its word does not count):')
       for (const c of t.commands) out(`  $ ${c}`)
       if (t.testsAdded.length) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
@@ -604,17 +700,25 @@ function nextVerb() {
       const packagePath = writeReviewPackage()
       const judgeBrief = writeJudgeBrief()
       const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
-      out(`DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`)
-      out(`  - the review package: ${packagePath}`)
-      out(`  - the task's brief: ${judgeBrief}`)
-      out(`  - the logs of the controls, ALREADY green, in case it wants them: ${run.lastControlsLog ?? '(none)'}`)
-      out(`  - that it write its verdict to: ${verdictPath}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath }),
+          new AnnouncedInput({ role: INPUT_ROLES.BRIEF, kind: INPUT_KINDS.LITERAL, path: judgeBrief }),
+          ...announcedIfPresent(INPUT_ROLES.CONTROLS_LOG, run.lastControlsLog),
+        ],
+        response: AnnouncedResponse.of(run.step, verdictPath),
+        consuming: { argv: consumingArgv('verdict', verdictPath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       // The `review_token` is NOT asked of it: this program writes it when it
       // reads the verdict, with the value it computed itself. Asking the judge
       // for it meant asking it to copy 64 hex characters from a line the program
       // had just written, and one copying slip cost a whole opus verdict.
       out('')
-      out(`When it comes back:  ct-step verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       out('Do not pass it the OUTPUT of the controls: a dirty lint must not dirty its judgement.')
       break
     }
@@ -625,15 +729,22 @@ function nextVerb() {
     case STEPS.ADVISE: {
       const packagePath = writeAdviceReviewPackage()
       const advicePath = join(workDir, `task-${run.task}-advice.json`)
-      out(`DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`)
-      out(`  - the advisor's package: ${packagePath}`)
-      out(`  - that it write its advice to: ${advicePath}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath })],
+        response: AnnouncedResponse.of(run.step, advicePath),
+        consuming: { argv: consumingArgv('advice', advicePath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
       out('')
       out("The judge has vetoed this task twice. On accepting the advice, the program returns the tree to the last commit for the task's paths and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
-      out(`When it comes back:  ct-step advice ${advicePath} --plan ${planPath} --issue ${issue}`)
+      out(prose.consuming)
       break
     }
     case STEPS.COMMIT:
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('commit') } })
       out('COMITEA LA TAREA:')
       out(`  ct-step commit --plan ${planPath} --issue ${issue}`)
       out('The message is composed by the plugin and validated against the closing keywords.')
@@ -654,6 +765,7 @@ function nextVerb() {
     // there is a conflict, it is the verb that says who to dispatch, not
     // `next`.
     case STEPS.RECONCILE:
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('reconcile') } })
       out('RECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):')
       out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       out('If there is a conflict, the verb itself says who to dispatch.')
@@ -661,6 +773,7 @@ function nextVerb() {
     // §3.7-A: the plan's end to end, after the last commit. It is run by the
     // PROGRAM — never by an agent evaluating itself.
     case STEPS.GLOBAL:
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: globalVerification.commands, consuming: { argv: consumingArgv('global') } })
       out("RUN THE PLAN'S GLOBAL VERIFICATION (no agent runs it, the program runs it):")
       if (globalVerification.commands.length) {
         for (const c of globalVerification.commands) out(`  $ ${c}`)
@@ -675,17 +788,26 @@ function nextVerb() {
     case STEPS.SLICE_JUDGE: {
       const packagePath = writeSliceReviewPackage()
       const verdictPath = join(workDir, 'slice-verdict.json')
-      out(`DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`)
-      out(`  - the slice's review package: ${packagePath}`)
-      out(`  - the plan: ${planPath}`)
-      out(`  - the log of the Global verification, ALREADY green, in case it wants it: ${run.lastGlobalLog ?? '(N/A declared)'}`)
-      out(`  - the verdict of every task, already committed: docs/superpowers/verdicts/issue-${issue}-task-*.json`)
-      out(`  - that it write its verdict to: ${verdictPath}`)
-        out('')
-      out(`When it comes back:  ct-step slice-verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      announcement = StepAnnouncement.dispatch({
+        ...stepRunFields,
+        agent: announcedAgent(run.step),
+        inputs: [
+          new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath }),
+          new AnnouncedInput({ role: INPUT_ROLES.PLAN, kind: INPUT_KINDS.LITERAL, path: planPath }),
+          ...announcedIfPresent(INPUT_ROLES.GLOBAL_LOG, run.lastGlobalLog),
+          new AnnouncedInput({ role: INPUT_ROLES.VERDICTS, kind: INPUT_KINDS.GLOB, path: `docs/superpowers/verdicts/issue-${issue}-task-*.json` }),
+        ],
+        response: AnnouncedResponse.of(run.step, verdictPath),
+        consuming: { argv: consumingArgv('slice-verdict', verdictPath) },
+      })
+      const prose = DispatchProse.render(announcement)
+      outProseMaterial(prose)
+      out('')
+      out(prose.consuming)
       break
     }
     case STEPS.E2E:
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: [], consuming: { argv: consumingArgv('e2e', E2E_REPORT_PLACEHOLDER) } })
       // There is no brief and no package to write: no task subagent is
       // dispatched here, the whole slice is crossed with the environment already
       // brought up by whoever is driving. `AGENTS.md` is the place with the
@@ -711,11 +833,16 @@ function nextVerb() {
         out(`  - ${verdict}: ${fields.join(', ')}`)
       }
       out('Close it with:')
-      out(`  ct-step e2e <file.json> --plan ${planPath} --issue ${issue}`)
+      out(`  ct-step e2e ${E2E_REPORT_PLACEHOLDER} --plan ${planPath} --issue ${issue}`)
       break
     default:
       die(`the state has a step this version does not know: ${run.step}`, EXIT.UNNAMED)
   }
+  // The announcement was built above on both roads; it is PRINTED only under
+  // the flag, straight to stdout with the same primitive `out` closes over —
+  // `out` writes nothing once the flag is on, so the prose and the JSON never
+  // share a channel. `text()` already ends with its own newline.
+  if (announcing) safeWrite(1, announcement.text())
   // THE SEAL OF THE STEP. `next` has just written the input the subagent of
   // this step is going to read —the brief, or the judge's package—, and that is
   // exactly what a dispatch that skips this verb leaves unwritten: measured
@@ -1921,6 +2048,29 @@ function handoverToSliceAgent() {
   out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
 }
 
+// The announcement of a round that dispatches `ct-reconciler`. It is THIS verb
+// that carries it and not `next`: a conflict does not exist until the merge has
+// been tried, so the round just measured is the only place that knows whether
+// there is anybody to dispatch, with which package and through which channel.
+//
+// It is built HERE and not in each of the two branches that dispatch, for the
+// same reason `handoverToSliceAgent` exists right above: the fresh CONFLICTING
+// and the discarded round being redispatched say THE SAME thing — the same
+// package, the same `edits` channel and the same verb that consumes them — and
+// writing it twice is what would leave one of the two halves behind on the
+// next change.
+function announcedReconcilerRound(packagePath) {
+  return StepAnnouncement.dispatch({
+    issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, attempt: currentAttempt(),
+    inputs: [new AnnouncedInput({ role: INPUT_ROLES.RECONCILIATION_PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath })],
+    // The reconciler answers with EDITS on the files in dispute: there is no
+    // path to read it back from, and it is the program that validates the tree
+    // afterwards (`BranchReconciliation.conclude()`).
+    response: AnnouncedResponse.of(STEPS.RECONCILE, null),
+    consuming: { argv: consumingArgv('reconcile') },
+  })
+}
+
 // Idempotent through MERGE_HEAD (Task 7): with no merge under way, it starts
 // the next round against the base; with one half done, it concludes the
 // resolution the session has already left in the index. The state of "which
@@ -1956,6 +2106,12 @@ function reconcileVerb() {
   // retry the two copies would have stopped agreeing: the verb would announce
   // another round and the table would close the run.
   const budgetLeft = !reconcileBudgetSpent(run)
+  // Built on both roads and never printed here: on the way out it is handed to
+  // the dispatcher, which has the single print site (see the bottom of this
+  // function). A round with nobody to dispatch leaves it unbuilt — there is no
+  // dispatch to announce, and the closure of the round is the transition the
+  // dispatcher publishes on its own.
+  let announcement
   switch (round.outcome) {
     case ReconcileOutcome.UP_TO_DATE:
       out(`reconcile: up-to-date (the base "${branch}" has not moved)`)
@@ -1974,9 +2130,14 @@ function reconcileVerb() {
       for (const f of round.files) out(`  - ${f}`)
       out('')
       if (budgetLeft) {
-        const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
+        // ONE call to `nextReconcileAttempt()`: the package it numbers is the
+        // package it writes, so a second call would already count it and
+        // answer the next number.
+        const attempt = nextReconcileAttempt()
+        const packagePath = writeReconcileReviewPackage({ branch, round, attempt })
+        announcement = announcedReconcilerRound(packagePath)
         out(`DISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) to resolve the conflict: have it leave the files resolved, with no conflict markers, and without touching anything outside that list — it cannot stage, commit or abort the merge: this program does that on concluding. Give it:`)
-        out(`  - the reconciliation package: ${packagePath}`)
+        out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
         out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}  (it concludes the half-finished merge — MERGE_HEAD decides, nothing else needs saying).`)
       } else {
         handoverToSliceAgent()
@@ -2022,15 +2183,29 @@ function reconcileVerb() {
         handoverToSliceAgent()
         break
       }
-      const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
+      const attempt = nextReconcileAttempt()
+      const packagePath = writeReconcileReviewPackage({ branch, round, attempt })
+      announcement = announcedReconcilerRound(packagePath)
       out(`REDISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) with the new package:`)
-      out(`  - the reconciliation package: ${packagePath}`)
+      out(DispatchProse.inputLine(STEPS.RECONCILE, INPUT_ROLES.RECONCILIATION_PACKAGE, packagePath))
       out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       break
     }
     default:
       throw new Error(`reconciliation round with an outcome that has no message: "${round.outcome}"`)
   }
+  // HANDED UP instead of printed here. The contract is one JSON object per
+  // invocation ("One JSON object per invocation, on stdout, nothing else", in
+  // this phase's design), and this is the only verb that announces a dispatch
+  // and then RETURNS into the dispatcher, which publishes a closure of its own:
+  // printing it here made a dispatching round answer with two. The dispatch is
+  // the one that survives, because it is the one that says who to call and with
+  // which package, and a dispatch at this step is only announced while the run
+  // is open at it. It does NOT say everything the suppressed transition said:
+  // the step shape carries no `state`, and it drops the `outcome`, the `exit`
+  // and the `discards` count the transition carried. A round with nobody to
+  // dispatch leaves this `null` and keeps its transition.
+  dispatchAnnouncement = announcement || null
   return outcomeOfReconcile(round.outcome)
 }
 
@@ -2699,6 +2874,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
 // ---------------------------------------------------------------------------
 // Apply the outcome to the table, and say what comes now.
 // ---------------------------------------------------------------------------
+// The dispatch announcement of the verb just applied, when the round it
+// measured dispatched a subagent instead of closing. `reconcileVerb` — the one
+// verb that dispatches and then returns in here — fills it, and the print site
+// below publishes IT in place of the transition: ONE object per invocation, the
+// same shape `next` has at a dispatch step by exiting before any transition
+// exists. It is declared here, next to the print site that owns it, and not by
+// the verb, which cannot reach the dispatcher's scope.
+//
+// Only the OPEN transition reads it, and that is deliberate: a round that
+// dispatches always leaves the run open at `reconcile` (`afterReconcile`, with
+// the budget unspent), so the one closure that can arrive on top of a dispatch
+// is the discard refusal right below — and there the REFUSAL is the truth,
+// because the run stops and nobody is going to be dispatched after all.
+let dispatchAnnouncement = null
+
 try {
   if (verb === 'next') nextVerb()
 
@@ -2710,7 +2900,18 @@ try {
 
   if (run.discards >= MAX_DISCARDS && outcome === OUTCOMES.DISCARDED) {
     save()
-    die(`${run.discards} discards in this run: it stops instead of going on asking for answers that cannot be read`, EXIT.NO_VERDICT)
+    // This branch runs before `after()`, so no transition exists yet to
+    // publish — it announces the pair `exitCodeOf` maps to `EXIT.NO_VERDICT`
+    // itself: `BLOCKED_JUDGE`/`DISCARDED`. The message is held in a `const` so
+    // the stderr line and the `detail` stay one sentence.
+    const message = `${run.discards} discards in this run: it stops instead of going on asking for answers that cannot be read`
+    if (announcing) {
+      safeWrite(1, StepAnnouncement.refusal({
+        issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+        state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.DISCARDED, exit: EXIT.NO_VERDICT, detail: message,
+      }).text())
+    }
+    die(message, EXIT.NO_VERDICT)
   }
 
   const before = run.step
@@ -2734,12 +2935,44 @@ try {
   if (transition.state === RUN_STATES.OPEN) {
     out('')
     out(`next: task ${run.task}/${run.tasksTotal}, step ${run.step} — ask with "ct-step next"`)
+    // The run stays open: the closure that just applied is a `transition`, not
+    // a `refusal` — there is no non-zero code to carry.
+    //
+    // A verb that DISPATCHED answers with its dispatch and with nothing else:
+    // the transition would be the second object of one invocation, and it adds
+    // nothing — `state: open` at the step the dispatch already names. It is
+    // suppressed HERE, and only when there really was a dispatch, so every
+    // round that closes instead of dispatching keeps publishing its own.
+    if (announcing) {
+      const announcement = dispatchAnnouncement || StepAnnouncement.transition({
+        issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
+        state: transition.state, outcome, exit: EXIT.OK,
+      })
+      safeWrite(1, announcement.text())
+    }
     process.exit(EXIT.OK)
   }
 
+  // The footer sentence is kept in a `const` because a refusal quotes it
+  // verbatim as `detail` — the prose and the JSON say the same thing, once.
+  const detail = `run ${transition.state}: task ${run.task}/${run.tasksTotal}, ${run.discards} discard(s)`
   out('')
-  out(`run ${transition.state}: task ${run.task}/${run.tasksTotal}, ${run.discards} discard(s)`)
-  process.exit(exitCodeOf(transition.state, before, outcome))
+  out(detail)
+  // `exitCodeOf` runs ONCE, after the footer's `out` lines, so its own
+  // DELIVERED line (`the tasks committed, …`) keeps printing right after them
+  // and before the announcement — the prose road is untouched.
+  const code = exitCodeOf(transition.state, before, outcome)
+  if (announcing) {
+    const closure = {
+      issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
+      state: transition.state, outcome, exit: code,
+    }
+    const announcement = code === EXIT.OK
+      ? StepAnnouncement.transition(closure)
+      : StepAnnouncement.refusal({ ...closure, detail })
+    safeWrite(1, announcement.text())
+  }
+  process.exit(code)
 } catch (e) {
   save()
   err(`unforeseen exception: ${e.stack || e.message}`)

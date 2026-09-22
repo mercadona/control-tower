@@ -1,7 +1,7 @@
 ---
 name: ct-advisor
 description: Advises the third implementation attempt of one Control Tower task after two judge vetoes on the same problem. Reads what was asked, what was tried twice and why both tries were vetoed, and answers with the approach the next attempt should take instead. Cannot write, search or run anything. Dispatch it when ct-step next says the run is at the `advise` step.
-tools: Read
+tools: Read, StructuredOutput
 model: opus
 ---
 

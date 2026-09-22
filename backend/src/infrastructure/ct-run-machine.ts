@@ -2,12 +2,16 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
+import { ANNOUNCEMENT_KINDS, RESPONSE_KINDS } from '../../../plugin/scripts/step-announcement.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import {
   RunEstablishment, RunMachine, type RunEstablishmentValue,
 } from '../domain/ports/run-machine.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
+import {
+  AnnouncedStep, CONSUMING_VERB_BY_STEP, RESPONSE_KIND_BY_STEP, RunAnnouncement, type RunClosure,
+} from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
@@ -15,14 +19,14 @@ import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 type InspectionFact =
   | { readonly kind: 'absent' | 'delivered' | 'unstarted' }
   | { readonly kind: 'active', readonly instruction: RunInstruction }
-  | { readonly kind: 'uncertain', readonly detail: string }
+  | { readonly kind: 'uncertain', readonly detail: string, readonly closure: RunClosure | null }
 
 type OracleEffect =
   | { readonly kind: 'call', readonly ticket: string, readonly argv: readonly string[], readonly command: RunConsumingCommand | null }
   | { readonly kind: 'command', readonly ticket: string, readonly argv: readonly string[] }
   | { readonly kind: 'next' }
   | { readonly kind: 'delivered' }
-  | { readonly kind: 'refused', readonly detail: string }
+  | { readonly kind: 'refused', readonly detail: string, readonly closure: RunClosure | null }
 
 class OracleResult {
   readonly effect: OracleEffect
@@ -48,8 +52,8 @@ class OracleResult {
     return new OracleResult({ kind: 'delivered' })
   }
 
-  static refused(detail: string): OracleResult {
-    return new OracleResult({ kind: 'refused', detail })
+  static refused(detail: string, closure: RunClosure | null = null): OracleResult {
+    return new OracleResult({ kind: 'refused', detail, closure })
   }
 }
 
@@ -297,108 +301,101 @@ class OracleBoundary {
       return OracleResult.refused(`command ${command.ticket} has no receipt and cannot be replayed`)
     }
     const output = command.receipt.output
-    if (output.code !== 0) {
-      return OracleResult.refused(
-        `ct-step exited ${output.code}; stdout: ${JSON.stringify(output.stdout)}; stderr: ${JSON.stringify(output.stderr)}`,
-      )
-    }
-    if (OracleBoundary.#delivered(output.stdout)) {
-      return OracleResult.delivered()
-    }
-    if (output.stdout.includes("DISPATCH THE SLICE'S AGENT (it has Bash)")) {
-      return OracleResult.refused(
-        `ct-step requested unsupported slice-agent reconciliation: ${JSON.stringify(output.stdout)}`,
-      )
-    }
-    const reconcileCommand = `When it comes back:  ct-step reconcile --plan ${manifest.plan} --issue ${manifest.issue}`
-    if ((output.stdout.includes('DISPATCH ct-reconciler') || output.stdout.includes('REDISPATCH ct-reconciler'))
-      && output.stdout.split('\n').some((line) => line.trim().startsWith(reconcileCommand))) {
-      try {
-        const consuming = RunConsumingCommand.edits({
-          stdout: output.stdout,
-          plan: manifest.plan,
-          issue: manifest.issue,
-        })
-        return OracleResult.call(command.ticket, consuming.argv, consuming)
-      } catch (cause) {
-        if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
-        throw cause
-      }
-    }
-    const step = /^step: ([a-z0-9-]+) \(attempt \d+\)$/m.exec(output.stdout)?.[1]
-    switch (step) {
-      case STEPS.IMPLEMENT:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.IMPLEMENT, 'report')
-      case STEPS.JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.JUDGE, 'verdict')
-      case STEPS.ADVISE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.ADVISE, 'advice')
-      case STEPS.SLICE_JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, manifest, STEPS.SLICE_JUDGE, 'slice-verdict')
-      case STEPS.E2E:
-        return OracleResult.call(command.ticket, [])
-      case STEPS.CONTROLS:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.CONTROLS, 'controls')
-      case STEPS.COMMIT:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.COMMIT, 'commit')
-      case STEPS.RECONCILE:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.RECONCILE, 'reconcile')
-      case STEPS.GLOBAL:
-        return OracleBoundary.#plainCommand(output.stdout, command.ticket, manifest, STEPS.GLOBAL, 'global')
-      case undefined:
-        break
-      default:
-        return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
-    }
-    if (/^next: task \d+\/\d+, step [a-z-]+ — ask with "ct-step next"$/m.test(output.stdout)) {
-      return OracleResult.next()
-    }
-    return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
-  }
-
-  static #delivered(stdout: string): boolean {
-    return new RegExp(`(?:^|\\n)run ${OracleBoundary.#escape(RUN_STATES.DELIVERED)}:`).test(stdout)
-  }
-
-  static #fileCall(
-    stdout: string,
-    ticket: string,
-    manifest: RunManifest,
-    step: string,
-    verb: 'report' | 'verdict' | 'advice' | 'slice-verdict',
-  ): OracleResult {
+    let announcement: RunAnnouncement | null
     try {
-      const command = RunConsumingCommand.structured({
-        stdout,
-        plan: manifest.plan,
-        issue: manifest.issue,
-        step,
-        verb,
-      })
-      return OracleResult.call(ticket, command.argv, command)
+      announcement = RunAnnouncement.of(output.stdout)
     } catch (cause) {
       if (cause instanceof RunNotUnderstood) return OracleResult.refused(cause.message)
       throw cause
     }
+    if (announcement !== null && announcement.closure !== null) {
+      return OracleBoundary.#closure(announcement, announcement.closure)
+    }
+    if (output.code !== 0) {
+      return OracleResult.refused(
+        `ct-step exited ${output.code} without announcing a run state; stdout: ${JSON.stringify(output.stdout)}; stderr: ${JSON.stringify(output.stderr)}`,
+      )
+    }
+    const round = AnnouncedStep.read(output.stdout)
+    if (round === null) {
+      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+    }
+    if (round.responseKind === RESPONSE_KINDS.EDITS) {
+      if (!OracleBoundary.#namesThisRun(round.argv, manifest)) {
+        return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+      }
+      try {
+        return OracleResult.call(command.ticket, round.argv, RunConsumingCommand.forEdits(round.argv))
+      } catch (cause) {
+        if (cause instanceof RunNotUnderstood) {
+          return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+        }
+        throw cause
+      }
+    }
+    const step = round.step
+    switch (step) {
+      case STEPS.IMPLEMENT:
+      case STEPS.JUDGE:
+      case STEPS.ADVISE:
+      case STEPS.SLICE_JUDGE:
+        return OracleBoundary.#dispatchCall(output.stdout, round, command.ticket, step, manifest)
+      case STEPS.E2E:
+        return OracleResult.refused('ct-step requested unsupported E2E material')
+      case STEPS.CONTROLS:
+      case STEPS.COMMIT:
+      case STEPS.RECONCILE:
+      case STEPS.GLOBAL:
+        return OracleBoundary.#programCommand(output.stdout, round, command.ticket, step, manifest)
+      default:
+        return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(output.stdout)}`)
+    }
   }
 
-  static #plainCommand(
+  static #closure(announcement: RunAnnouncement, closure: RunClosure): OracleResult {
+    if (announcement.kind === ANNOUNCEMENT_KINDS.TRANSITION) {
+      if (closure.state === RUN_STATES.OPEN) return OracleResult.next()
+      if (closure.state === RUN_STATES.DELIVERED) return OracleResult.delivered()
+    }
+    return OracleResult.refused(announcement.diagnostic, closure)
+  }
+
+  static #dispatchCall(
     stdout: string,
+    round: AnnouncedStep,
     ticket: string,
-    manifest: RunManifest,
     step: string,
-    verb: string,
+    manifest: RunManifest,
   ): OracleResult {
-    const expected = `ct-step ${verb} --plan ${manifest.plan} --issue ${manifest.issue}`
-    if (!stdout.split('\n').some((line) => line.trim() === expected || line === `Run it with:  ${expected}`)
-      || !stdout.includes(`step: ${step} (`)) {
+    if (round.responseKind !== RESPONSE_KIND_BY_STEP[step]
+      || round.argv[0] !== CONSUMING_VERB_BY_STEP[step]
+      || round.responsePath === null
+      || round.argv[1] !== round.responsePath
+      || !OracleBoundary.#namesThisRun(round.argv, manifest)) {
       return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
     }
-    return OracleResult.command(ticket, [verb, '--plan', manifest.plan, '--issue', String(manifest.issue)])
+    return OracleResult.call(ticket, round.argv)
   }
 
-  static #escape(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  static #namesThisRun(argv: readonly string[], manifest: RunManifest): boolean {
+    return OracleBoundary.#flagged(argv, '--plan') === manifest.plan
+      && OracleBoundary.#flagged(argv, '--issue') === String(manifest.issue)
+  }
+
+  static #flagged(argv: readonly string[], flag: string): string | undefined {
+    const at = argv.indexOf(flag)
+    return at === -1 ? undefined : argv[at + 1]
+  }
+
+  static #programCommand(
+    stdout: string, round: AnnouncedStep, ticket: string, step: string, manifest: RunManifest,
+  ): OracleResult {
+    if (round.commands === null
+      || round.argv[0] !== CONSUMING_VERB_BY_STEP[step]
+      || !OracleBoundary.#namesThisRun(round.argv, manifest)) {
+      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
+    }
+    return OracleResult.command(ticket, round.argv)
   }
 }
 
@@ -416,7 +413,7 @@ export class RunInspection {
         this.fact = Object.freeze({ kind: fact.kind, instruction: fact.instruction })
         break
       case 'uncertain':
-        this.fact = Object.freeze({ kind: fact.kind, detail: fact.detail })
+        this.fact = Object.freeze({ kind: fact.kind, detail: fact.detail, closure: fact.closure })
         break
       default:
         this.fact = fact satisfies never
@@ -511,6 +508,7 @@ export class CtRunMachine extends RunMachine {
         : new RunInspection({
           kind: 'uncertain',
           detail: 'the established run has unexplained plugin activity before its first command',
+          closure: null,
         })
     }
     const instruction = this.#instruction(state.commands[state.commands.length - 1], state.manifest)
@@ -518,7 +516,11 @@ export class CtRunMachine extends RunMachine {
       case 'delivered':
         return new RunInspection({ kind: 'delivered' })
       case 'refused':
-        return new RunInspection({ kind: 'uncertain', detail: instruction.work.detail })
+        return new RunInspection({
+          kind: 'uncertain',
+          detail: instruction.work.detail,
+          closure: instruction.work.closure,
+        })
       case 'call':
       case 'command':
         return new RunInspection({ kind: 'active', instruction })
@@ -535,18 +537,9 @@ export class CtRunMachine extends RunMachine {
     if (command.receipt.output.code !== 0) {
       throw new RunNotUnderstood(`dispatch ticket ${ticket} did not record successful oracle output`)
     }
-    if (command.receipt.output.stdout.includes("DISPATCH THE SLICE'S AGENT")) {
-      throw new RunNotUnderstood('ct-step requested unsupported slice-agent reconciliation material')
-    }
     const effect = OracleBoundary.read(command, state.manifest).effect
     if (effect.kind === 'refused') throw new RunNotUnderstood(effect.detail)
     if (effect.kind !== 'call') throw new RunNotUnderstood(`ticket ${ticket} does not carry dispatch material`)
-    if (effect.command === null) {
-      if (command.receipt.output.stdout.includes('step: e2e (')) {
-        throw new RunNotUnderstood('ct-step requested unsupported E2E material')
-      }
-      throw new RunNotUnderstood(`ticket ${ticket} has no validated consuming command`)
-    }
     const resolved = await RunDispatch.resolve({
       ticket,
       stdout: command.receipt.output.stdout,
@@ -593,7 +586,11 @@ export class CtRunMachine extends RunMachine {
     argv: readonly string[],
   ): Promise<RunInstruction> {
     if (argv.length === 0) {
-      return new RunInstruction({ kind: 'refused', detail: 'ct-step did not print an executable consuming verb' })
+      return new RunInstruction({
+        kind: 'refused',
+        detail: 'ct-step did not print an executable consuming verb',
+        closure: null,
+      })
     }
     const plan = await this.read(join(watch.located.path, manifest.plan))
     if (plan === null) throw new RunNotAdvanced(`the run plan ${manifest.plan} could not be read`)
@@ -636,7 +633,7 @@ export class CtRunMachine extends RunMachine {
       '-C', watch.located.path, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'docs/superpowers/plans',
     ])
     CtRunMachine.#requireSuccess(listed, 'git ls-tree could not list the committed plans')
-    const plans = planFilesForIssue(watch.issue.number, listed.stdout.split('\n').filter(Boolean))
+    const plans = planFilesForIssue(watch.issue.number, CtRunMachine.#listedNames(listed.stdout))
     if (plans.length !== 1) {
       throw new RunNotUnderstood(
         `expected exactly one committed plan for ${watch.issue}, found ${plans.length}: ${plans.join(', ')}`,
@@ -658,13 +655,11 @@ export class CtRunMachine extends RunMachine {
   }
 
   #nextArgv(manifest: RunManifest): readonly string[] {
-    return Object.freeze([
-      this.ctStep, 'next', '--plan', manifest.plan, '--issue', String(manifest.issue),
-    ])
+    return this.#runnerArgv(['next', '--plan', manifest.plan, '--issue', String(manifest.issue)])
   }
 
   #runnerArgv(argv: readonly string[]): readonly string[] {
-    return Object.freeze([this.ctStep, ...argv])
+    return Object.freeze([this.ctStep, ...argv, '--output-format', 'json'])
   }
 
   #runPath(watch: PlanWatch): string {
@@ -714,6 +709,10 @@ export class CtRunMachine extends RunMachine {
     return Object.freeze(ordered)
   }
 
+  static #listedNames(listing: string): string[] {
+    return listing.split('\n').filter(Boolean)
+  }
+
   static #requireSuccess(output: ProcessOutput, action: string): void {
     if (output.code !== 0) {
       throw new RunNotAdvanced(
@@ -734,7 +733,7 @@ export class CtRunMachine extends RunMachine {
       case 'delivered':
         return new RunInstruction({ kind: effect.kind })
       case 'refused':
-        return new RunInstruction({ kind: effect.kind, detail: effect.detail })
+        return new RunInstruction({ kind: effect.kind, detail: effect.detail, closure: effect.closure })
     }
     return effect satisfies never
   }

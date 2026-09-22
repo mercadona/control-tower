@@ -7,6 +7,9 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RoleBytes } from '../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
+import {
+  AnnouncedInput, AnnouncedResponse, INPUT_KINDS, INPUT_ROLES, StepAnnouncement,
+} from '../../../plugin/scripts/step-announcement.js'
 import { IMPLEMENTER_MODEL, IMPLEMENTER_TOOLS, REPORT_SCHEMA } from '../../../plugin/scripts/step-contracts.js'
 import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../src/application/actions/execute-run-instruction.ts'
@@ -718,7 +721,7 @@ describe('RunPlanRecovery projection', () => {
   ])('%s remains inspect-only', async (_name, detail) => {
     const tested = new ProjectionScenario()
     const watch = tested.watches[0]
-    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail }))
+    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail, closure: null }))
 
     await tested.recovery.recover()
 
@@ -727,6 +730,54 @@ describe('RunPlanRecovery projection', () => {
       diagnostic: detail,
       recovery: { action: 'inspect', detail },
     })
+  })
+
+  it('a spent discard budget is reported apart from red controls', async () => {
+    const spent = RecoveryMother.watch(331, '1')
+    const red = RecoveryMother.watch(332, '2')
+    const unclassified = RecoveryMother.watch(333, '3')
+    const tested = new ProjectionScenario([spent, red, unclassified])
+    tested.machine.inspections.set(spent.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-judge with outcome discarded (exit 3)',
+      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3 },
+    }))
+    tested.machine.inspections.set(red.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)',
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
+    }))
+    tested.machine.inspections.set(unclassified.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step exited 9 without announcing a run state',
+      closure: null,
+    }))
+
+    await tested.recovery.recover()
+
+    const projected = tested.activePlans.known()
+    expect(projected).toHaveLength(3)
+    expect(projected[0].refusal).toEqual({ state: 'blocked-judge', outcome: 'discarded', exit: 3 })
+    expect(projected[1].refusal).toEqual({ state: 'blocked-controls', outcome: 'failed', exit: 4 })
+    expect(Object.hasOwn(projected[2], 'refusal')).toBe(false)
+    expect(Object.isFrozen(projected[0].refusal)).toBe(true)
+    expect(Object.isFrozen(projected[0].recovery)).toBe(true)
+  })
+
+  it('a refusal with no classification projects no refusal key', async () => {
+    const tested = new ProjectionScenario()
+    const watch = tested.watches[0]
+    tested.machine.inspections.set(watch.agent, new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step exited 9 without announcing a run state',
+      closure: null,
+    }))
+
+    await tested.recovery.recover()
+
+    const projected = tested.activePlans.known()[0]
+    expect(Object.keys(projected)).toEqual(['phase', 'acceptsChange', 'request', 'plan', 'diagnostic', 'recovery'])
+    expect(projected.diagnostic).toBe('ct-step exited 9 without announcing a run state')
   })
 
   it('a driver implementation must name a journal ticket exactly once', async () => {
@@ -840,7 +891,7 @@ describe('RunPlanRecovery projection', () => {
     const watch = tested.watches[0]
     await tested.recovery.recover()
     expect(tested.reviews.started).toEqual([watch])
-    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'inspect only' }))
+    tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'inspect only', closure: null }))
     await tested.recovery.recover()
     tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'delivered' }))
     await tested.recovery.recover()
@@ -913,7 +964,7 @@ describe('RunPlanRecovery projection', () => {
     try {
       await recovery.recover()
       expect(reads).toBe(1)
-      tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'replace watcher' }))
+      tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'uncertain', detail: 'replace watcher', closure: null }))
       await recovery.recover()
       tested.machine.inspections.set(watch.agent, new RunInspection({ kind: 'delivered' }))
       await recovery.recover()
@@ -1385,10 +1436,12 @@ class FiniteBridge {
     const reportArgv = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'report', response, '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const nextArgv = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const node = async (argv: readonly string[], options: { cwd?: string } = {}): Promise<ProcessOutput> => {
       calls.count += 1
@@ -1400,7 +1453,8 @@ class FiniteBridge {
         run.bytes = '{"task":1,"step":"judge"}\n'
         return new ProcessOutput({
           code: 0,
-          stdout: 'implement: accepted\n\nnext: task 1/1, step judge — ask with "ct-step next"\n',
+          stdout: '{"version":1,"kind":"transition","state":"open","outcome":"done","exit":0,'
+            + '"run":{"issue":332,"task":1,"tasksTotal":1,"step":"implement","discards":0}}\n',
           stderr: '',
         })
       }
@@ -1522,18 +1576,37 @@ class FiniteBridge {
   }
 
   static announcement(fixture: Awaited<ReturnType<typeof FiniteBridge.build>>): string {
-    return `task 1/1 — recovery bridge\nstep: implement (attempt 1)\n\n`
-      + `DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:\n`
-      + `  - the rubric from ${join(FiniteBridge.pluginRoot, RoleBytes.filesOf(STEPS.IMPLEMENT)[0])}\n`
-      + `  - the task's brief: ${fixture.brief}\n`
-      + `  - that it write its report to: ${fixture.response}\n\n`
-      + `When it comes back:  ct-step report ${fixture.response} --plan ${FiniteBridge.PLAN} --issue 332\n`
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 1,
+      tasksTotal: 1,
+      step: STEPS.IMPLEMENT,
+      attempt: 1,
+      agent: undefined,
+      inputs: [
+        new AnnouncedInput({
+          role: INPUT_ROLES.RUBRIC,
+          kind: INPUT_KINDS.LITERAL,
+          path: join(FiniteBridge.pluginRoot, RoleBytes.filesOf(STEPS.IMPLEMENT)[0]),
+        }),
+        new AnnouncedInput({
+          role: INPUT_ROLES.BRIEF,
+          kind: INPUT_KINDS.LITERAL,
+          path: fixture.brief,
+        }),
+      ],
+      response: AnnouncedResponse.of(STEPS.IMPLEMENT, fixture.response),
+      consuming: {
+        argv: ['report', fixture.response, '--plan', FiniteBridge.PLAN, '--issue', '332'],
+      },
+    }).text()
   }
 
   static initialNext(): readonly string[] {
     return [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
   }
 
@@ -1641,15 +1714,11 @@ describe('RunPlanRecovery finite bridge', () => {
     }, null, 2)}\n`, 'utf8')
     await fixture.journal.admit(fixture.watch)
     await fixture.journal.establish(fixture.watch, FiniteBridge.manifest(fixture.watch))
-    const announcement = `task 1/1 — recovery bridge\nstep: implement (attempt 1)\n\n`
-      + `DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:\n`
-      + `  - the rubric from ${join(FiniteBridge.pluginRoot, RoleBytes.filesOf(STEPS.IMPLEMENT)[0])}\n`
-      + `  - the task's brief: ${fixture.brief}\n`
-      + `  - that it write its report to: ${fixture.response}\n\n`
-      + `When it comes back:  ct-step report ${fixture.response} --plan ${FiniteBridge.PLAN} --issue 332\n`
+    const announcement = FiniteBridge.announcement(fixture)
     const initialNext = [
       join(FiniteBridge.pluginRoot, 'scripts', 'ct-step.mjs'),
       'next', '--plan', FiniteBridge.PLAN, '--issue', '332',
+      '--output-format', 'json',
     ]
     const dispatchTicket = await fixture.journal.begin(
       fixture.watch,
