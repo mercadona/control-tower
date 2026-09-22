@@ -500,7 +500,7 @@ export const RECONCILER_TOOLS = 'Read, Grep, Glob, Edit'
 // agent to change in the SAME task.
 export const SLICE_PACKAGE_SECTIONS = ['Vara', 'Señal', 'Commits', 'Files changed', 'Diff']
 
-// THE ADVISOR (H9, `agents/ct-advisor.md`), with ONE single tool: `Read`. It
+// THE ADVISOR (H9, `agents/ct-advisor.md`), with `Read` and `StructuredOutput`. It
 // does not write its answer to a file like the two judges —it returns it through
 // `structured_output`, which is all `ct-step advice` needs to read— so giving it
 // `Write` would be granting it reach over the tree in precisely the step whose
@@ -513,7 +513,7 @@ export const SLICE_PACKAGE_SECTIONS = ['Vara', 'Señal', 'Commits', 'Files chang
 // `step-contracts.test.js` with the same criterion as JUDGE_TOOLS: this module
 // is pure and does not read disk, so what stops the two from diverging is the
 // test.
-export const ADVISOR_TOOLS = 'Read'
+export const ADVISOR_TOOLS = 'Read, StructuredOutput'
 
 // The three headings of the advisor's package `writeAdviceReviewPackage` writes
 // in `scripts/ct-step.mjs`, in the order in which they appear: the task's brief

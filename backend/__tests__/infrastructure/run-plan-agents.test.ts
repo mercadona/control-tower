@@ -4,6 +4,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { STEPS } from '../../../plugin/scripts/run-machine.js'
+import { StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
 import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import {
   PlanAgentNeverLaunched,
@@ -449,11 +451,17 @@ class AgentMother {
   }
 
   static nextArgv(): readonly string[] {
-    return ['/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332']
+    return [
+      '/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
+    ]
   }
 
   static controlsArgv(): readonly string[] {
-    return ['/plugin/ct-step.mjs', 'controls', '--plan', AgentMother.PLAN, '--issue', '332']
+    return [
+      '/plugin/ct-step.mjs', 'controls', '--plan', AgentMother.PLAN, '--issue', '332',
+      '--output-format', 'json',
+    ]
   }
 
   static request(previous: string | null, argv: readonly string[]): string {
@@ -478,11 +486,20 @@ class AgentMother {
   }
 
   static controlsAnnouncement(): string {
-    return `task 1/3 — execute oracle\nstep: controls (attempt 1)\n\nMEASURE THE TASK (the implementer does not do it, and its word does not count):\n\nRun it with:  ct-step controls --plan ${AgentMother.PLAN} --issue 332\n`
+    return StepAnnouncement.program({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.CONTROLS,
+      attempt: 1,
+      commands: ['npm run lint', 'npm test'],
+      consuming: { argv: ['controls', '--plan', AgentMother.PLAN, '--issue', '332'] },
+    }).text()
   }
 
-  static nextMarker(): string {
-    return `controls: done (log at ${AgentMother.LOCATION.path}/.agent/run-332/task-1-controls.log)\n\nnext: task 1/3, step implement — ask with "ct-step next"\n`
+  static deliveredTransition(): string {
+    return '{"version":1,"kind":"transition","state":"delivered","outcome":"done","exit":0,'
+      + '"run":{"issue":332,"task":3,"tasksTotal":3,"step":"slice-judge","discards":0}}\n'
   }
 
   static readFailureFiles(root: string, cause: unknown): HeadlessFiles {
@@ -680,7 +697,7 @@ describe('RunPlanAgents', () => {
         if (answer !== undefined) return answer()
         return new ProcessOutput({
           code: 0,
-          stdout: 'run delivered: complete\n',
+          stdout: AgentMother.deliveredTransition(),
           stderr: '',
         })
       },
@@ -1134,7 +1151,10 @@ describe('RunPlanAgents', () => {
     await pending.journal.begin(AgentMother.WATCH, `${JSON.stringify({
       version: 1,
       previous: null,
-      argv: ['/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332'],
+      argv: [
+        '/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332',
+        '--output-format', 'json',
+      ],
       cwd: AgentMother.LOCATION.path,
       planSha256: createHash('sha256').update(AgentMother.PLAN_TEXT).digest('hex'),
     })}\n`)
@@ -1162,13 +1182,8 @@ describe('RunPlanAgents', () => {
     tested.evidence.run = AgentMother.RUN_BYTES
     tested.evidence.answers.set(JSON.stringify(AgentMother.controlsArgv()), () => {
       tested.evidence.run = '{"step":"implement","task":1}\n'
-      return new ProcessOutput({ code: 0, stdout: AgentMother.nextMarker(), stderr: '' })
+      return new ProcessOutput({ code: 0, stdout: AgentMother.deliveredTransition(), stderr: '' })
     })
-    tested.evidence.answers.set(JSON.stringify(AgentMother.nextArgv()), () => new ProcessOutput({
-      code: 0,
-      stdout: 'run delivered: complete\n',
-      stderr: '',
-    }))
     const inspection = await tested.machine.inspect(AgentMother.WATCH)
     expect(inspection.fact).toEqual({
       kind: 'active',
@@ -1186,20 +1201,14 @@ describe('RunPlanAgents', () => {
     expect(driving).toBeDefined()
     await Bounded.wait(driving as Promise<void>)
 
-    expect(tested.evidence.asked).toEqual([
-      AgentMother.controlsArgv(),
-      AgentMother.nextArgv(),
-    ])
-    expect(await tested.journal.entries(AgentMother.WATCH)).toHaveLength(3)
+    expect(tested.evidence.asked).toEqual([AgentMother.controlsArgv()])
+    expect(await tested.journal.entries(AgentMother.WATCH)).toHaveLength(2)
     expect(tested.plannerDone.settled).toBe(false)
     expect(tested.publicationEntered.settled).toBe(false)
 
     await tested.agents.recover(asked)
-    expect(tested.evidence.asked).toEqual([
-      AgentMother.controlsArgv(),
-      AgentMother.nextArgv(),
-    ])
-    expect(await tested.journal.entries(AgentMother.WATCH)).toHaveLength(3)
+    expect(tested.evidence.asked).toEqual([AgentMother.controlsArgv()])
+    expect(await tested.journal.entries(AgentMother.WATCH)).toHaveLength(2)
   })
 
   it('real run boundaries retain declared refusal mappings', async () => {

@@ -108,7 +108,7 @@ class RunMother {
   }
 
   static refused(detail: string): RunInstruction {
-    return new RunInstruction({ kind: 'refused', detail })
+    return new RunInstruction({ kind: 'refused', detail, closure: null })
   }
 
   static completed(execution: CallExecution = { kind: 'success' }, code = 0): CompletedPlanCall {

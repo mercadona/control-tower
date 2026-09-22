@@ -11,6 +11,7 @@ import { issuesQueryFor } from '../../../../plugin/scripts/gh-issues.js'
 import { RoleBytes } from '../../../../plugin/scripts/role-bytes.js'
 import { STEPS } from '../../../../plugin/scripts/run-machine.js'
 import { renderState } from '../../../../plugin/scripts/state.js'
+import { RESPONSE_KINDS, RESPONSE_KIND_OF_STEP } from '../../../../plugin/scripts/step-announcement.js'
 import {
   ADVICE_SCHEMA,
   ADVISOR_TOOLS,
@@ -20,9 +21,7 @@ import {
   RECONCILER_TOOLS,
   REPORT_SCHEMA,
   SLICE_JUDGE_TOOLS,
-  SLICE_VERDICT_SCHEMA,
   SLICE_VERDICT_RULES,
-  VERDICT_SCHEMA,
   VERDICT_RULES,
 } from '../../../../plugin/scripts/step-contracts.js'
 import { AgentDefinition } from '../../../../plugin/scripts/judge-agent-definition.js'
@@ -92,6 +91,9 @@ type DispatchCapture = {
   readonly paths: readonly string[],
   readonly sha256: readonly string[],
   readonly argv: readonly string[],
+  readonly response:
+    | { readonly kind: 'file' | 'structured', readonly path: string }
+    | { readonly kind: 'edits' },
 }
 type ProducerCapture = DispatchCapture & { readonly ticket: string, readonly invocationArgv: readonly string[] }
 type RoleCrossing = {
@@ -566,6 +568,7 @@ export class RunDriverMother {
         }
       }
       instruction = await calls.step.execute(new ExecuteRunInstructionParams({ watch: this.watch, instruction }))
+      RunDriverMother.#requireAdvance(instruction)
     }
   }
 
@@ -613,6 +616,7 @@ export class RunDriverMother {
         }
       }
       const next = await calls.step.execute(new ExecuteRunInstructionParams({ watch: this.watch, instruction }))
+      RunDriverMother.#requireAdvance(next)
       if (next.work.kind === 'delivered') {
         if (reconciler === null) throw new Error('reconciler producer material was not captured')
         const crossing = await this.#crossing(reconciler)
@@ -683,7 +687,7 @@ export class RunDriverMother {
           const receipt = JSON.parse(
             await readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8'),
           ) as { stdout: string }
-          if (receipt.stdout.includes('run delivered:')) return receipt.stdout
+          if (receipt.stdout.includes('"kind":"transition","state":"delivered"')) return receipt.stdout
         }
         return null
       } catch (cause) {
@@ -1053,6 +1057,7 @@ export class RunDriverMother {
       paths: Object.freeze([...dispatch.paths]),
       sha256: Object.freeze(sha256),
       argv: Object.freeze([...dispatch.argv]),
+      response: dispatch.response,
       invocationArgv: Object.freeze([
         '-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
         '--plugin-dir', RunDriverMother.#PLUGIN, '--resume', this.watch.agent,
@@ -1332,22 +1337,27 @@ export class RunDriverMother {
         argv: ['--tools', IMPLEMENTER_TOOLS, '--allowedTools', IMPLEMENTER_TOOLS, '--model', IMPLEMENTER_MODEL,
           '--json-schema', JSON.stringify(REPORT_SCHEMA)],
         roleFiles: RoleBytes.filesOf(STEPS.IMPLEMENT).map((path) => join(RunDriverMother.#PLUGIN, path)),
+        response: RESPONSE_KIND_OF_STEP[STEPS.IMPLEMENT],
       },
       'ct-judge': {
-        argv: definedArgv(STEPS.JUDGE, JUDGE_TOOLS, VERDICT_SCHEMA),
+        argv: definedArgv(STEPS.JUDGE, JUDGE_TOOLS),
         roleFiles: RoleBytes.filesOf(STEPS.JUDGE).map((path) => join(RunDriverMother.#PLUGIN, path)),
+        response: RESPONSE_KIND_OF_STEP[STEPS.JUDGE],
       },
       'ct-advisor': {
         argv: definedArgv(STEPS.ADVISE, ADVISOR_TOOLS, ADVICE_SCHEMA),
         roleFiles: RoleBytes.filesOf(STEPS.ADVISE).map((path) => join(RunDriverMother.#PLUGIN, path)),
+        response: RESPONSE_KIND_OF_STEP[STEPS.ADVISE],
       },
       'ct-slice-judge': {
-        argv: definedArgv(STEPS.SLICE_JUDGE, SLICE_JUDGE_TOOLS, SLICE_VERDICT_SCHEMA),
+        argv: definedArgv(STEPS.SLICE_JUDGE, SLICE_JUDGE_TOOLS),
         roleFiles: RoleBytes.filesOf(STEPS.SLICE_JUDGE).map((path) => join(RunDriverMother.#PLUGIN, path)),
+        response: RESPONSE_KIND_OF_STEP[STEPS.SLICE_JUDGE],
       },
       'ct-reconciler': {
         argv: definedArgv(STEPS.RECONCILE, RECONCILER_TOOLS),
         roleFiles: RoleBytes.filesOf(STEPS.RECONCILE).map((path) => join(RunDriverMother.#PLUGIN, path)),
+        response: RESPONSE_KIND_OF_STEP[STEPS.RECONCILE],
       },
     }
     const brief = new PlanAgentBrief({
@@ -1383,8 +1393,11 @@ export class RunDriverMother {
       `const contracts = ${JSON.stringify(contracts)}`,
       `const planner = ${JSON.stringify(planner)}`,
       `const errandEnd = ${JSON.stringify(ClaudeRunCalls.ERRAND_END)}`,
+      `const fileErrandEnd = ${JSON.stringify(ClaudeRunCalls.FILE_ERRAND_END)}`,
+      `const fileResponse = ${JSON.stringify(RESPONSE_KINDS.FILE)}`,
       "const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right)",
       "let paths = []",
+      "let responsePath = null",
       "if (role === 'plan') {",
       "  const expectedPlannerArgv = [...planner.argv, opening]",
       "  expectedPlannerArgv[expectedPlannerArgv.indexOf('--session-id') + 1] = conversation",
@@ -1395,9 +1408,13 @@ export class RunDriverMother {
       "  const common = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--plugin-dir', " + JSON.stringify(RunDriverMother.#PLUGIN) + ", '--resume', conversation]",
       "  if (!equal(argv, [...common, ...contract.argv, opening])) throw new Error('model argv mismatch: ' + JSON.stringify({ role, argv }))",
       "  const prefix = 'Read the listed files.\\n'",
-      "  const suffix = '\\n' + errandEnd",
-      "  if (!prompt.startsWith(prefix) || !prompt.endsWith(suffix)) throw new Error('model prompt envelope mismatch')",
-      "  paths = prompt.slice(prefix.length, -suffix.length).split('\\n')",
+      "  if (!prompt.startsWith(prefix)) throw new Error('model prompt envelope mismatch')",
+      "  const listed = prompt.slice(prefix.length).split('\\n')",
+      "  if (contract.response === fileResponse) {",
+      "    responsePath = listed.pop()",
+      "    if (!responsePath || listed.pop() !== fileErrandEnd) throw new Error('model file envelope mismatch')",
+      "  } else if (listed.pop() !== errandEnd) throw new Error('model prompt envelope mismatch')",
+      "  paths = listed",
       "  if (!contract.roleFiles.every((material) => paths.includes(material))) throw new Error('role files mismatch: ' + JSON.stringify({ role, paths }))",
       "  for (const material of paths) if (!material.includes('*') && !fs.existsSync(material)) throw new Error('missing model material: ' + material)",
       "}",
@@ -1408,7 +1425,6 @@ export class RunDriverMother {
       "  fs.writeFileSync(path.join(process.cwd(), 'work.txt'), 'synthetic model response\\n')",
       "  structured = { paths: ['work.txt'], summary: 'Labelled synthetic model response for the offline fixture.' }",
       "} else if (role === 'ct-judge' || role === 'ct-slice-judge') {",
-      "  const paths = prompt.split('\\n').filter((line) => line.startsWith('/'))",
       "  const packagePath = paths.find((candidate) => { try { return fs.readFileSync(candidate, 'utf8').includes('Review token: ') } catch { return false } })",
       "  if (!packagePath) throw new Error('prepared review package was not supplied')",
       "  const packageText = fs.readFileSync(packagePath, 'utf8')",
@@ -1416,7 +1432,8 @@ export class RunDriverMother {
       `  const rules = role === 'ct-judge' ? ${JSON.stringify(VERDICT_RULES)} : ${JSON.stringify(SLICE_VERDICT_RULES)}`,
       "  const veto = process.env.CT_FIXTURE_SCENARIO === 'veto' && role === 'ct-judge'",
       "  const priorJudges = fs.readFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'model.jsonl'), 'utf8').split('\\n').filter((line) => line.includes('\\\"role\\\":\\\"ct-judge\\\"')).length",
-      "  structured = { ruling: veto && priorJudges <= 2 ? 'FAIL' : 'PASS', review_token: token, rubric: rules.map((rule) => ({ rule, result: 'Labelled synthetic model response checked ' + rule + ' on attempt ' + priorJudges + '.', outcome: 'conforme' })), findings: veto && priorJudges <= 2 ? [{ rule: 'objetivo', severity: 'high', what: 'Synthetic veto requires another fixture attempt.', path: 'work.txt', line: 1, evidence: 'Labelled synthetic model response attempt ' + priorJudges + '.' }] : [] }",
+      "  const verdict = { ruling: veto && priorJudges <= 2 ? 'FAIL' : 'PASS', review_token: token, rubric: rules.map((rule) => ({ rule, result: 'Labelled synthetic model response checked ' + rule + ' on attempt ' + priorJudges + '.', outcome: 'conforme' })), findings: veto && priorJudges <= 2 ? [{ rule: 'objetivo', severity: 'high', what: 'Synthetic veto requires another fixture attempt.', path: 'work.txt', line: 1, evidence: 'Labelled synthetic model response attempt ' + priorJudges + '.' }] : [] }",
+      "  fs.writeFileSync(responsePath, JSON.stringify(verdict) + '\\n')",
       "} else if (role === 'ct-advisor') {",
       "  const packageText = fs.readFileSync(paths[0], 'utf8')",
       "  if (!packageText.includes('## Intentos') || !packageText.includes('attempt 1') || !packageText.includes('attempt 2')) throw new Error('prepared advisor package was not supplied')",
@@ -1427,7 +1444,9 @@ export class RunDriverMother {
       "  fs.writeFileSync(path.join(process.cwd(), 'work.txt'), 'synthetic model response\\n')",
       "  require('node:child_process').execFileSync('git', ['add', 'work.txt'], { cwd: process.cwd() })",
       "} else if (role !== 'plan') throw new Error('unlisted model request: ' + JSON.stringify({ role, argv, prompt }))",
-      "console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: conversation, is_error: false, total_cost_usd: 0.25, num_turns: 2, duration_ms: 15, usage: { input_tokens: 11, output_tokens: 7 }, structured_output: structured }))",
+      "const event = { type: 'result', subtype: 'success', session_id: conversation, is_error: false, total_cost_usd: 0.25, num_turns: 2, duration_ms: 15, usage: { input_tokens: 11, output_tokens: 7 } }",
+      "if (responsePath === null) event.structured_output = structured",
+      "console.log(JSON.stringify(event))",
     ].join('\n') + '\n', { mode: 0o755 })
   }
 
@@ -1494,6 +1513,12 @@ export class RunDriverMother {
 
   static hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
+  }
+
+  static #requireAdvance(instruction: RunInstruction): void {
+    if (instruction.work.kind === 'refused') {
+      throw new Error(`the real run refused instead of advancing: ${instruction.work.detail}`)
+    }
   }
 
   static async #until<T>(read: () => Promise<T | null>, diagnostic: () => string): Promise<T> {

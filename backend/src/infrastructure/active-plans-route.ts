@@ -3,6 +3,7 @@ import { Answer } from './http.ts'
 import type { PlanSessions } from './plan-events-route.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 
 export const ActivePlanPhase = Object.freeze({
   PLANNING: 'planning',
@@ -29,12 +30,14 @@ export type FoundActivePlan =
     watch: PlanWatch,
     diagnostic: string | null,
     recovery: ActivePlanRecovery,
+    refusal: RunClosure | null,
   }
 
 export type ProjectedActivePlan = {
   phase: ActivePlanPhaseValue,
   acceptsChange: boolean,
   diagnostic?: string,
+  refusal?: RunClosure,
   request: { id: string | null, repo: string, path: string | undefined },
   plan: {
     id: string | null,
@@ -78,11 +81,22 @@ export class ActivePlans {
     this.sessions.remember(watch)
   }
 
-  rememberUncertain(watch: PlanWatch, diagnostic: string | null, recovery: ActivePlanRecovery): void {
+  rememberUncertain(
+    watch: PlanWatch,
+    diagnostic: string | null,
+    recovery: ActivePlanRecovery,
+    refusal: RunClosure | null = null,
+  ): void {
     const key = ActivePlans.#keyFor(watch)
     this.implementing.delete(key)
     this.sessions.forget({ issue: watch.issue.number, repository: watch.repository })
-    this.uncertain.set(key, { phase: ActivePlanPhase.UNCERTAIN, watch, diagnostic, recovery: Object.freeze({ ...recovery }) })
+    this.uncertain.set(key, {
+      phase: ActivePlanPhase.UNCERTAIN,
+      watch,
+      diagnostic,
+      recovery: Object.freeze({ ...recovery }),
+      refusal,
+    })
   }
 
   forget({ issue, repository }: AskedPlan): void {
@@ -124,7 +138,9 @@ export class ActivePlans {
         ActivePlans.#project(ActivePlanPhase.IMPLEMENTING, held.watch, null, null, held.acceptsChange)
       )),
       ...[...this.uncertain.values()].map((found) => (
-        ActivePlans.#project(ActivePlanPhase.UNCERTAIN, found.watch, found.diagnostic, found.recovery)
+        ActivePlans.#project(
+          ActivePlanPhase.UNCERTAIN, found.watch, found.diagnostic, found.recovery, false, found.refusal,
+        )
       )),
     ]
   }
@@ -135,6 +151,7 @@ export class ActivePlans {
     diagnostic: string | null = null,
     recovery: ActivePlanRecovery | null = null,
     acceptsChange: boolean = false,
+    refusal: RunClosure | null = null,
   ): ProjectedActivePlan {
     const projected: ProjectedActivePlan = {
       phase,
@@ -155,6 +172,9 @@ export class ActivePlans {
     }
     if (diagnostic !== null) projected.diagnostic = diagnostic
     if (recovery !== null) projected.recovery = recovery
+    if (refusal !== null) {
+      projected.refusal = Object.freeze({ state: refusal.state, outcome: refusal.outcome, exit: refusal.exit })
+    }
     return projected
   }
 }

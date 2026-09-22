@@ -7,6 +7,7 @@ import { PlanRecovery } from '../domain/policies/plan-recovery.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RecoveryCall } from '../domain/value-objects/recovery-call.ts'
 import { RegisteredCheckout } from '../domain/value-objects/registered-checkout.ts'
+import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
 import {
   ActivePlanPhase,
   type ActivePlanRecovery,
@@ -31,6 +32,7 @@ type PlanOutcome =
     readonly phase: typeof ActivePlanPhase.UNCERTAIN,
     readonly diagnostic: string,
     readonly recovery: ActivePlanRecovery,
+    readonly refusal: RunClosure | null,
   }
 
 type WatchProvenance =
@@ -201,7 +203,7 @@ export class RunPlanRecovery {
         }
         return this.#delivered(watch, facts.filter((recorded) => recorded.purpose === 'fix'))
       case 'uncertain':
-        return this.#inspect(watch, fact.detail)
+        return this.#inspect(watch, fact.detail, fact.closure)
       case 'active':
       case 'unstarted':
         break
@@ -316,6 +318,7 @@ export class RunPlanRecovery {
       phase: ActivePlanPhase.UNCERTAIN,
       diagnostic: detail,
       recovery: Object.freeze({ action: 'continue', detail }),
+      refusal: null,
     })
   }
 
@@ -327,11 +330,12 @@ export class RunPlanRecovery {
       : new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange })
   }
 
-  #inspect(watch: PlanWatch, detail: string): RecoveredRunPlan {
+  #inspect(watch: PlanWatch, detail: string, refusal: RunClosure | null = null): RecoveredRunPlan {
     return new RecoveredRunPlan(watch, {
       phase: ActivePlanPhase.UNCERTAIN,
       diagnostic: detail,
       recovery: Object.freeze({ action: 'inspect', detail }),
+      refusal,
     })
   }
 
@@ -340,6 +344,7 @@ export class RunPlanRecovery {
       phase: ActivePlanPhase.UNCERTAIN,
       diagnostic,
       recovery: Object.freeze({ action: recovery.action, detail: recovery.detail }),
+      refusal: null,
     })
   }
 
@@ -358,6 +363,7 @@ export class RunPlanRecovery {
           recovered.watch,
           recovered.outcome.diagnostic,
           recovered.outcome.recovery,
+          recovered.outcome.refusal,
         )
         return
       case ActivePlanPhase.IMPLEMENTING:

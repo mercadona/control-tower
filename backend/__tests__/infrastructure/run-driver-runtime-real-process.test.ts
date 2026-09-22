@@ -115,6 +115,9 @@ class MachineRuntimeFixture {
   static readonly ISSUE = 41
   static readonly REPOSITORY = 'acme/widget'
   static readonly PLAN = `docs/superpowers/plans/2026-09-17-issue-${MachineRuntimeFixture.ISSUE}-runtime.md`
+  static readonly BOUNDARY_CODE = 4
+  static readonly BOUNDARY_DIAGNOSTIC = 'ct-step refused: the run is blocked-controls with outcome failed'
+    + ' (exit 4) — run blocked-controls: task 1/1, 0 discard(s)'
   readonly base: string
   readonly checkout: string
   readonly state: string
@@ -211,9 +214,11 @@ class MachineRuntimeFixture {
           await readFile(join(harness, 'calls', name, 'call.json'), 'utf8'),
         ) as CallRecord))
         const operations = await readdir(join(harness, 'run', 'operations'))
-        const receipts = await Promise.all(operations.map((ticket) =>
-          readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8')))
-        if (calls.length < 2 || !receipts.some((receipt) => receipt.includes('step: implement'))) return null
+        const receipts = await Promise.all(operations.map(async (ticket) => JSON.parse(
+          await readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8'),
+        ) as { stdout: string }))
+        if (calls.length < 2
+          || !receipts.some((receipt) => receipt.stdout.includes('"step":"implement"'))) return null
         return { admission, publication, calls }
       } catch (cause) {
         if (MachineRuntimeFixture.#missing(cause)) return null
@@ -236,9 +241,15 @@ class MachineRuntimeFixture {
           const receipt = JSON.parse(
             await readFile(join(operations, ticket, 'receipt.json'), 'utf8'),
           ) as RunReceipt
-          if (receipt.code !== 0) {
-            return `ct-step exited ${receipt.code}; stdout: ${JSON.stringify(receipt.stdout)}; stderr: ${JSON.stringify(receipt.stderr)}`
+          if (receipt.code === 0) continue
+          if (receipt.code !== MachineRuntimeFixture.BOUNDARY_CODE) {
+            throw new Error(
+              `the machine boundary failed with exit ${receipt.code} instead of`
+              + ` ${MachineRuntimeFixture.BOUNDARY_CODE}; stdout: ${JSON.stringify(receipt.stdout)};`
+              + ` stderr: ${JSON.stringify(receipt.stderr)}`,
+            )
           }
+          return MachineRuntimeFixture.BOUNDARY_DIAGNOSTIC
         }
         return null
       } catch (cause) {
@@ -264,10 +275,15 @@ class MachineRuntimeFixture {
     this.process.kill()
     this.process = new RuntimeProcess(this.environment)
     const port = await this.process.port
+    let seen = 'no answer was read from /active-plans'
     const plans = await RuntimeProcess.until(async () => {
       const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
-      if (response.status !== 200) return null
+      if (response.status !== 200) {
+        seen = `HTTP ${response.status}`
+        return null
+      }
       const body = await response.json() as RecoveredPlans
+      seen = JSON.stringify(body)
       const recovered = body.plans[0]
       if (
         body.plans.length !== 1
@@ -277,7 +293,9 @@ class MachineRuntimeFixture {
         || recovered.recovery.detail !== diagnostic
       ) return null
       return body
-    }, () => `the restarted runtime did not recover: ${this.process.diagnostics()}`)
+    }, () => 'the restarted runtime did not recover one uncertain plan whose diagnostic and whose'
+      + ` inspect recovery detail are ${JSON.stringify(diagnostic)};`
+      + ` the last /active-plans answer was ${seen}; ${this.process.diagnostics()}`)
     return {
       beforeCalls,
       afterCalls: (await readdir(calls)).sort(),
