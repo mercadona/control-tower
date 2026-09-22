@@ -91,6 +91,7 @@ export class CheckedRunDelivery extends RunDelivery {
   readonly now: () => string
   readonly alive: (pid: number) => boolean
   readonly delivering = new Map<string, Promise<void>>()
+  readonly proven = new Map<string, { readonly receipt: string, readonly pullRequest: DeliveredPullRequest }>()
 
   constructor(ports: {
     journal: RunJournal,
@@ -163,28 +164,25 @@ export class CheckedRunDelivery extends RunDelivery {
       const intent = this.#parseIntent(raw, watch)
       await this.#requireIntentIdentity(watch, intent)
       const receipt = await this.journal.publicationRead(watch, CheckedRunDelivery.#RECEIPT)
-      if (receipt !== null) {
-        const recorded = await this.#validateReceipt(watch, intent, receipt)
-        const current = await this.#historicalPull(intent)
-        if (current.number !== recorded.number || current.url !== recorded.url) {
-          throw new RunDeliveryUncertain('the live pull request does not match the delivery receipt')
-        }
-        return { kind: 'delivered', pullRequest: current }
-      }
+      if (receipt !== null) return { kind: 'delivered', pullRequest: await this.#provenPull(watch, intent, receipt) }
       const remoteSha = await this.#remoteSha(intent)
       const pendingPush = await this.#pendingAttempt(watch, 'push', intent, remoteSha === intent.sha)
       if (pendingPush !== null && (pendingPush.result !== null || remoteSha !== intent.sha)) {
-        await this.#requireStopped(watch, 'push', pendingPush.name, pendingPush.request)
+        const ownership = await this.#ownership(watch, 'push', pendingPush.name, pendingPush.request)
+        if (ownership.running) return CheckedRunDelivery.#running('push', ownership.owner)
       }
       const pendingRelease = await this.#pendingAttempt(watch, 'release', intent)
       if (pendingRelease !== null) {
-        await this.#requireStopped(watch, 'release', pendingRelease.name, pendingRelease.request)
+        const ownership = await this.#ownership(watch, 'release', pendingRelease.name, pendingRelease.request)
+        if (ownership.running) return CheckedRunDelivery.#running('release', ownership.owner)
       }
       const pullRequest = await this.#compatiblePull(intent, false)
       if (pullRequest === null
         && await this.journal.publicationRead(watch, ['pull-request', 'request.json']) !== null
         && await this.journal.publicationRead(watch, ['pull-request', 'result.json']) === null) {
-        return { kind: 'uncertain', pullRequest: null, diagnostic: 'pull request creation has an unknown effect' }
+        return this.delivering.has(watch.agent)
+          ? { kind: 'publishing', pullRequest: null, diagnostic: 'pull request creation is in flight' }
+          : { kind: 'uncertain', pullRequest: null, diagnostic: 'pull request creation has an unknown effect' }
       }
       const diagnostic = await this.#latestDiagnostic(watch)
       return { kind: 'publishing', pullRequest, diagnostic }
@@ -194,6 +192,19 @@ export class CheckedRunDelivery extends RunDelivery {
         diagnostic: cause instanceof Error ? cause.message : String(cause),
       }
     }
+  }
+
+  async #provenPull(watch: PlanWatch, intent: DeliveryIntent, receipt: string): Promise<DeliveredPullRequest> {
+    const digest = this.#digest(receipt)
+    const remembered = this.proven.get(watch.agent)
+    if (remembered !== undefined && remembered.receipt === digest) return remembered.pullRequest
+    const recorded = await this.#validateReceipt(watch, intent, receipt)
+    const current = await this.#historicalPull(intent)
+    if (current.number !== recorded.number || current.url !== recorded.url) {
+      throw new RunDeliveryUncertain('the live pull request does not match the delivery receipt')
+    }
+    this.proven.set(watch.agent, { receipt: digest, pullRequest: current })
+    return current
   }
 
   async #intent(watch: PlanWatch): Promise<DeliveryIntent> {
@@ -377,7 +388,7 @@ export class CheckedRunDelivery extends RunDelivery {
 
   async #historicalPull(intent: DeliveryIntent): Promise<DeliveredPullRequest> {
     const candidates = await this.#pullCandidates(intent)
-    const compatible = candidates.filter((pull) => pull.state === 'OPEN' && !pull.isDraft
+    const compatible = candidates.filter((pull) => (pull.state === 'OPEN' || pull.state === 'MERGED') && !pull.isDraft
       && pull.headRefName === intent.branch && pull.headRepository.nameWithOwner === intent.repository
       && pull.baseRefName === intent.base && pull.baseRepository.nameWithOwner === intent.repository
       && new RegExp(`(?:^|\\n)Closes #${intent.issue}(?:\\r?$|\\s)`, 'm').test(pull.body))
@@ -385,6 +396,7 @@ export class CheckedRunDelivery extends RunDelivery {
       throw new RunDeliveryUncertain('the delivered pull request is no longer uniquely compatible with the delivery identity')
     }
     const current = compatible[0]
+    if (current.state === 'MERGED') return Object.freeze({ number: current.number, url: current.url })
     const remote = await this.#remoteSha(intent)
     if (remote === null || remote !== current.headRefOid || !(await this.#isAncestor(intent, intent.sha, remote))) {
       throw new RunDeliveryUncertain('the delivered pull request revision is not a descendant of the checked initial delivery')
@@ -622,13 +634,23 @@ export class CheckedRunDelivery extends RunDelivery {
     name: string,
     request: RecordedRequest,
   ): Promise<{ ownerText: string, owner: RecordedOwner }> {
+    const ownership = await this.#ownership(watch, operation, name, request)
+    if (ownership.running) {
+      throw new RunDeliveryUncertain(`${operation} process group ${ownership.owner.processGroup} may still be running`)
+    }
+    return ownership
+  }
+
+  async #ownership(
+    watch: PlanWatch,
+    operation: 'push' | 'release',
+    name: string,
+    request: RecordedRequest,
+  ): Promise<{ ownerText: string, owner: RecordedOwner, running: boolean }> {
     const ownerText = await this.journal.publicationRead(watch, [operation, name, 'owner.json'])
     if (ownerText === null) throw new RunDeliveryUncertain(`${operation} child ownership is unknown`)
     const owner = this.#owner(ownerText, operation, request)
-    if (this.alive(-owner.processGroup)) {
-      throw new RunDeliveryUncertain(`${operation} process group ${owner.processGroup} may still be running`)
-    }
-    return { ownerText, owner }
+    return { ownerText, owner, running: this.alive(-owner.processGroup) }
   }
 
   async #recordOwner(
@@ -875,6 +897,13 @@ export class CheckedRunDelivery extends RunDelivery {
   }
 
   #json(value: unknown): string { return `${JSON.stringify(value)}\n` }
+
+  static #running(operation: 'push' | 'release', owner: RecordedOwner): RunDeliveryInspection {
+    return {
+      kind: 'publishing', pullRequest: null,
+      diagnostic: `${operation} process group ${owner.processGroup} is still running`,
+    }
+  }
 
   static #isPullCandidate(value: unknown): value is PullCandidate {
     if (value === null || typeof value !== 'object') return false

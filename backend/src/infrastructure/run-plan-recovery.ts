@@ -40,6 +40,16 @@ type WatchProvenance =
   | { readonly kind: 'proven', readonly provenance: RunProvenanceValue }
   | { readonly kind: 'unproven', readonly diagnostic: string }
 
+class RunPublication {
+  readonly work: Promise<void>
+  failure: string | null
+
+  constructor(work: Promise<void>, diagnostic: (cause: unknown) => string) {
+    this.failure = null
+    this.work = work.catch((cause) => { this.failure = diagnostic(cause) })
+  }
+}
+
 class RecoveredRunPlan {
   readonly watch: PlanWatch
   readonly outcome: PlanOutcome
@@ -67,6 +77,7 @@ export class RunPlanRecovery {
   readonly reviews: ReviewWatch
   readonly nowMs: () => number
   readonly reviewing: Map<string, object>
+  readonly publications: Map<string, RunPublication>
   recovering: Promise<string | null> | null
 
   constructor(ports: {
@@ -96,6 +107,7 @@ export class RunPlanRecovery {
     this.reviews = ports.reviews
     this.nowMs = ports.nowMs
     this.reviewing = new Map()
+    this.publications = new Map()
     this.recovering = null
   }
 
@@ -146,6 +158,7 @@ export class RunPlanRecovery {
       if (foundKeys.has(key)) continue
       this.reviews.stop({ issue: watch.issue.number, repository: watch.repository })
       this.#forgetReviewing(key)
+      this.publications.delete(key)
       this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
     }
     for (const plan of recovered) {
@@ -252,29 +265,7 @@ export class RunPlanRecovery {
   }
 
   async #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): Promise<RecoveredRunPlan> {
-    if (fixes.length === 0) {
-      let publication = await this.delivery.inspect(watch)
-      if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
-      if (publication.kind !== 'delivered') {
-        try {
-          await this.delivery.deliver(watch)
-        } catch {
-          publication = await this.delivery.inspect(watch)
-          if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
-          return this.#continuable(
-            watch,
-            publication.kind === 'publishing' && publication.diagnostic !== null
-              ? publication.diagnostic
-              : 'completed implementation publication remains ready for continuation',
-          )
-        }
-        publication = await this.delivery.inspect(watch)
-      }
-      if (publication.kind !== 'delivered') {
-        return this.#continuable(watch, 'completed implementation publication remains ready for continuation')
-      }
-      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
-    }
+    if (fixes.length === 0) return this.#published(watch)
     const recovery = PlanRecovery.from({ calls: fixes, proof: null, cleanup: null, nowMs: this.nowMs() })
     if (recovery.successfulExecution() !== null) {
       return new RecoveredRunPlan(watch, {
@@ -297,6 +288,30 @@ export class RunPlanRecovery {
       recovery.detail,
       recovery,
     )
+  }
+
+  async #published(watch: PlanWatch): Promise<RecoveredRunPlan> {
+    const key = this.#key(watch)
+    const publication = await this.delivery.inspect(watch)
+    if (publication.kind === 'delivered') {
+      this.publications.delete(key)
+      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
+    }
+    if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
+    const started = this.publications.get(key)
+    if (started === undefined) {
+      this.publications.set(key, new RunPublication(
+        this.delivery.deliver(watch), (cause) => RunPlanRecovery.#diagnostic(cause),
+      ))
+      return this.#publishing(watch)
+    }
+    return started.failure === null ? this.#publishing(watch) : this.#continuable(watch, started.failure)
+  }
+
+  #publishing(watch: PlanWatch): RecoveredRunPlan {
+    return new RecoveredRunPlan(watch, {
+      phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange: false,
+    })
   }
 
   async #facts(history: readonly RecordedCall[]): Promise<readonly RecoveryCall[]> {

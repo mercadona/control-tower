@@ -358,6 +358,24 @@ class StartupRunDelivery extends RunDelivery {
   }
 }
 
+class HeldRunDelivery extends RunDelivery {
+  deliveries = 0
+  #release: (() => void) | null = null
+
+  override async deliver(): Promise<void> {
+    this.deliveries += 1
+    await new Promise<void>((resolve) => { this.#release = resolve })
+  }
+
+  override async inspect(): Promise<RunDeliveryInspection> {
+    return { kind: 'publishing', pullRequest: null, diagnostic: null }
+  }
+
+  finish(): void {
+    this.#release?.()
+  }
+}
+
 class LifecycleRecords extends PlanRecords {
   readonly watch: PlanWatch
 
@@ -542,6 +560,10 @@ class ProjectionScenario {
       receipt: { kind: 'present', text: '{}' },
     })))
   }
+
+  async settlePublications(): Promise<void> {
+    await Promise.all([...this.recovery.publications.values()].map((publication) => publication.work))
+  }
 }
 
 describe('RunPlanRecovery projection', () => {
@@ -554,7 +576,28 @@ describe('RunPlanRecovery projection', () => {
 
     expect(delivery.deliveries).toBe(1)
     expect(tested.machine.effects.commands).toBe(0)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: false })
+
+    await tested.settlePublications()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
     expect(tested.reviews.started).toEqual([watch])
+  })
+
+  it('reads an in-flight publication without waiting for it to finish', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new HeldRunDelivery()
+    const tested = new ProjectionScenario([watch], delivery)
+
+    expect(await tested.recovery.recover()).toBeNull()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(delivery.deliveries).toBe(1)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: false })
+    delivery.finish()
   })
 
   it('does not start the review observer when startup publication cannot prove checked delivery', async () => {
@@ -562,6 +605,8 @@ describe('RunPlanRecovery projection', () => {
     const delivery = new StartupRunDelivery(true)
     const tested = new ProjectionScenario([watch], delivery)
 
+    expect(await tested.recovery.recover()).toBeNull()
+    await tested.settlePublications()
     expect(await tested.recovery.recover()).toBeNull()
 
     expect(delivery.deliveries).toBe(1)

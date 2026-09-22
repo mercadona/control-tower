@@ -67,7 +67,7 @@ describe('checked run delivery with real git', () => {
     })
 
     await fixture.advanceForReviewFix()
-    expect(await restarted.inspect(fixture.watch)).toEqual({
+    expect(await fixture.rebuild().inspect(fixture.watch)).toEqual({
       kind: 'delivered', pullRequest: { number: 41, url: 'https://github.com/owner/name/pull/41' },
     })
   })
@@ -117,7 +117,7 @@ describe('checked run delivery with real git', () => {
     const interrupted = fixture.delivery.deliver(fixture.watch)
     await vi.waitFor(() => expect(child?.pid).toBeTypeOf('number'), { timeout: 10_000 })
     await vi.waitFor(async () => expect(await fixture.rebuild().inspect(fixture.watch)).toMatchObject({
-      kind: 'uncertain', diagnostic: expect.stringContaining('may still be running'),
+      kind: 'publishing', diagnostic: expect.stringContaining('is still running'),
     }))
 
     expect(fixture.releases).toHaveLength(1)
@@ -288,7 +288,7 @@ describe('checked run delivery with real git', () => {
     fixture.succeedRelease()
 
     expect(await fixture.rebuild().inspect(fixture.watch)).toMatchObject({
-      kind: 'uncertain', diagnostic: expect.stringContaining(`process group ${owner.processGroup} may still be running`),
+      kind: 'publishing', diagnostic: expect.stringContaining(`process group ${owner.processGroup} is still running`),
     })
     await expect(fixture.rebuild().deliver(fixture.watch)).rejects.toThrow('may still be running')
     expect(fixture.releases).toHaveLength(1)
@@ -342,6 +342,60 @@ describe('checked run delivery with real git', () => {
     expect(await fixture.remoteSha()).toBe(fixture.sha)
     expect(await fixture.pullCount()).toBe(1)
     expect(await fixture.releaseDispositionCount()).toBe(2)
+  })
+
+  it('reads a live publication as publishing and only its own pull request creation as in flight', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-in-flight-create-'))))
+    roots.push(fixture.home)
+    let finishCreate: (() => void) | null = null
+    fixture.setCreateLaunch(async (create) => {
+      await new Promise<void>((resolve) => { finishCreate = resolve })
+      create()
+      return DeliveryFixture.output('https://github.com/owner/name/pull/41\n')
+    })
+
+    const publishing = fixture.delivery.deliver(fixture.watch)
+    void publishing.catch(() => {})
+    await vi.waitFor(async () => expect(await fixture.delivery.inspect(fixture.watch)).toEqual({
+      kind: 'publishing', pullRequest: null, diagnostic: 'pull request creation is in flight',
+    }), { timeout: 10_000 })
+
+    expect(await fixture.rebuild().inspect(fixture.watch)).toEqual({
+      kind: 'uncertain', pullRequest: null, diagnostic: 'pull request creation has an unknown effect',
+    })
+    finishCreate!()
+    await expect(publishing).rejects.toThrow('checked release failed')
+  })
+
+  it('keeps reading a merged delivery as delivered once the branch and the issue are closed', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-merged-delivery-'))))
+    roots.push(fixture.home)
+    await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
+    await fixture.rebuild().deliver(fixture.watch)
+
+    await fixture.mergeDelivery()
+
+    expect(await fixture.rebuild().inspect(fixture.watch)).toEqual({
+      kind: 'delivered', pullRequest: { number: 41, url: 'https://github.com/owner/name/pull/41' },
+    })
+  })
+
+  it('proves the receipt once and answers later reads without asking GitHub again', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-remembered-receipt-'))))
+    roots.push(fixture.home)
+    await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
+    await fixture.rebuild().deliver(fixture.watch)
+    const reader = fixture.rebuild()
+    expect(await reader.inspect(fixture.watch)).toMatchObject({ kind: 'delivered' })
+
+    const queries = fixture.queries.length
+    const issueReads = fixture.issueReads.length
+    expect(await reader.inspect(fixture.watch)).toMatchObject({ kind: 'delivered' })
+
+    expect(fixture.queries).toHaveLength(queries)
+    expect(fixture.issueReads).toHaveLength(issueReads)
+    expect(await fixture.rebuild().inspect(fixture.watch)).toMatchObject({ kind: 'delivered' })
+    expect(fixture.queries.length).toBeGreaterThan(queries)
   })
 })
 
@@ -454,7 +508,9 @@ class DeliveryFixture {
   })
   const pulls: Record<string, unknown>[] = []
   const queries: string[][] = []
+  const issueReads: string[][] = []
   let labels = ['status:in-progress']
+  let issueState = 'OPEN'
   const externalStatePath = join(home, 'github-state.json')
   const fakeBin = join(home, 'bin')
   await fs.mkdir(fakeBin, { recursive: true })
@@ -489,7 +545,8 @@ class DeliveryFixture {
         return DeliveryFixture.output('https://github.com/owner/name/pull/41\n')
       }
       if (argv[0] === 'issue' && argv[1] === 'view') {
-        return DeliveryFixture.output(JSON.stringify({ state: 'OPEN', labels: labels.map((name) => ({ name })) }))
+        issueReads.push([...argv])
+        return DeliveryFixture.output(JSON.stringify({ state: issueState, labels: labels.map((name) => ({ name })) }))
       }
       return new ProcessOutput({ code: 1, stdout: '', stderr: `unexpected gh argv: ${argv.join(' ')}` })
     },
@@ -541,7 +598,7 @@ class DeliveryFixture {
     })
   }
   return {
-    home, root, remote, worktree, sha, watch, pulls, queries, releases, delivery: build(), rebuild: build,
+    home, root, remote, worktree, sha, watch, pulls, queries, issueReads, releases, delivery: build(), rebuild: build,
     receiptPath: join(state, 'harness', watch.agent, 'run', 'publication', 'receipt.json'),
     releaseDirectory: async () => {
       const root = join(state, 'harness', watch.agent, 'run', 'publication', 'release')
@@ -641,6 +698,12 @@ class DeliveryFixture {
       throw new Error(`release attempt ${attempt} is absent`)
     },
     remoteSha: () => runGit(['--git-dir', remote, 'rev-parse', 'refs/heads/feat/7']),
+    mergeDelivery: async () => {
+      pulls[0].state = 'MERGED'
+      await runGit(['--git-dir', remote, 'update-ref', '-d', 'refs/heads/feat/7'])
+      issueState = 'CLOSED'
+      labels = []
+    },
     advanceForReviewFix: async () => {
       await fs.writeFile(join(worktree, 'fix.txt'), 'review fix\n')
       await runGit(['-C', worktree, 'add', 'fix.txt'])
