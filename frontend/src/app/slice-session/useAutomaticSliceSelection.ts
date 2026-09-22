@@ -30,6 +30,14 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
   }, [])
 
   useEffect(() => {
+    const activeIdentities = new Set(plans.map((active) => identityOf(active.plan)))
+    setReadings((previous) => {
+      const retained = Object.entries(previous).filter(([identity]) => activeIdentities.has(identity))
+      return retained.length === Object.keys(previous).length ? previous : Object.fromEntries(retained)
+    })
+  }, [plans])
+
+  useEffect(() => {
     if (workflow === null || workflow.phase !== 'implementing') {
       previousRef.current = null
       pendingRef.current = null
