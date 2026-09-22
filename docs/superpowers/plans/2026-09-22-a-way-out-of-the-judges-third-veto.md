@@ -834,8 +834,13 @@ Add to `plugin/__tests__/ct-step-verdict.test.js`, inside `describe('a veto leav
     }
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    const p = writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }])
-    const third = ct('verdict', judgeTask.tokenise ? judgeTask.tokenise(p) : p, '--output-format', 'json')
+    // `judgeTask` seals the review token into the verdict and forwards every
+    // extra argument to the verb (fixtures/ct-step-harness.js:245), so the
+    // announcement flag rides along without bypassing the token.
+    const third = judgeTask(
+      writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]),
+      '--output-format', 'json',
+    )
     const announced = JSON.parse(third.stdout.trim().split('\n').pop())
 
     expect(announced.state).toBe('blocked-judge')
@@ -843,8 +848,6 @@ Add to `plugin/__tests__/ct-step-verdict.test.js`, inside `describe('a veto leav
     expect(announced.verdict).toMatch(/task-\d+-verdict-\d+\.json$/)
   })
 ```
-
-If `judgeTask` in `fixtures/ct-step-harness.js` exposes no tokenising helper, read it and call `ct('verdict', …)` exactly the way `judgeTask` does, adding `'--output-format', 'json'` to the argument list. Do not bypass the review token: a verdict without it is discarded, which is a different exit.
 
 - [ ] **Step 2: Run the tests and see them fail**
 
@@ -1024,7 +1027,7 @@ describe('a run the judge closed', () => {
 })
 ```
 
-`DriveRunMother.refusing` does not exist. Build it in this test file from the machinery the file already uses to construct a `DriveRun` (see its existing `this.driver = new DriveRun({…})` at `:320`), returning `{ drive: () => driver.execute(new DriveRunParams({ watch, planner })) }`. Read that block before writing it; do not invent a second way to build the same object.
+`DriveRunMother.refusing` does not exist yet, and building it is part of this task. `backend/__tests__/application/drive-run.test.ts:320` already constructs a `DriveRun` inside the file's own mother class, with a `RunMachine` double whose `open` answers an instruction. Extend that class with a `refusing({ detail, closure, announcements })` static that builds the same object with `announcements` passed through and a machine whose `open` answers `new RunInstruction({ kind: 'refused', detail, closure })`, and returns `{ drive: () => driver.execute(new DriveRunParams({ watch, planner })) }`. Read that block before writing it; do not add a second way to build the same object.
 
 - [ ] **Step 2: Run the tests and see them fail**
 
@@ -1327,8 +1330,6 @@ describe('a run the judge closed does not quietly close again', () => {
 })
 ```
 
-Check `EXIT.WRONG_STEP`'s number in `ct-step.mjs:118-135` before asserting `9`, and use the real one.
-
 - [ ] **Step 2: Run the tests and see them fail**
 
 Run: `cd plugin && npx vitest run __tests__/ct-step-reopen.test.js -t 'does not quietly close again'`
@@ -1458,8 +1459,6 @@ describe('reopen is the way a person gets a run out of the judge', () => {
   })
 })
 ```
-
-Check `EXIT.WRONG_STEP` and `EXIT.USAGE` in `ct-step.mjs:118-135` and use the real numbers in place of `9` and `2`.
 
 - [ ] **Step 2: Run the tests and see them fail**
 
