@@ -1171,8 +1171,8 @@ function archive(kind, content) {
 // and carries on), and naming a file that does not exist is worse than naming
 // none.
 function archivedVerdictPath() {
-  const relative = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
-  return existsSync(join(repoRoot, relative)) ? relative : null
+  const rel = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
+  return existsSync(join(repoRoot, rel)) ? rel : null
 }
 
 // ---------------------------------------------------------------------------
