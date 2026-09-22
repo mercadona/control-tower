@@ -37,6 +37,21 @@ describe('usePlanningProgress', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
+  it('should keep polling while the conversation has no recorded planning call yet, instead of treating it as a stop condition', async () => {
+    const fetching = answerWith(PlanningProgressMother.notRead())
+    vi.stubGlobal('fetch', fetching)
+    vi.useFakeTimers()
+
+    renderHook(() => usePlanningProgress(PlanningProgressMother.ISSUE, PlanningProgressMother.REPO))
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetching).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetching).toHaveBeenCalledTimes(3)
+  })
+
   it('should stop polling once this process is found not to be watching that issue', async () => {
     const fetching = answerWith(PlanningProgressMother.notWatched())
     vi.stubGlobal('fetch', fetching)

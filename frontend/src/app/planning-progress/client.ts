@@ -1,4 +1,4 @@
-import { PlanningActivity, PlanningActivityState, PlanningProgressOutcome, PlanningToolCall } from 'app/planning-progress/PlanningProgress.types'
+import { PlanningActivity, PlanningActivityState, PlanningActivityStateValue, PlanningProgressOutcome, PlanningToolCall } from 'app/planning-progress/PlanningProgress.types'
 
 const PATH = (issue: number) => `/planning-progress/${issue}`
 const REPO_FIELD = 'repo'
@@ -11,11 +11,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isStringOrNull = (value: unknown): value is string | null => value === null || typeof value === 'string'
 
+const isLastToolWire = (value: unknown): value is PlanningToolCall =>
+  isRecord(value) && typeof value.name === 'string' && isStringOrNull(value.argument)
+
+const isLastToolWireOrNull = (value: unknown): value is PlanningToolCall | null => value === null || isLastToolWire(value)
+
 type PlanningActivityWire = {
-  state: string
+  state: PlanningActivityStateValue
   running_ms: number
   tool_calls: number
-  last_tool?: unknown
+  last_tool: PlanningToolCall | null
   last_text: string | null
 }
 
@@ -25,18 +30,14 @@ const isPlanningActivityWire = (value: unknown): value is PlanningActivityWire =
   KNOWN_STATES.includes(value.state) &&
   typeof value.running_ms === 'number' &&
   typeof value.tool_calls === 'number' &&
+  isLastToolWireOrNull(value.last_tool) &&
   isStringOrNull(value.last_text)
 
-const isLastToolWire = (value: unknown): value is PlanningToolCall =>
-  isRecord(value) && typeof value.name === 'string' && isStringOrNull(value.argument)
-
-const toLastTool = (value: unknown): PlanningToolCall | null => (isLastToolWire(value) ? { name: value.name, argument: value.argument } : null)
-
 const toActivity = (wire: PlanningActivityWire): PlanningActivity => ({
-  state: wire.state as PlanningActivity['state'],
+  state: wire.state,
   runningMs: wire.running_ms,
   toolCalls: wire.tool_calls,
-  lastTool: wire.last_tool === undefined || wire.last_tool === null ? null : toLastTool(wire.last_tool),
+  lastTool: wire.last_tool,
   lastText: wire.last_text,
 })
 

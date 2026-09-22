@@ -39,7 +39,7 @@ describe('Home · plan events', () => {
 
     await streamFrame(PlanEventsMother.writing())
 
-    expect(screen.getByRole('status')).toHaveTextContent('Escribiendo el plan…')
+    expect(within(screen.getByLabelText('Progreso del plan')).getByRole('status')).toHaveTextContent('Escribiendo el plan…')
   })
 
   it('should keep a ready plan in review and keep listening in case a review reworks it', async () => {
@@ -60,7 +60,7 @@ describe('Home · plan events', () => {
 
     await dropStream()
 
-    expect(within(screen.getByLabelText('Progreso del plan')).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
     expect(FakeEventSource.last().closes).toBe(1)
   })
 

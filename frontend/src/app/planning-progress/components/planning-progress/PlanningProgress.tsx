@@ -4,7 +4,7 @@ import { Banner } from 'system-ui/banner'
 import './PlanningProgress.css'
 
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
-const NOT_WATCHED_MESSAGE = 'El backend no está siguiendo esta planificación, puede haberse reiniciado'
+const NOT_WATCHED_MESSAGE = 'Sin seguimiento del agente en este backend'
 const CHECKING_MESSAGE = 'Comprobando lo que hace el agente…'
 const RUNNING_MESSAGE = 'El agente está trabajando'
 const FINISHED_MESSAGE = 'El agente ha terminado'
@@ -50,7 +50,9 @@ const PlanningProgress = ({ issue, repo }: PlanningProgressProps) => {
           )}
         </div>
       )}
-      {progress.phase === 'not-watched' && <Banner type="error" role="alert" title={NOT_WATCHED_MESSAGE} />}
+      {progress.phase === 'not-watched' && (
+        <p className="planning-progress__state planning-progress__state--muted" role="status">{NOT_WATCHED_MESSAGE}</p>
+      )}
       {progress.phase === 'failed' && <Banner type="error" role="alert" title={progress.error} />}
       {progress.phase === 'unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
     </section>

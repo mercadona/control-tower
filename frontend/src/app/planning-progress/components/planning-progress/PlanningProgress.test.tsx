@@ -30,6 +30,17 @@ describe('PlanningProgress', () => {
     expect(screen.queryByText('Comprobando lo que hace el agente…')).toBeNull()
   })
 
+  it('should show minutes past sixty instead of wrapping the clock back to zero', async () => {
+    answerWith({
+      status: 200,
+      body: '{"state":"running","running_ms":4500000,"tool_calls":1,"last_tool":null,"last_text":null}',
+    })
+
+    renderProgress()
+
+    expect(await screen.findByText('75:00 · 1 llamadas a herramientas')).toBeInTheDocument()
+  })
+
   it('should show the last tool without a dash when it has no argument', async () => {
     answerWith({
       status: 200,
@@ -69,12 +80,22 @@ describe('PlanningProgress', () => {
     expect(screen.getByText('Comprobando lo que hace el agente…')).toHaveAttribute('role', 'status')
   })
 
-  it('should show this process not watching the issue as an error', async () => {
+  it('should show the waiting message, not an error, while the conversation has no recorded planning call yet', async () => {
+    answerWith(PlanningProgressMother.notRead())
+
+    renderProgress()
+
+    expect(await screen.findByText('Comprobando lo que hace el agente…')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('should show this process not watching the issue as a quiet status, not an error', async () => {
     answerWith(PlanningProgressMother.notWatched())
 
     renderProgress()
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(await screen.findByText('Sin seguimiento del agente en este backend')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('should show a real refusal as an error with the backend text', async () => {
