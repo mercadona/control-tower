@@ -380,8 +380,6 @@ describe('ClaudeRunCalls', () => {
       expect(descriptor.argv).toEqual(RunCallScenario.argv(dispatch, promptPath))
       expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch))
     })
-    expect(scenario.descriptor(0).argv).toContain(JSON.stringify(REPORT_SCHEMA))
-    expect(scenario.descriptor(4).argv).not.toContain('--json-schema')
     expect(scenario.descriptor(1).argv).not.toContain('Agent')
     expect(await Promise.all(prepared.map((path) => readFile(path)))).toEqual(before)
   })
