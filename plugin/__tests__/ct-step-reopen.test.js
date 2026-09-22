@@ -8,7 +8,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, writeVerdict, runState, judgeTask } = makeHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask } = makeHelpers(() => repo)
 
 const veto = () => judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
 
@@ -19,11 +19,14 @@ const advise = () => {
   return ct('advice', p)
 }
 
-// Three vetoes, through the adviser the second one opens.
-const blocked = () => {
+// Three vetoes, through the adviser the second one opens. `discarding` spends
+// one discard on the way, on an answer the judge wrote that cannot be read: the
+// only way the run reaches the closure with a non-zero discard count.
+const blocked = ({ discarding = false } = {}) => {
   for (let i = 0; i < 3; i++) {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
+    if (discarding && i === 0) judgeTask(writeRaw('no json'))
     veto()
     if (runState().step === 'advise') advise()
   }
@@ -54,6 +57,18 @@ describe('a run the judge closed does not quietly close again', () => {
     expect(announced.state).toBe('blocked-judge')
     expect(announced.outcome).toBe('failed')
     expect(announced.exit).toBe(1)
+  })
+
+  it('every re-ask carries the reason again, because the backend announces each one', () => {
+    blocked()
+
+    const announcementOf = () => JSON.parse(ct('next', '--output-format', 'json').stdout.trim().split('\n').pop())
+    const first = announcementOf()
+    const second = announcementOf()
+
+    expect(first.findings).toContain('mal')
+    expect(first.verdict).toBe('.agent/run-7/task-1-verdict-3.json')
+    expect(second).toEqual(first)
   })
 
   it('a verb that would transition is a sequence error that names the way out', () => {
@@ -87,8 +102,9 @@ describe('reopen is the way a person gets a run out of the judge', () => {
   })
 
   it('does not reset the discards, because an illegible judge is a different failure', () => {
-    blocked()
+    blocked({ discarding: true })
     const spent = runState().discards
+    expect(spent).toBeGreaterThan(0)
 
     ct('reopen', '--instruction', 'otra vuelta')
 

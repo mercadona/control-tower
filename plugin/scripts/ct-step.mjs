@@ -392,10 +392,25 @@ if (existsSync(stateFile)) {
     }
     if (verb === 'next') {
       if (announcing) {
+        // The same two fields the closing verb announced, so a second `next`
+        // is not a contentless duplicate: the backend re-announces on every
+        // re-ask, and a line with no findings and no verdict path tells the
+        // coordinating session nothing it can act on.
+        //
+        // The attempt is read with `StepSeal.attemptOf` and the path is built
+        // here instead of through `archivedVerdictPath()`: that helper reaches
+        // `currentAttempt`, a `const` arrow declared far below, and this block
+        // is top-level module code — calling it here is a temporal-dead-zone
+        // `ReferenceError`, exactly as `save()` would be. The counters are
+        // untouched by the closure, so the attempt is the one that archived
+        // the verdict.
+        const archived = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${StepSeal.attemptOf(run)}.json`)
         safeWrite(1, StepAnnouncement.refusal({
           issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
           state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
           detail: WAY_OUT,
+          findings: run.lastFindings ?? null,
+          verdict: existsSync(join(repoRoot, archived)) ? archived : null,
         }).text())
       }
       out(WAY_OUT)
