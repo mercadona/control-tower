@@ -105,9 +105,20 @@ infrastructure words.
 instead enters `RunPlanAgents` before planning and, after successful publication,
 `DriveRun` follows the unchanged plugin oracle in the original conversation.
 This is unconditional composition in the existing entrypoint: no feature flag,
-toggle, environment setting or configurable alternate path exists. The driver
-ends at the plugin's delivered result. It owns neither pull-request publication
-nor checked release, and the existing post-review fix path remains separate.
+toggle, environment setting or configurable alternate path exists. The plugin's
+delivered result means local implementation is complete. The driver then owns
+publication through `RunDelivery`: pin the revision, publish its branch, create or
+reuse the matching pull request, and invoke checked release. Review watching starts
+only after validated delivery evidence. The existing post-review fix path remains
+separate and reuses the published pull request.
+
+Publication requests, results and receipts live under the backend journal's
+`run/publication/`, outside the implementation tree. Recovery reconciles remote
+effects and validates their bound evidence without repeating implementation.
+Tracked mutations own process groups; a dead leader alone does not authorize a
+retry while its descendants remain alive. Termination evidence permits retry,
+never a successful delivery claim. Progress shows local completion as publication
+pending until checked delivery is proven.
 
 Durable provenance, not configuration, chooses compatibility behavior. A valid
 admission identifies driver work unless contradictory legacy evidence exists.

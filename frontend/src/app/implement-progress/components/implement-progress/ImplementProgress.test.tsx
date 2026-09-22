@@ -91,6 +91,16 @@ describe('ImplementProgress', () => {
     expect(await screen.findByText(/En revisión/)).toHaveAttribute('role', 'status')
   })
 
+  it('shows publication as pending even when the pull request already exists', async () => {
+    answerWith(ImplementProgressMother.publishing())
+
+    renderProgress()
+
+    expect(await screen.findByText('Implementación terminada; publicación pendiente')).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('link', { name: /#31/ })).toHaveAttribute('href', 'https://github.com/owner/name/pull/31')
+    expect(screen.queryByText(/^En revisión$/)).toBeNull()
+  })
+
   it('should link the pull request once the plan is in review', async () => {
     answerWith(ImplementProgressMother.inReview())
 

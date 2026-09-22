@@ -71,6 +71,7 @@ import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
+import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
 type Measurement = {
@@ -811,6 +812,7 @@ export class RunDriverMother {
           calls: initial.planCalls,
           publication: fixture.#publication(fixture.files),
           machine: fixture.machine,
+          delivery: new CompletedRunDelivery(),
           step: new ExecuteRunInstruction({ machine: fixture.machine, calls: cutCalls }),
           messages: new DeliverHeldMessages({
             messages: fixture.journal,
@@ -865,6 +867,7 @@ export class RunDriverMother {
           calls: rebuilt.planCalls,
           publication: fixture.#publication(rebuiltFiles),
           machine: rebuiltMachine,
+          delivery: new CompletedRunDelivery(),
           step: new ExecuteRunInstruction({ machine: rebuiltMachine, calls: recoveryCalls }),
           messages: new DeliverHeldMessages({
             messages: rebuiltJournal,
@@ -877,6 +880,7 @@ export class RunDriverMother {
         const agents = new RunPlanAgents({
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
           transport: rebuilt.transport, driver, machine: rebuiltMachine, journal: rebuiltJournal,
+          delivery: new CompletedRunDelivery(),
           measurements: rebuilt.measurements, newId: () => fixture.#identity(), nowMs: Date.now,
           announcements: new SilentChangeAnnouncements(),
           stderr: (line) => nextRoleGate.cancel(new Error(line.trim())),
@@ -1196,7 +1200,7 @@ export class RunDriverMother {
     })
     const measurements = new ClaudeRunMeasurements({ files, calls: transport })
     const driver = new DriveRun({
-      calls: planCalls, publication: new PlanPublication(), machine,
+      calls: planCalls, publication: new PlanPublication(), machine, delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport, machine, measurements, files, pluginRoot: RunDriverMother.#PLUGIN,
       }) }),
@@ -1209,7 +1213,8 @@ export class RunDriverMother {
       escalations: QuietEscalations.reader(),
     })
     const agents = new RunPlanAgents({
-      legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal, measurements,
+      legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal,
+      delivery: new CompletedRunDelivery(), measurements,
       announcements: new SilentChangeAnnouncements(),
       newId: () => this.#identity(), nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'), stderr: () => {},
     })
@@ -1219,7 +1224,7 @@ export class RunDriverMother {
       records, calls: planCalls, ownership: transport, checkouts: new RecoveryCheckouts(), activePlans, reviews,
     })
     const recovery = new RunPlanRecovery({
-      legacy, records, calls: planCalls, transport, machine, journal, agents,
+      legacy, records, calls: planCalls, transport, machine, journal, agents, delivery: new CompletedRunDelivery(),
       checkouts: new RecoveryCheckouts(), activePlans, reviews,
       nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'),
     })

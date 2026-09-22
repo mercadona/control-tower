@@ -52,6 +52,7 @@ import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
+import { CompletedRunDelivery } from '../run-delivery-double.ts'
 
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
@@ -595,6 +596,7 @@ describe('RunPlanAgents', () => {
       calls,
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine: driverMachine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine: driverMachine, calls: new RefusingRunCalls() }),
       messages: new DeliverHeldMessages({
         messages: journal,
@@ -615,6 +617,7 @@ describe('RunPlanAgents', () => {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements,
       announcements,
       newId: () => '55555555-5555-4555-8555-555555555555',
@@ -715,6 +718,7 @@ describe('RunPlanAgents', () => {
       calls,
       publication: new ControlledPublication(events, publicationEntered, publicationRelease),
       machine,
+      delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: new RefusingRunCalls() }),
       messages: new DeliverHeldMessages({
         messages: journal,
@@ -734,6 +738,7 @@ describe('RunPlanAgents', () => {
       driver,
       machine,
       journal,
+      delivery: new CompletedRunDelivery(),
       measurements,
       announcements: new AnnouncementsDouble(),
       newId: () => '55555555-5555-4555-8555-555555555555',

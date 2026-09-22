@@ -19,6 +19,7 @@ import type { RecordedCall } from './recorded-call.ts'
 import type { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
 import type { ReviewWatch } from './review-watch.ts'
 import type { RunJournal } from './run-journal.ts'
+import type { RunDelivery } from '../domain/ports/run-delivery.ts'
 import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from './run-plan-agents.ts'
 
 type PlanOutcome =
@@ -60,6 +61,7 @@ export class RunPlanRecovery {
   readonly machine: CtRunMachine
   readonly journal: RunJournal
   readonly agents: RunPlanAgents
+  readonly delivery: RunDelivery
   readonly checkouts: CheckoutRegistry
   readonly activePlans: ActivePlans
   readonly reviews: ReviewWatch
@@ -75,6 +77,7 @@ export class RunPlanRecovery {
     machine: CtRunMachine,
     journal: RunJournal,
     agents: RunPlanAgents,
+    delivery: RunDelivery,
     checkouts: CheckoutRegistry,
     activePlans: ActivePlans,
     reviews: ReviewWatch,
@@ -87,6 +90,7 @@ export class RunPlanRecovery {
     this.machine = ports.machine
     this.journal = ports.journal
     this.agents = ports.agents
+    this.delivery = ports.delivery
     this.checkouts = ports.checkouts
     this.activePlans = ports.activePlans
     this.reviews = ports.reviews
@@ -201,7 +205,7 @@ export class RunPlanRecovery {
         if (unfinished.some((recorded) => recorded.purpose !== 'fix')) {
           return this.#inspect(watch, `incomplete call ${unfinished[0].call.id} is not the current machine work`)
         }
-        return this.#delivered(watch, facts.filter((recorded) => recorded.purpose === 'fix'))
+        return await this.#delivered(watch, facts.filter((recorded) => recorded.purpose === 'fix'))
       case 'uncertain':
         return this.#inspect(watch, fact.detail, fact.closure)
       case 'active':
@@ -247,11 +251,29 @@ export class RunPlanRecovery {
     )
   }
 
-  #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): RecoveredRunPlan {
+  async #delivered(watch: PlanWatch, fixes: readonly RecoveryCall[]): Promise<RecoveredRunPlan> {
     if (fixes.length === 0) {
-      return new RecoveredRunPlan(watch, {
-        phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true,
-      })
+      let publication = await this.delivery.inspect(watch)
+      if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
+      if (publication.kind !== 'delivered') {
+        try {
+          await this.delivery.deliver(watch)
+        } catch {
+          publication = await this.delivery.inspect(watch)
+          if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
+          return this.#continuable(
+            watch,
+            publication.kind === 'publishing' && publication.diagnostic !== null
+              ? publication.diagnostic
+              : 'completed implementation publication remains ready for continuation',
+          )
+        }
+        publication = await this.delivery.inspect(watch)
+      }
+      if (publication.kind !== 'delivered') {
+        return this.#continuable(watch, 'completed implementation publication remains ready for continuation')
+      }
+      return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
     }
     const recovery = PlanRecovery.from({ calls: fixes, proof: null, cleanup: null, nowMs: this.nowMs() })
     if (recovery.successfulExecution() !== null) {

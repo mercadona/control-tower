@@ -38,6 +38,12 @@ const delivered = () => ({
   body: '{"step":"delivered","task":null,"total_tasks":8,"name":null,"attempt":null,"discards":1}',
 })
 
+const publishing = () => ({
+  status: 200,
+  body: '{"step":"publishing","task":null,"total_tasks":8,"name":null,"attempt":null,"discards":1,' +
+    '"pull_request":{"number":31,"url":"https://github.com/owner/name/pull/31"}}',
+})
+
 const withoutTaskName = () => ({
   status: 200,
   body: '{"step":"implement","task":1,"total_tasks":8,"name":null,"attempt":1,"discards":0}',
@@ -65,6 +71,7 @@ export const ImplementProgressMother = {
   inReviewWithMalformedPullRequest,
   realWorldInReview,
   delivered,
+  publishing,
   withoutTaskName,
   notRead,
   malformedRoot,
