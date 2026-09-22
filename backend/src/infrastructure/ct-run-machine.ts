@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
-  ANNOUNCEMENT_KINDS, CONSUMING_VERB_OF_STEP, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS,
+  ANNOUNCEMENT_KINDS, CONSUMING_VERB_OF_STEP, RESPONSE_KINDS,
 } from '../../../plugin/scripts/step-announcement.js'
 import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
@@ -13,13 +13,12 @@ import {
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
 import {
-  AnnouncedStep, ConsumingProse, RunAnnouncement, StepProse, type RunClosure,
+  AnnouncedStep, ConsumingProse, RESPONSE_KIND_BY_STEP, RunAnnouncement, StepProse, type RunClosure,
 } from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
 
-const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
 const CONSUMING_VERB_BY_STEP: Readonly<Record<string, string>> = CONSUMING_VERB_OF_STEP
 
 type InspectionFact =

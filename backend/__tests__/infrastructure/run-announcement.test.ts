@@ -93,6 +93,38 @@ class AnnouncementMother {
     })
   }
 
+  static reconcilerRoundWhoseConsumingArgvCarriesANumber(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'reconcile', attempt: 1 },
+      dispatch: {
+        inputs: [{ role: 'reconciliation-package', kind: 'literal', path: '.agent/reconcile-package.md' }],
+        response: { kind: 'edits', path: null },
+      },
+      consuming: { argv: ['reconcile', '--plan', 'docs/superpowers/plans/plan.md', '--issue', 9] },
+    })
+  }
+
+  static controlsRoundWhoseCommandsCarryANumber(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'controls', attempt: 1 },
+      commands: ['npm run lint', 9],
+      consuming: { argv: ['controls', '--plan', 'docs/superpowers/plans/plan.md', '--issue', '9'] },
+    })
+  }
+
+  static controlsRoundWithNoConsumingKey(): string {
+    return JSON.stringify({
+      version: 1,
+      kind: 'step',
+      run: { issue: 9, task: 1, tasksTotal: 2, step: 'controls', attempt: 1 },
+      commands: ['npm run lint', 'npm test'],
+    })
+  }
+
   static reconcilerRoundWithoutAPath(): string {
     return JSON.stringify({
       version: 1,
@@ -322,6 +354,21 @@ describe('AnnouncedStep', () => {
 
   it('a judge round missing the brief leaves the round unread', () => {
     expect(AnnouncedStep.read(AnnouncementMother.judgeRoundCarryingThePackageAlone())).toBeNull()
+  })
+
+  it('an announced consuming argv that carries a number leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.reconcilerRoundWhoseConsumingArgvCarriesANumber())).toBeNull()
+  })
+
+  it('an announced commands list that carries a number leaves the round unread', () => {
+    expect(AnnouncedStep.read(AnnouncementMother.controlsRoundWhoseCommandsCarryANumber())).toBeNull()
+  })
+
+  it('an announced step with no consuming key keeps an empty argv', () => {
+    const round = AnnouncedStep.read(AnnouncementMother.controlsRoundWithNoConsumingKey())
+
+    expect(round?.argv).toEqual([])
+    expect(round?.commands).toEqual(['npm run lint', 'npm test'])
   })
 
   it('a slice-judge round with both optional roles absent stays readable', () => {

@@ -332,7 +332,7 @@ export class RunDispatch {
   }
 
   static #response(step: string, round: DispatchRound): RunResponse {
-    if (round.responsePath === null || round.argv[1] !== round.responsePath) {
+    if (round.responsePath === null) {
       throw new RunNotUnderstood('the announced response path conflicts with the consuming command')
     }
     switch (RESPONSE_KIND_BY_STEP[step]) {

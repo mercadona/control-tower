@@ -175,8 +175,10 @@ export class AnnouncedStep {
     }
     const step = AnnouncedStep.#object(announcement.run)?.step
     if (typeof step !== 'string') return null
+    const consuming = AnnouncedStep.#object(announcement.consuming)
+    if (AnnouncedStep.#malformed(announcement.commands) || AnnouncedStep.#malformed(consuming?.argv)) return null
     const commands = AnnouncedStep.#stringArray(announcement.commands)
-    const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
+    const argv = AnnouncedStep.#stringArray(consuming?.argv) ?? Object.freeze([])
     const dispatch = AnnouncedStep.#object(announcement.dispatch)
     const inputs = dispatch === undefined
       ? Object.freeze([])
@@ -229,8 +231,16 @@ export class AnnouncedStep {
       : undefined
   }
 
+  static #malformed(value: unknown): boolean {
+    return value !== undefined && !AnnouncedStep.#isStringArray(value)
+  }
+
   static #stringArray(value: unknown): readonly string[] | null {
-    return Array.isArray(value) ? Object.freeze([...value]) as readonly string[] : null
+    return AnnouncedStep.#isStringArray(value) ? Object.freeze([...value]) : null
+  }
+
+  static #isStringArray(value: unknown): value is readonly string[] {
+    return Array.isArray(value) && value.every((element) => typeof element === 'string')
   }
 }
 
