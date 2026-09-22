@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { FakeEventSource } from './FakeEventSource'
 import {
@@ -60,7 +60,7 @@ describe('Home · plan events', () => {
 
     await dropStream()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    expect(within(screen.getByLabelText('Progreso del plan')).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
     expect(FakeEventSource.last().closes).toBe(1)
   })
 

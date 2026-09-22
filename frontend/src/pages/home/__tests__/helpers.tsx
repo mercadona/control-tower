@@ -31,11 +31,16 @@ const NO_IMPLEMENTATION_HISTORY_YET = {
   status: 400,
   body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
 }
+const NOT_WATCHED_PLANNING_PROGRESS = {
+  status: 400,
+  body: '{"code":"not-watched","detail":"no plan was started for that issue"}',
+}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status, headers: JSON_HEADERS })
 
 const isImplementProgressPath = (input: string | URL | Request) => String(input).startsWith('/implement-progress/')
 const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
+const isPlanningProgressPath = (input: string | URL | Request) => String(input).startsWith('/planning-progress/')
 const isCoordinatingSessionRead = (input: string | URL | Request, init?: RequestInit) =>
   input === '/coordinating-session' && init === undefined
 
@@ -50,6 +55,7 @@ const backendAnswering = (answer: Answer) => {
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
+      if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return fetching(input, init)
@@ -66,6 +72,7 @@ const backendRecovering = (answer: Answer) => {
     if (input === '/sessions') return responseFor(NO_SESSIONS)
     if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
     if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
+    if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
     if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
     if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
     return init === undefined ? fetching(input) : fetching(input, init)
@@ -86,6 +93,7 @@ const backendPending = () => {
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
+      if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return pending

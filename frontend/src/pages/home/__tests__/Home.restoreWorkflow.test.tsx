@@ -63,6 +63,9 @@ const withReadyTools = <T extends (input: string | URL | Request, init?: Request
     if (String(input).startsWith('/implement-progress/')) {
       return Promise.resolve(new Response('{"code":"implementation-progress-not-read","detail":"not started"}', { status: 400 }))
     }
+    if (String(input).startsWith('/planning-progress/')) {
+      return Promise.resolve(new Response('{"code":"not-watched","detail":"no plan was started for that issue"}', { status: 400 }))
+    }
     return init === undefined ? fetching(input) : fetching(input, init)
   }))
 

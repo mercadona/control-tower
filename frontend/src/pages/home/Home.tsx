@@ -7,6 +7,7 @@ import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
+import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { SliceSession, type SliceRecovery } from 'app/slice-session/components/slice-session'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
@@ -618,6 +619,13 @@ const Home = () => {
                 onReady={planReady}
                 observe={restoredIsConfirmed}
               />
+              {restoredIsConfirmed && workflow.phase === 'planning' && (
+                <PlanningProgress
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                  issue={workflow.plan.issue.number}
+                  repo={workflow.plan.repo}
+                />
+              )}
               {workflow.phase === 'ready' && restoredIsConfirmed && (
                 <div className="home__review-action">
                   <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
