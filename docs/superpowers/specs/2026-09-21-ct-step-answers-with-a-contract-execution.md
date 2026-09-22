@@ -154,10 +154,22 @@ Falsifiable three ways, and each slice below carries the measurement:
 | Slice | specReviewedSha | codeReviewedSha | uiScreenshot | Gate cerrado con |
 |-------|-----------------|-----------------|--------------|------------------|
 | 1 | 1d56d74d | bef434b4 | – | six task reviews; no CT gate, because no slice was groomed |
-| 2 | 1d56d74d | – | – | – |
-| 3 | 1d56d74d | – | – | – |
-| 4 | 1d56d74d | – | – | – |
-| 5 | 1d56d74d | – | – | – |
+| 2 | 1d56d74d | b6c408cb | – | five task reviews, three of them with a fix wave of their own |
+| 3 | 1d56d74d | 89c3ddfc | – | seven task reviews; task 4's went back once and closed at "Approved with findings" |
+| 4 | 1d56d74d | a511bc59 | – | six task reviews; task 4's found a broken frozen decision and its fix was re-measured |
+| 5 | 1d56d74d | 9ee0b84d | – | four task reviews plus two fixes; task 2's review measured a guard that had come loose |
+
+No CT gate closed any row: no slice was groomed, because an end-to-end run was live on this
+repository and opening an issue would have disturbed it. `uiScreenshot` stays empty everywhere,
+because this branch changes no frontend module.
+
+Slice 4's `codeReviewedSha` is `a511bc59` and not `33ae4609`, although task 6 landed first: the
+coordinating session integrated them in review order, not in task order.
+
+Three tasks did not exist when the slices were frozen. Slice 2's task 5 answers a guard that
+refused any checkout whose path carries a space. Slice 4's task 6 answers the flag silencing the
+prose `#edits` read its package from. Slice 5's task 4 answers three `out(` substitutions that
+`ct-step next` never prints, so task 3's measurement could not see them.
 
 The table carried four rows for five slices. Row 5 is added here, and `uiScreenshot` stays
 empty for every row on purpose: this branch changes no frontend module.
