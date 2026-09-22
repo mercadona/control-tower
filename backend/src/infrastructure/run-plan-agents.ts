@@ -354,7 +354,9 @@ export class RunPlanAgents extends PlanAgents {
         RunPlanAgents.#requireOwnedIncomplete(history, this.transport)
         return this.calls.planningFor(watch)
       case 'uncertain':
-        throw new PlanRecoveryConflict(inspection.fact.detail)
+        if (inspection.fact.closure === null) throw new PlanRecoveryConflict(inspection.fact.detail)
+        RunPlanAgents.#requireOwnedIncomplete(history, this.transport)
+        return this.calls.planningFor(watch)
       case 'delivered':
         return this.#deliveredFixRecovery(history)
       case 'active':

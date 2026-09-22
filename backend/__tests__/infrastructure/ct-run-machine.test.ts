@@ -1474,3 +1474,66 @@ describe('CtRunMachine', () => {
     expect(instruction).toEqual(new RunInstruction({ kind: 'call', ticket }))
   })
 })
+
+describe('CtRunMachine after a refusal (#504)', () => {
+  const roots: string[] = []
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  const refusedJournal = async (fixture: OracleFixture): Promise<string> => {
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const refused = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), refused,
+      OracleMother.receipt(
+        OracleMother.output(4, OracleMother.controlsRefusal()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+    return refused
+  }
+
+  it('open asks ct-step again after a refusal, and the fresh answer is the run instruction', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-resumed-')))
+    roots.push(fixture.root)
+    const refused = await refusedJournal(fixture)
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(instruction.work.kind).toBe('call')
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+    const entries = await fixture.journal.entries(OracleMother.watch())
+    expect(entries).toHaveLength(3)
+    expect(JSON.parse(entries[2].request)).toMatchObject({ previous: refused, argv: OracleMother.nextArgv() })
+  })
+
+  it('open confirms a refusal ct-step repeats, with a receipt of its own', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-confirmed-')))
+    roots.push(fixture.root)
+    await refusedJournal(fixture)
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(4, OracleMother.controlsRefusal()))
+
+    const instruction = await fixture.machine().open(OracleMother.watch())
+
+    expect(instruction.work).toEqual({
+      kind: 'refused',
+      detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
+        + ' — run blocked-controls: task 1/3, 0 discard(s)',
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4 },
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+    expect(await fixture.journal.entries(OracleMother.watch())).toHaveLength(3)
+  })
+})
