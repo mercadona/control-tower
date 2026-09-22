@@ -114,8 +114,8 @@ export class RunAnnouncement {
       outcome,
       exit: exit as number,
       task: RunAnnouncement.#taskOf(record),
-      findings: RunAnnouncement.#textOr(record.findings),
-      verdict: RunAnnouncement.#textOr(record.verdict),
+      findings: RunAnnouncement.#textOrNothing(record.findings),
+      verdict: RunAnnouncement.#textOrNothing(record.verdict),
     })
   }
 
@@ -136,7 +136,7 @@ export class RunAnnouncement {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 
-  static #textOr(value: unknown): string | null {
+  static #textOrNothing(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null
   }
 

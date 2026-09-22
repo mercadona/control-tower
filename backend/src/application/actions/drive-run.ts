@@ -104,16 +104,17 @@ export class DriveRun {
     const closure = refused.closure
     if (this.announcements === null || closure === null) return
     if (closure.state !== DriveRun.BLOCKED_JUDGE) return
-    try {
-      await this.announcements.announce({
-        repository: watch.repository,
-        issue: watch.issue.number,
-        task: closure.task,
-        findings: closure.findings,
-        verdict: closure.verdict,
-      })
-    } catch {
-    }
+    await DriveRun.#whetherOrNotItArrives(this.announcements.announce({
+      repository: watch.repository,
+      issue: watch.issue.number,
+      task: closure.task,
+      findings: closure.findings,
+      verdict: closure.verdict,
+    }))
+  }
+
+  static #whetherOrNotItArrives(announcing: Promise<void>): Promise<void> {
+    return announcing.catch(() => undefined)
   }
 
   async #waiting(watch: PlanWatch): Promise<boolean> {
