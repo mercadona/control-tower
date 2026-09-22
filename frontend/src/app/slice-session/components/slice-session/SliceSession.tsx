@@ -1,6 +1,6 @@
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
-import { RecoveryAction } from 'app/active-plans/ActivePlan.types'
+import { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import './SliceSession.css'
@@ -9,12 +9,18 @@ const UNCERTAIN_TITLE = 'No se puede confirmar el estado de implementación'
 const RECOVER_LABEL = 'Recuperar trabajo'
 const CLEANUP_LABEL = 'Limpiar arranque fallido'
 const RETRY_LABEL = 'Reintentar recuperación'
+const VETOED_TITLE = 'El juez cerró este slice'
+const VETOED_HINT = 'Habla con la sesión coordinadora para decidir qué hacer.'
+const FOUND_LABEL = 'Lo que encontró el juez'
+const VERDICT_LABEL = 'Veredicto completo'
+const BLOCKED_JUDGE = 'blocked-judge'
 
 type SliceRecovery = {
   diagnostic: string
   action: RecoveryAction
   pending: boolean
   failure: string | null
+  refusal?: PlanRefusal | null
   onAct: () => void
   onRetry: () => void
 }
@@ -30,6 +36,7 @@ const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_
 
 const SliceSession = ({ issue, root, repo, recovery = null }: SliceSessionProps) => {
   const progress = useImplementProgress(issue, root, repo)
+  const vetoed = recovery?.refusal?.state === BLOCKED_JUDGE ? recovery.refusal : null
 
   return (
     <section className="slice-session" aria-label={`Slice #${issue}`}>
@@ -40,9 +47,25 @@ const SliceSession = ({ issue, root, repo, recovery = null }: SliceSessionProps)
           <Banner
             type="warning"
             role="alert"
-            title={UNCERTAIN_TITLE}
-            description={recovery.failure ?? recovery.diagnostic}
+            title={vetoed === null ? UNCERTAIN_TITLE : VETOED_TITLE}
+            description={vetoed === null ? (recovery.failure ?? recovery.diagnostic) : VETOED_HINT}
           />
+          {vetoed !== null && (
+            <dl className="slice-session__veto">
+              {vetoed.findings !== null && (
+                <>
+                  <dt className="lg-body-small">{FOUND_LABEL}</dt>
+                  <dd className="slice-session__veto-findings">{vetoed.findings}</dd>
+                </>
+              )}
+              {vetoed.verdict !== null && (
+                <>
+                  <dt className="lg-body-small">{VERDICT_LABEL}</dt>
+                  <dd className="slice-session__veto-verdict">{vetoed.verdict}</dd>
+                </>
+              )}
+            </dl>
+          )}
           <div className="slice-session__recovery-actions">
             {recovery.action === 'inspect' ? (
               <Button onClick={recovery.onRetry}>{RETRY_LABEL}</Button>
