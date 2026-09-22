@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { planFilesForIssue } from '../../../plugin/scripts/plan-contract.js'
 import { RUN_STATES, STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
-  ANNOUNCEMENT_KINDS, ANNOUNCEMENT_VERSION, RESPONSE_KINDS,
+  ANNOUNCEMENT_KINDS, RESPONSE_KIND_OF_STEP, RESPONSE_KINDS,
 } from '../../../plugin/scripts/step-announcement.js'
 import { DispatchProse, UnreadableStepProse } from '../../../plugin/scripts/step-prose.js'
 import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
@@ -12,10 +12,14 @@ import {
 } from '../domain/ports/run-machine.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { RunInstruction } from '../domain/value-objects/run-instruction.ts'
-import { ConsumingProse, RunAnnouncement, StepProse, type RunClosure } from './run-announcement.ts'
+import {
+  AnnouncedStep, ConsumingProse, RunAnnouncement, StepProse, type RunClosure,
+} from './run-announcement.ts'
 import { type JournalEntry, RunJournal } from './run-journal.ts'
 import { RunConsumingCommand, RunDispatch } from './run-dispatch.ts'
 import { ProcessOutput, type ToolRunner } from './tool-runner.ts'
+
+const RESPONSE_KIND_BY_STEP: Readonly<Record<string, string>> = RESPONSE_KIND_OF_STEP
 
 type InspectionFact =
   | { readonly kind: 'absent' | 'delivered' | 'unstarted' }
@@ -296,62 +300,6 @@ class JsonContract {
   }
 }
 
-export class AnnouncedStep {
-  readonly step: string
-  readonly commands: readonly string[] | null
-  readonly argv: readonly string[]
-  readonly responseKind: string | null
-
-  private constructor(asked: {
-    step: string,
-    commands: readonly string[] | null,
-    argv: readonly string[],
-    responseKind: string | null,
-  }) {
-    this.step = asked.step
-    this.commands = asked.commands
-    this.argv = asked.argv
-    this.responseKind = asked.responseKind
-    Object.freeze(this)
-  }
-
-  static read(stdout: string): AnnouncedStep | null {
-    let value: unknown
-    try {
-      value = JSON.parse(stdout)
-    } catch {
-      return null
-    }
-    const announcement = AnnouncedStep.#object(value)
-    if (announcement === undefined
-      || announcement.version !== ANNOUNCEMENT_VERSION
-      || announcement.kind !== ANNOUNCEMENT_KINDS.STEP) {
-      return null
-    }
-    const step = AnnouncedStep.#object(announcement.run)?.step
-    if (typeof step !== 'string') return null
-    const commands = AnnouncedStep.#stringArray(announcement.commands)
-    const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
-    const responseKindField = AnnouncedStep.#object(AnnouncedStep.#object(announcement.dispatch)?.response)?.kind
-    return new AnnouncedStep({
-      step,
-      commands,
-      argv,
-      responseKind: typeof responseKindField === 'string' ? responseKindField : null,
-    })
-  }
-
-  static #object(value: unknown): Record<string, unknown> | undefined {
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : undefined
-  }
-
-  static #stringArray(value: unknown): readonly string[] | null {
-    return Array.isArray(value) ? Object.freeze([...value]) as readonly string[] : null
-  }
-}
-
 class OracleBoundary {
   static read(command: JournalCommand, manifest: RunManifest): OracleResult {
     if (command.receipt === null) {
@@ -387,13 +335,12 @@ class OracleBoundary {
     const step = round?.step ?? StepProse.step(output.stdout)
     switch (step) {
       case STEPS.IMPLEMENT:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.IMPLEMENT)
       case STEPS.JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.JUDGE)
       case STEPS.ADVISE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.ADVISE)
       case STEPS.SLICE_JUDGE:
-        return OracleBoundary.#fileCall(output.stdout, command.ticket, STEPS.SLICE_JUDGE)
+        return round === null
+          ? OracleBoundary.#fileCall(output.stdout, command.ticket, step)
+          : OracleBoundary.#dispatchCall(output.stdout, round, command.ticket, step)
       case STEPS.E2E:
         return OracleResult.refused('ct-step requested unsupported E2E material')
       case STEPS.CONTROLS:
@@ -432,6 +379,20 @@ class OracleBoundary {
       if (cause instanceof UnreadableStepProse) return OracleResult.refused(cause.message)
       throw cause
     }
+  }
+
+  static #dispatchCall(
+    stdout: string,
+    round: AnnouncedStep,
+    ticket: string,
+    step: string,
+  ): OracleResult {
+    if (round.responseKind !== RESPONSE_KIND_BY_STEP[step]
+      || round.responsePath === null
+      || round.argv[1] !== round.responsePath) {
+      return OracleResult.refused(`ct-step output is not understood: ${JSON.stringify(stdout)}`)
+    }
+    return OracleResult.call(ticket, round.argv)
   }
 
   static #plainCommand(

@@ -16,9 +16,9 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import { AnnouncedStep, CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
+import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
-import { StepProse } from '../../src/infrastructure/run-announcement.ts'
+import { AnnouncedStep, StepProse } from '../../src/infrastructure/run-announcement.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { ProcessOutput, type ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 
@@ -194,6 +194,75 @@ class OracleMother {
       'Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.',
       '',
     ].join('\n')
+  }
+
+  static judgeVerdictPath(): string {
+    return `${OracleMother.WORKTREE}/.agent/run-332/task-1-verdict.json`
+  }
+
+  static judgeRoundJson(): string {
+    return OracleMother.#judgeRound([
+      'verdict', OracleMother.judgeVerdictPath(), '--plan', OracleMother.PLAN, '--issue', '332',
+    ])
+  }
+
+  static judgeRoundNamingAnotherResponsePathJson(): string {
+    return OracleMother.#judgeRound([
+      'verdict', `${OracleMother.WORKTREE}/.agent/run-332/task-2-verdict.json`,
+      '--plan', OracleMother.PLAN, '--issue', '332',
+    ])
+  }
+
+  static #judgeRound(argv: readonly string[]): string {
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.JUDGE,
+      attempt: 1,
+      agent: 'ct-judge',
+      inputs: [
+        new AnnouncedInput({
+          role: INPUT_ROLES.PACKAGE,
+          kind: INPUT_KINDS.LITERAL,
+          path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-review.diff`,
+        }),
+        new AnnouncedInput({
+          role: INPUT_ROLES.BRIEF,
+          kind: INPUT_KINDS.LITERAL,
+          path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-judge-brief.md`,
+        }),
+      ],
+      response: AnnouncedResponse.of(STEPS.JUDGE, OracleMother.judgeVerdictPath()),
+      consuming: { argv },
+    }).text()
+  }
+
+  static implementRoundOfAForeignResponseKindJson(): string {
+    return StepAnnouncement.dispatch({
+      issue: 332,
+      task: 1,
+      tasksTotal: 3,
+      step: STEPS.IMPLEMENT,
+      attempt: 1,
+      agent: undefined,
+      inputs: [
+        new AnnouncedInput({
+          role: INPUT_ROLES.RUBRIC,
+          kind: INPUT_KINDS.LITERAL,
+          path: '/plugin/prompts/task-implementer.md',
+        }),
+        new AnnouncedInput({
+          role: INPUT_ROLES.BRIEF,
+          kind: INPUT_KINDS.LITERAL,
+          path: `${OracleMother.WORKTREE}/.agent/run-332/task-1-brief.md`,
+        }),
+      ],
+      response: new AnnouncedResponse({ kind: 'file', path: OracleMother.implementReportPath() }),
+      consuming: {
+        argv: ['report', OracleMother.implementReportPath(), '--plan', OracleMother.PLAN, '--issue', '332'],
+      },
+    }).text()
   }
 
   static sliceJudgeAnnouncement(): string {
@@ -929,6 +998,80 @@ describe('CtRunMachine', () => {
       detail: `ct-step output is not understood: ${JSON.stringify(foreign)}`,
       closure: null,
     }))
+  })
+
+  it('an announced judge round hands over the consuming argv the announcement carries', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-judge-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.judgeRoundJson())
+    })
+    fixture.answer([
+      OracleMother.CT_STEP, 'verdict', OracleMother.judgeVerdictPath(),
+      '--plan', OracleMother.PLAN, '--issue', '332', '--output-format', 'json',
+    ], OracleMother.output(0, OracleMother.deliveredTransition()))
+    const machine = fixture.machine()
+
+    const judge = await machine.open(OracleMother.watch())
+
+    expect(judge).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }))
+    expect((await machine.advance(OracleMother.watch(), judge)).work).toEqual({ kind: 'delivered' })
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      {
+        argv: [
+          OracleMother.CT_STEP, 'verdict',
+          '/repo/.worktrees/332/.agent/run-332/task-1-verdict.json',
+          '--plan', OracleMother.PLAN, '--issue', '332', '--output-format', 'json',
+        ],
+        cwd: OracleMother.WORKTREE,
+      },
+    ])
+  })
+
+  it('an announced judge round whose consuming argv does not name its response path is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-judge-foreign-path-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.judgeRoundNamingAnotherResponsePathJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an announced implement round whose response kind is not its own is refused', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-announced-foreign-kind-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const announced = OracleMother.implementRoundOfAForeignResponseKindJson()
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, announced)
+    })
+
+    const refused = await fixture.machine().open(OracleMother.watch())
+
+    expect(refused.work).toEqual({
+      kind: 'refused',
+      detail: `ct-step output is not understood: ${JSON.stringify(announced)}`,
+      closure: null,
+    })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
   })
 
   it('a pending forked or malformed command chain cannot resume', async () => {

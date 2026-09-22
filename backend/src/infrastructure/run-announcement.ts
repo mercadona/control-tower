@@ -155,6 +155,66 @@ export class RunAnnouncement {
   }
 }
 
+export class AnnouncedStep {
+  readonly step: string
+  readonly commands: readonly string[] | null
+  readonly argv: readonly string[]
+  readonly responseKind: string | null
+  readonly responsePath: string | null
+
+  private constructor(asked: {
+    step: string,
+    commands: readonly string[] | null,
+    argv: readonly string[],
+    responseKind: string | null,
+    responsePath: string | null,
+  }) {
+    this.step = asked.step
+    this.commands = asked.commands
+    this.argv = asked.argv
+    this.responseKind = asked.responseKind
+    this.responsePath = asked.responsePath
+    Object.freeze(this)
+  }
+
+  static read(stdout: string): AnnouncedStep | null {
+    let value: unknown
+    try {
+      value = JSON.parse(stdout)
+    } catch {
+      return null
+    }
+    const announcement = AnnouncedStep.#object(value)
+    if (announcement === undefined
+      || announcement.version !== ANNOUNCEMENT_VERSION
+      || announcement.kind !== ANNOUNCEMENT_KINDS.STEP) {
+      return null
+    }
+    const step = AnnouncedStep.#object(announcement.run)?.step
+    if (typeof step !== 'string') return null
+    const commands = AnnouncedStep.#stringArray(announcement.commands)
+    const argv = AnnouncedStep.#stringArray(AnnouncedStep.#object(announcement.consuming)?.argv) ?? Object.freeze([])
+    const response = AnnouncedStep.#object(AnnouncedStep.#object(announcement.dispatch)?.response)
+    return new AnnouncedStep({
+      step,
+      commands,
+      argv,
+      responseKind: typeof response?.kind === 'string' ? response.kind : null,
+      responsePath: typeof response?.path === 'string' ? response.path : null,
+    })
+  }
+
+  static #object(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  }
+
+  static #stringArray(value: unknown): readonly string[] | null {
+    return Array.isArray(value) ? Object.freeze([...value]) as readonly string[] : null
+  }
+}
+
 export class ConsumingProse {
   static readonly #INTRODUCTION = ':  '
 
