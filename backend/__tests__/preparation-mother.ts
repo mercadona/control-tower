@@ -1,9 +1,9 @@
 import { CheckRepositoryPreparation } from '../src/application/actions/check-repository-preparation.ts'
-import { RepositoryPreparations } from '../src/domain/ports/repository-preparations.ts'
-import { PreparationAnnouncements } from '../src/domain/ports/preparation-announcements.ts'
+import { WorktreeEnvironments } from '../src/domain/ports/worktree-environments.ts'
+import { PreparationReports } from '../src/domain/ports/preparation-reports.ts'
 import { RepositoryPreparation, PreparationFinding, PreparationState } from '../src/domain/value-objects/repository-preparation.ts'
 
-class Preparations extends RepositoryPreparations {
+class Environments extends WorktreeEnvironments {
   answer: RepositoryPreparation
 
   constructor(answer: RepositoryPreparation) { super(); this.answer = answer }
@@ -11,7 +11,7 @@ class Preparations extends RepositoryPreparations {
   override async prepare(): Promise<RepositoryPreparation> { return this.answer }
 }
 
-class Announcements extends PreparationAnnouncements {
+class Reports extends PreparationReports {
   override async announce(): Promise<void> {}
 }
 
@@ -28,6 +28,6 @@ export class PreparationMother {
   }
 
   static check(answer = PreparationMother.compatible()): CheckRepositoryPreparation {
-    return new CheckRepositoryPreparation({ preparations: new Preparations(answer), announcements: new Announcements() })
+    return new CheckRepositoryPreparation({ environments: new Environments(answer), reports: new Reports() })
   }
 }

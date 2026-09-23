@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { PreparationMother } from '../preparation-mother.ts'
 import { CheckRepositoryPreparation } from '../../src/application/actions/check-repository-preparation.ts'
-import { RepositoryPreparations } from '../../src/domain/ports/repository-preparations.ts'
-import { SessionPreparationAnnouncements } from '../../src/infrastructure/session-preparation-announcements.ts'
+import { WorktreeEnvironments } from '../../src/domain/ports/worktree-environments.ts'
+import { SessionPreparationReports } from '../../src/infrastructure/session-preparation-reports.ts'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
@@ -426,9 +426,9 @@ afterEach(async () => {
 describe('EpicGroomRoute', () => {
   it('an authorized milestone exposes a pending preparation diagnosis and a key to recheck', async () => {
     const held = Mother.live()
-    const announcements = new SessionPreparationAnnouncements({ sessions: () => held, stderr: () => {} })
-    await announcements.announce({ root: Mother.ROOT, repository: Mother.REPOSITORY, path: '/repo/.worktrees/1', preparation: PreparationMother.blocked() })
-    const preparation = new CheckRepositoryPreparation({ preparations: new RepositoryPreparations(), announcements })
+    const reports = new SessionPreparationReports({ sessions: () => held, stderr: () => {} })
+    await reports.announce({ root: Mother.ROOT, repository: Mother.REPOSITORY, path: '/repo/.worktrees/1', preparation: PreparationMother.blocked() })
+    const preparation = new CheckRepositoryPreparation({ environments: new WorktreeEnvironments(), reports })
     const port = await RunningApi.listening(held,
       ReadEpicGroomSpy.answering(Mother.authorisedRead([Mother.readyIssue()])), GroomEpicSpy.neverAsked(),
       Keys.minted(), new WorkInFlight(), () => {}, preparation)

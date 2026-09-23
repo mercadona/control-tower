@@ -5,7 +5,7 @@ import type { RepositoryPreparation } from '../value-objects/repository-preparat
 export type PreparationTarget = { root: CheckoutRoot, repository: RepositoryName }
 export type PreparationWorkspace = PreparationTarget & { path: string }
 
-export class RepositoryPreparations {
+export class WorktreeEnvironments {
   async inspect(_asked: PreparationTarget): Promise<RepositoryPreparation> {
     throw new Error('must implement inspect()')
   }

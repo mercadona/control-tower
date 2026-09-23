@@ -38,8 +38,8 @@ import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
 import { SessionChangeAnnouncements } from './session-change-announcements.ts'
 import { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
-import { ComposeRepositoryPreparations } from './compose-repository-preparations.ts'
-import { SessionPreparationAnnouncements } from './session-preparation-announcements.ts'
+import { ComposeWorktreeEnvironments } from './compose-worktree-environments.ts'
+import { SessionPreparationReports } from './session-preparation-reports.ts'
 import { SessionClosureAnnouncements } from './session-closure-announcements.ts'
 import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
@@ -444,8 +444,8 @@ class CtApi {
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const preparation = new CheckRepositoryPreparation({
-      preparations: new ComposeRepositoryPreparations({ git, docker: CtApi.#tool('docker'), files: fs }),
-      announcements: new SessionPreparationAnnouncements({
+      environments: new ComposeWorktreeEnvironments({ git, docker: CtApi.#tool('docker'), files: fs }),
+      reports: new SessionPreparationReports({
         sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
       }),
     })

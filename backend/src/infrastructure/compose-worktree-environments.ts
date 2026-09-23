@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { parseDocument } from 'yaml'
-import { RepositoryPreparations } from '../domain/ports/repository-preparations.ts'
-import type { PreparationTarget, PreparationWorkspace } from '../domain/ports/repository-preparations.ts'
+import { WorktreeEnvironments } from '../domain/ports/worktree-environments.ts'
+import type { PreparationTarget, PreparationWorkspace } from '../domain/ports/worktree-environments.ts'
 import { PreparationFinding, PreparationState, RepositoryPreparation } from '../domain/value-objects/repository-preparation.ts'
 import type { PreparationStateValue } from '../domain/value-objects/repository-preparation.ts'
 import type { ToolLaunch } from './external-tool.ts'
@@ -140,7 +140,7 @@ class ComposeSource {
   }
 }
 
-export class ComposeRepositoryPreparations extends RepositoryPreparations {
+export class ComposeWorktreeEnvironments extends WorktreeEnvironments {
   readonly git: ToolLaunch
   readonly docker: ToolLaunch
   readonly files: FileAccess
@@ -185,7 +185,7 @@ export class ComposeRepositoryPreparations extends RepositoryPreparations {
       try {
         await this.files.readFile(destination, 'utf8')
       } catch (error) {
-        if (!ComposeRepositoryPreparations.#missing(error)) throw new ConfigurationNotChecked(`${source.override}: could not read the local override`)
+        if (!ComposeWorktreeEnvironments.#missing(error)) throw new ConfigurationNotChecked(`${source.override}: could not read the local override`)
         try {
           await this.files.writeFile(destination, source.overrideText(name), { encoding: 'utf8', flag: 'wx' })
         } catch {

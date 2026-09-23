@@ -1,27 +1,27 @@
 import { RepositoryPreparationRequired } from '../../domain/exceptions.ts'
-import type { RepositoryPreparations, PreparationTarget, PreparationWorkspace } from '../../domain/ports/repository-preparations.ts'
-import type { PreparationAnnouncements } from '../../domain/ports/preparation-announcements.ts'
+import type { WorktreeEnvironments, PreparationTarget, PreparationWorkspace } from '../../domain/ports/worktree-environments.ts'
+import type { PreparationReports } from '../../domain/ports/preparation-reports.ts'
 import type { RepositoryPreparation } from '../../domain/value-objects/repository-preparation.ts'
 
 export class CheckRepositoryPreparation {
-  readonly preparations: RepositoryPreparations
-  readonly announcements: PreparationAnnouncements
+  readonly environments: WorktreeEnvironments
+  readonly reports: PreparationReports
 
-  constructor(ports: { preparations: RepositoryPreparations, announcements: PreparationAnnouncements }) {
-    this.preparations = ports.preparations
-    this.announcements = ports.announcements
+  constructor(ports: { environments: WorktreeEnvironments, reports: PreparationReports }) {
+    this.environments = ports.environments
+    this.reports = ports.reports
   }
 
   async execute(asked: PreparationTarget): Promise<RepositoryPreparation> {
-    return this.#require(asked, await this.preparations.inspect(asked))
+    return this.#require(asked, await this.environments.inspect(asked))
   }
 
   async prepare(asked: PreparationWorkspace): Promise<RepositoryPreparation> {
-    return this.#require(asked, await this.preparations.prepare(asked))
+    return this.#require(asked, await this.environments.prepare(asked))
   }
 
   async #require(asked: PreparationTarget, preparation: RepositoryPreparation): Promise<RepositoryPreparation> {
-    await this.announcements.announce({ ...asked, preparation })
+    await this.reports.announce({ ...asked, preparation })
     if (!preparation.permitsDispatch()) {
       throw new RepositoryPreparationRequired(preparation.summary)
     }
@@ -29,6 +29,6 @@ export class CheckRepositoryPreparation {
   }
 
   current(asked: PreparationTarget): readonly RepositoryPreparation[] {
-    return this.announcements.current(asked)
+    return this.reports.current(asked)
   }
 }

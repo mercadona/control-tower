@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ComposeRepositoryPreparations } from '../../src/infrastructure/compose-repository-preparations.ts'
+import { ComposeWorktreeEnvironments } from '../../src/infrastructure/compose-worktree-environments.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -77,8 +77,8 @@ class Environment {
     this.written.push(text)
   }
 
-  adapter(): ComposeRepositoryPreparations {
-    return new ComposeRepositoryPreparations({ git: this.git.bind(this), docker: this.docker.bind(this), files: this })
+  adapter(): ComposeWorktreeEnvironments {
+    return new ComposeWorktreeEnvironments({ git: this.git.bind(this), docker: this.docker.bind(this), files: this })
   }
 
   prepare() {

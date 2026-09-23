@@ -11,8 +11,9 @@ Control Tower owns the check and the local preparation. Governed repositories
 need no Control Tower script or capability manifest.
 
 `CheckRepositoryPreparation` is injected into milestone authorization, dispatch
-and workspace preparation. Authorization checks before promoting issues;
-dispatch checks before claiming any candidate. The adapter fetches the remote
+and workspace preparation. The `WorktreeEnvironments` port isolates the execution-environment step from Git
+workspace creation, with `ComposeWorktreeEnvironments` as its Compose adapter.
+Authorization checks before promoting issues; dispatch checks before claiming any candidate. The adapter fetches the remote
 default HEAD by commit and reads its files with Git, without switching branches
 or replacing local source files. A corrected revision is read on the next check.
 

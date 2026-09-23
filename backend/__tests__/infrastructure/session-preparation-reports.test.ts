@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SessionPreparationAnnouncements } from '../../src/infrastructure/session-preparation-announcements.ts'
+import { SessionPreparationReports } from '../../src/infrastructure/session-preparation-reports.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PreparationMother } from '../preparation-mother.ts'
@@ -18,7 +18,7 @@ class Session {
 describe('preparation findings reach the matching coordinating session', () => {
   it('two failing worktrees are announced once each rather than on every dispatch sweep', async () => {
     const session = new Session()
-    const adapter = new SessionPreparationAnnouncements({ sessions: () => session, stderr: () => {} })
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: () => {} })
     const target = { root: session.root, repository: session.repository, preparation: PreparationMother.blocked() }
     for (let sweep = 0; sweep < 2; sweep++) {
       await adapter.announce({ ...target, path: '/repo/.worktrees/1' })
@@ -29,7 +29,7 @@ describe('preparation findings reach the matching coordinating session', () => {
 
   it('a successful remote check does not erase a pending local preparation failure', async () => {
     const session = new Session()
-    const adapter = new SessionPreparationAnnouncements({ sessions: () => session, stderr: () => {} })
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: () => {} })
     const target = { root: session.root, repository: session.repository }
     await adapter.announce({ ...target, path: '/repo/.worktrees/1', preparation: PreparationMother.blocked() })
     await adapter.announce({ ...target, preparation: PreparationMother.compatible() })
@@ -41,7 +41,7 @@ describe('preparation findings reach the matching coordinating session', () => {
   it('includes the exact diagnosis and human approval requirement, without repeating an unchanged finding', async () => {
     const session = new Session()
     const diagnostics: string[] = []
-    const adapter = new SessionPreparationAnnouncements({ sessions: () => session, stderr: (line) => diagnostics.push(line) })
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: (line) => diagnostics.push(line) })
     const asked = { root: session.root, repository: session.repository, preparation: PreparationMother.blocked() }
     await adapter.announce(asked)
     await adapter.announce(asked)
@@ -55,7 +55,7 @@ describe('preparation findings reach the matching coordinating session', () => {
   it('does not send a repository diagnostic into another checkout conversation', async () => {
     const session = new Session()
     const diagnostics: string[] = []
-    const adapter = new SessionPreparationAnnouncements({ sessions: () => session, stderr: (line) => diagnostics.push(line) })
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: (line) => diagnostics.push(line) })
     await adapter.announce({ root: new CheckoutRoot('/other'), repository: session.repository, preparation: PreparationMother.blocked() })
     expect(session.sent).toEqual([])
     expect(diagnostics[0]).toContain('no matching coordinating session')
@@ -64,7 +64,7 @@ describe('preparation findings reach the matching coordinating session', () => {
   it('an undelivered diagnostic can be delivered on a later check', async () => {
     const session = new Session()
     session.available = false
-    const adapter = new SessionPreparationAnnouncements({ sessions: () => session, stderr: () => {} })
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: () => {} })
     const asked = { root: session.root, repository: session.repository, preparation: PreparationMother.blocked() }
     await adapter.announce(asked)
     session.available = true

@@ -1,5 +1,5 @@
-import { PreparationAnnouncements } from '../domain/ports/preparation-announcements.ts'
-import type { PreparationTarget } from '../domain/ports/repository-preparations.ts'
+import { PreparationReports } from '../domain/ports/preparation-reports.ts'
+import type { PreparationTarget } from '../domain/ports/worktree-environments.ts'
 import type { RepositoryPreparation } from '../domain/value-objects/repository-preparation.ts'
 
 type PreparationSession = {
@@ -7,7 +7,7 @@ type PreparationSession = {
   announce(line: string): boolean
 }
 
-export class SessionPreparationAnnouncements extends PreparationAnnouncements {
+export class SessionPreparationReports extends PreparationReports {
   readonly sessions: () => PreparationSession
   readonly stderr: (line: string) => void
   readonly #announced = new Map<string, string>()
