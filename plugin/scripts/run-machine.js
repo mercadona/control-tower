@@ -114,7 +114,7 @@ export const DEFAULT_BUDGETS = Object.freeze({
 })
 
 // The newborn run: task 1, step implement, every counter at zero.
-export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, checkpoints }) {
+export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, checkpoints = null }) {
   return freeze({
     plan, issue, baseSha,
     task: 1,
