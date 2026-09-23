@@ -64,7 +64,8 @@ import { GhPlanPublication } from '../../../src/infrastructure/gh-plan-publicati
 import { PlanContractProgress } from '../../../src/infrastructure/plan-contract-progress.ts'
 import { Gh } from '../../../src/infrastructure/gh.ts'
 import { GhPlanIssues } from '../../../src/infrastructure/gh-plan-issues.ts'
-import { PlanComment } from '../../../src/domain/value-objects/plan-comment.ts'
+import { UserStory } from '../../../src/domain/value-objects/user-story.ts'
+import { UserStoryUrl } from '../../../src/domain/value-objects/user-story-url.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts'
@@ -672,7 +673,7 @@ export class RunDriverMother {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_comment: 'Run the finite offline driver fixture',
+        id: 'https://github.com/acme/widget/issues/1',
         repo: RunDriverMother.REPOSITORY,
         path: this.checkout,
       }),
@@ -1285,8 +1286,10 @@ export class RunDriverMother {
   async #executables(): Promise<void> {
     const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
     const issueCreate = GhPlanIssues.argvFor({
-      story: null,
-      comment: new PlanComment('Run the finite offline driver fixture'),
+      story: new UserStory({
+        key: new UserStoryUrl('https://github.com/acme/widget/issues/1'),
+        summary: 'Run the finite offline driver fixture', description: '',
+      }),
       repository: new RepositoryName(RunDriverMother.REPOSITORY),
     })
     await writeFile(join(this.bin, 'git'), [
@@ -1304,6 +1307,7 @@ export class RunDriverMother {
       "const page = (nodes) => JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'gh.jsonl'), JSON.stringify(argv) + '\\n')",
       "if (equal(issueCreate)) console.log('https://github.com/acme/widget/issues/7')",
+      "else if (equal(['issue', 'view', 'https://github.com/acme/widget/issues/1', '--json', 'title,body,comments'])) console.log(JSON.stringify({ title: 'Run the finite offline driver fixture', body: '', comments: [] }))",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'labels', '-q', '[.labels[].name]'])) console.log(JSON.stringify(['status:in-progress']))",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'body', '-q', '.body'])) console.log('<!-- ct-order:1 -->')",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'number,title,body,labels,milestone'])) console.log(JSON.stringify({ number: 7, title: 'Finite fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: null }))",

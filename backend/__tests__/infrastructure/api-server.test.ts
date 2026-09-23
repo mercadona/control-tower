@@ -1365,28 +1365,28 @@ describe('ApiServer', () => {
     )
   })
 
-  it('a_body_with_neither_an_id_nor_a_comment_is_refused_because_nothing_says_what_to_plan', async () => {
+  it('a_body_without_a_ticket_is_refused', async () => {
     const port = await RunningApi.listening()
 
     const response = await RunningApi.startPlan(port, '{}')
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe(
-      '{"code":"nothing-to-plan","detail":"either id or user_comment must say what to plan"}'
+      '{"code":"nothing-to-plan","detail":"id is required to say what to plan"}'
     )
   })
 
-  it('a_body_with_only_a_comment_is_accepted_with_a_null_id_because_there_is_no_user_story', async () => {
+  it('rejects_the_removed_description_before_starting_any_work', async () => {
     const port = await RunningApi.listening()
 
     const response = await RunningApi.startPlan(
       port,
-      '{"user_comment":"añade el endpoint de salud","repo":"owner/name","path":"/repo/checkout"}'
+      '{"user_comment":"Plan the health endpoint","repo":"owner/name","path":"/repo/checkout"}'
     )
 
-    expect(response.status).toBe(202)
-    expect(await response.text()).toBe(RunningApi.ANSWER.replace('"id":"ABC-123"', '"id":null'))
-    expect(RunningApi.spy.asked).toEqual([null])
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe('{"code":"unknown-field","detail":"unknown field: user_comment"}')
+    expect(RunningApi.spy.asked).toEqual([])
   })
 
   it('an_id_that_is_not_shaped_like_a_story_key_is_refused_before_it_ever_becomes_a_branch_name', async () => {

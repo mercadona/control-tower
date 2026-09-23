@@ -114,12 +114,12 @@ class GhDouble {
   static BARE_GO = { id: 'IC_kwDOT9lB5c8AAAABRCA25w', body: '-OK' }
   static THE_GO = { id: 'IC_kwDOT9lB5c8AAAABRCF0FA', body: '-OK 3f9a1c2b' }
 
-  async openFor({ story = GhDouble.story(), comment = null } = {}) {
-    return this.issues().open({ story, comment, repository: GhDouble.REPOSITORY })
+  async openFor({ story = GhDouble.story() } = {}) {
+    return this.issues().open({ story, repository: GhDouble.REPOSITORY })
   }
 
-  async refusalFor({ story = GhDouble.story(), comment = null } = {}) {
-    return this.openFor({ story, comment }).catch((cause) => cause)
+  async refusalFor({ story = GhDouble.story() } = {}) {
+    return this.openFor({ story }).catch((cause) => cause)
   }
 
   static labelled(...names: string[]) {
@@ -158,7 +158,7 @@ describe('GhPlanIssues', () => {
       'issue', 'create',
       '--repo', 'josemerca/ct-loop-sandbox',
       '--title', 'MO_SHOP-42 El buscador acepta acentos',
-      '--body', PlanIssueBody.of({ story, comment: null }),
+      '--body', PlanIssueBody.of({ story }),
       '--label', 'gate:none',
       '--label', 'status:ready',
     ]])

@@ -81,7 +81,7 @@ class Mother {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 
   static readonly OPENING_REQUEST =
-    '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+    '{"id":"ABC-1","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
 
   static readonly TIMELINE = [
     new SessionTimelineEvent({ id: 'event-1', kind: TimelineEventKind.OPENED, at: '2026-09-15T10:00:00.000Z', detail: null }),
@@ -355,7 +355,7 @@ describe('CoordinatingSessionRoute', () => {
 
     const response = await RunningApi.post(
       open, held,
-      '{"user_comment":"explore the checkout screen","repo_list":[{"repo":"josemerca/ct-loop-sandbox","path":"/repo"}]}'
+      '{"id":"ABC-1","repo_list":[{"repo":"josemerca/ct-loop-sandbox","path":"/repo"}]}'
     )
 
     expect(response.status).toBe(400)
@@ -375,7 +375,7 @@ describe('CoordinatingSessionRoute', () => {
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       code: 'nothing-to-plan',
-      detail: 'either id or user_comment must say what to plan',
+      detail: 'id is required to say what to plan',
     })
     expect(open.asked).toEqual([])
   })

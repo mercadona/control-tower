@@ -37,22 +37,13 @@ describe('WorkflowSnapshotStorage', () => {
     expect(WorkflowSnapshotStorage.load()).toEqual(workflow())
   })
 
-  it('writes and restores the version 2 optional description extension', () => {
-    const described = workflow()
-    described.request.userComment = 'Revisar la caché de precios'
-    WorkflowSnapshotStorage.save(described)
-
-    expect(JSON.parse(localStorage.getItem(WORKFLOW_SNAPSHOT_KEY) ?? '{}').version).toBe(2)
-    expect(WorkflowSnapshotStorage.load()).toEqual(described)
-  })
-
-  it('loads a version 1 snapshot that predates the optional description', () => {
+  it('loads a version 1 snapshot with a ticket', () => {
     localStorage.setItem(WORKFLOW_SNAPSHOT_KEY, JSON.stringify({ version: 1, workflow: workflow() }))
 
     expect(WorkflowSnapshotStorage.load()).toEqual(workflow())
   })
 
-  it('should load a saved workflow whose plan has no user story with a null id', () => {
+  it('restores a milestone slice without a source ticket', () => {
     WorkflowSnapshotStorage.save(workflowWithoutStory())
 
     expect(WorkflowSnapshotStorage.load()).toEqual(workflowWithoutStory())

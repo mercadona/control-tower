@@ -395,7 +395,7 @@ describe('StartPlanRoute milestone entrance', () => {
 
     const response = await RunningApi.post(
       port,
-      `{"user_comment":"plan this","repo":"${Mother.REPOSITORY.text}","path":"${Mother.ROOT.text}"}`,
+      `{"id":"ABC-1","repo":"${Mother.REPOSITORY.text}","path":"${Mother.ROOT.text}"}`,
     )
 
     expect(response.status).toBe(202)
@@ -596,7 +596,7 @@ describe('StartPlanRoute milestone entrance', () => {
 
 describe('StartPlanRoute and the closed coordinating checkout', () => {
   const loosePlan = (path: string): string =>
-    JSON.stringify({ user_comment: 'plan this', repo: Mother.REPOSITORY.text, path })
+    JSON.stringify({ id: 'ABC-1', repo: Mother.REPOSITORY.text, path })
 
   it('forgets the closed coordinating checkout when the plan starts in another one', async () => {
     const coordinatingSessions = Mother.closed()

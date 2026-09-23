@@ -15,7 +15,6 @@ const isTicketOrAbsent = (id: unknown): id is string | null =>
 const isRequest = (value: unknown): value is StartPlanRequest =>
   isRecord(value) &&
   isTicketOrAbsent(value.id) &&
-  (value.userComment === undefined || value.userComment === null || (typeof value.userComment === 'string' && value.userComment.trim() !== '')) &&
   typeof value.repo === 'string' &&
   RepositoryName.isWellFormed(value.repo) &&
   typeof value.path === 'string' &&

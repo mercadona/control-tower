@@ -1,7 +1,6 @@
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
 import { MilestoneContextHeading } from '../../../plugin/scripts/milestone-context.js'
-import { PlanIssueBody } from './gh-plan-issues.ts'
 import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
@@ -36,7 +35,6 @@ export class PlanAgentBrief {
       `The baseline is already measured: its result, command and summary are in the \`baseline:\` field in ${SLICE_REL_PATH}. Read it there; do not rerun it to make a claim.`,
       `Hydrate from the issue with \`gh issue view ${issue.number} --repo ${named}\`. Its acceptance criteria and "## Out of scope / Protected" section are the planning input.`,
       `Also read its "${PlanAgentBrief.MILESTONE_CONTEXT}" and "${PlanAgentBrief.INHERITED_CONTEXT}" sections. They carry constraints that do not fit in the acceptance criteria. If they are empty or absent, there is nothing to inherit; do not look outside the issue.`,
-      `If the issue has a "${PlanIssueBody.COMMENT_SECTION}" section, the manually requested work is planning input just like the acceptance criteria. If the issue declares no acceptance criteria, that section is the entire input: there is no spec from which to fill them, so propose the criteria in the plan and do not look elsewhere.`,
       `Control Tower's yardstick lives in ${conventions}, and the program carries it to every task: pasted for the implementer and provided by path to the judge. Your plan selects the repository yardstick in §3's \`Rules to obey:\`; open from ${conventions} only the document needed for a concrete decision, not all five in advance.`,
       'The header carried with that yardstick states how the two relate when they conflict, and it is included here because this repository may not put it in `AGENTS.md`. It is the only wording of that rule: apply it verbatim rather than reinterpreting or rewriting it in the plan.',
       PluginYardstick.precedenceHeader(),

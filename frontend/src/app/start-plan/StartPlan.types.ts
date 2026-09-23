@@ -1,13 +1,10 @@
 export type StartPlanRequest = {
   id: string | null
-  userComment?: string | null
   repo: string
   path: string
 }
 
-export type StartPlanSubmission = StartPlanRequest & {
-  userComment: string | null
-}
+export type StartPlanSubmission = StartPlanRequest & { id: string }
 
 export type PlanIssue = {
   number: number

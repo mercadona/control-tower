@@ -10,7 +10,7 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the implementation).
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
-the ticket or free-text request and repository open a coordinating session,
+the required ticket, repository and local path open a coordinating session,
 plan progress arrives over `GET /plan-events/:issue` (Server-Sent Events), and
 what the plan agent is doing meanwhile arrives over `GET
 /planning-progress/:issue`, polled. The page shows implementation progress, the
@@ -21,7 +21,8 @@ and starts the next eligible slice; after the committed plan is published, the
 backend resumes the same headless conversation automatically. `POST
 /implement-plan` is not routed, so the page offers no implementation button.
 Each area has its own directory under `src/app/`, and the endpoint it consumes
-is named in the sections below.
+is named in the sections below. Additional context and feedback are entered
+directly in the coordinating conversation.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px

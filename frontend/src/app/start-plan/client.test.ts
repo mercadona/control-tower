@@ -3,7 +3,6 @@ import { StartPlanClient } from 'app/start-plan/client'
 
 const request = () => ({
   id: StartPlanMother.TICKET,
-  userComment: null,
   repo: StartPlanMother.REPO,
   path: StartPlanMother.PATH,
 })

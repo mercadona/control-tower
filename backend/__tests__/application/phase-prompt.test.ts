@@ -3,6 +3,8 @@ import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { UserStory } from '../../src/domain/value-objects/user-story.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 
 class Phase {
   static REPOSITORY = new RepositoryName('owner/name')
@@ -10,7 +12,8 @@ class Phase {
 
   static brainstorming(): PhasePrompt {
     return PhasePrompt.brainstorming({
-      story: null, comment: null, repository: Phase.REPOSITORY, root: Phase.ROOT,
+      story: new UserStory({ key: new UserStoryKey('ABC-1'), summary: 'Plan the work', description: '' }),
+      repository: Phase.REPOSITORY, root: Phase.ROOT,
     })
   }
 

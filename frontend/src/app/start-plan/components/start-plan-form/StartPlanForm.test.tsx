@@ -43,8 +43,6 @@ const renderForm = ({ isCoordinatingSessionLive = false } = {}) => {
 }
 
 const typeTicket = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText('Ticket'), value)
-const typeUserComment = (user: ReturnType<typeof userEvent.setup>, value: string) =>
-  user.type(screen.getByLabelText('Qué quieres planificar'), value)
 const typeRepository = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText(/Repositorio/), value)
 const typePath = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText(/Ruta local/), value)
 
@@ -106,13 +104,12 @@ describe('StartPlanForm', () => {
     expect(repository).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('opens the brainstorming with the ticket and the comment', async () => {
+  it('opens the brainstorming with the required ticket', async () => {
     vi.mocked(CoordinatingSessionClient.open).mockResolvedValue(OPENED)
     const user = userEvent.setup()
     const { onOpened } = renderForm()
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeUserComment(user, StartPlanMother.COMMENT)
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
@@ -120,43 +117,29 @@ describe('StartPlanForm', () => {
     await waitFor(() =>
       expect(CoordinatingSessionClient.open).toHaveBeenCalledWith({
         id: StartPlanMother.TICKET,
-        userComment: StartPlanMother.COMMENT,
         repo: StartPlanMother.REPO,
         path: StartPlanMother.PATH,
       }),
     )
     expect(onOpened).toHaveBeenCalledWith(OPENED.opened, {
       id: StartPlanMother.TICKET,
-      userComment: StartPlanMother.COMMENT,
       repo: StartPlanMother.REPO,
       path: StartPlanMother.PATH,
     })
   })
 
-  it('opens the brainstorming with free text alone', async () => {
-    vi.mocked(CoordinatingSessionClient.open).mockResolvedValue(OPENED)
+  it('cannot open brainstorming without a ticket and offers no description field', async () => {
     const user = userEvent.setup()
     const { onOpened } = renderForm()
 
-    await typeUserComment(user, StartPlanMother.COMMENT)
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
 
-    await waitFor(() =>
-      expect(CoordinatingSessionClient.open).toHaveBeenCalledWith({
-        id: null,
-        userComment: StartPlanMother.COMMENT,
-        repo: StartPlanMother.REPO,
-        path: StartPlanMother.PATH,
-      }),
-    )
-    expect(onOpened).toHaveBeenCalledWith(OPENED.opened, {
-      id: null,
-      userComment: StartPlanMother.COMMENT,
-      repo: StartPlanMother.REPO,
-      path: StartPlanMother.PATH,
-    })
+    expect(submitButton()).toBeDisabled()
+    expect(screen.queryByLabelText('Qué quieres planificar')).not.toBeInTheDocument()
+    expect(CoordinatingSessionClient.open).not.toHaveBeenCalled()
+    expect(onOpened).not.toHaveBeenCalled()
   })
 
   it('opens nothing while the repository or the path is missing', async () => {
@@ -201,7 +184,6 @@ describe('StartPlanForm', () => {
     await waitFor(() =>
       expect(onUnreachable).toHaveBeenCalledWith({
         id: StartPlanMother.TICKET,
-        userComment: null,
         repo: StartPlanMother.REPO,
         path: StartPlanMother.PATH,
       }),

@@ -160,7 +160,7 @@ class RunningCloseApi {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_comment: 'new work after confirmed closure',
+        id: 'ABC-1',
         repo: CloseMother.CONVERSATION.repository.text,
         path: CloseMother.CONVERSATION.root.text,
       }),
@@ -366,7 +366,7 @@ describe('CoordinatingSessionCloseRoute', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_comment: 'replacement must wait',
+          id: 'ABC-1',
           repo: CloseMother.CONVERSATION.repository.text,
           path: CloseMother.CONVERSATION.root.text,
         }),

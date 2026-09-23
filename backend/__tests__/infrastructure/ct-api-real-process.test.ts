@@ -110,6 +110,7 @@ class AClaudeThatStaysOpen {
   static async onThePath(): Promise<{ directory: string, path: string }> {
     const directory = await mkdtemp(join(tmpdir(), 'ct-api-claude-'))
     await writeFile(join(directory, 'claude'), `${AClaudeThatStaysOpen.SCRIPT}\n`, { mode: 0o755 })
+    await TheCoordinatingSessionEndpoint.prepareStoryReader(directory)
 
     return { directory, path: `${directory}:${process.env.PATH}` }
   }
@@ -161,6 +162,7 @@ class LifecycleFixture {
     LifecycleFixture.#git(checkout, 'commit', '-q', '-m', 'fixture baseline')
     await writeFile(join(checkout, 'sentinel.txt'), 'dirty sentinel must survive\n')
     await writeFile(join(checkout, 'untracked.txt'), 'untracked work must survive\n')
+    await TheCoordinatingSessionEndpoint.prepareStoryReader(bin)
     await writeFile(join(bin, 'claude'), [
       '#!/usr/bin/env node',
       "const fs = require('node:fs')",
@@ -276,14 +278,23 @@ class ARecordedConversation {
 }
 
 class TheCoordinatingSessionEndpoint {
-  static readonly COMMENT = 'explore the checkout screen'
+  static readonly TICKET = 'https://github.com/acme/widget/issues/1'
+
+  static async prepareStoryReader(directory: string): Promise<void> {
+    await writeFile(join(directory, 'gh'), [
+      '#!/usr/bin/env node',
+      "const argv = process.argv.slice(2)",
+      `if (JSON.stringify(argv) !== JSON.stringify(['issue', 'view', '${TheCoordinatingSessionEndpoint.TICKET}', '--json', 'title,body,comments'])) throw new Error('unexpected gh request')`,
+      "console.log(JSON.stringify({ title: 'Explore the checkout screen', body: '', comments: [] }))",
+    ].join('\n') + '\n', { mode: 0o755 })
+  }
 
   static open(port: number, repository: string, checkout: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_comment: TheCoordinatingSessionEndpoint.COMMENT,
+        id: TheCoordinatingSessionEndpoint.TICKET,
         repo: repository,
         path: checkout,
       }),
@@ -741,7 +752,7 @@ describe('ct-api entrypoint', () => {
       await TheCoordinatingSession.recoveredBy(started.port)
       await runtime.launches(ActualHeadlessRuntime.LAUNCHED_BY_THE_CHAIN)
       const looseResponse = await Entrypoint.startPlan(started.port, JSON.stringify({
-        user_comment: 'Plan the loose fixture', repo: ActualHeadlessRuntime.REPOSITORY, path: runtime.root,
+        id: 'https://github.com/acme/widget/issues/1', repo: ActualHeadlessRuntime.REPOSITORY, path: runtime.root,
       }))
       const looseText = await looseResponse.text()
       expect(looseResponse.status, looseText).toBe(202)

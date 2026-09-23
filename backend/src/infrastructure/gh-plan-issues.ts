@@ -15,7 +15,6 @@ import { PlanIssues } from '../domain/ports/plan-issues.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.ts'
 import type { PlanIssueStatusValue } from '../domain/value-objects/plan-issue-status.ts'
-import type { PlanComment } from '../domain/value-objects/plan-comment.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { UserStory } from '../domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
@@ -75,17 +74,16 @@ export class GhPlanIssues extends PlanIssues {
     ]
   }
 
-  static argvFor({ story, comment, repository }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static argvFor({ story, repository }: {
+    story: UserStory,
     repository: RepositoryName,
   }): string[] {
     return [
       'issue', 'create',
       '--repo', repository.text,
-      '--title', PlanIssueBody.titleFor({ story, comment }),
-      '--body', PlanIssueBody.of({ story, comment }),
-      ...PlanIssueBody.labels({ story, comment }).flatMap((label) => ['--label', label]),
+      '--title', PlanIssueBody.titleFor({ story }),
+      '--body', PlanIssueBody.of({ story }),
+      ...PlanIssueBody.labels({ story }).flatMap((label) => ['--label', label]),
     ]
   }
 
@@ -100,14 +98,13 @@ export class GhPlanIssues extends PlanIssues {
     return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'labels']
   }
 
-  async open({ story, comment, repository }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  async open({ story, repository }: {
+    story: UserStory,
     repository: RepositoryName,
   }): Promise<PlanIssue> {
     const outcome = await this.#sowing({
-      argv: GhPlanIssues.argvFor({ story, comment, repository }),
-      ours: PlanIssueBody.labels({ story, comment }),
+      argv: GhPlanIssues.argvFor({ story, repository }),
+      ours: PlanIssueBody.labels({ story }),
       repository,
       safeToRepeat: false,
     })
@@ -287,15 +284,8 @@ export class PlanIssueBody {
   static DESCRIPTION_HEADING = '## Descripción'
   static PROTECTED_HEADING = '## Out of scope / Protected'
   static AC_HEADING = '## Acceptance criteria (EARS, 1:1 con tests)'
-  static COMMENT_SECTION = 'Comentario de quien pide el plan'
-  static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
-  static NO_STORY_LINE = '> Plan asked for by hand: there is no ticket behind it.'
   static STORY_LINE = '> Historia de usuario: '
   static ISSUE_LINE = '> Issue de GitHub: '
-  static NO_STORY_EPIC_CONTEXT = '_This plan does not come from any ticket._'
-  static NO_HEADLINE = '_The comment brings no first line that sums up what is being asked for._'
-  static HEADLINE_LIMIT = 72
-  static HEADLINE_CUT = '…'
   static #ACTIVE =
     /((?<![\w])[\w.-]+\/[\w.-]+#\d+|(?<![\w])#\d+|(?<![\w.])@[A-Za-z0-9][A-Za-z0-9-]*|https?:\/\/\S*github\.com\/\S+)/g
   static #CODE_SPAN = /(`[^`]*`)/
@@ -311,11 +301,10 @@ export class PlanIssueBody {
       `${story.key.repository.text}#${story.key.number} ${story.summary}`],
   ])
 
-  static labels({ story, comment }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static labels({ story }: {
+    story: UserStory,
   }): string[] {
-    return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story, comment })).gates), GhPlanIssues.READY_LABEL]
+    return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story })).gates), GhPlanIssues.READY_LABEL]
   }
 
   static storyIn({ body }: { body: string }): UserStoryKey | UserStoryUrl | null {
@@ -334,29 +323,16 @@ export class PlanIssueBody {
     return found === null ? text : found[1]
   }
 
-  static titleFor({ story, comment }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static titleFor({ story }: {
+    story: UserStory,
   }): string {
-    return story === null
-      ? PlanIssueBody.headlineOf(comment!)
-      : PlanIssueBody.#TITLE_BY_KIND.of(story.key.constructor)(story)
+    return PlanIssueBody.#TITLE_BY_KIND.of(story.key.constructor)(story)
   }
 
-  static headlineOf(comment: PlanComment): string {
-    const line = comment.text.split('\n').find((candidate) => candidate.trim().length > 0)
-    const collapsed = String(line).replace(/\s+/g, ' ').trim()
-
-    return collapsed.length > PlanIssueBody.HEADLINE_LIMIT
-      ? `${collapsed.slice(0, PlanIssueBody.HEADLINE_LIMIT - 1)}${PlanIssueBody.HEADLINE_CUT}`
-      : collapsed
-  }
-
-  static rowFor({ story, comment }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static rowFor({ story }: {
+    story: UserStory,
   }): PlanIssueRow {
-    const name = story === null ? PlanIssueBody.headlineOf(comment!) : story.summary
+    const name = story.summary
 
     return {
       n: null,
@@ -378,9 +354,7 @@ export class PlanIssueBody {
       'there is nothing written to start from._'],
   ])
 
-  static #epicContextOf(story: UserStory | null): string {
-    if (story === null) return PlanIssueBody.NO_STORY_EPIC_CONTEXT
-
+  static #epicContextOf(story: UserStory): string {
     return story.hasDescription()
       ? PlanIssueBody.quieted(story.description)
       : PlanIssueBody.#EMPTY_EPIC_CONTEXT_BY_KIND.of(story.key.constructor)(story)
@@ -395,22 +369,18 @@ export class PlanIssueBody {
       .join('')
   }
 
-  static of({ story, comment }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static of({ story }: {
+    story: UserStory,
   }): string {
-    const row = PlanIssueBody.rowFor({ story, comment })
+    const row = PlanIssueBody.rowFor({ story })
 
     return [
-      story === null
-        ? PlanIssueBody.NO_STORY_LINE
-        : PlanIssueBody.#LINE_BY_KIND.of(story.key.constructor)(story.key),
+      PlanIssueBody.#LINE_BY_KIND.of(story.key.constructor)(story.key),
       '',
       PlanIssueBody.DESCRIPTION_HEADING,
       renderDescription(row) ??
-        (story === null ? PlanIssueBody.NO_HEADLINE : `_${story.key} brings no summary in Jira._`),
+        `_${story.key} brings no summary in Jira._`,
       '',
-      ...(comment === null ? [] : [PlanIssueBody.COMMENT_HEADING, PlanIssueBody.quieted(comment.text), '']),
       MilestoneContextHeading.WRITTEN,
       PlanIssueBody.#epicContextOf(story),
       '',
