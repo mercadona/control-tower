@@ -12,8 +12,10 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
 the ticket or free-text request and repository open a coordinating session,
 plan progress arrives over `GET /plan-events/:issue` (Server-Sent Events), and
-the page shows implementation progress, the panels of gates 1 and 2, and the
-live terminals of the sessions the backend owns. `POST /start-plan` accepts the
+what the plan agent is doing meanwhile arrives over `GET
+/planning-progress/:issue`, polled. The page shows implementation progress, the
+panels of gates 1 and 2, and the live terminals of the sessions the backend
+owns. `POST /start-plan` accepts the
 retained loose request or a milestone-only command. The milestone path selects
 and starts the next eligible slice; after the committed plan is published, the
 backend resumes the same headless conversation automatically. `POST

@@ -63,6 +63,13 @@ class HeadlessPlanMother {
     return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
   }
 
+  static slicesInFlightPlanning(...issues: number[]): Answer {
+    return {
+      status: 200,
+      body: JSON.stringify({ plans: issues.map((issue) => ({ ...HeadlessPlanMother.slice(issue), phase: 'planning' })) }),
+    }
+  }
+
   static slicesAcrossCheckouts(repo: string, root: string): Answer {
     const other = HeadlessPlanMother.slice(8)
     return {
@@ -73,6 +80,14 @@ class HeadlessPlanMother {
         plan: { ...other.plan, repo, worktree: `${root}/.worktrees/8`, issue: { number: 8, url: `https://github.com/${repo}/issues/8` } },
       }] }),
     }
+  }
+
+  static planningAmong(planning: number, ...others: number[]): Answer {
+    const plans = [planning, ...others].map((issue) => (issue === planning
+      ? { ...HeadlessPlanMother.slice(issue), phase: 'planning' }
+      : HeadlessPlanMother.slice(issue)))
+
+    return { status: 200, body: JSON.stringify({ plans }) }
   }
 
   static uncertainAmong(uncertain: number, action: RecoveryAction, ...others: number[]): Answer {

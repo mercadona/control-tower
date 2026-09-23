@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
+import type { ActivePlan } from 'app/active-plans/ActivePlan.types'
+import { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { ImplementProgressRead, useImplementProgress } from 'app/implement-progress/useImplementProgress'
-import { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
+import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import './SliceSession.css'
@@ -27,10 +29,13 @@ type SliceRecovery = {
   onRetry: () => void
 }
 
-interface SliceSessionProps {
+type SlicePhase = ActivePlan['phase']
+
+type SliceSessionProps = {
   issue: number
   root: string
   repo: string
+  phase: SlicePhase
   recovery?: SliceRecovery | null
   onSelect?: (() => void) | null
   onProgress?: ((progress: ImplementProgressRead) => void) | null
@@ -38,7 +43,16 @@ interface SliceSessionProps {
 
 const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_LABEL : RECOVER_LABEL)
 
-const SliceSession = ({ issue, root, repo, recovery = null, onSelect = null, onProgress = null }: SliceSessionProps) => {
+type SliceImplementationPanelProps = {
+  issue: number
+  root: string
+  repo: string
+  recovery: SliceRecovery | null
+  onSelect: (() => void) | null
+  onProgress: ((progress: ImplementProgressRead) => void) | null
+}
+
+const SliceImplementationPanel = ({ issue, root, repo, recovery, onSelect, onProgress }: SliceImplementationPanelProps) => {
   const progress = useImplementProgress(issue, root, repo)
   const closure = recovery?.refusal ?? null
   const vetoed = closure !== null && closure.state === BLOCKED_JUDGE && closure.outcome === VETOED
@@ -50,8 +64,7 @@ const SliceSession = ({ issue, root, repo, recovery = null, onSelect = null, onP
   }, [progress, onProgress])
 
   return (
-    <section className="slice-session" aria-label={`Slice #${issue}`}>
-      <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
+    <>
       {onSelect !== null && <Button variant="secondary" onClick={onSelect}>Ver detalle</Button>}
       <ImplementProgress progress={progress} />
       {recovery !== null && (
@@ -87,6 +100,46 @@ const SliceSession = ({ issue, root, repo, recovery = null, onSelect = null, onP
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+const SlicePanel = ({ issue, root, repo, phase, recovery, onSelect, onProgress }: SliceImplementationPanelProps & { phase: SlicePhase }) => {
+  switch (phase) {
+    case 'planning':
+      return <PlanningProgress issue={issue} repo={repo} />
+    case 'implementing':
+    case 'uncertain':
+      return (
+        <SliceImplementationPanel
+          issue={issue}
+          root={root}
+          repo={repo}
+          recovery={recovery}
+          onSelect={onSelect}
+          onProgress={onProgress}
+        />
+      )
+    default: {
+      const exhaustive: never = phase
+      throw new Error(`unsupported slice phase: ${JSON.stringify(exhaustive)}`)
+    }
+  }
+}
+
+const SliceSession = ({ issue, root, repo, phase, recovery = null, onSelect = null, onProgress = null }: SliceSessionProps) => {
+  return (
+    <section className="slice-session" aria-label={`Slice #${issue}`}>
+      <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
+      <SlicePanel
+        issue={issue}
+        root={root}
+        repo={repo}
+        phase={phase}
+        recovery={recovery}
+        onSelect={onSelect}
+        onProgress={onProgress}
+      />
     </section>
   )
 }
