@@ -62,7 +62,7 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
-import { after, newRun, isCheckpoint, stretchOf, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
+import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -72,7 +72,7 @@ import { CONVENTIONS_FILE, yardstickSection } from './repo-yardstick.js'
 import { PluginYardstick } from './plugin-yardstick.js'
 import { PluginManifest } from './plugin-manifest.js'
 import {
-  readVerdict, readReport, outcomeOfVerdict, commitMessage, findingLocation,
+  readVerdict, readReport, outcomeOfVerdict, commitMessage, reviewCommitMessage, findingLocation,
   readE2eReport, E2E_SCHEMA,
   PACKAGE_SECTIONS,
   readSliceVerdict, outcomeOfSliceVerdict, sliceVerdictCommitMessage,
@@ -334,9 +334,7 @@ if (existsSync(stateFile)) {
   // the ones whose base has moved the most. The same remedy and the same reason
   // as the `sliceCommits || 0` a few lines further down: no persisted state ever
   // gains a mandatory field.
-  // #530: a run born before `judgedSha` judged every task, so the last judged
-  // commit is HEAD.
-  run = { ...run, reconcileRetries: run.reconcileRetries || 0, judgedSha: run.judgedSha ?? headSha() }
+  run = { ...run, reconcileRetries: run.reconcileRetries || 0 }
   // A delivered run has no next step, and that is known WITHOUT rebuilding the
   // table: the good closure is persisted as `closed` (it is what the gate of
   // `dispatch-check --release` reads). `next` answers "it is done" and exits
@@ -464,9 +462,11 @@ if (existsSync(stateFile)) {
   // DELIVERED); nobody applied it to the one placed in front of it. That is why
   // the slice commits are COUNTED in the state (`sliceCommits`) instead of being
   // taken for zero: `|| 0` covers the runs written before the field existed.
+  // The review (#530) stands after the last task commit and before its own, so
+  // it counts the `tasksTotal` task commits and nothing more.
   const expected = SLICE_STEPS.includes(run.step)
     ? run.tasksTotal + (run.sliceCommits || 0)
-    : run.task - 1
+    : run.reviewing ? run.tasksTotal : run.task - 1
   if (actual !== expected) {
     die(`the state and git do not count the same: the file expects ${expected} commit(s) (task ${run.task}, step ${run.step}) and in \`${shortRange}\` (merges excluded) there are ${actual}. It does not carry on blind.`, EXIT.PRECONDITION)
   }
@@ -486,13 +486,16 @@ if (existsSync(stateFile)) {
   const { meta: sliceMeta } = parseStateSafe(readFileSync(join(repoRoot, SLICE_REL_PATH), 'utf8'))
   run = newRun({
     plan: planPath, issue, baseSha: headSha(), tasksTotal: tasks.length, e2eRuns: sliceMeta.e2e,
-    checkpoints: tasks.filter((t) => t.checkpoint).map((t) => t.n),
+    judging: 'final',
   })
   writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 }
 
 const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 const currentTask = () => tasks.find((t) => t.n === run.task)
+// What `controls` runs: the task's own commands, or, in the review (#530), the
+// commands of every task of the plan in plan order — a fix may touch any of them.
+const controlCommands = () => (run.reviewing ? tasks.flatMap((t) => t.commands) : currentTask().commands)
 // The argv a measuring step's announcement carries as `consuming`: what a
 // program-answering road runs to close that step, not the shell commands the
 // step measures. `verb` plus the positional arguments the verb takes, then
@@ -763,8 +766,6 @@ function nextVerb() {
         out('')
         out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
-        const { from, to } = stretchOf(run)
-        if (from < to) out(`The judge reviewed tasks ${from}-${to} together: a finding in a file of an earlier task of that stretch is yours to fix in this attempt, and it lands in the commit of task ${to}.`)
       }
       out('')
       out(prose.consuming)
@@ -772,10 +773,10 @@ function nextVerb() {
       break
     }
     case STEPS.CONTROLS:
-      announcement = StepAnnouncement.program({ ...stepRunFields, commands: t.commands, consuming: { argv: consumingArgv('controls') } })
+      announcement = StepAnnouncement.program({ ...stepRunFields, commands: controlCommands(), consuming: { argv: consumingArgv('controls') } })
       out('MEASURE THE TASK (the implementer does not do it, and its word does not count):')
-      for (const c of t.commands) out(`  $ ${c}`)
-      if (t.testsAdded.length) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
+      for (const c of controlCommands()) out(`  $ ${c}`)
+      if (t.testsAdded.length && !run.reviewing) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
       out('')
       out(`Run it with:  ct-step controls --plan ${planPath} --issue ${issue}`)
       break
@@ -1036,14 +1037,6 @@ function writeBrief() {
 function writeJudgeBrief() {
   const brief = join(workDir, `task-${run.task}-judge-brief.md`)
   writeTaskBody(brief)
-  // #530: a checkpoint answers for every earlier task of its stretch too, each
-  // one alone — the plan context already travels above.
-  const { from } = stretchOf(run)
-  for (let k = from; k < run.task; k++) {
-    const earlier = join(workDir, `task-${run.task}-judge-brief-earlier-${k}.md`)
-    writeTaskBody(earlier, k, { withContext: false })
-    appendFileSync(brief, `\n## Earlier task of this stretch: ${k}\n\n${readFileSync(earlier, 'utf8')}`)
-  }
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
   return brief
@@ -1104,11 +1097,13 @@ function adviceSection(advice) {
 // commit, so it has no reason to invalidate the judgement. The slice's one
 // comes out of the RANGE, because by then everything is committed (see
 // `writeSliceReviewPackage`).
-// #530: against the last judged commit, so a checkpoint shows every task of its
-// stretch; the telemetry those commits carried is no task's work. The
-// pathspecs are rooted at the top (`:/`) so the diff is the whole repo from
-// any cwd, as the plain `git diff --cached` it replaced was.
-const taskDiff = () => git(['diff', '--cached', '-U10', run.judgedSha, '--', ':/', `:(top,exclude)${METRICS_REL}`]) || ''
+// #530: the review diffs the index against the run base, so it shows every
+// task of the slice; the telemetry those commits carried is no task's work. A
+// task judged alone (a run born before the review) diffs the index against
+// HEAD. The pathspecs are rooted at the top (`:/`) so the diff is the whole
+// repo from any cwd.
+const diffBase = () => (run.reviewing ? [run.baseSha] : [])
+const taskDiff = () => git(['diff', '--cached', '-U10', ...diffBase(), '--', ':/', `:(top,exclude)${METRICS_REL}`]) || ''
 const sliceDiff = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 
 // THE TREE OF THE INDEX — the identity of what is about to be committed, and
@@ -1155,10 +1150,7 @@ function writeReviewPackage() {
   // AHEAD of the diff for the same reason as `Señal` in the slice package:
   // behind a `-U10` it would be buried.
   const ctYardstick = PluginYardstick.composePathSection(loadCtYardstick())
-  const { from, to } = stretchOf(run)
-  const header = from < to
-    ? `# Review package: tasks ${from}-${to}/${run.tasksTotal} of issue #${issue} (${from}-${to - 1} committed since ${run.judgedSha.slice(0, 7)}, ${to} staged)`
-    : `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`
+  const header = `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`
   writeFileSync(packagePath, [
     header,
     // The HEADER carries the token: the sha256 of exactly the diff that goes
@@ -1167,7 +1159,7 @@ function writeReviewPackage() {
     // slice 10 decided on for the slice package.
     reviewTokenLine(reviewToken(diff)),
     ctYardstick,
-    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat', run.judgedSha, '--', ':/', `:(top,exclude)${METRICS_REL}`]) || '',
+    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat', ...diffBase(), '--', ':/', `:(top,exclude)${METRICS_REL}`]) || '',
     '', `## ${PATHS_SECTION}`, paths,
     '', `## ${DIFF_SECTION}`, diff,
   ].join('\n'))
@@ -1642,6 +1634,7 @@ function reportVerb() {
 
 function controlsVerb() {
   const t = currentTask()
+  const commands = controlCommands()
   // The only time this program can really measure: the two calls to the model
   // are made by the session, so of those there is neither cost nor turns nor
   // duration. And it is the only one that cannot be reconstructed by
@@ -1690,8 +1683,10 @@ function controlsVerb() {
   // one passed. It goes through `inIndex`, so it can throw
   // `NameLookupDidNotRun` when the lookup itself could not run — that is not
   // a failed control, it is one that could not be measured.
+  // The review does not check them again (#530): each task checked its own
+  // before it committed.
   try {
-    const failures = declaredTests(t)
+    const failures = run.reviewing ? [] : declaredTests(t)
     if (failures.length) {
       lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
       result = OUTCOMES.FAILED
@@ -1710,7 +1705,7 @@ function controlsVerb() {
   // A task that declares no command is not a skip: there was nothing to run, and
   // saying "the suite did not run" of it would be a report about a suite nobody
   // asked for.
-  const skippedForNoCode = result === OUTCOMES.DONE && t.commands.length > 0 && carriesNoCode()
+  const skippedForNoCode = result === OUTCOMES.DONE && commands.length > 0 && carriesNoCode()
   if (skippedForNoCode) {
     lines.push(
       '# the suite did not run: the diff carries no code, only documentation',
@@ -1719,7 +1714,7 @@ function controlsVerb() {
     )
   }
 
-  for (const command of result === OUTCOMES.DONE && !skippedForNoCode ? t.commands : []) {
+  for (const command of result === OUTCOMES.DONE && !skippedForNoCode ? commands : []) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
     if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
@@ -1730,14 +1725,15 @@ function controlsVerb() {
   measure('controls', {
     outcome: result,
     controls_log: log,
-    commands: skippedForNoCode ? 0 : t.commands.length,
+    commands: skippedForNoCode ? 0 : commands.length,
     ...(skippedForNoCode ? { skipped: 'no-code' } : {}),
     duration_ms: Date.now() - startedAt,
   })
   run = { ...run, lastControlsLog: log }
   // A task with no judge goes from here to `commit`, so the controls seal the
   // index the verdict would have sealed: what they measured is what commits.
-  if (result === OUTCOMES.DONE && !isCheckpoint(run)) run = { ...run, sealedTree: indexTree() }
+  // The table says where green goes, so the seal asks it instead of guessing.
+  if (result === OUTCOMES.DONE && after(run, result).run.step === STEPS.COMMIT) run = { ...run, sealedTree: indexTree() }
   out(`controls: ${result}${skippedForNoCode ? ' (the suite did not run: the diff carries no code, only documentation)' : ''} (log at ${log})`)
   return result
 }
@@ -2574,7 +2570,7 @@ function verdictVerb() {
     // the seal: a verdict forged and staged in the gap does not get in either
     // (measured: today it does).
     //
-    // Only on the PASS: on a checkpoint the COMMIT step is only reached from a
+    // Only on the PASS: after a judge the COMMIT step is only reached from a
     // PASS —`done` and `corrections-ordered` with the budget spent, the two
     // branches of `run-machine.js#afterJudge`—. A task with no judge reaches it
     // from green controls, which seal the index themselves (#530), and
@@ -2696,7 +2692,10 @@ function commitVerb() {
   const t = currentTask()
   let message
   try {
-    message = commitMessage({ issue, task: run.task, tasksTotal: run.tasksTotal, name: t.name })
+    // The review commit (#530) carries the judge's fixes and its verdict, not a task.
+    message = run.reviewing
+      ? reviewCommitMessage({ issue, tasksTotal: run.tasksTotal })
+      : commitMessage({ issue, task: run.task, tasksTotal: run.tasksTotal, name: t.name })
   } catch (e) {
     err(String(e.message))
     return OUTCOMES.FAILED
@@ -2734,12 +2733,15 @@ function commitVerb() {
   // vetoes, and inheriting it would put into the next one's brief an approach
   // to a problem that no longer exists.
   // `run.task` is still the committed one: the machine advances it afterwards.
-  // A checkpoint moves the last judged commit; every commit spends its seal.
+  // Every commit spends its seal. The review commit is a slice commit: the
+  // state load counts it in `sliceCommits`, as it counts the slice verdict's.
   run = {
-    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null,
-    sealedTree: null, ...(isCheckpoint(run) ? { judgedSha: sha } : {}),
+    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, sealedTree: null,
+    ...(run.reviewing ? { sliceCommits: (run.sliceCommits || 0) + 1 } : {}),
   }
-  out(`task ${run.task}/${run.tasksTotal} committed: ${sha.slice(0, 7)}`)
+  out(run.reviewing
+    ? `the judge's review committed: ${sha.slice(0, 7)}`
+    : `task ${run.task}/${run.tasksTotal} committed: ${sha.slice(0, 7)}`)
   return OUTCOMES.DONE
 }
 

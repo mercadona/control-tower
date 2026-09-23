@@ -7,7 +7,7 @@
 // with a gap is not a table, it is a table plus an implicit decision taken by
 // omission.
 import { describe, it, expect } from 'vitest'
-import { after, newRun, isCheckpoint, stretchOf, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
+import { after, newRun, judgesEachTask, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
 import { ReconcileOutcome } from '../scripts/reconcile-outcome.js'
 
 const run = (over = {}) => ({ ...newRun({ plan: 'p.md', issue: 7, baseSha: 'abc', tasksTotal: 3 }), ...over })
@@ -73,21 +73,21 @@ describe('controls', () => {
     expect(after(atControls(), OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
   })
 
-  it('done on a task that is not a checkpoint → commit, with no judge', () => {
-    const r = atControls({ tasksTotal: 3, task: 1, checkpoints: [2] })
+  it('done on a task before the last → commit, with no judge', () => {
+    const r = atControls({ judging: 'final', tasksTotal: 3, task: 1 })
     expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.COMMIT)
   })
 
-  it('done on the last task → judge, even when the plan names no checkpoint', () => {
-    const r = atControls({ tasksTotal: 3, task: 3, checkpoints: [] })
+  it('done in the review → judge', () => {
+    const r = atControls({ judging: 'final', tasksTotal: 3, task: 3, reviewing: true })
     expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
   })
 
-  it('a run with no checkpoints list judges every task, as a run born before the field did', () => {
-    // No `checkpoints` override: the default helper's run carries the one
-    // `newRun` set with no `checkpoints` argument. Task 2 of 3, not the last,
-    // so the only thing making it a checkpoint is the absent list.
+  it('a run born before the final review judges every task, as it always did', () => {
+    // No `judging` override: the default helper's run is the one `newRun`
+    // builds with no `judging` argument, which is how an old run reads.
     const r = atControls({ tasksTotal: 3, task: 2 })
+    expect(judgesEachTask(r)).toBe(true)
     expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
   })
 
@@ -112,13 +112,6 @@ describe('controls', () => {
     const { run: r, state } = after(atControls(), OUTCOMES.INDETERMINATE)
     expect(state).toBe(RUN_STATES.BLOCKED_CONTROLS)
     expect(r.controlRetries).toBe(0)
-  })
-})
-
-describe('the stretch of a checkpoint', () => {
-  it('the stretch of a checkpoint starts one past the previous checkpoint', () => {
-    const r = run({ tasksTotal: 4, task: 4, checkpoints: [2] })
-    expect(stretchOf(r)).toEqual({ from: 3, to: 4 })
   })
 })
 
@@ -212,6 +205,25 @@ describe('commit', () => {
     expect([r.controlRetries, r.judgeRetries, r.correctionRetries]).toEqual([0, 0, 0])
     // The discards and the money belong to the whole slice: they are not touched here.
     expect(r.discards).toBe(0)
+  })
+
+  it('the last commit opens the review: judge, with the counters at zero', () => {
+    const r = atCommit({ judging: 'final', task: 3, tasksTotal: 3, controlRetries: 1, judgeRetries: 0, correctionRetries: 2 })
+    const { run: next, state } = after(r, OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect(next.step).toBe(STEPS.JUDGE)
+    expect(next.reviewing).toBe(true)
+    expect(next.task).toBe(3)
+    expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
+  })
+
+  it('the commit after the review opens reconcile', () => {
+    const r = atCommit({ judging: 'final', task: 3, tasksTotal: 3, reviewing: true, judgeRetries: 1 })
+    const { run: next, state } = after(r, OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect(next.step).toBe(STEPS.RECONCILE)
+    expect(next.reviewing).toBe(false)
+    expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
   })
 
   it('failed closes in blocked-commit without retrying', () => {

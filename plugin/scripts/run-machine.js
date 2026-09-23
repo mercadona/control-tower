@@ -114,7 +114,7 @@ export const DEFAULT_BUDGETS = Object.freeze({
 })
 
 // The newborn run: task 1, step implement, every counter at zero.
-export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, checkpoints = null }) {
+export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, judging = null }) {
   return freeze({
     plan, issue, baseSha,
     task: 1,
@@ -125,16 +125,13 @@ export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, checkpoints 
     // e2e" and is a datum, whereas `undefined` cannot be told apart from "an
     // old version wrote this run".
     e2eRuns: Array.isArray(e2eRuns) ? [...e2eRuns] : [],
-    // checkpoints — the task numbers the plan marked `**Judge:** checkpoint`,
-    // frozen at birth so a later edit to the plan cannot move the judge under
-    // a run already in flight. `null` and not `[]` when the argument is not a
-    // list: that is a run born before this field existed, and it has to judge
-    // every task — `isCheckpoint` reads the `null` for exactly that meaning.
-    checkpoints: Array.isArray(checkpoints) ? [...checkpoints] : null,
-    // judgedSha — the commit the last checkpoint's judge looked at, so the
-    // next checkpoint's review package can diff against it instead of against
-    // the whole slice. Starts at the base: nothing has been judged yet.
-    judgedSha: baseSha,
+    // judging — `'final'` when the judge reviews the whole slice once, after
+    // the last commit. `null` is a run born before this field: it judges every
+    // task, and `judgesEachTask` reads the `null` for exactly that meaning.
+    judging: judging === 'final' ? 'final' : null,
+    // reviewing — true from the last task commit to the review commit, the
+    // stretch in which `judge` looks at the whole slice instead of one task.
+    reviewing: false,
     step: STEPS.IMPLEMENT,
     controlRetries: 0,
     judgeRetries: 0,
@@ -148,28 +145,14 @@ export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns, checkpoints 
 const freeze = (run) => Object.freeze({ ...run })
 const withChanges = (run, changes) => freeze({ ...run, ...changes })
 
-// The predicate `afterControls` asks to choose between JUDGE and COMMIT, and
-// the same one the review package and the judge brief will ask (later tasks)
-// to decide what a checkpoint carries. True when there is no list (a run born
-// before this field, judging every task as it always did), when the list
-// names the current task, or on the last task — a plan that names no
-// checkpoint still gets judged once, at its end.
-export function isCheckpoint(run) {
-  if (!Array.isArray(run.checkpoints)) return true
-  if (run.checkpoints.includes(run.task)) return true
-  return run.task === run.tasksTotal
+// The predicate `afterControls` and `afterCommit` ask to choose between
+// judging each task and reviewing the slice once. True for a run born before
+// the `judging` field, which judges every task as it always did.
+export function judgesEachTask(run) {
+  return run.judging !== 'final'
 }
 
-// The span of tasks a checkpoint answers for, so the review package and the
-// judge brief (later tasks) can gather every task since the last one judged
-// instead of just the current one. `from` looks at the checkpoints list
-// itself — never at the last-task rule `isCheckpoint` adds on top of it — so
-// the implicit checkpoint of the last task never shortens an earlier stretch.
-export function stretchOf(run) {
-  if (!Array.isArray(run.checkpoints)) return { from: run.task, to: run.task }
-  const earlier = run.checkpoints.filter((n) => n < run.task)
-  return { from: earlier.length ? Math.max(...earlier) + 1 : 1, to: run.task }
-}
+const freshCounters = Object.freeze({ controlRetries: 0, judgeRetries: 0, correctionRetries: 0 })
 
 const open = (run, changes) => ({ run: withChanges(run, changes), state: RUN_STATES.OPEN })
 const closed = (run, state) => ({ run: freeze(run), state })
@@ -229,10 +212,10 @@ function afterImplement(run, outcome) {
 function afterControls(run, outcome, budgets) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      // Between two checkpoints the judge is skipped: the task is sealed and
-      // moves straight to commit, so its diff waits for the checkpoint ahead
-      // of it instead of being judged alone.
-      return open(run, { step: isCheckpoint(run) ? STEPS.JUDGE : STEPS.COMMIT })
+      // A task of a final-review run is sealed and moves straight to commit:
+      // its diff waits for the review after the last commit. The review's own
+      // controls go to the judge.
+      return open(run, { step: judgesEachTask(run) || run.reviewing ? STEPS.JUDGE : STEPS.COMMIT })
     case OUTCOMES.FAILED:
       return run.controlRetries < budgets.controlRetries
         ? open(run, { step: STEPS.IMPLEMENT, controlRetries: run.controlRetries + 1 })
@@ -305,29 +288,28 @@ function afterAdvice(run, outcome) {
 function afterCommit(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
+      // The review commit carries the judge's fixes and verdict, and it opens
+      // the slice queue as the last task commit did before the review existed.
+      if (run.reviewing) return open(run, { step: STEPS.RECONCILE, reviewing: false, ...freshCounters })
       // Each task starts its retry count afresh. The discards and the money do
       // not: those belong to the whole slice.
-      return run.task < run.tasksTotal
-        ? open(run, {
-            task: run.task + 1,
-            step: STEPS.IMPLEMENT,
-            controlRetries: 0,
-            judgeRetries: 0,
-            correctionRetries: 0,
-          })
-        // The last task committed does NOT deliver the run: §3.7 opens the
-        // RECONCILE phase here — the branch has to end up up to date with its
-        // base before GLOBAL measures the end-to-end — with the three counters
-        // at zero (the phase starts its own count afresh, like every task).
-        // `delivered` comes to mean tasks committed + branch reconciled +
-        // end-to-end green + slice judged, not just the first of those.
-        //
-        // `task` does NOT advance in any of the steps of that final queue
-        // (RECONCILE, GLOBAL, SLICE_JUDGE and, if the spec declared runs,
-        // E2E): they are steps of the SLICE, not of a sixth task that does not
-        // exist. (Careful: that breaks the `commits === task - 1` invariant
-        // ct-step checks when loading the state — see Task 8.)
-        : open(run, { step: STEPS.RECONCILE, controlRetries: 0, judgeRetries: 0, correctionRetries: 0 })
+      if (run.task < run.tasksTotal) return open(run, { task: run.task + 1, step: STEPS.IMPLEMENT, ...freshCounters })
+      // The last task committed does NOT deliver the run: §3.7 opens the
+      // RECONCILE phase here — the branch has to end up up to date with its
+      // base before GLOBAL measures the end-to-end — with the three counters
+      // at zero (the phase starts its own count afresh, like every task).
+      // `delivered` comes to mean tasks committed + branch reconciled +
+      // end-to-end green + slice judged, not just the first of those.
+      //
+      // `task` does NOT advance in any of the steps of that final queue
+      // (RECONCILE, GLOBAL, SLICE_JUDGE and, if the spec declared runs,
+      // E2E): they are steps of the SLICE, not of a sixth task that does not
+      // exist. (Careful: that breaks the `commits === task - 1` invariant
+      // ct-step checks when loading the state — see Task 8.)
+      if (judgesEachTask(run)) return open(run, { step: STEPS.RECONCILE, ...freshCounters })
+      // A final-review run opens the review instead: the judge looks at the
+      // whole slice, with the three counters at zero like a task of its own.
+      return open(run, { step: STEPS.JUDGE, reviewing: true, ...freshCounters })
     // A commit that fails is not retried: if git says no, it is the index or
     // the message, and neither of those gets fixed by implementing again.
     case OUTCOMES.FAILED:

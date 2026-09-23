@@ -962,3 +962,24 @@ export function sliceVerdictCommitMessage({ issue, tasksTotal }) {
   }
   return message
 }
+
+// THE REVIEW COMMIT (#530): the judge reviews the slice once, after the last
+// task commit, and what it asked to fix lands with its verdict in a commit of
+// its own — no task's, so the task title of `commitMessage` does not fit it.
+// Same trailer and same keyword refusal as its siblings.
+export function reviewCommitMessage({ issue, tasksTotal }) {
+  const title = `the judge's review of the slice (#${issue}, after task ${tasksTotal}/${tasksTotal})`
+  const body = [
+    '',
+    'The fixes the judge asked for and its verdict.',
+    '',
+    CtStepCommit.TRAILER_LINE,
+    'Co-Authored-By: Claude <noreply@anthropic.com>',
+  ].join('\n')
+  const message = title + '\n' + body
+  const keywords = findClosingKeywords(message)
+  if (keywords.length) {
+    throw new Error(`the commit message of the review contains a closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) and would close an issue without anybody having decided it`)
+  }
+  return message
+}
