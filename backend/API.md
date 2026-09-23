@@ -405,8 +405,9 @@ metrics projection; the original output remains in `stream.ndjson`. Historical
 The common record is not returned by this endpoint or sent through harvest.
 It describes one agent invocation, which can
 contain several model requests, with execution outcome, durable timing and
-available reported consumption. Completion observations, including restart
-recovery, persist the record through the common measured executor. Unknown
+available reported consumption. Execution completion and explicit recovery,
+including startup restoration, persist the record through the common measured
+executor. Completion, history and progress queries do not capture metrics. Unknown
 values remain unknown and resumed reported costs remain `unverified-resume`.
 
 **200 OK**
@@ -577,8 +578,10 @@ cwd conflicts do not prove legacy ownership. Post-delivery fixes retain their
 existing resume path after positive provenance; a fix is refused while machine
 work is active.
 
-Each observed completed backend call leaves `agent-measurements-v1.json` beside
-its raw stream and completion. It contains durable identity, role, execution
+Each completed backend execution leaves `agent-measurements-v1.json` beside its
+raw stream and completion. Startup and explicit plan recovery reconcile missing
+records; polling active plans or progress does not create or rewrite them.
+The file contains durable identity, role, execution
 outcome, wall duration, reported consumption and diagnostics. Missing values are
 `null` and measured zero remains zero. Cost retains `initial-invocation` or
 `unverified-resume` attribution; token counts are reported values, not verified

@@ -277,3 +277,49 @@ Simplification verification: `npm run typecheck` passed; the fast backend subset
 passed 3,043 tests, and `npm test` passed all 3,143 tests across 151 files.
 The independent follow-up judge returned PASS, confirming the read-only reader,
 single metrics output and shared explicit result parser against the amended scope.
+
+## Further review: shared file publication and descriptor validation
+
+The user approved consolidating immutable write-or-match behavior in the existing
+`HeadlessFiles` adapter and removing immediate duplicate validation in
+`CallDescriptor.from` and its constructor. The file operation reports accepted
+publication or a content conflict; each caller retains its own error translation.
+Descriptor decoding still checks the object shape, while field validation now
+happens once in the constructor. Tests preserve malformed-input rejection through
+both direct preparation and disk decoding.
+
+Productive structured-response handling remains separate from measurement
+extraction. The `agentic-skills` reference shares an outer response envelope but
+consumes its structured response and its spending through different operations.
+Changing the metrics capture trigger requires a separate decision: the current
+recovery routine is also used by active-plan queries, so startup reconciliation
+must be distinguished from observation before making history reads side-effect-free.
+
+Verification of the publication and validation cleanup: `npm run typecheck` passed;
+`npm test` passed 3,155 tests across 151 files.
+
+## Approved capture lifecycle
+
+The user approved separating capture from observation. `AgentCalls.wait` completes
+execution through the measured wrapper; explicit `recover` reconciles terminal
+records without launching or waiting for agents. `completed` and `history` are
+read-only observations. Role execution goes through `wait` even when its process
+has already finished, while unfinished unowned calls remain refused.
+
+Startup calls `RunPlanRecovery.restoreCalls` before listening and reports a failed
+restoration on stderr. Explicit plan recovery requests call restoration as well.
+The existing active-plan projection routine does not restore measurements, so
+repeated active-plan and planning-progress requests do not run the reader/store.
+This supersedes the earlier terminal-observation capture guarantee. Recovery uses
+existing durable records, with no cache, extra worker or new storage.
+
+Capture-lifecycle verification: `npm run typecheck` passed. The full backend run
+passed 3,155 of 3,159 tests; four real-process cases in
+`ct-run-machine-real-process.test.ts` and `run-recovery-real-process.test.ts`
+failed at the `CT_STATE_DIR` consistency control before exercising their intended
+behavior. A separately running backend uses another state directory. The user
+explicitly chose to keep that backend running and proceed without rerunning those
+four cases. The control and test assertions were not bypassed or weakened, and
+this run is not recorded as fully passing. The independent read-only judge returned
+PASS for the current implementation; that review does not replace the blocked
+verification.

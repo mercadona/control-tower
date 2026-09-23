@@ -4,7 +4,10 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PlanningActivityNotRead, RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
+import { PlanningActivityNotRead } from '../../src/domain/exceptions.ts'
+import { AgentMeasurementReader } from '../../src/domain/ports/agent-measurement-reader.ts'
+import { AgentMeasurementStore } from '../../src/domain/ports/agent-measurement-store.ts'
+import type { AgentCallMeasurements } from '../../src/domain/value-objects/agent-call-measurements.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanningActivityState } from '../../src/domain/value-objects/planning-activity.ts'
@@ -17,6 +20,19 @@ import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { StreamPlanningActivities } from '../../src/infrastructure/stream-planning-activities.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+
+class UnaskedMeasurementReader extends AgentMeasurementReader {
+  override async read(): Promise<AgentCallMeasurements> {
+    throw new Error('a planning observation must not extract measurements')
+  }
+}
+
+class UnaskedMeasurementStore extends AgentMeasurementStore {
+  override async record(): Promise<void> {
+    throw new Error('a planning observation must not publish measurements')
+  }
+}
 
 class CallsDouble extends ClaudeCalls {
   historyRows: readonly RecordedCall[] = []
@@ -93,7 +109,9 @@ class Subject {
     this.calls = new CallsDouble()
     this.nowMsValue = Date.parse('2026-09-22T10:06:12.000Z')
     this.planCalls = new ClaudePlanCalls({
-      calls: this.calls,
+      calls: new MeasuredAgentCalls({
+        executor: this.calls, reader: new UnaskedMeasurementReader(), store: new UnaskedMeasurementStore(),
+      }),
       brief: new PlanAgentBrief({
         dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
         conventions: '/plugin/conventions',
@@ -128,16 +146,15 @@ describe('StreamPlanningActivities, against a real claude -p --output-format str
     if (root !== undefined) await rm(root, { recursive: true, force: true })
   })
 
-  it.each([
-    new RunNotAdvanced('agent measurements could not be recorded: disk full'),
-    new RunNotUnderstood('agent measurements contain conflicting bytes'),
-  ])('measurement refusal %s retains its diagnostic in the planning observation contract', async (failure) => {
+  it('polling a finished planner reads its activity without extracting or publishing measurements', async () => {
     root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
     const subject = new Subject(root)
-    subject.calls.historyFailure = failure
+    subject.calls.historyRows = [Mother.finished()]
+    const adapter = subject.adapter()
 
-    await expect(subject.adapter().of(Mother.watch()))
-      .rejects.toEqual(new PlanningActivityNotRead(failure.message))
+    expect((await adapter.of(Mother.watch())).state).toBe(PlanningActivityState.FINISHED)
+    expect((await adapter.of(Mother.watch())).state).toBe(PlanningActivityState.FINISHED)
+    expect(await fs.readdir(root)).toEqual([])
   })
 
   it('unexpected history failures remain programming errors rather than measurement refusals', async () => {

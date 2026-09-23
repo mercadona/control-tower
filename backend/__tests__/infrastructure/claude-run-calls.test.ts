@@ -557,7 +557,7 @@ describe('ClaudeRunCalls', () => {
       executor: scenario.calls,
       reader: new ClaudeRunMeasurements({ files: scenario.files }),
       store: new DiskAgentMeasurements({ files: scenario.files }),
-    }).history(scenario.watch.agent)
+    }).recover(scenario.watch.agent)
 
     expect(scenario.launch.descriptors).toHaveLength(1)
     expect(await readFile(evidence, 'utf8')).toBe(immutable)

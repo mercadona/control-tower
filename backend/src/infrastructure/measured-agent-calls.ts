@@ -34,14 +34,16 @@ export class MeasuredAgentCalls<Invocation, Descriptor> extends AgentCalls<Invoc
     return completed
   }
 
-  async completed(call: StartedPlanCall): Promise<CompletedPlanCall | null> {
-    const completed = await this.executor.completed(call)
-    if (completed !== null) await this.#record(completed)
-    return completed
+  completed(call: StartedPlanCall): Promise<CompletedPlanCall | null> {
+    return this.executor.completed(call)
   }
 
-  async history(conversation: string): Promise<readonly RecordedCall[]> {
-    const history = await this.executor.history(conversation)
+  history(conversation: string): Promise<readonly RecordedCall[]> {
+    return this.executor.history(conversation)
+  }
+
+  async recover(conversation: string): Promise<readonly RecordedCall[]> {
+    const history = await this.executor.recover(conversation)
     for (const recorded of history) {
       if (recorded.completion !== null) await this.#record(recorded.completion)
     }

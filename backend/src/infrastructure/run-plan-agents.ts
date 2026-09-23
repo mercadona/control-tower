@@ -135,6 +135,7 @@ export class RunPlanAgents extends PlanAgents {
     const watch = await this.#recoveryWatch(asked)
     let provenance: RunProvenanceValue
     try {
+      await this.transport.recover(watch.agent)
       provenance = await this.provenance(watch)
     } catch (cause) {
       RunPlanAgents.#throwRecoveryFailure(cause)

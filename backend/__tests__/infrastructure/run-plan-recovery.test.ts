@@ -135,6 +135,8 @@ class RecoveryTransport extends ClaudeCalls {
   readonly descriptors = new Map<string, CallDescriptor>()
   readonly deadlines = new Map<string, number>()
   readonly owned = new Set<string>()
+  readonly restored: string[] = []
+  restorationFailure: Error | null = null
   spawns = 0
 
   constructor() {
@@ -156,6 +158,12 @@ class RecoveryTransport extends ClaudeCalls {
 
   override async history(conversation: string): Promise<readonly RecordedCall[]> {
     return this.histories.get(conversation) ?? []
+  }
+
+  override async recover(conversation: string): Promise<readonly RecordedCall[]> {
+    this.restored.push(conversation)
+    if (this.restorationFailure !== null) throw this.restorationFailure
+    return this.history(conversation)
   }
 
   override async descriptorOf(call: StartedPlanCall): Promise<CallDescriptor> {
@@ -553,6 +561,35 @@ class ProjectionScenario {
 }
 
 describe('RunPlanRecovery projection', () => {
+  it('startup restores recorded calls while subsequent plan observations leave measurements alone', async () => {
+    const tested = new ProjectionScenario()
+
+    expect(await tested.recovery.restoreCalls()).toBeNull()
+    expect(tested.transport.restored).toEqual(tested.watches.map((watch) => watch.agent))
+    tested.transport.restored.length = 0
+    expect(await tested.recovery.recover()).toBeNull()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(tested.transport.restored).toEqual([])
+    expect(tested.transport.spawns).toBe(0)
+  })
+
+  it('startup reports a failed measurement restoration without replaying an agent', async () => {
+    const tested = new ProjectionScenario()
+    tested.transport.restorationFailure = new Error('measurement disk is full')
+
+    expect(await tested.recovery.restoreCalls()).toContain('measurement disk is full')
+    expect(tested.transport.spawns).toBe(0)
+  })
+
+  it('startup refuses an unreadable call registry instead of treating it as empty', async () => {
+    const tested = new ProjectionScenario()
+    tested.records.found = PlansInFlight.refused('call registry is unreadable')
+
+    expect(await tested.recovery.restoreCalls()).toBe('call registry is unreadable')
+    expect(tested.transport.restored).toEqual([])
+  })
+
   it('continues publication during startup without a GET and starts review only after checked delivery', async () => {
     const watch = RecoveryMother.watch()
     const delivery = new StartupRunDelivery()
@@ -1933,6 +1970,8 @@ describe('RunPlanRecovery finite bridge', () => {
     expect(fixture.calls.count).toBe(0)
     expect(restarted.spawns()).toBe(0)
     expect(await restarted.journal.entries(restarted.watch)).toEqual(beforeGet)
+    const metricPath = join(fixture.files.callDirectory(implementation), 'agent-measurements-v1.json')
+    await expect(readFile(metricPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
 
     await restarted.agents.recover({
       agent: restarted.watch.agent,
@@ -1941,6 +1980,10 @@ describe('RunPlanRecovery finite bridge', () => {
     })
     await FiniteBridge.bounded(() => fixture.warnings.length > 0)
     expect(fixture.warnings.join('')).toContain('finite recovery boundary')
+    expect(JSON.parse(await readFile(metricPath, 'utf8'))).toMatchObject({
+      callId: implementation.id, conversation: implementation.conversation,
+      cost: { kind: 'reported', attribution: 'unverified-resume' },
+    })
 
     expect(fixture.calls.asked).toEqual([
       { argv: fixture.reportArgv, cwd: fixture.worktree },

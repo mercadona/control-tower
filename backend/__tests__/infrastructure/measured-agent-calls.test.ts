@@ -25,6 +25,7 @@ class AgentCallMother extends CommonAgentCallMother {
 class ScriptedAgent extends AgentCalls<string, number> {
   readonly completion: CompletedPlanCall | null
   readonly starts: string[] = []
+  readonly recoveries: string[] = []
   readonly uncertainty = new Error('completion is not known')
 
   constructor(completion: CompletedPlanCall | null) {
@@ -56,6 +57,11 @@ class ScriptedAgent extends AgentCalls<string, number> {
       call: AgentCallMother.call(), purpose: 'implementation',
       startedAt: AgentCallMother.STARTED_AT, completion: this.completion,
     })]
+  }
+
+  override async recover(conversation: string): Promise<readonly RecordedCall[]> {
+    this.recoveries.push(conversation)
+    return this.history(conversation)
   }
 
   override async descriptorOf(): Promise<number> { return 17 }
@@ -133,21 +139,36 @@ describe('measured agent calls', () => {
     expect(scenario.executor.starts).toEqual([])
   })
 
-  it('a nonblocking completion read also leaves measurements', async () => {
+  it('completion and history queries never read or publish measurements, even when the store would refuse', async () => {
     const scenario = AgentCallMother.succeeded()
+    scenario.store.refusal = new Error('measurement storage is unavailable')
 
-    await scenario.calls.completed(AgentCallMother.call())
+    expect(await scenario.calls.completed(AgentCallMother.call())).toBe(scenario.executor.completion)
+    expect((await scenario.calls.history('conversation'))[0].completion).toBe(scenario.executor.completion)
+    await scenario.calls.history('conversation')
 
-    expect(scenario.store.recorded).toHaveLength(1)
-    expect(scenario.store.recorded[0].provider).toBe('scripted-agent')
+    expect(scenario.reader.readCalls).toEqual([])
+    expect(scenario.store.recorded).toEqual([])
+    expect(scenario.executor.recoveries).toEqual([])
   })
 
-  it('history reconciles finished calls after restart without launching an agent', async () => {
+  it('explicit recovery reconciles finished calls without launching an agent', async () => {
     const scenario = AgentCallMother.succeeded()
 
-    const history = await scenario.observer().history('conversation')
+    const history = await scenario.observer().recover('conversation')
 
     expect(scenario.store.recorded.map((measurement) => measurement.completed.call)).toEqual([history[0].call])
+    expect(scenario.executor.recoveries).toEqual(['conversation'])
+    expect(scenario.executor.starts).toEqual([])
+  })
+
+  it('explicit recovery leaves unfinished calls unmeasured and does not wait for or restart them', async () => {
+    const scenario = AgentCallMother.unfinished()
+
+    expect((await scenario.calls.recover('conversation'))[0].completion).toBeNull()
+
+    expect(scenario.reader.readCalls).toEqual([])
+    expect(scenario.store.recorded).toEqual([])
     expect(scenario.executor.starts).toEqual([])
   })
 
@@ -183,16 +204,16 @@ describe('measured agent calls', () => {
     expect(scenario.executor.starts).toEqual([])
   })
 
-  it('a recording failure can be retried from completion without repeating execution', async () => {
+  it('a recording failure can be retried by explicit recovery without repeating execution', async () => {
     const scenario = AgentCallMother.succeeded()
     const refusal = new Error('measurement disk is full')
     scenario.store.refusal = refusal
 
     await expect(scenario.calls.wait(AgentCallMother.call())).rejects.toBe(refusal)
     scenario.store.refusal = null
-    const completed = await scenario.calls.completed(AgentCallMother.call())
+    const history = await scenario.calls.recover('conversation')
 
-    expect(completed).toBe(scenario.executor.completion)
+    expect(history[0].completion).toBe(scenario.executor.completion)
     expect(scenario.store.recorded).toHaveLength(1)
     expect(scenario.executor.starts).toEqual([])
   })

@@ -240,7 +240,7 @@ describe('ClaudeCalls with real local processes', () => {
     const measurements = join(RealCallMother.directory(root), 'agent-measurements-v1.json')
     await expect(fs.access(measurements)).rejects.toMatchObject({ code: 'ENOENT' })
 
-    await RealCallMother.measured(root).history(RealCallMother.CONVERSATION)
+    await RealCallMother.measured(root).recover(RealCallMother.CONVERSATION)
     const first = await readFile(measurements, 'utf8')
     await RealCallMother.measured(root).completed(RealCallMother.call())
 
@@ -300,6 +300,7 @@ describe('ClaudeCalls with real local processes', () => {
       const proof = await records.nonLaunch(watch!)
       const call = new StartedPlanCall({ conversation, id: callId })
       const completed = await RealCallMother.measured(root).completed(call)
+      await RealCallMother.measured(root).recover(conversation)
       const recovery = await RealCallMother.planCalls(root, records).recoveryFor(watch!)
       expect(proof).toMatchObject({ conversation, callId, source: 'child-spawn' })
       expect(completed).toMatchObject({

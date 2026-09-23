@@ -309,6 +309,24 @@ describe('ClaudeCalls', () => {
     expect(original).not.toBe(driverBytes)
   })
 
+  it.each([
+    { field: 'conversation', value: '' },
+    { field: 'purpose', value: 'unknown' },
+    { field: 'requestId', value: 7 },
+    { field: 'role', value: ' ' },
+    { field: 'cwd', value: '' },
+    { field: 'binary', value: '' },
+    { field: 'argv', value: ['--session-id', 7] },
+    { field: 'startedAt', value: 'yesterday' },
+    { field: 'budgetMs', value: -1 },
+    { field: 'killGraceMs', value: -1 },
+  ])('invalid $field is rejected both when preparing and when reading a call', ({ field, value }) => {
+    const text = CallMother.descriptor('/checkout', { [field]: value })
+
+    expect(() => new CallDescriptor(JSON.parse(text))).toThrow(field)
+    expect(() => CallDescriptor.from(text)).toThrow(field)
+  })
+
   it('descriptor provenance preserves read and identity failures', async () => {
     const missingRoot = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-missing-'))
     roots.push(missingRoot)

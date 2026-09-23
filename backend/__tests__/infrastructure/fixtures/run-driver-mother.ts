@@ -632,6 +632,24 @@ export class RunDriverMother {
     }
   }
 
+  async observeWithoutMeasurements(conversation: string): Promise<readonly string[]> {
+    if (this.#runtime === null) throw new Error('the fixture backend is not running')
+    const directory = join(this.state, 'control-tower', 'harness', conversation, 'calls')
+    const names = await readdir(directory)
+    for (const name of names) await rm(join(directory, name, 'agent-measurements-v1.json'))
+    const port = await this.#runtime.port
+    for (let observation = 0; observation < 2; observation += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+      const body = await response.text()
+      if (response.status !== 200) throw new Error(`active-plans answered ${response.status}: ${body}`)
+    }
+    const regenerated: string[] = []
+    for (const name of names) {
+      if ((await readdir(join(directory, name))).includes('agent-measurements-v1.json')) regenerated.push(name)
+    }
+    return regenerated
+  }
+
   async deliverThroughApi(): Promise<{
     admission: { conversation: string },
     conversations: string[],

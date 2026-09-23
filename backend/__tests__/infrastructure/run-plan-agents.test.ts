@@ -44,7 +44,7 @@ import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { ChangeAnnouncements } from '../../src/domain/ports/change-announcements.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
-import { RunPlanAgents } from '../../src/infrastructure/run-plan-agents.ts'
+import { RunPlanAgents, RunProvenance } from '../../src/infrastructure/run-plan-agents.ts'
 import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
@@ -178,6 +178,7 @@ class TransportDouble extends ClaudeCalls {
   historyValue: Awaited<ReturnType<ClaudeCalls['history']>> = []
   readonly owned = new Set<string>()
   readonly descriptors = new Map<string, CallDescriptor>()
+  readonly restored: string[] = []
 
   constructor() {
     super({
@@ -189,6 +190,11 @@ class TransportDouble extends ClaudeCalls {
   }
 
   override async history(): Promise<Awaited<ReturnType<ClaudeCalls['history']>>> {
+    return this.historyValue
+  }
+
+  override async recover(conversation: string): Promise<readonly RecordedCall[]> {
+    this.restored.push(conversation)
     return this.historyValue
   }
 
@@ -839,6 +845,20 @@ describe('RunPlanAgents', () => {
     expect((await tested.transport.descriptorOf(implementation)).argv).toEqual(implementationInvocation.argv)
     expect((await tested.transport.descriptorOf(implementation)).requestId).toBe(`implementation:${planner.id}`)
     expect(tested.spawns()).toBe(0)
+  })
+
+  it('only explicit plan recovery requests call restoration, even when no agent needs to resume', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({ kind: 'delivered' })
+
+    expect(await tested.agents.provenance(AgentMother.WATCH)).toBe(RunProvenance.DRIVER)
+    expect(tested.transport.restored).toEqual([])
+    await tested.agents.recover({
+      agent: AgentMother.CONVERSATION, issue: AgentMother.ISSUE.number, repository: AgentMother.REPOSITORY,
+    })
+
+    expect(tested.transport.restored).toEqual([AgentMother.CONVERSATION])
+    expect(tested.events).toEqual([])
   })
 
   it('restart preserves recorded ownership without migrating a conversation', async () => {

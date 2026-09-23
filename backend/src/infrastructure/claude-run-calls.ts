@@ -7,7 +7,7 @@ import type { RunInstruction } from '../domain/value-objects/run-instruction.ts'
 import { CallDescriptor, CallInvocation } from './claude-calls.ts'
 import type { AgentCalls } from '../domain/ports/agent-calls.ts'
 import type { CtRunMachine } from './ct-run-machine.ts'
-import { HeadlessFiles } from './headless-files.ts'
+import type { HeadlessFiles } from './headless-files.ts'
 import type { RunDispatch } from './run-dispatch.ts'
 
 class StructuredResponse {
@@ -72,13 +72,10 @@ export class ClaudeRunCalls extends RunCalls {
       await this.#discardStaleResponse(watch.located.path, dispatch.response.path)
     }
     const call = recorded ?? await this.calls.start(invocation)
-    let completion = await this.calls.completed(call)
-    if (completion === null) {
-      if (!this.calls.owns(call)) {
-        throw new RunNotAdvanced(`recorded call ${call.id} is incomplete and is not owned by this API process`)
-      }
-      completion = await this.calls.wait(call)
+    if (await this.calls.completed(call) === null && !this.calls.owns(call)) {
+      throw new RunNotAdvanced(`recorded call ${call.id} is incomplete and is not owned by this API process`)
     }
+    const completion = await this.calls.wait(call)
     if (!completion.succeeded) throw new RunNotAdvanced(ClaudeRunCalls.#failureOf(completion))
     switch (dispatch.response.kind) {
       case 'edits':
@@ -118,7 +115,9 @@ export class ClaudeRunCalls extends RunCalls {
     const stream = await this.files.read(join(this.files.callDirectory(call), CallDescriptor.STREAM))
     const response = StructuredResponse.from(stream, call.conversation)
     const evidence = join(this.files.callDirectory(call), ClaudeRunCalls.RESPONSE)
-    await this.#writeOnceOrMatch(evidence, response)
+    if (await this.files.writeOnceOrMatch(evidence, response) === 'conflict') {
+      throw new Error(`${evidence} contains different bytes after immutable publication collided`)
+    }
     const destination = ClaudeRunCalls.#destination(watch.located.path, printed)
     await this.files.fs.mkdir(dirname(destination), { recursive: true })
     const temporary = join(dirname(destination), `.${basename(destination)}.${this.files.newId()}.tmp`)
@@ -133,18 +132,6 @@ export class ClaudeRunCalls extends RunCalls {
       if (opened !== null) await opened.close()
       await this.files.fs.rm(temporary, { force: true })
     }
-  }
-
-  async #writeOnceOrMatch(path: string, text: string): Promise<void> {
-    try {
-      await this.files.writeOnce(path, text)
-      return
-    } catch (cause) {
-      if (!HeadlessFiles.isSystemFailure(cause) || cause.code !== 'EEXIST') throw cause
-    }
-    const existing = await this.files.read(path)
-    if (existing === null) throw new Error(`${path} is absent after immutable publication collided`)
-    if (existing !== text) throw new Error(`${path} contains different bytes after immutable publication collided`)
   }
 
   static #prompt(watch: PlanWatch, dispatch: RunDispatch): string {

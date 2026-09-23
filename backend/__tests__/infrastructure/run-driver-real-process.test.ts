@@ -80,6 +80,7 @@ describe('run driver real process', () => {
       run: { issue: 7, task: 1, tasksTotal: 1, step: 'slice-judge', discards: 0 },
     })
     expect(evidence.publication).toContain(`Source: ${RunDriverMother.PLAN}`)
+    expect(await fixture.observeWithoutMeasurements(evidence.admission.conversation)).toEqual([])
     const owned = fixture.holdOwnedProcess()
     await fixture.dispose()
     expect(fixture.disposedWith(owned)).toBe(true)

@@ -122,6 +122,17 @@ export class RunPlanRecovery {
     }
   }
 
+  async restoreCalls(): Promise<string | null> {
+    try {
+      const found = await this.records.inFlight()
+      if (!found.wereListed) return found.reason
+      for (const watch of found.watches ?? []) await this.transport.recover(watch.agent)
+      return null
+    } catch (cause) {
+      return RunPlanRecovery.#diagnostic(cause)
+    }
+  }
+
   async #recover(): Promise<string | null> {
     const found = await this.records.inFlight()
     if (!found.wereListed) return found.reason

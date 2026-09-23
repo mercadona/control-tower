@@ -795,6 +795,10 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })
+    const callRestorationFailure = await recovery.restoreCalls()
+    if (callRestorationFailure !== null) {
+      process.stderr.write(`call measurement recovery failed: ${callRestorationFailure}\n`)
+    }
     let port: number
     coordinatingSessions.beginRecovery()
     try {

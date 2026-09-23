@@ -7,6 +7,7 @@ export abstract class AgentCalls<Invocation, Descriptor> {
   abstract wait(call: StartedPlanCall): Promise<CompletedPlanCall>
   abstract completed(call: StartedPlanCall): Promise<CompletedPlanCall | null>
   abstract history(conversation: string): Promise<readonly RecordedCall[]>
+  abstract recover(conversation: string): Promise<readonly RecordedCall[]>
   abstract descriptorOf(call: StartedPlanCall): Promise<Descriptor>
   abstract deadlineOf(call: StartedPlanCall): Promise<number>
   abstract owns(call: StartedPlanCall): boolean
