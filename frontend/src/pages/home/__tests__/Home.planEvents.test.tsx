@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { FakeEventSource } from './FakeEventSource'
 import {
@@ -39,7 +39,7 @@ describe('Home · plan events', () => {
 
     await streamFrame(PlanEventsMother.writing())
 
-    expect(screen.getByRole('status')).toHaveTextContent('Escribiendo el plan…')
+    expect(within(screen.getByLabelText('Progreso del plan')).getByRole('status')).toHaveTextContent('Escribiendo el plan…')
   })
 
   it('should keep a ready plan in review and keep listening in case a review reworks it', async () => {
