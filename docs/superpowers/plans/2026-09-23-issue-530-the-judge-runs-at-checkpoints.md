@@ -118,6 +118,7 @@ with task 1 marked, so every one of them still reaches the judge at task 1.
 task.
 
 **Files:** `plugin/scripts/plan-tasks.js` (modify), `plugin/__tests__/plan-tasks.test.js`
+(modify), `plugin/scripts/plan-contract.js` (modify), `plugin/__tests__/plan-contract.test.js`
 (modify)
 
 Current state (plugin/scripts/plan-tasks.js, lines 80-80):
@@ -138,8 +139,9 @@ const OTHER_MARKERS = ['**Objective:**', FILES, TDD, TESTS, JUDGE]
 ```
 
 Read the value from the first structural line that starts with `**Judge:**`, trimmed. A task
-with no such line gets `checkpoint: false`. `plan-contract.js` already turns every problem of
-`extractTasks` into a violation, so it needs no change.
+with no such line gets `checkpoint: false`. `validatePlan` in `plan-contract.js` forwards only
+the verification problems of `extractTasks`, so it also forwards `judge-line` as a violation with
+rule `judge`.
 
 **TDD:** `it('a task that declares **Judge:** checkpoint is a checkpoint, and a task that declares nothing is not')`
 expects `true` for the marked task and `false` for the other. The boundary is
