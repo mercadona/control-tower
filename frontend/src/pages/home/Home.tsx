@@ -32,12 +32,11 @@ const SESSIONS_DRAWER_COLLAPSED_WIDTH_PX = 48
 const ACTIVE_PLANS_POLL_INTERVAL_MS = 2000
 const NO_COORDINATING_TARGET = 'no-coordinating-target'
 
-type WorkflowStageName = 'request' | 'review' | 'implementation'
+type WorkflowStageName = 'request' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
 
 const STAGE_LABEL: Record<WorkflowStageName, string> = {
   request: 'Solicitud',
-  review: 'Revisar plan',
   implementation: 'Implementación',
 }
 
@@ -68,7 +67,7 @@ const Home = () => {
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const coordinatingSession = useCoordinatingSession()
   const sessionsColumnCollapse = useSessionsColumnCollapse(coordinatingSession.target)
-  const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
+  const [requestExpanded, setRequestExpanded] = useState(false)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
   const retryingRef = useRef(false)
@@ -106,7 +105,7 @@ const Home = () => {
     setWorkflow(selected)
     setReconciliation(restored ? 'confirmed' : 'not-required')
     setUncertainRequest(null)
-    setExpandedSummary(null)
+    setRequestExpanded(false)
     WorkflowSnapshotStorage.save(selected)
   }, [])
 
@@ -119,7 +118,7 @@ const Home = () => {
       setRecoveryFailure(null)
       setWorkflow(null)
       setUncertainRequest(active.request)
-      setExpandedSummary(null)
+      setRequestExpanded(false)
       setReconciliation('uncertain')
       return
     }
@@ -159,7 +158,6 @@ const Home = () => {
       }
       workflowRef.current = reconciled
       setWorkflow(reconciled)
-      if (reconciled.phase !== current.phase) setExpandedSummary(null)
       setReconciliation('confirmed')
       WorkflowSnapshotStorage.save(reconciled)
       return active
@@ -265,10 +263,6 @@ const Home = () => {
     setBrainstormingUnreachable(false)
   }, [])
 
-  const expandSummary = (stage: WorkflowStageName) => (isExpanded: boolean) => {
-    setExpandedSummary(isExpanded ? stage : null)
-  }
-
   const sessionOpened = useCallback(() => {
     recoveryGenerationRef.current += 1
     recoveryTokenRef.current = null
@@ -310,7 +304,7 @@ const Home = () => {
     setWorkflow(null)
     setReconciliation('not-required')
     setUncertainRequest(null)
-    setExpandedSummary(null)
+    setRequestExpanded(false)
     setRequestFormVersion((version) => version + 1)
     WorkflowSnapshotStorage.remove()
   }
@@ -413,20 +407,16 @@ const Home = () => {
   const restoredIsConfirmed = reconciliation === 'confirmed' || reconciliation === 'not-required'
   const showRestoredDiscard = restoredRef.current && workflow?.phase !== 'implementing' && !restoredNeedsRecovery
 
-  const currentStage: WorkflowStageName = workflow === null
-    ? 'request'
-    : workflow.phase === 'implementing'
-      ? 'implementation'
-      : 'review'
-  const reviewIsComplete = workflow?.phase === 'implementing'
+  const currentStage: WorkflowStageName = workflow === null ? 'request' : 'implementation'
   const requestStatus: WorkflowStepStatus = workflow === null ? 'active' : 'completed'
-  const reviewStatus: WorkflowStepStatus = workflow === null ? 'pending' : reviewIsComplete ? 'completed' : 'active'
-  const implementationStatus: WorkflowStepStatus = workflow?.phase === 'implementing' ? 'active' : 'pending'
-  const reviewDescription = !restoredIsConfirmed
+  const implementationStatus: WorkflowStepStatus = workflow === null ? 'pending' : 'active'
+  const implementationDescription = !restoredIsConfirmed
     ? 'Estamos comprobando el estado del plan guardado.'
-    : workflow?.phase === 'planning'
-      ? 'Seguimos el estado del plan. Aún no necesitas hacer nada.'
-      : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
+    : workflow?.phase === 'implementing'
+      ? 'Seguimos la implementación. Aquí verás el progreso que comunica el backend.'
+      : workflow?.phase === 'planning'
+        ? 'El agente está preparando el plan como parte de la implementación. No necesitas aprobarlo.'
+        : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
   const activePlan = uncertainActiveRef.current
   const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
 
@@ -561,8 +551,7 @@ const Home = () => {
             <ol>
               {[
                 { number: 1, name: 'Solicitud', stage: 'request', status: requestStatus },
-                { number: 2, name: 'Revisar plan', stage: 'review', status: reviewStatus },
-                { number: 3, name: 'Implementación', stage: 'implementation', status: implementationStatus },
+                { number: 2, name: 'Implementación', stage: 'implementation', status: implementationStatus },
               ].map((step) => (
                 <li
                   key={step.stage}
@@ -621,72 +610,56 @@ const Home = () => {
             </WorkflowStep>
           )}
 
-          {currentStage === 'review' && workflow !== null && (
-            <WorkflowStep
-              aria-label={STAGE_LABEL.review}
-              title={STAGE_LABEL.review}
-              level={1}
-              subtitle={reviewDescription}
-              status="active"
-              canCollapse={false}
-            >
-              {recovery}
-              <BaselineNotice baseline={workflow.plan.baseline} />
-              <PlanProgress
-                key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                plan={workflow.plan}
-                onReady={planReady}
-                observe={restoredIsConfirmed}
-              />
-              {restoredIsConfirmed && workflow.phase === 'planning' && (
-                <PlanningProgress
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                  issue={workflow.plan.issue.number}
-                  repo={workflow.plan.repo}
-                />
-              )}
-              {workflow.phase === 'ready' && restoredIsConfirmed && (
-                <div className="home__review-action">
-                  <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
-                    Abrir el plan en GitHub
-                  </a>
-                </div>
-              )}
-              {showRestoredDiscard && workflow.phase === 'planning' && (
-                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-              )}
-              {showRestoredDiscard && workflow.phase === 'ready' && (
-                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-              )}
-            </WorkflowStep>
-          )}
-
           {currentStage === 'implementation' && workflow !== null && (
             <WorkflowStep
               aria-label={STAGE_LABEL.implementation}
               title={STAGE_LABEL.implementation}
               level={1}
-              subtitle="Seguimos la implementación. Aquí verás el progreso que comunica el backend."
+              subtitle={implementationDescription}
               status="active"
               canCollapse={false}
             >
               {recovery}
-              {restoredIsConfirmed && (
+              <BaselineNotice baseline={workflow.plan.baseline} />
+              {restoredIsConfirmed && workflow.phase === 'implementing' && (
                 <Banner
                   type="informative"
                   title="Implementación iniciada automáticamente"
                   description={<>El backend ha registrado al agente <code>{workflow.plan.agent}</code>.</>}
                 />
               )}
-              {restoredIsConfirmed && (
+              {restoredIsConfirmed && workflow.phase === 'implementing' && (
                 <SliceSession
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:implementation`}
                   issue={workflow.plan.issue.number}
                   root={workflow.plan.root ?? workflow.request.path}
                   repo={workflow.plan.repo}
                   phase="implementing"
                   onProgress={(progress) => observeSliceProgress(workflow.plan, progress)}
                 />
+              )}
+              {restoredIsConfirmed && workflow.phase === 'planning' && (
+                <PlanningProgress
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:planning`}
+                  issue={workflow.plan.issue.number}
+                  repo={workflow.plan.repo}
+                />
+              )}
+              <PlanProgress
+                key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                plan={workflow.plan}
+                onReady={planReady}
+                observe={restoredIsConfirmed && workflow.phase !== 'implementing'}
+              />
+              {workflow.phase === 'ready' && restoredIsConfirmed && (
+                <div className="home__plan-link">
+                  <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
+                    Abrir el plan en GitHub
+                  </a>
+                </div>
+              )}
+              {showRestoredDiscard && (
+                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
               )}
             </WorkflowStep>
           )}
@@ -706,8 +679,8 @@ const Home = () => {
               <WorkflowStep
                 title="Solicitud"
                 status="completed"
-                isExpanded={expandedSummary === 'request'}
-                onExpandedChange={expandSummary('request')}
+                isExpanded={requestExpanded}
+                onExpandedChange={setRequestExpanded}
               >
                 <StartPlanForm
                   key={requestFormVersion}
@@ -718,21 +691,6 @@ const Home = () => {
                   request={workflow.request}
                 />
               </WorkflowStep>
-              {reviewIsComplete && (
-                <WorkflowStep
-                  title="Revisar plan"
-                  subtitle="Plan revisado"
-                  status="completed"
-                  isExpanded={expandedSummary === 'review'}
-                  onExpandedChange={expandSummary('review')}
-                >
-                  <PlanProgress
-                    plan={workflow.plan}
-                    onReady={planReady}
-                    observe={false}
-                  />
-                </WorkflowStep>
-              )}
             </section>
           )}
         </main>

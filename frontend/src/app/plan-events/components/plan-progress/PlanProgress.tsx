@@ -46,15 +46,15 @@ const PlanProgress = ({
       {observe && progress.phase === 'refused' && <Banner type="error" role="alert" title={REFUSED_MESSAGE} />}
       {observe && progress.phase === 'unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
       <div className="plan-progress__summary">
-        <p className="plan-progress__facts">
-          Solicitud: issue{' '}
-          <a href={plan.issue.url} target="_blank" rel="noreferrer">
-            #{plan.issue.number}
-          </a>{' '}
-          en <code>{plan.repo}</code>
-        </p>
         <details className="plan-progress__details">
           <summary>Detalles del agente y del entorno</summary>
+          <p className="plan-progress__facts">
+            Solicitud: issue{' '}
+            <a href={plan.issue.url} target="_blank" rel="noreferrer">
+              #{plan.issue.number}
+            </a>{' '}
+            en <code>{plan.repo}</code>
+          </p>
           <dl>
             <div>
               <dt className="lg-caption1-regular">Agente</dt>
@@ -69,10 +69,10 @@ const PlanProgress = ({
               <dd><code>{plan.worktree}</code></dd>
             </div>
           </dl>
+          <Button type="button" variant="secondary" onClick={() => void copyFacts()}>Copiar datos del plan</Button>
+          {copyResult !== null && <p role="status" className="plan-progress__copy-result">{copyResult}</p>}
         </details>
       </div>
-      <Button type="button" variant="secondary" onClick={() => void copyFacts()}>Copiar datos del plan</Button>
-      {copyResult !== null && <p role="status" className="plan-progress__copy-result">{copyResult}</p>}
     </section>
   )
 }

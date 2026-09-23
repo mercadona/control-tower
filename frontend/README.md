@@ -24,6 +24,15 @@ Each area has its own directory under `src/app/`, and the endpoint it consumes
 is named in the sections below. Additional context and feedback are entered
 directly in the coordinating conversation.
 
+The main workflow has two stages: **Solicitud → Implementación**. Planning and
+the ready-plan wait are internal phases of Implementation, with plan state,
+agent activity, failures and environment details visible there. Saved planning,
+ready and implementing workflows all restore into that stage. Plan events and
+planning-activity polling keep their existing contracts; once execution starts,
+implementation progress takes over. The progress appears first; the issue link,
+environment details and copy action remain in a disclosure closed by default. There
+is no separate plan-review stage or completed plan-review summary.
+
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
 collapsed, held by `system-ui/navigation` (`Navigation`) together with the
@@ -159,8 +168,7 @@ A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
 operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
 to reset), clamped to `[360px, columnsWidth - 600px]` so the work area always
-keeps at least 600 px — the flow bar's three steps clipped a long label at a
-narrower width, so this is the safe minimum, not a rounder guess. Its focus
+keeps at least 600 px for the flow bar and work details. Its focus
 ring is the design system's, not the browser default:
 `.column-resizer:focus-visible` matches `Button`'s
 `outline: var(--borderwidth-md) solid var(--border-brand-primary)`. The flow

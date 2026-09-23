@@ -57,6 +57,8 @@ describe('Home · opens the brainstorming', () => {
     expect(current).toHaveTextContent('1')
     expect(current).toHaveTextContent('Solicitud')
     expect(current).toHaveTextContent('En curso')
+    const steps = within(screen.getByRole('navigation', { name: 'Flujo del plan' })).getAllByRole('listitem')
+    expect(steps.map((step) => step.textContent)).toEqual(['1SolicitudEn curso', '2ImplementaciónPendiente'])
   })
 
   it('should send exactly the payload the backend contract declares', async () => {
@@ -237,7 +239,7 @@ describe('Home · opens the brainstorming', () => {
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
   })
 
-  it('should show the branch and the worktree of the plan being reviewed', async () => {
+  it('should show the branch and the worktree during planning', async () => {
     openRestored({ phase: 'planning' })
 
     await screen.findByRole('status')

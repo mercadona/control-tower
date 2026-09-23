@@ -70,12 +70,16 @@ describe('PlanProgress', () => {
     expect(onReady).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps a readable plan summary and reports whether copying details worked', async () => {
+  it('keeps plan details collapsed until requested and reports whether copying worked', async () => {
     const writeText = vi.fn(async () => undefined)
     const user = userEvent.setup()
 
     await renderProgress(writeText)
 
+    expect(screen.getByText('Solicitud:', { exact: false })).not.toBeVisible()
+    expect(screen.getByRole('button', { name: 'Copiar datos del plan' })).not.toBeVisible()
+    await user.click(screen.getByText('Detalles del agente y del entorno'))
+    expect(screen.getByText('Solicitud:', { exact: false })).toBeVisible()
     expect(screen.getByText('Solicitud:', { exact: false })).toHaveTextContent(StartPlanMother.REPO)
     await user.click(screen.getByRole('button', { name: 'Copiar datos del plan' }))
     expect(await screen.findByText('Datos del plan copiados')).toBeInTheDocument()
@@ -87,6 +91,7 @@ describe('PlanProgress', () => {
     const user = userEvent.setup()
 
     await renderProgress(writeText)
+    await user.click(screen.getByText('Detalles del agente y del entorno'))
     await user.click(screen.getByRole('button', { name: 'Copiar datos del plan' }))
 
     expect(await screen.findByText('No se pudieron copiar los datos del plan')).toBeInTheDocument()

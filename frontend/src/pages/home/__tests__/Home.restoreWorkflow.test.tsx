@@ -267,7 +267,7 @@ describe('Home · restore workflow', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
-  it('should restore ready into review and resume listening for a possible review once confirmed', async () => {
+  it('restores a ready plan inside implementation and resumes tracking once confirmed', async () => {
     const { unmount, fetching } = await startPlanning()
     await streamFrame(PlanEventsMother.ready())
 
@@ -276,7 +276,7 @@ describe('Home · restore workflow', () => {
     openHome()
 
     expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
     expect(screen.getByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
@@ -295,21 +295,21 @@ describe('Home · restore workflow', () => {
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
-  it('keeps implementation current when reopening the completed review summary with the keyboard', async () => {
+  it('keeps implementation current when reopening the completed request with the keyboard', async () => {
     backendRecovering(activePlansAnswer(activePlan('implementing')))
     const { user } = openHome()
 
     await screen.findByText('Implementación iniciada automáticamente')
-    const reviewSummary = screen.getByRole('button', { name: /Revisar plan.*Completado/ })
-    reviewSummary.focus()
+    const requestSummary = screen.getByRole('button', { name: /Solicitud.*Completado/ })
+    requestSummary.focus()
     await user.keyboard('{Enter}')
 
-    expect(reviewSummary).toHaveAttribute('aria-expanded', 'true')
+    expect(requestSummary).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Implementación')
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
-  it('a same-phase poll keeps the completed review summary expanded', async () => {
+  it('a same-phase poll preserves expanded environment details inside implementation', async () => {
     vi.useFakeTimers()
     storeWorkflow('implementing')
     const changes = HeadlessPlanMother.deferredChanges()
@@ -317,21 +317,17 @@ describe('Home · restore workflow', () => {
     openHome()
 
     await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
-    const reviewSummary = screen.getByRole('button', { name: /Revisar plan.*Completado/ })
-    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
-      'aria-hidden',
-      'true',
-    )
+    const implementation = screen.getByLabelText('Implementación', { selector: 'section' })
+    const details = within(implementation).getByText('Detalles del agente y del entorno')
+    expect(details.closest('details')).not.toHaveAttribute('open')
 
-    fireEvent.click(reviewSummary)
+    fireEvent.click(details)
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
 
-    expect(reviewSummary).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
-      'aria-hidden',
-      'false',
-    )
+    expect(details.closest('details')).toHaveAttribute('open')
+    expect(within(implementation).getByText(StartPlanMother.WORKTREE)).toBeVisible()
+    expect(screen.queryByText('Plan revisado')).not.toBeInTheDocument()
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
@@ -379,7 +375,7 @@ describe('Home · restore workflow', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
-  it('uses neutral review copy while a restored ready plan is still checking', async () => {
+  it('uses neutral implementation copy while a restored ready plan is still checking', async () => {
     storeWorkflow('ready')
     let resolveRecovery: (response: Response) => void = () => undefined
     const recovery = new Promise<Response>((resolve) => {
@@ -388,7 +384,7 @@ describe('Home · restore workflow', () => {
     withReadyTools(vi.fn(() => recovery))
     const { unmount } = openHome()
 
-    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
     expect(screen.getByText('Estamos comprobando el estado del plan guardado.')).toBeInTheDocument()
     expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
@@ -747,7 +743,7 @@ describe('Home · restore workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
     expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
     expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.ANOTHER_REPO)
     expect(fetching).toHaveBeenCalledTimes(2)
   })
