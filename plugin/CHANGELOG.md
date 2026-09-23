@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.60.0](https://github.com/mercadona/control-tower/compare/plugin-v0.59.0...plugin-v0.60.0) (2026-09-23)
+
+
+### Funcionalidades
+
+* a person can get a run out of the judge's third veto ([#517](https://github.com/mercadona/control-tower/issues/517)) ([22559db](https://github.com/mercadona/control-tower/commit/22559dbbea0a41e1dbd18130dd8f083766cf84aa))
+* **ct-step:** the stdout is a structured contract, so a refusal arrives classified ([#498](https://github.com/mercadona/control-tower/issues/498)) ([7ac42db](https://github.com/mercadona/control-tower/commit/7ac42db3ec311e8280b9a0e0da067aeedec8c911))
+* the coordinating session grants the round after the judge's third veto ([#523](https://github.com/mercadona/control-tower/issues/523)) ([3b42dd1](https://github.com/mercadona/control-tower/commit/3b42dd1fa0197648e286da0c2e523136611ed590))
+
+
+### Correcciones
+
+* **plugin:** global commits the loop's own telemetry before measuring the tree, so a clean-tree predicate holds ([#503](https://github.com/mercadona/control-tower/issues/503)) ([9a0f6d3](https://github.com/mercadona/control-tower/commit/9a0f6d314dda71b8772699197b7ac07a2c10bab9))
+* **plugin:** the cabin's harvest collects a worktree whose tip the merged head contains, and skips the workspace lookup ([#510](https://github.com/mercadona/control-tower/issues/510)) ([c0c037f](https://github.com/mercadona/control-tower/commit/c0c037fe9d55af8c5546d55d821225e75bd607d0))
+* the freeze asks for the Alcance line the scope gate reads, and the template writes it ([#508](https://github.com/mercadona/control-tower/issues/508)) ([1b5c17f](https://github.com/mercadona/control-tower/commit/1b5c17f0bd1463c08809ecf63a283efabda47640))
+* the plan's prose stops being a gate, so a sentence cannot condemn a run ([#519](https://github.com/mercadona/control-tower/issues/519)) ([4a09805](https://github.com/mercadona/control-tower/commit/4a09805968914ff9e71061b4c6b6def32a32b13f))
+
 ## [0.59.0](https://github.com/mercadona/control-tower/compare/plugin-v0.58.0...plugin-v0.59.0) (2026-09-20)
 
 
