@@ -1021,7 +1021,7 @@ describe('ClaudeCalls', () => {
     expect(launches).toBe(0)
   })
 
-  it('leader close before grace retains enforcement until the resistant group is escalated', async () => {
+  it('a group that outlives its leader is left alone and the call completes at the close', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     const descriptor = await CallMother.prepared(root)
@@ -1030,15 +1030,32 @@ describe('ClaudeCalls', () => {
     const signals: NodeJS.Signals[] = []
     const worker = CallMother.worker(root, child, clock, { present: () => true, signals })
     await worker.run(descriptor)
+    clock.advance(10)
     child.closed(0, null)
-    clock.advance(100)
-    await CallMother.settled()
-    const completion = join(descriptor, '..', 'completion.json')
-    await expect(readFile(completion, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
 
+    const completed = await CallMother.completion(join(descriptor, '..', 'completion.json'))
+    clock.advance(110)
+    expect(completed.code).toBe(0)
+    expect(completed.wallDurationMs).toBe(10)
+    expect(signals).toEqual([])
+  })
+
+  it('a leader closing while the deadline terminates its group still waits for the escalation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
+    roots.push(root)
+    const descriptor = await CallMother.prepared(root)
+    const child = new FakeChild(909)
+    const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
+    const signals: NodeJS.Signals[] = []
+    const worker = CallMother.worker(root, child, clock, { present: () => true, signals })
+    await worker.run(descriptor)
+    clock.advance(100)
+    child.closed(null, 'SIGTERM')
     clock.advance(20)
+
+    const completed = await CallMother.completion(join(descriptor, '..', 'completion.json'))
     expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
-    expect((await CallMother.completion(completion)).code).toBe(0)
+    expect(completed.wallDurationMs).toBe(120)
   })
 
   it('leader close after escalation settles once despite a still observable group', async () => {
@@ -1095,8 +1112,9 @@ describe('ClaudeCalls', () => {
       acknowledge: () => {},
     })
     await worker.run(descriptor)
+    clock.advance(100)
     child.closed(0, null)
-    clock.advance(120)
+    clock.advance(20)
 
     const completed = await CallMother.completion(join(descriptor, '..', 'completion.json'))
     expect(completed).toMatchObject({
