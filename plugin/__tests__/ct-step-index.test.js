@@ -96,7 +96,10 @@ describe('what gets committed is what was approved: the index seal', () => {
     expect(committedFiles).toMatch(/docs\/superpowers\/verdicts\/issue-7-task-1\.json/)   // F37's closure criterion
     expect(committedFiles).toMatch(/docs\/superpowers\/metrics\/issue-7\.jsonl/)
     expect(committedFiles).toMatch(/uno\.txt/)
-    expect(runState().sealedTree).toMatch(/^[0-9a-f]{40,64}$/)   // sha1 or sha256: it makes no difference
+    // The commit spends its seal (#530): the next task seals its own, from its
+    // verdict or from its controls. The seal's value before the commit is
+    // pinned by "the seal is the tree of the INDEX…" above.
+    expect(runState().sealedTree).toBeNull()
     // And the second task too, with its new artefact and the telemetry already tracked.
     expect(taskOk('dos.txt').status).toBe(0)
     expect(commits()).toBe(3)

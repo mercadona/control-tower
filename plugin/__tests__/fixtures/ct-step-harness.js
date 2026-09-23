@@ -52,6 +52,7 @@ export const PLAN = [
   '',
   '### Task 1 — the first one',
   '**Objective:** one file.',
+  '**Judge:** checkpoint',
   '**Files:** `uno.txt` (create).',
   '**TDD:** No TDD — fixture.',
   '**Tests:** N/A — fixture.',
@@ -79,8 +80,9 @@ export const PLAN = [
 // from when creating the run (there is no `gh` in this program). It is written
 // with `renderState` and not by hand for the same reason the signal's is: what
 // parses it is a real YAML, and a journey is a sentence with commas and colons
-// inside it.
-export function makeRepo({ e2e = null } = {}) {
+// inside it. `plan` replaces the plan a test drives; task 1 of `PLAN` is a
+// checkpoint (#530), so the tests written before checkpoints keep their judge.
+export function makeRepo({ e2e = null, plan = PLAN } = {}) {
   const d = mkdtempSync(join(tmpdir(), 'ct-step-'))
   const g = (...a) => execFileSync('git', a, { cwd: d, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   g('init', '-q', '-b', 'main')
@@ -91,7 +93,7 @@ export function makeRepo({ e2e = null } = {}) {
   writeFileSync(join(d, '.agent', 'SLICE.md'), e2e
     ? renderState({ meta: { issue: 7, epic: 12, e2e }, body: '# made-up slice' })
     : '---\nissue: 7\nepic: 12\n---\n\n# made-up slice\n')
-  writeFileSync(join(d, 'plan.md'), PLAN)
+  writeFileSync(join(d, 'plan.md'), plan)
   // WHAT THIS FIXTURE WRITES INSIDE THE REPO AND IS NO TASK'S WORK: the JSON
   // standing in for the subagent's answer (in a real run `next` dictates it
   // inside `.agent/run-<n>/`) and the telemetry, which here is diverted to

@@ -62,7 +62,7 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
-import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
+import { after, newRun, isCheckpoint, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -334,7 +334,9 @@ if (existsSync(stateFile)) {
   // the ones whose base has moved the most. The same remedy and the same reason
   // as the `sliceCommits || 0` a few lines further down: no persisted state ever
   // gains a mandatory field.
-  run = { ...run, reconcileRetries: run.reconcileRetries || 0 }
+  // #530: a run born before `judgedSha` judged every task, so the last judged
+  // commit is HEAD.
+  run = { ...run, reconcileRetries: run.reconcileRetries || 0, judgedSha: run.judgedSha ?? headSha() }
   // A delivered run has no next step, and that is known WITHOUT rebuilding the
   // table: the good closure is persisted as `closed` (it is what the gate of
   // `dispatch-check --release` reads). `next` answers "it is done" and exits
@@ -482,7 +484,10 @@ if (existsSync(stateFile)) {
   // e2e"), and does not confuse it with `undefined` ("an old version that did
   // not write the field").
   const { meta: sliceMeta } = parseStateSafe(readFileSync(join(repoRoot, SLICE_REL_PATH), 'utf8'))
-  run = newRun({ plan: planPath, issue, baseSha: headSha(), tasksTotal: tasks.length, e2eRuns: sliceMeta.e2e })
+  run = newRun({
+    plan: planPath, issue, baseSha: headSha(), tasksTotal: tasks.length, e2eRuns: sliceMeta.e2e,
+    checkpoints: tasks.filter((t) => t.checkpoint).map((t) => t.n),
+  })
   writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 }
 
@@ -1712,6 +1717,9 @@ function controlsVerb() {
     duration_ms: Date.now() - startedAt,
   })
   run = { ...run, lastControlsLog: log }
+  // A task with no judge goes from here to `commit`, so the controls seal the
+  // index the verdict would have sealed: what they measured is what commits.
+  if (result === OUTCOMES.DONE && !isCheckpoint(run)) run = { ...run, sealedTree: indexTree() }
   out(`controls: ${result}${skippedForNoCode ? ' (the suite did not run: the diff carries no code, only documentation)' : ''} (log at ${log})`)
   return result
 }
@@ -2548,13 +2556,11 @@ function verdictVerb() {
     // the seal: a verdict forged and staged in the gap does not get in either
     // (measured: today it does).
     //
-    // Only on the PASS, and there is no need to clear it on the other roads:
-    // the COMMIT step is only reached from a PASS —`done` and
-    // `corrections-ordered` with the budget spent, the two branches of
-    // `run-machine.js#afterJudge`, and both come out of `ruling === 'PASS'`—,
-    // so the seal `commit` reads is ALWAYS that of the immediately preceding
-    // verdict and never a stale one from three attempts back. A FAIL goes back
-    // to implementing or closes the run; a discard asks again.
+    // Only on the PASS: on a checkpoint the COMMIT step is only reached from a
+    // PASS —`done` and `corrections-ordered` with the budget spent, the two
+    // branches of `run-machine.js#afterJudge`—. A task with no judge reaches it
+    // from green controls, which seal the index themselves (#530), and
+    // `commit` clears the seal, so it is never a stale one.
     run = { ...run, sealedTree: indexTree() }
   }
   out(`verdict ${verdict.ruling} with ${verdict.findings.length} finding(s) → ${outcome}`)
@@ -2641,7 +2647,8 @@ function commitVerb() {
   //
   // The third equality (see the seal in `verdictVerb`): the index as it
   // stands now has to be the SAME one the machinery sealed when it accepted
-  // the verdict. It goes ahead of the message and of the "nothing is staged"
+  // the verdict — or, on a task with no judge, when its controls went green
+  // (`controlsVerb`). It goes ahead of the message and of the "nothing is staged"
   // because those two ask whether git CAN commit and this one asks whether it
   // SHOULD: a badly composed message is fixed by fixing the plan, and a commit
   // with unreviewed code inside is never fixed, because it is already on the
@@ -2657,12 +2664,12 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`the state does not carry the index seal (sealedTree) that this task's verdict was supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, and this program does not commit what it cannot assert. Check it yourself and commit by hand (the verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, and this program does not commit what it cannot assert. Check it yourself and commit by hand (the verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()
   if (currentTree !== run.sealedTree) {
-    err(`the index is no longer the one the judge approved: on accepting the verdict the tree ${run.sealedTree} was sealed and the one of the index now is ${currentTree}. Something changed it AFTER the verdict, so this commit would take inside it code no judge has seen, with the verdict of other code travelling alongside. NOTHING is committed.
+    err(`the index is no longer the one the judge approved: on accepting the verdict (or the green controls of a task with no judge) the tree ${run.sealedTree} was sealed and the one of the index now is ${currentTree}. Something changed it AFTER the verdict, so this commit would take inside it code no judge has seen, with the verdict of other code travelling alongside. NOTHING is committed.
   - to bring the approved index back, as it was and without touching your worktree:  git read-tree ${run.sealedTree}
     and repeat "ct-step commit". Whatever you staged afterwards is still in the files: it is not lost, it stops being staged.
   - if that code HAS to go in, it does not go in through here: from "commit" there is no way back to the judge in this run. Take it out of the index, commit the approved task, and let that work come in through the next task or through another slice.`)
@@ -2708,7 +2715,12 @@ function commitVerb() {
   // named it: the advice was dictated by an adviser that read THIS task's two
   // vetoes, and inheriting it would put into the next one's brief an approach
   // to a problem that no longer exists.
-  run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null }
+  // `run.task` is still the committed one: the machine advances it afterwards.
+  // A checkpoint moves the last judged commit; every commit spends its seal.
+  run = {
+    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null,
+    sealedTree: null, ...(isCheckpoint(run) ? { judgedSha: sha } : {}),
+  }
   out(`task ${run.task}/${run.tasksTotal} committed: ${sha.slice(0, 7)}`)
   return OUTCOMES.DONE
 }
