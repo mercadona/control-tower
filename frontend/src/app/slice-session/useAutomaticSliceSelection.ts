@@ -14,7 +14,7 @@ interface AutomaticSliceSelectionOptions {
 
 const identityOf = (plan: StartedPlan) => `${plan.repo}:${plan.issue.number}:${plan.agent}`
 
-const isFinished = (progress: ImplementProgressRead | undefined) =>
+const isDeliveredOrInReview = (progress: ImplementProgressRead | undefined) =>
   progress?.phase === 'progress' && (
     progress.step === ImplementationStep.DELIVERED || progress.step === ImplementationStep.IN_REVIEW
   )
@@ -49,9 +49,9 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
     if (previous?.identity !== identity) pendingRef.current = null
     const selectedProgress = readings[identity]
     if (selectedProgress?.phase === 'progress') {
-      if (previous?.identity === identity && previous.step !== ImplementationStep.DELIVERED
-        && selectedProgress.step === ImplementationStep.DELIVERED) pendingRef.current = identity
-      if (!isFinished(selectedProgress)) pendingRef.current = null
+      if (previous?.identity === identity && previous.step !== ImplementationStep.IN_REVIEW
+        && selectedProgress.step === ImplementationStep.IN_REVIEW) pendingRef.current = identity
+      if (!isDeliveredOrInReview(selectedProgress)) pendingRef.current = null
       previousRef.current = { identity, step: selectedProgress.step }
     }
 
@@ -60,7 +60,7 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
       identityOf(active.plan) !== identity &&
       active.plan.repo === workflow.plan.repo &&
       (active.plan.root ?? active.request.path) === (workflow.plan.root ?? workflow.request.path) &&
-      !(active.phase === 'implementing' && isFinished(readings[identityOf(active.plan)])),
+      !(active.phase === 'implementing' && isDeliveredOrInReview(readings[identityOf(active.plan)])),
     )
     if (candidates.length !== 1) return
     const next = candidates[0]
