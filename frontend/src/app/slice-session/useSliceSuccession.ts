@@ -5,7 +5,7 @@ import { ImplementProgressRead } from 'app/implement-progress/useImplementProgre
 import { StartedPlan } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot } from 'app/workflow-snapshot/storage'
 
-interface AutomaticSliceSelectionOptions {
+interface SliceSuccessionOptions {
   workflow: WorkflowSnapshot | null
   plans: ActivePlan[]
   enabled: boolean
@@ -19,13 +19,12 @@ interface DeliveredSlice {
 
 const identityOf = (plan: StartedPlan) => `${plan.repo}:${plan.issue.number}:${plan.agent}`
 
-const isDeliveredOrInReviewStep = (step: ImplementationStep | null) =>
-  step === ImplementationStep.DELIVERED || step === ImplementationStep.IN_REVIEW
-
 const isDeliveredOrInReview = (progress: ImplementProgressRead | undefined) =>
-  progress?.phase === 'progress' && isDeliveredOrInReviewStep(progress.step)
+  progress?.phase === 'progress' && (
+    progress.step === ImplementationStep.DELIVERED || progress.step === ImplementationStep.IN_REVIEW
+  )
 
-const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: AutomaticSliceSelectionOptions) => {
+const useSliceSuccession = ({ workflow, plans, enabled, onSelect }: SliceSuccessionOptions) => {
   const [readings, setReadings] = useState<Record<string, ImplementProgressRead>>({})
   const [delivered, setDelivered] = useState<DeliveredSlice | null>(null)
   const previousRef = useRef<{ identity: string; step: ImplementationStep } | null>(null)
@@ -70,7 +69,7 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
       !(active.phase === 'implementing' && isDeliveredOrInReview(readings[identityOf(active.plan)])),
     )
     const lastStep = previousRef.current?.identity === identity ? previousRef.current.step : null
-    setDelivered(isDeliveredOrInReviewStep(lastStep)
+    setDelivered(lastStep === ImplementationStep.IN_REVIEW
       ? { issue: workflow.plan.issue.number, successors: candidates.map((candidate) => candidate.plan.issue.number) }
       : null)
 
@@ -86,4 +85,4 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
   return { observe, delivered }
 }
 
-export { useAutomaticSliceSelection }
+export { useSliceSuccession }

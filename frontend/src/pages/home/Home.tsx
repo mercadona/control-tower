@@ -10,7 +10,7 @@ import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { SliceSession, type SliceRecovery } from 'app/slice-session/components/slice-session'
-import { useAutomaticSliceSelection } from 'app/slice-session/useAutomaticSliceSelection'
+import { useSliceSuccession } from 'app/slice-session/useSliceSuccession'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -130,7 +130,7 @@ const Home = () => {
     setSlicesInFlight(activePlans.filter((active) => activePlanIdentity(active) !== activePlanIdentity(slice)))
   }, [activePlans, selectActivePlan])
 
-  const { observe: observeSliceProgress, delivered: deliveredSlice } = useAutomaticSliceSelection({
+  const { observe: observeSliceProgress, delivered: deliveredSlice } = useSliceSuccession({
     workflow,
     plans: activePlans,
     enabled: reconciliation === 'confirmed' || reconciliation === 'stale',
@@ -410,13 +410,15 @@ const Home = () => {
   const currentStage: WorkflowStageName = workflow === null ? 'request' : 'implementation'
   const requestStatus: WorkflowStepStatus = workflow === null ? 'active' : 'completed'
   const implementationStatus: WorkflowStepStatus = workflow === null ? 'pending' : 'active'
-  const implementationDescription = !restoredIsConfirmed
-    ? 'Estamos comprobando el estado del plan guardado.'
-    : workflow?.phase === 'implementing'
-      ? 'Seguimos la implementación. Aquí verás el progreso que comunica el backend.'
-      : workflow?.phase === 'planning'
-        ? 'El agente está preparando el plan como parte de la implementación. No necesitas aprobarlo.'
-        : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
+  const implementationDescription = reconciliation === 'stale' && deliveredSlice !== null
+    ? 'El slice seleccionado ha terminado.'
+    : !restoredIsConfirmed
+      ? 'Estamos comprobando el estado del plan guardado.'
+      : workflow?.phase === 'implementing'
+        ? 'Seguimos la implementación. Aquí verás el progreso que comunica el backend.'
+        : workflow?.phase === 'planning'
+          ? 'El agente está preparando el plan como parte de la implementación. No necesitas aprobarlo.'
+          : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
   const activePlan = uncertainActiveRef.current
   const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
 
@@ -436,12 +438,10 @@ const Home = () => {
             type="informative"
             title={`Slice #${deliveredSlice.issue} entregado`}
             description={deliveredSlice.successors.length === 0
-              ? 'No hay más slices en marcha.'
-              : `Esperando a que #${deliveredSlice.successors.join(', #')} empiece a implementar.`}
+              ? 'No hay más slices en marcha en este repositorio.'
+              : `En marcha: #${deliveredSlice.successors.join(', #')}.`}
           />
-          {deliveredSlice.successors.length === 0 && (
-            <Button variant="secondary" onClick={discardStaleWorkflow}>Cerrar</Button>
-          )}
+          <Button variant="secondary" onClick={discardStaleWorkflow}>Cerrar</Button>
         </div>
       )}
       {reconciliation === 'stale' && deliveredSlice === null && (

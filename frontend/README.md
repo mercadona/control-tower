@@ -155,7 +155,12 @@ later, including after the slice in review leaves active plans. Ambiguous or
 unreadable candidates prevent a jump.
 Manual selection cancels the pending handoff; restoring or opening an already
 in-review slice does not trigger one. Returning to fixes cancels the pending handoff.
-`useAutomaticSliceSelection.ts` consumes the cards' existing progress reads
+A selected slice last seen **En revisión** that then leaves active plans has
+finished: the page announces it as delivered instead of warning that the saved
+plan is gone, names the slices still running in the same repository and
+checkout, and offers **Cerrar** to forget it whether or not a handoff is armed.
+A slice that leaves without having been seen in review keeps the warning.
+`useSliceSuccession.ts` consumes the cards' existing progress reads
 rather than starting another polling loop.
 
 The mutation owns the active-plan read barrier from the click until its fresh

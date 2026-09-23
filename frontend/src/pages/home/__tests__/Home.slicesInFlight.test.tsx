@@ -682,8 +682,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(screen.getByText('Slice #7 entregado')).toBeInTheDocument()
-    expect(screen.getByText('Esperando a que #8 empiece a implementar.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Cerrar' })).toBeNull()
+    expect(screen.getByText('En marcha: #8.')).toBeInTheDocument()
     expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
   })
 
@@ -705,13 +704,61 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(screen.getByText('Slice #7 entregado')).toBeInTheDocument()
-    expect(screen.getByText('No hay más slices en marcha.')).toBeInTheDocument()
+    expect(screen.getByText('No hay más slices en marcha en este repositorio.')).toBeInTheDocument()
+    expect(screen.getByText('El slice seleccionado ha terminado.')).toBeInTheDocument()
+    expect(screen.queryByText('Estamos comprobando el estado del plan guardado.')).toBeNull()
     expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Cerrar' }))
 
     expect(screen.getByRole('heading', { name: 'Solicitud', level: 1 })).toBeInTheDocument()
     expect(WorkflowSnapshotStorage.load()).toBeNull()
+  })
+
+  it.each([
+    ['implementing', ImplementProgressMother.progress()],
+    ['delivered but not yet in review', ImplementProgressMother.delivered()],
+  ])('should keep warning when a slice last seen %s leaves the active plans', async (_state, lastProgress) => {
+    vi.useFakeTimers()
+    let plans = HeadlessPlanMother.slicesInFlight(7)
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => plans,
+      progress: () => selectedProgress,
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    selectedProgress = lastProgress
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    plans = HeadlessPlanMother.empty()
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
+    expect(screen.queryByText('Slice #7 entregado')).toBeNull()
+  })
+
+  it('should let the person close a delivered slice whose automatic handoff never started and follow the one still running', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    let plans = HeadlessPlanMother.slicesInFlight(7)
+    backendWith({
+      activePlans: () => plans,
+      progress: (issue) => issue === 7 ? ImplementProgressMother.inReview() : ImplementProgressMother.progress(),
+    })
+    const { user } = openHome()
+    await (await panelOf(7)).findByText('En revisión')
+
+    plans = HeadlessPlanMother.slicesInFlight(8)
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    await screen.findByText('En marcha: #8.')
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(await within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).findByText('#8')).toBeInTheDocument()
   })
 
   it('should not announce an earlier delivered slice once the person follows an uncertain slice that then leaves the active plans', async () => {
