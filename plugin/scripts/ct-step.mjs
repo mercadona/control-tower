@@ -725,6 +725,8 @@ function nextVerb() {
   // committed.
   if (run.step === STEPS.RECONCILE || run.step === STEPS.GLOBAL || run.step === STEPS.SLICE_JUDGE) {
     out(`slice of issue ${issue} — the ${run.tasksTotal} tasks committed`)
+  } else if (run.reviewing) {
+    out(`slice of issue ${issue} — the review of the ${run.tasksTotal} tasks`)
   } else {
     out(`task ${run.task}/${run.tasksTotal} — ${t.name}`)
   }
@@ -766,6 +768,7 @@ function nextVerb() {
         out('')
         out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
+        if (run.reviewing) out('The judge reviewed the whole slice: fix every finding, in any file of any task. The fixes land in one commit after the judge approves them.')
       }
       out('')
       out(prose.consuming)
@@ -879,7 +882,7 @@ function nextVerb() {
           new AnnouncedInput({ role: INPUT_ROLES.PACKAGE, kind: INPUT_KINDS.LITERAL, path: packagePath }),
           new AnnouncedInput({ role: INPUT_ROLES.PLAN, kind: INPUT_KINDS.LITERAL, path: planPath }),
           ...announcedIfPresent(INPUT_ROLES.GLOBAL_LOG, run.lastGlobalLog),
-          new AnnouncedInput({ role: INPUT_ROLES.VERDICTS, kind: INPUT_KINDS.GLOB, path: `docs/superpowers/verdicts/issue-${issue}-task-*.json` }),
+          new AnnouncedInput({ role: INPUT_ROLES.VERDICTS, kind: INPUT_KINDS.GLOB, path: `docs/superpowers/verdicts/issue-${issue}-*.json` }),
         ],
         response: AnnouncedResponse.of(run.step, verdictPath),
         consuming: { argv: consumingArgv('slice-verdict', verdictPath) },
@@ -1007,6 +1010,19 @@ function writeTaskBody(path, n = run.task, { withContext = true } = {}) {
   }
 }
 
+// The body a brief carries: the current task, or, in the review (#530), every
+// task of the plan — task 1 with the plan context, the rest without a second
+// copy of it.
+function writeBriefBody(path) {
+  if (!run.reviewing) return writeTaskBody(path)
+  writeTaskBody(path, 1)
+  for (let k = 2; k <= run.tasksTotal; k++) {
+    const part = `${path}.task-${k}`
+    writeTaskBody(part, k, { withContext: false })
+    appendFileSync(path, `\n## Task ${k} of the slice\n\n${readFileSync(part, 'utf8')}`)
+  }
+}
+
 // THE IMPLEMENTER'S BRIEF: the task, then the ct yardstick PASTED — the
 // implementer is asked to write against it and does not depend on remembering
 // to open it (`selective-hearing`) —, then the repo's yardstick, then the
@@ -1016,7 +1032,7 @@ function writeBrief() {
   // It is checked before calling `task-brief` so as not to leave a brief on
   // disk that nobody is going to use.
   const ctDocs = loadCtYardstick()
-  writeTaskBody(brief)
+  writeBriefBody(brief)
   appendFileSync(brief, PluginYardstick.composeSection(ctDocs))
   appendFileSync(brief, repoYardstickSection('the brief'))
   // H9: the advice for the third attempt, inside the brief and not on a loose
@@ -1036,7 +1052,7 @@ function writeBrief() {
 // expensive call of the loop, per task, for nothing.
 function writeJudgeBrief() {
   const brief = join(workDir, `task-${run.task}-judge-brief.md`)
-  writeTaskBody(brief)
+  writeBriefBody(brief)
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
   return brief
@@ -1150,7 +1166,9 @@ function writeReviewPackage() {
   // AHEAD of the diff for the same reason as `Señal` in the slice package:
   // behind a `-U10` it would be buried.
   const ctYardstick = PluginYardstick.composePathSection(loadCtYardstick())
-  const header = `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`
+  const header = run.reviewing
+    ? `# Review package: the ${run.tasksTotal} tasks of issue #${issue} (committed since ${run.baseSha.slice(0, 7)}, fixes staged)`
+    : `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`
   writeFileSync(packagePath, [
     header,
     // The HEADER carries the token: the sha256 of exactly the diff that goes
@@ -2533,7 +2551,8 @@ function verdictVerb() {
     // the next PASS rewrites it, so the commit always gets the last one). It
     // is staged AFTER the checks on purpose: it is an artefact of the
     // machinery, like the plan, not the implementer's scope.
-    const path = join('docs', 'superpowers', 'verdicts', `issue-${issue}-task-${run.task}.json`)
+    // The review's verdict (#530) answers for the whole slice, not for a task.
+    const path = join('docs', 'superpowers', 'verdicts', run.reviewing ? `issue-${issue}-review.json` : `issue-${issue}-task-${run.task}.json`)
     mkdirSync(join(repoRoot, 'docs', 'superpowers', 'verdicts'), { recursive: true })
     writeFileSync(join(repoRoot, path), JSON.stringify({ issue, task: run.task, task_name: currentTask()?.name ?? null, verdict }, null, 2) + '\n')
     // `allowFail`, for the same reason as the telemetry's `git add` in
@@ -2678,7 +2697,7 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (a judged task's verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (a judged task's verdict is at docs/superpowers/verdicts/issue-${issue}-${run.reviewing ? 'review' : `task-${run.task}`}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()
