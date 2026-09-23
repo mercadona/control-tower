@@ -62,7 +62,7 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
-import { after, newRun, isCheckpoint, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
+import { after, newRun, isCheckpoint, stretchOf, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -763,6 +763,8 @@ function nextVerb() {
         out('')
         out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
+        const { from, to } = stretchOf(run)
+        if (from < to) out(`The judge reviewed tasks ${from}-${to} together: a finding in a file of an earlier task of that stretch is yours to fix in this attempt, and it lands in the commit of task ${to}.`)
       }
       out('')
       out(prose.consuming)
@@ -995,12 +997,12 @@ function repoYardstickSection(artifactName) {
 // The task as `task-brief` extracts it from the plan: the desired end state,
 // the plan's yardstick and the task's own markers. It is the part the
 // implementer and the judge read alike; what each one gets appended differs.
-function writeTaskBody(path) {
+function writeTaskBody(path, n = run.task, { withContext = true } = {}) {
   try {
     execFileSync(join(PLUGIN_ROOT, 'skills', 'ct-subagent-driven-development', 'scripts', 'task-brief'),
-      ['--with-plan-context', planPath, String(run.task), path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+      [...(withContext ? ['--with-plan-context'] : []), planPath, String(n), path], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (e) {
-    die(`the brief of task ${run.task} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
+    die(`the brief of task ${n} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
   }
 }
 
@@ -1034,6 +1036,14 @@ function writeBrief() {
 function writeJudgeBrief() {
   const brief = join(workDir, `task-${run.task}-judge-brief.md`)
   writeTaskBody(brief)
+  // #530: a checkpoint answers for every earlier task of its stretch too, each
+  // one alone — the plan context already travels above.
+  const { from } = stretchOf(run)
+  for (let k = from; k < run.task; k++) {
+    const earlier = join(workDir, `task-${run.task}-judge-brief-earlier-${k}.md`)
+    writeTaskBody(earlier, k, { withContext: false })
+    appendFileSync(brief, `\n## Earlier task of this stretch: ${k}\n\n${readFileSync(earlier, 'utf8')}`)
+  }
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
   return brief
@@ -1094,7 +1104,9 @@ function adviceSection(advice) {
 // commit, so it has no reason to invalidate the judgement. The slice's one
 // comes out of the RANGE, because by then everything is committed (see
 // `writeSliceReviewPackage`).
-const taskDiff = () => git(['diff', '--cached', '-U10']) || ''
+// #530: against the last judged commit, so a checkpoint shows every task of its
+// stretch; the telemetry those commits carried is no task's work.
+const taskDiff = () => git(['diff', '--cached', '-U10', run.judgedSha, '--', '.', `:(exclude)${METRICS_REL}`]) || ''
 const sliceDiff = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 
 // THE TREE OF THE INDEX — the identity of what is about to be committed, and
@@ -1141,15 +1153,19 @@ function writeReviewPackage() {
   // AHEAD of the diff for the same reason as `Señal` in the slice package:
   // behind a `-U10` it would be buried.
   const ctYardstick = PluginYardstick.composePathSection(loadCtYardstick())
+  const { from, to } = stretchOf(run)
+  const header = from < to
+    ? `# Review package: tasks ${from}-${to}/${run.tasksTotal} of issue #${issue} (${from}-${to - 1} committed since ${run.judgedSha.slice(0, 7)}, ${to} staged)`
+    : `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`
   writeFileSync(packagePath, [
-    `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`,
+    header,
     // The HEADER carries the token: the sha256 of exactly the diff that goes
     // below. A second line and not a `##` section, so as not to touch
     // PACKAGE_SECTIONS (which the rubric cites heading by heading) nor the order
     // slice 10 decided on for the slice package.
     reviewTokenLine(reviewToken(diff)),
     ctYardstick,
-    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat']) || '',
+    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat', run.judgedSha, '--', '.', `:(exclude)${METRICS_REL}`]) || '',
     '', `## ${PATHS_SECTION}`, paths,
     '', `## ${DIFF_SECTION}`, diff,
   ].join('\n'))
@@ -2664,12 +2680,12 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, and this program does not commit what it cannot assert. Check it yourself and commit by hand (the verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (a judged task's verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()
   if (currentTree !== run.sealedTree) {
-    err(`the index is no longer the one the judge approved: on accepting the verdict (or the green controls of a task with no judge) the tree ${run.sealedTree} was sealed and the one of the index now is ${currentTree}. Something changed it AFTER the verdict, so this commit would take inside it code no judge has seen, with the verdict of other code travelling alongside. NOTHING is committed.
+    err(`the index is no longer the one the judge approved: on accepting the verdict (or the green controls of a task with no judge) the tree ${run.sealedTree} was sealed and the one of the index now is ${currentTree}. Something changed it AFTER the seal, so this commit would take inside it code neither the judge nor the controls have seen, with the verdict or the green controls of other code travelling alongside. NOTHING is committed.
   - to bring the approved index back, as it was and without touching your worktree:  git read-tree ${run.sealedTree}
     and repeat "ct-step commit". Whatever you staged afterwards is still in the files: it is not lost, it stops being staged.
   - if that code HAS to go in, it does not go in through here: from "commit" there is no way back to the judge in this run. Take it out of the index, commit the approved task, and let that work come in through the next task or through another slice.`)
