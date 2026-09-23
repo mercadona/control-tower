@@ -605,7 +605,7 @@ export class RunDriverMother {
       if (instruction.work.kind === 'call') {
         const dispatch = await this.machine.dispatch(this.watch, instruction.work.ticket)
         if (dispatch.role === 'judge' && stagedTaskDiff.length === 0) {
-          stagedTaskDiff = this.#git('diff', '--cached', '-U10')
+          stagedTaskDiff = this.#git('diff', '--cached', '-U10', this.#baseSha())
         }
         if (dispatch.role === 'reconcile') {
           reconciler = await this.#producer(instruction.work.ticket, dispatch)
@@ -760,7 +760,7 @@ export class RunDriverMother {
       JSON.parse(line) as { step: string }
     ).step)
     const verbSteps = new Map([
-      ['report', 'implement'], ['controls', 'controls'], ['verdict', 'judge'], ['commit', 'reconcile'],
+      ['report', 'implement'], ['controls', 'controls'], ['verdict', 'judge'], ['reconcile', 'reconcile'],
       ['global', 'global'], ['slice-verdict', 'slice-judge'],
     ])
     const orderedOperations = [...operations].sort((left, right) => (
