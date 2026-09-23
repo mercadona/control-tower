@@ -16,6 +16,7 @@ type LeaderOutcome = { readonly kind: 'pending' }
   | { readonly kind: 'known', readonly code: number | null, readonly signal: string | null }
 type GroupEnforcement = { readonly kind: 'pending' }
   | { readonly kind: 'disappeared' }
+  | { readonly kind: 'released' }
   | { readonly kind: 'escalated' }
 type WorkerTimer = { cancel: () => void }
 type ChildSpawnFailure = {
@@ -214,7 +215,9 @@ export class HeadlessCallWorker {
     if (this.#leader.kind === 'pending') {
       this.#leader = Object.freeze({ kind: 'known', code, signal })
     }
-    if (this.#enforcement.kind === 'pending') this.#confirmDisappearance()
+    if (this.#enforcement.kind === 'pending' && this.#graceTimer === null) {
+      this.#enforcement = Object.freeze({ kind: 'released' })
+    }
     this.#settle()
   }
 
@@ -237,23 +240,6 @@ export class HeadlessCallWorker {
       this.#enforcement = Object.freeze({ kind: 'escalated' })
     }
     this.#settle()
-  }
-
-  #confirmDisappearance(): void {
-    const pid = this.#pid
-    if (pid === null) {
-      this.#enforcement = Object.freeze({ kind: 'disappeared' })
-      return
-    }
-    try {
-      this.kill(-pid, 0)
-    } catch (cause) {
-      if (HeadlessCallWorker.#hasCode(cause, 'ESRCH')) {
-        this.#enforcement = Object.freeze({ kind: 'disappeared' })
-      } else {
-        this.#diagnostics.push(`process group presence could not be checked: ${String(cause)}`)
-      }
-    }
   }
 
   #signal(signal: NodeJS.Signals): void {
