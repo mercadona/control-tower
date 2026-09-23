@@ -288,13 +288,8 @@ export function validatePlan(markdown, { readFile } = {}) {
     'verification-block', 'verification-predicate',
     'global-verification-block', 'global-verification-predicate',
   ]
-  // The judge line (§2: "any other value is a problem with rule `judge-line`,
-  // so `--check-plan` refuses the plan") is forwarded under its OWN rule,
-  // `judge`, not `verification` — it is a different fix for whoever reads it:
-  // the **Judge:** line, not the task's yardstick.
   for (const problem of extractTasks(markdown).problems) {
     if (VERIFICATION_RULES.includes(problem.rule)) push('verification', problem.detail)
-    else if (problem.rule === 'judge-line') push('judge', problem.detail)
   }
 
   // F-jjponz-4, pass A — the blocks WITH a role. It checks where each one

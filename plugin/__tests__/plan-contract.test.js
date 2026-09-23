@@ -177,29 +177,6 @@ describe('validatePlan — structure', () => {
   })
 })
 
-// §2 of the plan closes it: "Any other value | a problem with rule
-// `judge-line`, so `--check-plan` refuses the plan." `extractTasks` already
-// raises `judge-line`; the contract has to forward it as its own `judge`
-// violation, distinct from `verification` — a different fix for whoever reads
-// it (the **Judge:** line, not the yardstick).
-describe('validatePlan — the judge line', () => {
-  const withJudge = (value) => VALID_PLAN.replace(
-    '### Task 1 — cover sum',
-    `### Task 1 — cover sum\n**Judge:** ${value}`,
-  )
-
-  it('the plan contract refuses a **Judge:** value that is not checkpoint', () => {
-    const r = validatePlan(withJudge('always'), { readFile })
-    expect(r.ok).toBe(false)
-    expect(r.violations.some((v) => v.rule === 'judge' && v.detail.includes('**Judge:** always'))).toBe(true)
-  })
-
-  it('**Judge:** checkpoint stays ok', () => {
-    const r = validatePlan(withJudge('checkpoint'), { readFile })
-    expect(r.ok).toBe(true)
-  })
-})
-
 describe('validatePlan — placeholders', () => {
   it('a TBD outside a fence is a violation; inside a fence, it is not', () => {
     const outside = validatePlan(VALID_PLAN.replace('Unit with vitest.', 'Unit with vitest. TBD'), { readFile })

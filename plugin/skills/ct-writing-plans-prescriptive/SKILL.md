@@ -192,11 +192,6 @@ and assertion, or `No TDD — <reason>`), `**Tests:**` (added or deliberately re
 and `**Verification:**` (exact commands, already run, with output) — **fenced right after
 the marker, one per line, each a predicate**, for the reason above.
 
-**A task may carry `**Judge:** checkpoint`**: mark one that fixes a contract, interface or
-shape later tasks lean on. The judge reviews only checkpoints and the last task, each over the
-stretch since the previous one. An unmarked task is committed with no judge; any other value
-fails `--check-plan`.
-
 **No control may pin the suite's total test count.** A `grep -c '52 passed'` is a proxy: when
 the judge demands one more assertion, every later task repeating it needs fixing, and the
 nailed total leaves no room for what `conventions/testing.md` demands, so a branch ships

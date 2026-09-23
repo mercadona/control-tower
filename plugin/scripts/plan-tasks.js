@@ -74,14 +74,11 @@ const TESTS = '**Tests:**'
 const FILES = '**Files:**'
 const TDD = '**TDD:**'
 
-const JUDGE = '**Judge:**'
-const CHECKPOINT = 'checkpoint'
-
 // Any other task marker cuts the paragraph: if after **Verification:** comes
 // **Objective:** instead of a block, then there is no block, and saying so is
 // better than going on searching to the end of the file.
-const OTHER_MARKERS = ['**Objective:**', FILES, TDD, TESTS, JUDGE]
-// each task: { n, name, commands, testsAdded, testsRemoved, checkpoint }
+const OTHER_MARKERS = ['**Objective:**', FILES, TDD, TESTS]
+// each task: { n, name, commands, testsAdded, testsRemoved }
 
 // The three forms of §2.5. The order matters: "retira a propósito" before
 // "retira", or the short one eats the long one and splits in the wrong place.
@@ -518,21 +515,10 @@ export function extractTasks(markdown) {
     let added = []
     let removed = []
     let testsDeclared = false
-    let checkpoint = false
-    let judgeDeclared = false
 
     body.forEach((l, i) => {
       if (!l.structural) return
       const t = l.line.trim()
-      if (t.startsWith(JUDGE) && !judgeDeclared) {
-        judgeDeclared = true
-        const value = t.slice(JUDGE.length).trim()
-        if (value === CHECKPOINT) {
-          checkpoint = true
-        } else {
-          push(h.n, 'judge-line', `task ${h.n} declares "${JUDGE}${value ? ` ${value}` : ''}": the only value is "${CHECKPOINT}".`)
-        }
-      }
       if (t.startsWith(VERIFICATION) && commands === null) {
         const { end } = paragraphFrom(body, i, VERIFICATION)
         commands = commandsAfter(body, end)
@@ -575,7 +561,6 @@ export function extractTasks(markdown) {
       commands: commands || [],
       testsAdded: added,
       testsRemoved: removed,
-      checkpoint,
     }
   })
 
