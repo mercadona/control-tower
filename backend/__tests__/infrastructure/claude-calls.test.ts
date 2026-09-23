@@ -309,6 +309,24 @@ describe('ClaudeCalls', () => {
     expect(original).not.toBe(driverBytes)
   })
 
+  it.each([
+    { field: 'conversation', value: '' },
+    { field: 'purpose', value: 'unknown' },
+    { field: 'requestId', value: 7 },
+    { field: 'role', value: ' ' },
+    { field: 'cwd', value: '' },
+    { field: 'binary', value: '' },
+    { field: 'argv', value: ['--session-id', 7] },
+    { field: 'startedAt', value: 'yesterday' },
+    { field: 'budgetMs', value: -1 },
+    { field: 'killGraceMs', value: -1 },
+  ])('invalid $field is rejected both when preparing and when reading a call', ({ field, value }) => {
+    const text = CallMother.descriptor('/checkout', { [field]: value })
+
+    expect(() => new CallDescriptor(JSON.parse(text))).toThrow(field)
+    expect(() => CallDescriptor.from(text)).toThrow(field)
+  })
+
   it('descriptor provenance preserves read and identity failures', async () => {
     const missingRoot = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-missing-'))
     roots.push(missingRoot)
@@ -388,6 +406,18 @@ describe('ClaudeCalls', () => {
     expect(observed).not.toMatchObject({ env: { CT_PHASE_PROMPT: expect.anything() } })
     expect(observed).not.toMatchObject({ env: { CT_SESSION_HOOKS_URL: expect.anything() } })
     expect(observed).toMatchObject({ env: { CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' } })
+  })
+
+  it('a recorded request cannot be reused as another functional role', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-role-conflict-'))
+    roots.push(root)
+    await CallMother.prepared(root, { requestId: 'same-request', role: 'judge' })
+    const calls = CallMother.calls(root, () => { throw new Error('request lookup must not spawn') })
+    const invocation = new CallInvocation({
+      ...CallMother.invocation({ prompt: 'A recorded prompt' }), requestId: 'same-request', role: 'implement',
+    })
+
+    await expect(calls.startedFor(invocation)).rejects.toThrow('already recorded with a different role')
   })
 
   it('a failed record write launches nothing', async () => {
@@ -847,6 +877,9 @@ describe('ClaudeCalls', () => {
       CallMother.descriptor('/checkout', { argv: ['--resume', 'another-conversation'] }),
       CallMother.descriptor('/checkout', { requestId: 7 }),
       CallMother.descriptor('/checkout', { requestId: '' }),
+      CallMother.descriptor('/checkout', { role: 7 }),
+      CallMother.descriptor('/checkout', { role: '' }),
+      CallMother.descriptor('/checkout', { role: ' ' }),
       CallMother.descriptorWithoutRequest('/checkout'),
       CallMother.descriptor('/checkout', {
         conversation: foreign,

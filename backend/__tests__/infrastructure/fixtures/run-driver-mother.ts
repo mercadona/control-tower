@@ -33,10 +33,12 @@ import { PlanAgents } from '../../../src/domain/ports/plan-agents.ts'
 import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../../src/domain/value-objects/plan-call.ts'
 import { ActivePlans } from '../../../src/infrastructure/active-plans-route.ts'
-import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../../src/infrastructure/claude-calls.ts'
+import { CallDescriptor, ClaudeCalls, StoredCompletion, type CallInvocation } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
+import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-calls.ts'
+import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
 import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../../src/infrastructure/plan-events-route.ts'
@@ -68,17 +70,12 @@ import { UserStory } from '../../../src/domain/value-objects/user-story.ts'
 import { UserStoryUrl } from '../../../src/domain/value-objects/user-story-url.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
-import { CallMeasurements } from '../../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
 import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
-type Measurement = {
-  readonly conversation: string,
-  readonly reported: { readonly total_cost_usd: { readonly scope: string } },
-}
 export type ModelCapture = {
   readonly callId: string,
   readonly role: string,
@@ -368,13 +365,13 @@ class RecoveryCheckouts extends CheckoutRegistry {
   override remember(_checkout: RegisteredCheckout): void {}
 }
 
-class UnaskedMeasurements extends CallMeasurements {
-  override async capture(): Promise<void> {
-    throw new Error('the drain measures nothing here')
-  }
-}
-
 export class RunDriverMother {
+  static measured(executor: ClaudeCalls, files: HeadlessFiles): MeasuredAgentCalls<CallInvocation, CallDescriptor> {
+    return new MeasuredAgentCalls({
+      executor, reader: new ClaudeRunMeasurements({ files }), store: new DiskAgentMeasurements({ files }),
+    })
+  }
+
   static readonly ISSUE = 7
   static readonly REPOSITORY = 'acme/widget'
   static readonly CONVERSATION = '11111111-1111-4111-8111-111111111111'
@@ -636,13 +633,31 @@ export class RunDriverMother {
     }
   }
 
+  async observeWithoutMeasurements(conversation: string): Promise<readonly string[]> {
+    if (this.#runtime === null) throw new Error('the fixture backend is not running')
+    const directory = join(this.state, 'control-tower', 'harness', conversation, 'calls')
+    const names = await readdir(directory)
+    for (const name of names) await rm(join(directory, name, 'agent-measurements-v1.json'))
+    const port = await this.#runtime.port
+    for (let observation = 0; observation < 2; observation += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+      const body = await response.text()
+      if (response.status !== 200) throw new Error(`active-plans answered ${response.status}: ${body}`)
+    }
+    const regenerated: string[] = []
+    for (const name of names) {
+      if ((await readdir(join(directory, name))).includes('agent-measurements-v1.json')) regenerated.push(name)
+    }
+    return regenerated
+  }
+
   async deliverThroughApi(): Promise<{
     admission: { conversation: string },
     conversations: string[],
     roles: string[],
     callIds: string[],
     requests: string[],
-    measurements: Measurement[],
+    commonMeasurements: string[],
     modelCalls: ModelCapture[],
     attemptSteps: string[],
     consumingSteps: string[],
@@ -734,9 +749,9 @@ export class RunDriverMother {
       if (call.descriptor.argv[at + 1] === 'ct-slice-judge') return 'slice-judge'
       throw new Error(`unexpected model role: ${JSON.stringify(call.descriptor.argv)}`)
     })
-    const measurements = await Promise.all(implementations.map(async (call) => JSON.parse(
-      await readFile(join(harness, 'calls', call.id, 'measurements-v1.json'), 'utf8'),
-    ) as Measurement))
+    const commonMeasurements = await Promise.all(calls.map((call) =>
+      readFile(join(harness, 'calls', call.id, 'agent-measurements-v1.json'), 'utf8'),
+    ))
     const metrics = await readFile(
       join(started.worktree, 'docs', 'superpowers', 'metrics', `issue-${RunDriverMother.ISSUE}.jsonl`),
       'utf8',
@@ -770,7 +785,7 @@ export class RunDriverMother {
       roles,
       callIds: implementations.map((call) => call.id),
       requests: implementations.map((call) => call.descriptor.requestId ?? ''),
-      measurements,
+      commonMeasurements,
       modelCalls,
       attemptSteps,
       consumingSteps,
@@ -818,7 +833,6 @@ export class RunDriverMother {
           messages: new DeliverHeldMessages({
             messages: fixture.journal,
             calls: initial.planCalls,
-            measurements: new UnaskedMeasurements(),
             escalations: new QuietEscalations(),
           }),
           escalations: QuietEscalations.reader(),
@@ -873,7 +887,6 @@ export class RunDriverMother {
           messages: new DeliverHeldMessages({
             messages: rebuiltJournal,
             calls: rebuilt.planCalls,
-            measurements: new UnaskedMeasurements(),
             escalations: new QuietEscalations(),
           }),
           escalations: QuietEscalations.reader(),
@@ -882,7 +895,7 @@ export class RunDriverMother {
           legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
           transport: rebuilt.transport, driver, machine: rebuiltMachine, journal: rebuiltJournal,
           delivery: new CompletedRunDelivery(),
-          measurements: rebuilt.measurements, newId: () => fixture.#identity(), nowMs: Date.now,
+          newId: () => fixture.#identity(), nowMs: Date.now,
           announcements: new SilentChangeAnnouncements(),
           stderr: (line) => nextRoleGate.cancel(new Error(line.trim())),
         })
@@ -950,12 +963,11 @@ export class RunDriverMother {
     machine: CtRunMachine,
     scenario: 'veto' | 'reconcile' | 'pass',
   }): {
-    transport: ClaudeCalls,
+    transport: MeasuredAgentCalls<CallInvocation, CallDescriptor>,
     planCalls: ClaudePlanCalls,
     runCalls: ClaudeRunCalls,
-    measurements: ClaudeRunMeasurements,
   } {
-    const transport = new ClaudeCalls({
+    const transport = RunDriverMother.measured(new ClaudeCalls({
       files: asked.files, binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
       spawn: this.#processes.spawn, env: {
@@ -964,7 +976,7 @@ export class RunDriverMother {
       }, newId: () => this.#identity(), now: () => new Date().toISOString(),
       budgetMs: 30_000, killGraceMs: 1_000, acceptanceMs: 10_000, pollMs: 25,
       sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    })
+    }), asked.files)
     const planCalls = new ClaudePlanCalls({
       calls: transport, records: asked.records,
       brief: new PlanAgentBrief({
@@ -973,11 +985,10 @@ export class RunDriverMother {
       }),
       pluginRoot: RunDriverMother.#PLUGIN, resumable: async () => true, nowMs: Date.now,
     })
-    const measurements = new ClaudeRunMeasurements({ files: asked.files, calls: transport })
     return {
-      transport, planCalls, measurements,
+      transport, planCalls,
       runCalls: new ClaudeRunCalls({
-        calls: transport, machine: asked.machine, measurements,
+        calls: transport, machine: asked.machine,
         files: asked.files, pluginRoot: RunDriverMother.#PLUGIN,
       }),
     }
@@ -1019,11 +1030,11 @@ export class RunDriverMother {
   }
 
   #runCalls(scenario: 'veto' | 'reconcile' | 'pass'): {
-    transport: ClaudeCalls,
+    transport: MeasuredAgentCalls<CallInvocation, CallDescriptor>,
     calls: ClaudeRunCalls,
     step: ExecuteRunInstruction,
   } {
-    const transport = new ClaudeCalls({
+    const transport = RunDriverMother.measured(new ClaudeCalls({
       files: this.files,
       binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
@@ -1040,11 +1051,10 @@ export class RunDriverMother {
       acceptanceMs: 10_000,
       pollMs: 25,
       sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    })
+    }), this.files)
     const calls = new ClaudeRunCalls({
       calls: transport,
       machine: this.machine,
-      measurements: new ClaudeRunMeasurements({ files: this.files, calls: transport }),
       files: this.files,
       pluginRoot: RunDriverMother.#PLUGIN,
     })
@@ -1165,12 +1175,12 @@ export class RunDriverMother {
     const refusingSpawn = new Proxy(spawn, {
       apply: () => { calls += 1; throw new Error('recovery must not spawn') },
     })
-    const transport = new ClaudeCalls({
+    const transport = RunDriverMother.measured(new ClaudeCalls({
       files, binary: 'claude', worker: 'worker',
       spawn: refusingSpawn,
       env: {}, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
       budgetMs: 7_200_000, killGraceMs: 5_000, acceptanceMs: 10_000, pollMs: 250, sleep: async () => {},
-    })
+    }), files)
     const records = new DiskPlanRecords({
       files, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
       exists: async (path) => existsSync(path),
@@ -1199,23 +1209,21 @@ export class RunDriverMother {
       }),
       pluginRoot: RunDriverMother.#PLUGIN, resumable: async () => true, nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'),
     })
-    const measurements = new ClaudeRunMeasurements({ files, calls: transport })
     const driver = new DriveRun({
       calls: planCalls, publication: new PlanPublication(), machine, delivery: new CompletedRunDelivery(),
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
-        calls: transport, machine, measurements, files, pluginRoot: RunDriverMother.#PLUGIN,
+        calls: transport, machine, files, pluginRoot: RunDriverMother.#PLUGIN,
       }) }),
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: planCalls,
-        measurements: measurements,
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
     })
     const agents = new RunPlanAgents({
       legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal,
-      delivery: new CompletedRunDelivery(), measurements,
+      delivery: new CompletedRunDelivery(),
       announcements: new SilentChangeAnnouncements(),
       newId: () => this.#identity(), nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'), stderr: () => {},
     })
