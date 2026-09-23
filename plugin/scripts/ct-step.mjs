@@ -354,7 +354,7 @@ if (existsSync(stateFile)) {
           state: RUN_STATES.DELIVERED, outcome: OUTCOMES.DONE, exit: EXIT.OK,
         }).text())
       }
-      out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
+      out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed and judged, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
@@ -365,7 +365,7 @@ if (existsSync(stateFile)) {
   // persisted because it does not have to be — the discard budget exits before
   // the persistence, so a `blocked-judge` on disk is always the veto.
   if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
-    const WAY_OUT = `the judge vetoed task ${run.task} of issue ${issue} three times and the run is closed. `
+    const WAY_OUT = `the judge vetoed ${run.reviewing ? 'the review of the slice' : `task ${run.task}`} of issue ${issue} three times and the run is closed. `
       + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
     if (verb === 'reopen') {
       const instruction = arg('--instruction')
@@ -395,7 +395,7 @@ if (existsSync(stateFile)) {
           state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: EXIT.OK,
         }).text())
       }
-      out(`run reopened at task ${run.task} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      out(`run reopened at ${run.reviewing ? 'the review' : `task ${run.task}`} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
       process.exit(EXIT.OK)
     }
     if (verb === 'next') {
@@ -412,7 +412,7 @@ if (existsSync(stateFile)) {
         // `ReferenceError`, exactly as `save()` would be. The counters are
         // untouched by the closure, so the attempt is the one that archived
         // the verdict.
-        const archived = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${StepSeal.attemptOf(run)}.json`)
+        const archived = join('.agent', `run-${issue}`, `${run.reviewing ? 'review' : `task-${run.task}`}-verdict-${StepSeal.attemptOf(run)}.json`)
         safeWrite(1, StepAnnouncement.refusal({
           issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
           state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
@@ -575,6 +575,14 @@ const sliceSignal = (() => {
   return typeof meta.senal === 'string' && meta.senal.trim() ? meta.senal.trim() : null
 })()
 const currentAttempt = () => StepSeal.attemptOf(run)
+// THE STEM OF EVERY ARTEFACT this run writes for a step (#530): the task's
+// number, or `review` while the judge reviews the whole slice. The review
+// restarts its attempts at 1 on top of the last task, so under that task's
+// stem its fix rounds would overwrite the task's own archives and the adviser
+// would read the task's reports as the review's attempts. The slice judge's
+// `slice-*` names are apart from both. The closure gate of `blocked-judge`
+// builds the same name inline: it runs before this `const` is reached.
+const artefactStem = () => (run.reviewing ? 'review' : `task-${run.task}`)
 // The two identity fields the row's module CANNOT go and look up (it is pure):
 // whoever writes provides them. The version comes out of the plugin's manifest
 // —a rewritten `ct-step` makes two runs incomparable, just as a rewritten plan
@@ -746,7 +754,7 @@ function nextVerb() {
   switch (run.step) {
     case STEPS.IMPLEMENT: {
       const brief = writeBrief()
-      const reportPath = join(workDir, `task-${run.task}-report.json`)
+      const reportPath = join(workDir, `${artefactStem()}-report.json`)
       // §2: the implementer carries NO agent name — its declared material is a
       // prompt, not a subagent definition.
       announcement = StepAnnouncement.dispatch({
@@ -786,7 +794,7 @@ function nextVerb() {
     case STEPS.JUDGE: {
       const packagePath = writeReviewPackage()
       const judgeBrief = writeJudgeBrief()
-      const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
+      const verdictPath = join(workDir, `${artefactStem()}-verdict.json`)
       announcement = StepAnnouncement.dispatch({
         ...stepRunFields,
         agent: announcedAgent(run.step),
@@ -815,7 +823,7 @@ function nextVerb() {
     // one thing neither of the two implementers could see.
     case STEPS.ADVISE: {
       const packagePath = writeAdviceReviewPackage()
-      const advicePath = join(workDir, `task-${run.task}-advice.json`)
+      const advicePath = join(workDir, `${artefactStem()}-advice.json`)
       announcement = StepAnnouncement.dispatch({
         ...stepRunFields,
         agent: announcedAgent(run.step),
@@ -826,7 +834,9 @@ function nextVerb() {
       const prose = DispatchProse.render(announcement)
       outProseMaterial(prose)
       out('')
-      out("The judge has vetoed this task twice. On accepting the advice, the program returns the tree to the last commit for the task's paths and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
+      out(run.reviewing
+        ? "The judge has vetoed the review of the slice twice. On accepting the advice, the program returns the tree to the last commit for the paths of the fix rounds and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now."
+        : "The judge has vetoed this task twice. On accepting the advice, the program returns the tree to the last commit for the task's paths and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
       out(prose.consuming)
       break
     }
@@ -1028,7 +1038,7 @@ function writeBriefBody(path) {
 // to open it (`selective-hearing`) —, then the repo's yardstick, then the
 // advice.
 function writeBrief() {
-  const brief = join(workDir, `task-${run.task}-brief.md`)
+  const brief = join(workDir, `${artefactStem()}-brief.md`)
   // It is checked before calling `task-brief` so as not to leave a brief on
   // disk that nobody is going to use.
   const ctDocs = loadCtYardstick()
@@ -1051,7 +1061,7 @@ function writeBrief() {
 // twice, once pasted and once by path: some 43 KB of context on the most
 // expensive call of the loop, per task, for nothing.
 function writeJudgeBrief() {
-  const brief = join(workDir, `task-${run.task}-judge-brief.md`)
+  const brief = join(workDir, `${artefactStem()}-judge-brief.md`)
   writeBriefBody(brief)
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
@@ -1073,7 +1083,7 @@ function adviceSection(advice) {
       '',
       '## Advice for this attempt',
       '',
-      "The judge vetoed this task three times and the run was closed. A person read it and reopened it with an instruction of their own, instead of the adviser's:",
+      `The judge vetoed ${run.reviewing ? 'the review of the slice' : 'this task'} three times and the run was closed. A person read it and reopened it with an instruction of their own, instead of the adviser's:`,
       '',
       advice,
       '',
@@ -1146,7 +1156,7 @@ const indexTree = () => git(['write-tree']).trim()
 // The package comes out of the INDEX and not out of a range of commits: the
 // implementer does not commit, so what has to be judged is not a commit yet.
 function writeReviewPackage() {
-  const packagePath = join(workDir, `task-${run.task}-review.diff`)
+  const packagePath = join(workDir, `${artefactStem()}-review.diff`)
   // This section used to carry, alongside each path, whether it was production
   // or test code (the `kind` the implementer's report declared). It was removed:
   // the judge has the diff in front of it and tells a test from a production
@@ -1231,7 +1241,7 @@ function writeSliceReviewPackage() {
 // disk comes out named and with the reason, because a section missing in silence
 // reads as "there was no such attempt".
 function writeAdviceReviewPackage() {
-  const packagePath = join(workDir, `task-${run.task}-advice.md`)
+  const packagePath = join(workDir, `${artefactStem()}-advice.md`)
   const [BRIEF_SECTION, ATTEMPTS_SECTION, VERDICTS_SECTION] = ADVICE_PACKAGE_SECTIONS
   writeFileSync(packagePath, [
     `# Advice package: task ${run.task}/${run.tasksTotal} of issue #${issue} — vetoed twice, one attempt left`,
@@ -1258,7 +1268,7 @@ const readOrAbsent = (path, what) => {
 // not two walks of the directory with the same expression.
 const ARCHIVED_ATTEMPT_RE = /-(\d+)\.json$/
 function taskArchives(kind) {
-  const prefix = `task-${run.task}-${kind}-`
+  const prefix = `${artefactStem()}-${kind}-`
   try {
     return readdirSync(workDir)
       .filter((f) => f.startsWith(prefix) && ARCHIVED_ATTEMPT_RE.test(f))
@@ -1286,7 +1296,7 @@ function sectionsByAttempt(kind, what) {
 // argv— because it is the only thing this program answers for.
 function archive(kind, content) {
   try {
-    writeFileSync(join(workDir, `task-${run.task}-${kind}-${currentAttempt()}.json`), JSON.stringify(content, null, 2) + '\n')
+    writeFileSync(join(workDir, `${artefactStem()}-${kind}-${currentAttempt()}.json`), JSON.stringify(content, null, 2) + '\n')
   } catch (e) {
     err(`warning: ${kind} of attempt ${currentAttempt()} could not be archived (${String(e.message).trim()}): if this task reaches the advisor, its package will say so.`)
   }
@@ -1298,7 +1308,7 @@ function archive(kind, content) {
 // and carries on), and naming a file that does not exist is worse than naming
 // none.
 function archivedVerdictPath() {
-  const rel = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
+  const rel = join('.agent', `run-${issue}`, `${artefactStem()}-verdict-${currentAttempt()}.json`)
   return existsSync(join(repoRoot, rel)) ? rel : null
 }
 
@@ -1422,7 +1432,7 @@ function readJson(path, whose) {
 // would assert a brief with no yardstick, and what has happened is that it could
 // not be looked at.
 function briefPath() {
-  return join(workDir, `task-${run.task}-brief.md`)
+  return join(workDir, `${artefactStem()}-brief.md`)
 }
 
 function briefMeasures() {
@@ -1659,7 +1669,7 @@ function controlsVerb() {
   // subtracting consecutive `written_at`, because between two rows there is
   // session latency mixed with work.
   const startedAt = Date.now()
-  const log = join(workDir, `task-${run.task}-controls-${currentAttempt()}.log`)
+  const log = join(workDir, `${artefactStem()}-controls-${currentAttempt()}.log`)
   const lines = []
   let result = OUTCOMES.DONE
 
@@ -2467,7 +2477,7 @@ function verdictVerb() {
   // problem that was not the one, and the telemetry would count a judge that
   // writes badly instead of a conductor that skipped a step. The cause rules
   // over the symptom.
-  const packagePath = join(workDir, `task-${run.task}-review.diff`)
+  const packagePath = join(workDir, `${artefactStem()}-review.diff`)
   if (!existsSync(packagePath)) {
     const why = `the review package does not exist (${packagePath}): the judge judged blind — go back to "ct-step next", the only step that generates it, and REDISPATCH the judge with the new package. The package is SINGLE USE: the verdict that reads it consumes it, so after a FAIL (or any accepted verdict) you have to go through next again before dispatching the judge once more — and going back to next WITHOUT redispatching the judge leaves a verdict of another diff, which this verb also rejects`
     // The row carries `outcome` and `why`, and no other measure: exactly the
@@ -2554,7 +2564,11 @@ function verdictVerb() {
     // The review's verdict (#530) answers for the whole slice, not for a task.
     const path = join('docs', 'superpowers', 'verdicts', run.reviewing ? `issue-${issue}-review.json` : `issue-${issue}-task-${run.task}.json`)
     mkdirSync(join(repoRoot, 'docs', 'superpowers', 'verdicts'), { recursive: true })
-    writeFileSync(join(repoRoot, path), JSON.stringify({ issue, task: run.task, task_name: currentTask()?.name ?? null, verdict }, null, 2) + '\n')
+    // The review's names no task: it has the slice verdict's shape.
+    const record = run.reviewing
+      ? { issue, tasks_total: run.tasksTotal, verdict }
+      : { issue, task: run.task, task_name: currentTask()?.name ?? null, verdict }
+    writeFileSync(join(repoRoot, path), JSON.stringify(record, null, 2) + '\n')
     // `allowFail`, for the same reason as the telemetry's `git add` in
     // `commit`: without it, a repo that ignores this path makes the exception
     // climb up and leaves the task UNCOMMITTED with the run stuck at the
@@ -2610,7 +2624,7 @@ function verdictVerb() {
 // does not touch the code, so its unreadable answer cannot cost the same as a
 // veto. What backs it is the slice's discard cap.
 function adviceVerb() {
-  const packagePath = join(workDir, `task-${run.task}-advice.md`)
+  const packagePath = join(workDir, `${artefactStem()}-advice.md`)
   if (!existsSync(packagePath)) {
     const why = `the advisor's package does not exist (${packagePath}): the advisor advised blind — go back to "ct-step next", the only step that generates it, and REDISPATCH the advisor with the new package`
     measure(STEPS.ADVISE, { outcome: 'discarded', why })
@@ -2734,7 +2748,7 @@ function commitVerb() {
   if (!(git(['diff', '--cached', '--name-only']) || '').trim()) {
     if (run.reviewing) {
       err("warning: nothing to commit of the judge's review (are the verdict and the telemetry gitignored?) — the run carries on.")
-      run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, sealedTree: null }
+      run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null }
       return OUTCOMES.DONE
     }
     err(`task ${run.task} left nothing staged: there is nothing to commit`)
@@ -2766,11 +2780,13 @@ function commitVerb() {
   // named it: the advice was dictated by an adviser that read THIS task's two
   // vetoes, and inheriting it would put into the next one's brief an approach
   // to a problem that no longer exists.
+  // The controls log goes with it too: the next judge to read one is the
+  // review's (#530), and the last task's log is no measure of a fix round.
   // `run.task` is still the committed one: the machine advances it afterwards.
   // Every commit spends its seal. The review commit is a slice commit: the
   // state load counts it in `sliceCommits`, as it counts the slice verdict's.
   run = {
-    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, sealedTree: null,
+    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null,
     ...(run.reviewing ? { sliceCommits: (run.sliceCommits || 0) + 1 } : {}),
   }
   out(run.reviewing

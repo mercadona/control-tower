@@ -34,9 +34,9 @@ commit after your PASS.
   are going to cite. `## Files changed` lists the staged files; `## Rutas
   tocadas` lists every path the implementer touched; `## Diff` is the staged
   diff of this task, or, at the review, of the whole slice since the run's
-  base. At the review, `## Rutas tocadas` lists the last task's implementer's
-  own paths alone, so a file of an earlier task absent from it is expected, a
-  finding only on its own. The two lists come from different places:
+  base. At the review, `## Rutas tocadas` lists what the last fix round's
+  implementer touched — `(none)` on the first look — so a file of any task
+  absent from it is expected, a finding only on its own. The two lists come from different places:
   `## Files changed` is read off the index itself, and `## Rutas tocadas` is
   read off the implementer's own report of what it touched — a declared path
   and a changed path are two different facts. What each of those paths is, you

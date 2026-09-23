@@ -26,8 +26,9 @@ const FINDING = { severity: 'high', what: 'la lógica está en el sitio que no e
 
 // The judge reviews the slice once, after the last commit (#530), so the
 // vetoes that reach the advisor are the review's. Its first attempt is the
-// slice as its tasks committed it, and what the implementer of the last task
-// said is what the advisor's package shows for it.
+// slice as its tasks committed it, with no implementer of its own: what the
+// implementer of the last task said belongs to that task, and the advisor's
+// package shows the review's attempts alone.
 const vetoedReview = (says) => {
   taskOk('uno.txt')
   ct('next')
@@ -61,7 +62,7 @@ const advice = (over = {}, name = 'advice.json') => {
   return p
 }
 
-const advicePackagePath = () => join(repo, '.agent', 'run-7', `task-${runState().task}-advice.md`)
+const advicePackagePath = () => join(repo, '.agent', 'run-7', runState().reviewing ? 'review-advice.md' : `task-${runState().task}-advice.md`)
 
 // `next` is the only verb that writes the advisor's package, the same as with
 // the judge: asking for the advice is, by definition, having asked before.
@@ -92,9 +93,11 @@ describe('the second veto does not go back to implementing blindly', () => {
     ct('next')
     const packageText = readFileSync(advicePackagePath(), 'utf8')
     for (const section of ADVICE_PACKAGE_SECTIONS) expect(packageText).toContain(`## ${section}`)
-    expect(packageText).toContain('lo puse en el módulo viejo')
+    // The last task's report is that task's, and the review's fix round is
+    // the one attempt with an implementer of its own.
+    expect(packageText).not.toContain('lo puse en el módulo viejo')
     expect(packageText).toContain('lo volví a poner en el módulo viejo')
-    expect(packageText).toContain('la lógica está en el sitio que no es')
+    expect(packageText.match(/la lógica está en el sitio que no es/g)).toHaveLength(2)
     // The brief of the review, which the two attempts came out of.
     expect(packageText).toContain('the first one')
   })
@@ -207,7 +210,7 @@ describe('the third attempt starts with a clean tree and with the advice in fron
     askForAdvice(advice())
 
     ct('next')
-    const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-2-brief.md'), 'utf8')
+    const brief = readFileSync(join(repo, '.agent', 'run-7', 'review-brief.md'), 'utf8')
     expect(brief).toContain('saca la decisión a un tipo propio')
     expect(brief).toContain('uno.txt')
   })

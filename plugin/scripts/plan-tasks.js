@@ -78,7 +78,6 @@ const TDD = '**TDD:**'
 // **Objective:** instead of a block, then there is no block, and saying so is
 // better than going on searching to the end of the file.
 const OTHER_MARKERS = ['**Objective:**', FILES, TDD, TESTS]
-// each task: { n, name, commands, testsAdded, testsRemoved }
 
 // The three forms of §2.5. The order matters: "retira a propósito" before
 // "retira", or the short one eats the long one and splits in the wrong place.

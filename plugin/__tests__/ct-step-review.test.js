@@ -5,7 +5,7 @@
 // fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
@@ -13,7 +13,7 @@ import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
 const { ct, ctFrom, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask,
-  bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
+  reviewFix, bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
 
 const filesOf = (rev) => execFileSync('git', ['show', '--name-only', '--format=', rev], { cwd: repo, encoding: 'utf8' })
 const subjectOf = (rev) => execFileSync('git', ['log', '-1', '--format=%s', rev], { cwd: repo, encoding: 'utf8' }).trim()
@@ -94,7 +94,7 @@ describe('the review of the whole slice, after the last commit', () => {
 
     const r = ct('next')
     expect(r.stdout).toContain('slice of issue 7 — the review of the 2 tasks')
-    const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-2-judge-brief.md'), 'utf8')
+    const brief = readFileSync(join(repo, '.agent', 'run-7', 'review-judge-brief.md'), 'utf8')
     expect(brief).toMatch(/### Task 1 — the first one[\s\S]*## Task 2 of the slice\n+### Task 2 — the second one/)
     expect(brief.match(/### Task 1 — the first one/g)).toHaveLength(1)
     expect(brief.match(/### Task 2 — the second one/g)).toHaveLength(1)
@@ -107,7 +107,7 @@ describe('the review of the whole slice, after the last commit', () => {
     const vetoed = ct('next')
     expect(vetoed.stdout).toContain('The judge reviewed the whole slice: fix every finding, in any file of any task. The fixes land in one commit after the judge approves them.')
     // The implementer of the fixes reads every task too.
-    const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-2-brief.md'), 'utf8')
+    const brief = readFileSync(join(repo, '.agent', 'run-7', 'review-brief.md'), 'utf8')
     expect(brief).toMatch(/### Task 1 — the first one[\s\S]*## Task 2 of the slice\n+### Task 2 — the second one/)
 
     writeFileSync(join(repo, 'uno.txt'), 'uno.txt, fixed at the review\n')
@@ -123,6 +123,10 @@ describe('the review of the whole slice, after the last commit', () => {
     expect(committed).toContain(REVIEW_VERDICT)
     expect(committed).not.toContain('dos.txt')
     expect(committed).not.toContain('issue-7-task-')
+    // The review's verdict names no task: it has the slice verdict's shape.
+    const saved = JSON.parse(execFileSync('git', ['show', `HEAD:${REVIEW_VERDICT}`], { cwd: repo, encoding: 'utf8' }))
+    expect(Object.keys(saved)).toEqual(['issue', 'tasks_total', 'verdict'])
+    expect(saved.tasks_total).toBe(2)
     expect(runState().step).toBe('reconcile')
   })
 
@@ -149,6 +153,42 @@ describe('the review of the whole slice, after the last commit', () => {
     expect(diff).toMatch(/\+\+\+ b\/uno\.txt/)
     expect(diff).toMatch(/\+\+\+ b\/dos\.txt/)
     expect(readFileSync(taskPackage(), 'utf8')).not.toContain(TELEMETRY)
+  })
+
+  it('a last task with a controls retry keeps its archives through the review', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    ct('commit')
+    // The last task goes red once, so it archives two attempts of its own.
+    ct('report', writeReport(['dos.txt']))
+    rmSync(join(repo, 'dos.txt'))
+    expect(ct('controls').stdout).toMatch(/controls: failed/)
+    ct('report', writeReport(['dos.txt']))
+    ct('controls')
+    expect(ct('commit').status).toBe(0)
+    const runDir = join(repo, '.agent', 'run-7')
+    const taskReport = readFileSync(join(runDir, 'task-2-report-2.json'), 'utf8')
+    const taskControls = readFileSync(join(runDir, 'task-2-controls-2.log'), 'utf8')
+
+    // The review vetoes once, and its fix round is its own attempt 2.
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'wrong in the first task', path: 'uno.txt', line: 1 }]))
+    ct('next')
+    reviewFix(['uno.txt'])
+
+    expect(readFileSync(join(runDir, 'task-2-report-2.json'), 'utf8')).toBe(taskReport)
+    expect(readFileSync(join(runDir, 'task-2-controls-2.log'), 'utf8')).toBe(taskControls)
+    expect(JSON.parse(readFileSync(join(runDir, 'review-report-2.json'), 'utf8')).paths).toEqual(['uno.txt'])
+    expect(readFileSync(join(runDir, 'review-controls-2.log'), 'utf8')).toMatch(/\$ test -f uno\.txt[\s\S]*\$ test -f dos\.txt/)
+    expect(existsSync(join(runDir, 'review-verdict-1.json'))).toBe(true)
+  })
+
+  it('the first review judge is handed no controls log of the last task', () => {
+    commitBothTasks()
+
+    const r = ct('next', '--output-format', 'json')
+    expect(r.status).toBe(0)
+    const { dispatch } = JSON.parse(r.stdout)
+    expect(dispatch.inputs.map((i) => i.role)).toEqual(['package', 'brief'])
   })
 
   it('a review with nothing to commit, because its evidence is gitignored, goes on to reconcile with no commit to count', () => {

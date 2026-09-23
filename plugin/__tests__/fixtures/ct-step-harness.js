@@ -213,7 +213,10 @@ export function makeHelpers(ref) {
   const commits = () => log().trim().split('\n').filter(Boolean).length
   const runState = () => JSON.parse(readFileSync(join(ref(), '.agent', 'run-7.json'), 'utf8'))
 
-  const taskPackage = (n = runState().task) => join(ref(), '.agent', 'run-7', `task-${n}-review.diff`)
+  // The package of the step at hand: the task's, or the review's (#530) while
+  // the judge reviews the whole slice. A number names one task's package.
+  const artefactStem = () => (runState().reviewing ? 'review' : `task-${runState().task}`)
+  const taskPackage = (n) => join(ref(), '.agent', 'run-7', `${n === undefined ? artefactStem() : `task-${n}`}-review.diff`)
   const slicePackage = () => join(ref(), '.agent', 'run-7', 'slice-review.diff')
   const judgeRows = (step = 'judge') => readFileSync(join(ref(), '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
     .trim().split('\n').map((l) => JSON.parse(l)).filter((row) => row.step === step)

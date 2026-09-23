@@ -82,7 +82,7 @@ describe('a veto leaves no trace to undo', () => {
 
     expect(announced.state).toBe('blocked-judge')
     expect(announced.findings).toContain('uno.txt')
-    expect(announced.verdict).toMatch(/task-\d+-verdict-\d+\.json$/)
+    expect(announced.verdict).toMatch(/review-verdict-\d+\.json$/)
   })
 })
 
@@ -131,7 +131,7 @@ describe('a verdict issued with no review package is not a verdict', () => {
     // passing through `next`. Nothing is deleted — the file does not exist
     // because nobody generated it.
     atTheReview()
-    expect(existsSync(join(repo, '.agent', 'run-7', 'task-2-review.diff'))).toBe(false)
+    expect(existsSync(join(repo, '.agent', 'run-7', 'review-review.diff'))).toBe(false)
 
     const r = ct('verdict', writeVerdict('PASS'))
     expect(r.status).toBe(0)                 // a discard, not a closure: it gets asked again

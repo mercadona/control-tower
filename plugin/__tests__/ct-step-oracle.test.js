@@ -46,8 +46,8 @@ describe('next: the session asks and the oracle answers', () => {
     // line: the judge's dispatch names its brief, or the judge never opens it.
     // It is the judge's own brief (#111): the task without the ct documents its
     // package already lists by path.
-    expect(r.stdout).toMatch(/the task's brief: .*task-2-judge-brief\.md/)
-    const reviewPackage = join(repo, '.agent', 'run-7', 'task-2-review.diff')
+    expect(r.stdout).toMatch(/the task's brief: .*review-judge-brief\.md/)
+    const reviewPackage = join(repo, '.agent', 'run-7', 'review-review.diff')
     expect(readFileSync(reviewPackage, 'utf8')).toMatch(/\+uno/)
   })
 

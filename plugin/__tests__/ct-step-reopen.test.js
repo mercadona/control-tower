@@ -69,7 +69,7 @@ describe('a run the judge closed does not quietly close again', () => {
     const second = announcementOf()
 
     expect(first.findings).toContain('mal')
-    expect(first.verdict).toBe('.agent/run-7/task-2-verdict-3.json')
+    expect(first.verdict).toBe('.agent/run-7/review-verdict-3.json')
     expect(second).toEqual(first)
   })
 
@@ -158,7 +158,7 @@ describe('reopen is the way a person gets a run out of the judge', () => {
 
     const reopened = ct('reopen', '--instruction', 'otra vuelta')
 
-    expect(reopened.stdout).toContain('run reopened at task 2 of issue 7')
+    expect(reopened.stdout).toContain('run reopened at the review of issue 7')
     expect(reopened.stdout).not.toContain('{"version"')
   })
 })

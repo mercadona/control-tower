@@ -30,13 +30,12 @@ describe('ct-step next answers with the announcement under --output-format json'
       dispatch: {
         agent: 'ct-judge',
         inputs: [
-          { role: 'package', kind: 'literal', path: join(workDir, 'task-2-review.diff') },
-          { role: 'brief', kind: 'literal', path: join(workDir, 'task-2-judge-brief.md') },
-          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-2-controls-1.log') },
+          { role: 'package', kind: 'literal', path: join(workDir, 'review-review.diff') },
+          { role: 'brief', kind: 'literal', path: join(workDir, 'review-judge-brief.md') },
         ],
-        response: { kind: 'file', path: join(workDir, 'task-2-verdict.json') },
+        response: { kind: 'file', path: join(workDir, 'review-verdict.json') },
       },
-      consuming: { argv: ['verdict', join(workDir, 'task-2-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
+      consuming: { argv: ['verdict', join(workDir, 'review-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
     })
   })
 
@@ -57,13 +56,13 @@ describe('ct-step next answers with the announcement under --output-format json'
       dispatch: {
         agent: 'ct-judge',
         inputs: [
-          { role: 'package', kind: 'literal', path: join(workDir, 'task-2-review.diff') },
-          { role: 'brief', kind: 'literal', path: join(workDir, 'task-2-judge-brief.md') },
-          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-2-controls-2.log') },
+          { role: 'package', kind: 'literal', path: join(workDir, 'review-review.diff') },
+          { role: 'brief', kind: 'literal', path: join(workDir, 'review-judge-brief.md') },
+          { role: 'controls-log', kind: 'literal', path: join(workDir, 'review-controls-2.log') },
         ],
-        response: { kind: 'file', path: join(workDir, 'task-2-verdict.json') },
+        response: { kind: 'file', path: join(workDir, 'review-verdict.json') },
       },
-      consuming: { argv: ['verdict', join(workDir, 'task-2-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
+      consuming: { argv: ['verdict', join(workDir, 'review-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
     })
   })
 
@@ -99,6 +98,8 @@ describe('ct-step next answers with the announcement under --output-format json'
   it('the default prose of the judge step still prints its four material lines', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'it is sent back once', path: 'uno.txt', line: 1 }]))
+    reviewFix()
 
     const r = ct('next')
 
@@ -106,12 +107,12 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(r.status).toBe(0)
     expect(r.stdout).toContain([
       'DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: Read, Grep, Glob, Write, Skill) with:',
-      `  - the review package: ${join(workDir, 'task-2-review.diff')}`,
-      `  - the task's brief: ${join(workDir, 'task-2-judge-brief.md')}`,
-      `  - the logs of the controls, ALREADY green, in case it wants them: ${join(workDir, 'task-2-controls-1.log')}`,
-      `  - that it write its verdict to: ${join(workDir, 'task-2-verdict.json')}`,
+      `  - the review package: ${join(workDir, 'review-review.diff')}`,
+      `  - the task's brief: ${join(workDir, 'review-judge-brief.md')}`,
+      `  - the logs of the controls, ALREADY green, in case it wants them: ${join(workDir, 'review-controls-2.log')}`,
+      `  - that it write its verdict to: ${join(workDir, 'review-verdict.json')}`,
       '',
-      `When it comes back:  ct-step verdict ${join(workDir, 'task-2-verdict.json')} --plan plan.md --issue 7`,
+      `When it comes back:  ct-step verdict ${join(workDir, 'review-verdict.json')} --plan plan.md --issue 7`,
     ].join('\n'))
   })
 
@@ -299,7 +300,7 @@ describe('ct-step next in a checkout whose directory name carries a space', () =
     const prose = ct('next')
     const announced = ct('next', '--output-format', 'json')
 
-    const verdict = join(realpathSync(repo), '.agent', 'run-7', 'task-2-verdict.json')
+    const verdict = join(realpathSync(repo), '.agent', 'run-7', 'review-verdict.json')
     expect(prose.status).toBe(0)
     expect(prose.stdout).toContain(`When it comes back:  ct-step verdict ${verdict} --plan plan.md --issue 7`)
     expect(announced.status).toBe(0)

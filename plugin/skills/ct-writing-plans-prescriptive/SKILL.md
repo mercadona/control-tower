@@ -181,30 +181,34 @@ words that are not verb forms. If the gate refuses a word the plan needs, say so
 
 ## Structure
 
-The 9 sections are fixed, in order and by name; one that does not apply keeps its heading
-with `N/A — <reason>`.
+The 9 sections are fixed, in order, with those names; one that does not apply keeps its
+heading, with `N/A — <reason>`.
 
-Tasks live under `## 7. Tasks` as `### Task N — <name>`, numbered 1, 2, 3… **One task = one
-commit.** Each carries `**Objective:**` (one sentence), `**Files:**` (exact paths,
-create/modify), its labelled blocks (at least one, or the exact line `No code — <reason>` for
-a prose-config or documentation task), `**TDD:**` (the failing test first: literal name
-and assertion, or `No TDD — <reason>`), `**Tests:**` (added or deliberately removed, by name)
-and `**Verification:**` (exact commands, already run, with output) — **fenced right after
-the marker, one per line, each a predicate**, for the reason above.
+Tasks live under `## 7. Tasks` as `### Task N — <name>`, numbered from 1, consecutively.
+**One task = one commit.** Each task carries: `**Objective:**` (one sentence), `**Files:**`
+(exact paths, with create/modify), its labelled blocks (at least one, or the exact line
+`No code — <reason>` for prose-config or documentation tasks), `**TDD:**` (the failing test
+first, with its literal name and assertion, or `No TDD — <reason>`), `**Tests:**` (added /
+deliberately removed, named one by one), and `**Verification:**` (exact commands, already run,
+and their output) — **the commands go in a fenced block right after the marker, one per line,
+each one a predicate**, for the reason above.
 
-**No control may pin the suite's total test count.** A `grep -c '52 passed'` is a proxy: when
-the judge demands one more assertion, every later task repeating it needs fixing, and the
-nailed total leaves no room for what `conventions/testing.md` demands, so a branch ships
-untested to keep a control green. Count the task's own tests by module name; `--check-plan`
-rejects the suite total.
+**No control may pin the number of tests in the whole suite.** A `grep -c '52 passed'` is a
+proxy, and it breaks the moment the judge demands one more assertion: the stale number then
+needs fixing in every later task that repeated it. Worse, it blocks what
+`conventions/testing.md` requires: with the total nailed shut, there is no room for the
+assertion that document demands, so a branch ships untested to keep a control green. Count the
+task's own tests instead, by module name; `--check-plan` rejects the suite total.
 
-Every name in the plan resolves: a value where a `TBD` would go, concrete handling instead of
-"add error handling", the decision instead of "similar to Task 3", and a task defining each
-symbol named. **Decisions are closed here; bodies are written there.**
+Every name in the plan resolves: a value where a `TBD` would go, the concrete handling instead
+of "add error handling", the decision spelled out instead of "similar to Task 3", and a task
+that defines each symbol the plan mentions. **Decisions are closed here; bodies are written
+there.**
 
 `## 5. Interfaces` is prose: `Consumes` names the interface the issue's "Dependencias" section
-declares (else its description), `Produces` what later slices rely on, one export and
-signature per line. The block creating the file lives in its task, which the brief carries.
+declares — or, failing that, its description — and `Produces` names what later slices rely on,
+one exported name and signature per line. The block that creates the file lives in its task,
+since that is what the task brief carries.
 
 ## Examples
 

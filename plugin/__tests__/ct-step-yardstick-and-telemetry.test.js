@@ -368,8 +368,11 @@ describe('the judge gets a brief of its own: the task, without the ct documents 
     ct('commit')
     return ct('next')
   }
-  const implementerBrief = () => join(repo, '.agent', 'run-7', 'task-2-brief.md')
-  const judgeBrief = () => join(repo, '.agent', 'run-7', 'task-2-judge-brief.md')
+  // The review's artefacts carry the `review` stem; task 2's own brief keeps its
+  // task's.
+  const taskBrief = () => join(repo, '.agent', 'run-7', 'task-2-brief.md')
+  const implementerBrief = () => join(repo, '.agent', 'run-7', 'review-brief.md')
+  const judgeBrief = () => join(repo, '.agent', 'run-7', 'review-judge-brief.md')
   const ctDocuments = () => PluginYardstick.FILES.map((name) => {
     const path = join(PLUGIN_ROOT_TEST, PluginYardstick.DIRECTORY, name)
     return { name, path, content: readFileSync(path, 'utf8') }
@@ -378,12 +381,12 @@ describe('the judge gets a brief of its own: the task, without the ct documents 
   it('`next` at the judge step writes the judge brief and names it, and the implementer brief is untouched', () => {
     taskOk('uno.txt')
     ct('next')
-    const implementerBefore = readFileSync(implementerBrief(), 'utf8')
+    const implementerBefore = readFileSync(taskBrief(), 'utf8')
     const r = toJudgeStep()
-    expect(r.stdout).toMatch(/the task's brief: .*task-2-judge-brief\.md/)
-    expect(r.stdout).not.toMatch(/the task's brief: .*task-2-brief\.md/)
+    expect(r.stdout).toMatch(/the task's brief: .*review-judge-brief\.md/)
+    expect(r.stdout).not.toMatch(/the task's brief: .*review-brief\.md/)
     expect(existsSync(judgeBrief())).toBe(true)
-    expect(readFileSync(implementerBrief(), 'utf8')).toBe(implementerBefore)
+    expect(readFileSync(taskBrief(), 'utf8')).toBe(implementerBefore)
   })
 
   it('the judge brief carries the task and none of the pasted ct documents', () => {

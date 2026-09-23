@@ -289,7 +289,8 @@ export function validatePlan(markdown, { readFile } = {}) {
     'global-verification-block', 'global-verification-predicate',
   ]
   for (const problem of extractTasks(markdown).problems) {
-    if (VERIFICATION_RULES.includes(problem.rule)) push('verification', problem.detail)
+    if (!VERIFICATION_RULES.includes(problem.rule)) continue
+    push('verification', problem.detail)
   }
 
   // F-jjponz-4, pass A — the blocks WITH a role. It checks where each one
