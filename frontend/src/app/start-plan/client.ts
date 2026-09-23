@@ -3,9 +3,8 @@ import { StartPlanOutcome, StartPlanRefusal, StartPlanResult, StartPlanSubmissio
 const PATH = '/start-plan'
 const ACCEPTED = 202
 
-const bodyFor = ({ id, userComment, repo, path }: StartPlanSubmission): Record<string, string> => ({
-  ...(id !== null ? { id } : {}),
-  ...(userComment !== null ? { user_comment: userComment } : {}),
+const bodyFor = ({ id, repo, path }: StartPlanSubmission): Record<string, string> => ({
+  id,
   repo,
   path,
 })

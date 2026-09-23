@@ -193,7 +193,7 @@ class MachineRuntimeFixture {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_comment: 'Plan the runtime fixture',
+        id: 'https://github.com/acme/widget/issues/1',
         repo: MachineRuntimeFixture.REPOSITORY,
         path: this.checkout,
       }),

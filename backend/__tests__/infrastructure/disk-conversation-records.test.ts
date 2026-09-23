@@ -14,6 +14,8 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 import { SessionProcessOwnership } from '../../src/domain/value-objects/session-process-ownership.ts'
+import { UserStory } from '../../src/domain/value-objects/user-story.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 
 const STATE_ROOT = '/state'
 const REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
@@ -21,11 +23,15 @@ const CHECKOUT_ROOT = new CheckoutRoot('/real/repo')
 const CONVERSATION_ID = new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
 const CONVERSATION = new CoordinatingConversation({ id: CONVERSATION_ID, repository: REPOSITORY, root: CHECKOUT_ROOT })
 
-const PROMPT = PhasePrompt.brainstorming({ story: null, comment: null, repository: REPOSITORY, root: CHECKOUT_ROOT })
+const PROMPT = PhasePrompt.brainstorming({
+  story: new UserStory({ key: new UserStoryKey('ABC-1'), summary: 'Plan the work', description: '' }),
+  repository: REPOSITORY, root: CHECKOUT_ROOT,
+})
 const PROMPT_TEXT = [
   'Invoke the skill control-tower-loop:ct-brainstorming.',
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
   PhasePrompt.FREEZE_IS_NOT_YOURS,
+  'The ticket ABC-1 says: "Plan the work".',
   PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
   PhasePrompt.RECOVERY_CAPABILITIES,

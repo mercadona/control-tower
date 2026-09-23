@@ -1,4 +1,3 @@
-import type { PlanComment } from '../value-objects/plan-comment.ts'
 import type { PlanIssue } from '../value-objects/plan-issue.ts'
 import type { PlanIssueStatusValue } from '../value-objects/plan-issue-status.ts'
 import type { RepositoryName } from '../value-objects/repository-name.ts'
@@ -7,13 +6,12 @@ import type { UserStoryKey } from '../value-objects/user-story-key.ts'
 import type { UserStoryUrl } from '../value-objects/user-story-url.ts'
 
 export class PlanIssues {
-  async open({ story, comment, repository }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  async open({ story, repository }: {
+    story: UserStory,
     repository: RepositoryName,
   }): Promise<PlanIssue> {
     throw new Error(
-      `${this.constructor.name} must implement open({ story, comment, repository }), asked for ${story?.key} in ${repository}`
+      `${this.constructor.name} must implement open({ story, repository }), asked for ${story.key} in ${repository}`
     )
   }
 

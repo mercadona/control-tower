@@ -15,7 +15,6 @@ import {
   typePath,
   typeRepository,
   typeTicket,
-  typeUserComment,
 } from './helpers'
 
 vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
@@ -278,7 +277,7 @@ describe('Home · opens the brainstorming', () => {
     await backend.answerWith(CoordinatingSessionMother.opened())
   })
 
-  it('should keep the start button disabled when neither a ticket nor a comment is given', async () => {
+  it('should keep the start button disabled without a ticket', async () => {
     backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeRepository(user, StartPlanMother.REPO)
@@ -287,56 +286,4 @@ describe('Home · opens the brainstorming', () => {
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
   })
 
-  it('should enable the start button with only a well formed comment and no ticket', async () => {
-    backendAnswering(CoordinatingSessionMother.opened())
-    const { user } = openHome()
-    await typeRepository(user, StartPlanMother.REPO)
-    await typePath(user, StartPlanMother.PATH)
-
-    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
-    await typeUserComment(user, StartPlanMother.COMMENT)
-    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
-  })
-
-  it('should send a plan asked for with only a comment', async () => {
-    const fetching = backendAnswering(CoordinatingSessionMother.opened())
-    const { user } = openHome()
-    await typeUserComment(user, StartPlanMother.COMMENT)
-    await typeRepository(user, StartPlanMother.REPO)
-    await typePath(user, StartPlanMother.PATH)
-
-    await pressStart(user)
-
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-    const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
-    expect(init.body).toBe(StartPlanMother.REQUEST_BODY_COMMENT_ONLY)
-  })
-
-  it('should send a plan asked for with both a ticket and a comment', async () => {
-    const fetching = backendAnswering(CoordinatingSessionMother.opened())
-    const { user } = openHome()
-    await typeTicket(user, StartPlanMother.TICKET)
-    await typeUserComment(user, StartPlanMother.COMMENT)
-    await typeRepository(user, StartPlanMother.REPO)
-    await typePath(user, StartPlanMother.PATH)
-
-    await pressStart(user)
-
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-    const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
-    expect(init.body).toBe(StartPlanMother.REQUEST_BODY_WITH_COMMENT)
-  })
-
-  it('should show a plan with no user story, keeping its null id through the summary', async () => {
-    const { user } = openRestored({
-      phase: 'planning',
-      request: { id: null, userComment: StartPlanMother.COMMENT, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
-      plan: { id: null },
-    })
-
-    await screen.findByRole('status')
-    await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
-    expect(screen.queryByText('Ticket')).toBeNull()
-    expect(screen.getByText('Qué quieres planificar').parentElement).toHaveTextContent(StartPlanMother.COMMENT)
-  })
 })

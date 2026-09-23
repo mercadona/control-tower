@@ -16,7 +16,6 @@ class Deferred<T> {
 const response = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
 const submission = () => ({
   id: StartPlanMother.TICKET,
-  userComment: null,
   repo: StartPlanMother.REPO,
   path: StartPlanMother.PATH,
 })

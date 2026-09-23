@@ -231,11 +231,11 @@ class ALifeOfTheBackend {
 }
 
 class ADispatchedPlan {
-  static readonly COMMENT = 'Plan the loose fixture'
+  static readonly TICKET = 'https://github.com/acme/widget/issues/1'
 
   static async by(port: number, runtime: ActualHeadlessRuntime): Promise<RecordedLaunch> {
     const answered = await Entrypoint.startPlan(port, JSON.stringify({
-      user_comment: ADispatchedPlan.COMMENT,
+      id: ADispatchedPlan.TICKET,
       repo: ActualHeadlessRuntime.REPOSITORY,
       path: runtime.root,
     }))

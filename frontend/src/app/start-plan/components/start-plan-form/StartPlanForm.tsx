@@ -4,20 +4,18 @@ import { LocalPath } from 'app/start-plan/LocalPath'
 import { RepositoryName } from 'app/start-plan/RepositoryName'
 import { StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 import { TicketKey } from 'app/start-plan/TicketKey'
-import { UserComment } from 'app/start-plan/UserComment'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { FormField } from 'system-ui/form-field'
 import { Input } from 'system-ui/input'
 import { Loading } from 'system-ui/loading'
-import { TextArea } from 'system-ui/text-area'
 import './StartPlanForm.css'
 
 type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>
 
 const MUTATION_BLOCKED_HELP = 'No puedes arrancar otro plan hasta confirmar el estado del backend.'
 const ALREADY_LIVE_HELP = 'Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.'
-const INCOMPLETE_HELP = 'Da un ticket o una descripción válida, además del repositorio y su ruta local.'
+const INCOMPLETE_HELP = 'Da un ticket válido, además del repositorio y su ruta local.'
 
 type StartPlanFormProps = {
   onOpened: (opened: OpenedCoordinatingSession, request: StartPlanRequest) => void
@@ -35,7 +33,6 @@ const StartPlanForm = ({
   isCoordinatingSessionLive = false, openSession, request,
 }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
-  const [userComment, setUserComment] = useState('')
   const [repository, setRepository] = useState('')
   const [path, setPath] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -44,15 +41,12 @@ const StartPlanForm = ({
   const [touched, setTouched] = useState({ ticket: false, repository: false, path: false })
 
   const hasWellFormedTicket = TicketKey.isWellFormed(ticketKey)
-  const ticketBlocksStart = ticketKey !== '' && !hasWellFormedTicket
-  const hasSomethingToPlan = hasWellFormedTicket || UserComment.isWellFormed(userComment)
-  const ticketError = touched.ticket && ticketKey !== '' && !hasWellFormedTicket
+  const ticketError = touched.ticket && !hasWellFormedTicket
   const repositoryError = touched.repository && !RepositoryName.isWellFormed(repository)
   const pathError = touched.path && !LocalPath.isWellFormed(path)
 
   const canStart =
-    !ticketBlocksStart &&
-    hasSomethingToPlan &&
+    hasWellFormedTicket &&
     RepositoryName.isWellFormed(repository) &&
     LocalPath.isWellFormed(path) &&
     !isSending &&
@@ -72,12 +66,11 @@ const StartPlanForm = ({
     setIsSending(true)
     setRefusal(null)
     const submission: StartPlanSubmission = {
-      id: hasWellFormedTicket ? ticketKey : null,
-      userComment: UserComment.isWellFormed(userComment) ? UserComment.normalize(userComment) : null,
+      id: ticketKey,
       repo: repository,
       path: LocalPath.normalize(path),
     }
-    const submitted: StartPlanRequest = { id: submission.id, userComment: submission.userComment, repo: submission.repo, path: submission.path }
+    const submitted: StartPlanRequest = { id: submission.id, repo: submission.repo, path: submission.path }
     let outcome: OpenOutcome
     try {
       outcome = await openSession?.(submission) ?? { kind: 'backend-unreachable' }
@@ -97,7 +90,6 @@ const StartPlanForm = ({
 
   if (isLocked) {
     const shownTicket = request?.id ?? (ticketKey !== '' ? ticketKey : null)
-    const shownComment = request?.userComment ?? (userComment.trim() !== '' ? userComment : null)
 
     return (
       <dl className="start-plan-form__summary">
@@ -105,12 +97,6 @@ const StartPlanForm = ({
           <div>
             <dt className="lg-caption1-regular">Ticket</dt>
             <dd>{shownTicket}</dd>
-          </div>
-        )}
-        {shownComment !== null && (
-          <div>
-            <dt className="lg-caption1-regular">Qué quieres planificar</dt>
-            <dd>{shownComment}</dd>
           </div>
         )}
         <div>
@@ -129,6 +115,7 @@ const StartPlanForm = ({
     <form className="start-plan-form" onSubmit={openBrainstorming}>
       <FormField
         label="Ticket"
+        required
         message={
           ticketError
             ? `Usa una clave como ${TicketKey.EXAMPLE} o una URL como ${TicketKey.URL_EXAMPLE}`
@@ -137,6 +124,7 @@ const StartPlanForm = ({
         error={ticketError}
       >
         <Input
+          aria-label="Ticket"
           placeholder={TicketKey.EXAMPLE}
           value={ticketKey}
           disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
@@ -145,18 +133,6 @@ const StartPlanForm = ({
           onChange={(event) => {
             onInteraction()
             setTicketKey(event.target.value)
-          }}
-        />
-      </FormField>
-      <FormField label="Qué quieres planificar" message="Da un ticket, una descripción o ambos" error={false}>
-        <TextArea
-          placeholder="Qué hay que planificar"
-          value={userComment}
-          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
-          autoComplete="off"
-          onChange={(event) => {
-            onInteraction()
-            setUserComment(event.target.value)
           }}
         />
       </FormField>

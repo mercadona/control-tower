@@ -14,7 +14,6 @@ import { ConversationId } from '../../src/domain/value-objects/conversation-id.t
 import type { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
-import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
@@ -161,7 +160,6 @@ class Flow {
   static ROOT = new CheckoutRoot('/repo')
   static CANONICAL_ROOT = new CheckoutRoot('/real/repo')
   static STORY = new UserStoryKey('MO_SHOP-42')
-  static COMMENT = new PlanComment('use dark mode on the panel')
 
   userStories: UserStoriesDouble
   workspace: WorkspaceDouble
@@ -189,9 +187,9 @@ class Flow {
     this.checkouts.steps = this.steps
   }
 
-  async run(story: UserStoryKey | UserStoryUrl | null = Flow.STORY, comment: PlanComment | null = null) {
+  async run(story: UserStoryKey | UserStoryUrl = Flow.STORY) {
     return new OpenCoordinatingSession(this).execute(new OpenCoordinatingSessionParams({
-      story, comment, repository: Flow.REPOSITORY, root: Flow.ROOT,
+      story, repository: Flow.REPOSITORY, root: Flow.ROOT,
     }))
   }
 }
@@ -215,12 +213,12 @@ describe('OpenCoordinatingSession', () => {
     expect(flow.workspace.prepared).toBe(0)
   })
 
-  it('hydrates the phase prompt with the story summary and description and with the free text', async () => {
+  it('hydrates the phase prompt with the story summary and description', async () => {
     const flow = new Flow({
       userStories: UserStoriesDouble.reading('rename the button', 'as a user I want a dark mode'),
     })
 
-    await flow.run(Flow.STORY, Flow.COMMENT)
+    await flow.run(Flow.STORY)
 
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
@@ -228,25 +226,6 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
-      Flow.COMMENT.text,
-      PhasePrompt.CHANGE_TO_A_SLICE,
-      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
-      PhasePrompt.RECOVERY_CAPABILITIES,
-    ].join('\n'))
-  })
-
-  it('hydrates the phase prompt from free text alone without asking the user stories adapter', async () => {
-    const flow = new Flow()
-
-    await flow.run(null, Flow.COMMENT)
-
-    expect(flow.userStories.asked).toEqual([])
-    const [recorded] = flow.records.prepared
-    expect(recorded.prompt.text).toBe([
-      'Invoke the skill control-tower-loop:ct-brainstorming.',
-      `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
-      PhasePrompt.FREEZE_IS_NOT_YOURS,
-      Flow.COMMENT.text,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
@@ -290,7 +269,7 @@ describe('OpenCoordinatingSession', () => {
   it('tells the coordinating session that the freeze is the cabin button and not a line it writes', async () => {
     const flow = new Flow()
 
-    await flow.run(Flow.STORY, Flow.COMMENT)
+    await flow.run(Flow.STORY)
 
     const [recorded] = flow.records.prepared
     const lines = recorded.prompt.text.split('\n')
