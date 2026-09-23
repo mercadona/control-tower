@@ -61,6 +61,13 @@ class HeadlessPlanMother {
     return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
   }
 
+  static slicesInFlightPlanning(...issues: number[]): Answer {
+    return {
+      status: 200,
+      body: JSON.stringify({ plans: issues.map((issue) => ({ ...HeadlessPlanMother.slice(issue), phase: 'planning' })) }),
+    }
+  }
+
   static uncertainAmong(uncertain: number, action: RecoveryAction, ...others: number[]): Answer {
     const plans = [uncertain, ...others].map((issue) => (issue === uncertain
       ? {

@@ -4,6 +4,7 @@ import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
+import { PlanningProgressMother } from '__scenarios__/PlanningProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -30,10 +31,16 @@ const backendFallsOver = () => {
 }
 
 const IMPLEMENT_PROGRESS = /^\/implement-progress\/(\d+)/
+const PLANNING_PROGRESS = /^\/planning-progress\/(\d+)/
 
-const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inReview() }: {
+const backendWith = ({
+  activePlans,
+  progress = () => ImplementProgressMother.inReview(),
+  planningProgress = () => PlanningProgressMother.running(),
+}: {
   activePlans: () => Answer
   progress?: (issue: number) => Answer
+  planningProgress?: (issue: number) => Answer
 }) => {
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -46,6 +53,8 @@ const backendWith = ({ activePlans, progress = () => ImplementProgressMother.inR
     if (url === '/epic-groom') return responseFor(NO_EPIC_GROOM)
     const asProgress = IMPLEMENT_PROGRESS.exec(url)
     if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
+    const asPlanning = PLANNING_PROGRESS.exec(url)
+    if (asPlanning !== null) return responseFor(planningProgress(Number(asPlanning[1])))
     if (url.startsWith('/implement-history/')) return responseFor(ImplementProgressMother.notRead())
     if (url === '/recover-plan' && init?.method === 'POST') return new Response('{"agent":"conversation-of-8"}', { status: 202 })
     if (url === '/cleanup-plan' && init?.method === 'POST') return new Response('{}', { status: 200 })
@@ -107,6 +116,30 @@ describe('Home · the slices in flight', () => {
     expect(screen.queryAllByLabelText(MESSAGE_FIELD)).toEqual([])
     expect(screen.queryAllByRole('button', { name: SEND })).toEqual([])
     expect(fetching.mock.calls.some(([input]) => String(input).includes('/message'))).toBe(false)
+  })
+
+  it('two slices in planning each show planning activity and ask /planning-progress for their own issue number', async () => {
+    const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlightPlanning(7, 8) })
+    openHome()
+
+    const first = await panelOf(7)
+    expect(await first.findByText('El agente está trabajando')).toBeInTheDocument()
+    const second = await panelOf(8)
+    expect(await second.findByText('El agente está trabajando')).toBeInTheDocument()
+
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/7'))).toBe(true))
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/8'))).toBe(true))
+    expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/'))).toBe(false)
+  })
+
+  it('a slice in implementing still polls implement-progress, not planning-progress', async () => {
+    const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7) })
+    openHome()
+
+    await screen.findByRole('heading', { name: 'Slice #7', level: 2 })
+
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/7'))).toBe(true))
+    expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/'))).toBe(false)
   })
 
   it('an uncertain slice among several carries its recovery inside its own panel and leaves the others alone', async () => {

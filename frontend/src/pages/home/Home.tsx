@@ -571,6 +571,7 @@ const Home = () => {
                   issue={slice.plan.issue.number}
                   root={slice.plan.root ?? slice.request.path}
                   repo={slice.plan.repo}
+                  phase={slice.phase}
                   recovery={sliceRecoveryOf(slice)}
                 />
               ))}
@@ -665,6 +666,7 @@ const Home = () => {
                   issue={workflow.plan.issue.number}
                   root={workflow.plan.root ?? workflow.request.path}
                   repo={workflow.plan.repo}
+                  phase="implementing"
                 />
               )}
             </WorkflowStep>
