@@ -32,6 +32,8 @@ import type {
 } from '../application/queries/read-slice-escalation.ts'
 import { SliceHeldChangeRoute, SliceMessageRoute } from './slice-message-route.ts'
 import type { SliceChangeAsked, SliceChangeHeld } from './slice-message-route.ts'
+import { AnotherRoundRoute } from './another-round-route.ts'
+import type { AnotherRoundAsked } from './another-round-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { RecoverPlan } from '../application/actions/recover-plan.ts'
@@ -156,6 +158,7 @@ export type ApiCollaborators = {
   promoteEpic?: PromoteEpic | null,
   sliceMessage?: SliceChangeAsked | null,
   sliceHeldChange?: SliceChangeHeld | null,
+  anotherRound?: AnotherRoundAsked | null,
   sliceEscalation?: SliceEscalationReader | null,
   stderr?: Stderr | null,
   frontendRoot: string,
@@ -227,6 +230,7 @@ export class ApiServer {
   readonly promoteEpic: PromoteEpic | null | undefined
   readonly sliceMessage: SliceChangeAsked | null | undefined
   readonly sliceHeldChange: SliceChangeHeld | null | undefined
+  readonly anotherRound: AnotherRoundAsked | null | undefined
   readonly sliceEscalation: SliceEscalationReader | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
@@ -239,7 +243,7 @@ export class ApiServer {
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
-    sliceMessage, sliceHeldChange, sliceEscalation, stderr, frontendRoot,
+    sliceMessage, sliceHeldChange, anotherRound, sliceEscalation, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -277,6 +281,7 @@ export class ApiServer {
     this.promoteEpic = promoteEpic
     this.sliceMessage = sliceMessage
     this.sliceHeldChange = sliceHeldChange
+    this.anotherRound = anotherRound
     this.sliceEscalation = sliceEscalation
     this.stderr = stderr
     this.frontendRoot = frontendRoot
@@ -338,6 +343,14 @@ export class ApiServer {
       SliceHeldChangeRoute.handledBy(this.sliceHeldChange!)
     )
     app.all(SliceHeldChangeRoute.PATH, SliceHeldChangeRoute.refuseOtherMethods)
+    app.post(
+      AnotherRoundRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      AnotherRoundRoute.handledBy(this.anotherRound!)
+    )
+    app.all(AnotherRoundRoute.PATH, AnotherRoundRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

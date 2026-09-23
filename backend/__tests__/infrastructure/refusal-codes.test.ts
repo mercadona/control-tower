@@ -21,6 +21,7 @@ import { SliceMessageOutcome, SliceMessageCollapse } from '../../src/infrastruct
 import {
   EscalationRequestOutcome, EscalationCollapse,
 } from '../../src/infrastructure/slice-escalation-route.ts'
+import { AnotherRoundOutcome, AnotherRoundCollapse } from '../../src/infrastructure/another-round-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -47,6 +48,7 @@ class RequestVocabularies {
       ...Object.values(CleanupPlanOutcome),
       ...Object.values(EscalationRequestOutcome),
       ...Object.values(SliceMessageOutcome),
+      ...Object.values(AnotherRoundOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -96,6 +98,7 @@ class EveryCodeTheApiEmits {
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
       ...EscalationCollapse.declaredCodes(),
+      ...AnotherRoundCollapse.declaredCodes(),
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...PlanEvents.declaredCodes(),
     ]

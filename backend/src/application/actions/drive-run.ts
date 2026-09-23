@@ -1,12 +1,13 @@
 import {
   PlanAgentNotResumed, PlanProgressNotRead, RunNotAdvanced,
 } from '../../domain/exceptions.ts'
+import type { ClosureAnnouncements } from '../../domain/ports/closure-announcements.ts'
 import type { PlanCalls } from '../../domain/ports/plan-calls.ts'
 import type { PlanPublication } from '../../domain/ports/plan-publication.ts'
 import type { RunDelivery } from '../../domain/ports/run-delivery.ts'
 import { RunEstablishment, type RunMachine } from '../../domain/ports/run-machine.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../../domain/value-objects/plan-call.ts'
-import type { RunInstruction } from '../../domain/value-objects/run-instruction.ts'
+import type { RunClosure, RunInstruction } from '../../domain/value-objects/run-instruction.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import { EscalationState } from '../../domain/value-objects/slice-escalation.ts'
@@ -26,6 +27,9 @@ export class DriveRunParams {
 }
 
 export class DriveRun {
+  static readonly BLOCKED_JUDGE = 'blocked-judge'
+  static readonly VETOED = 'failed'
+
   readonly calls: PlanCalls
   readonly publication: PlanPublication
   readonly machine: RunMachine
@@ -33,9 +37,14 @@ export class DriveRun {
   readonly step: ExecuteRunInstruction
   readonly messages: DeliverHeldMessages
   readonly escalations: ReadSliceEscalation
+  readonly announcements: ClosureAnnouncements | null
+  readonly stderr: (line: string) => void
   readonly driving: Map<string, Promise<void>>
 
-  constructor({ calls, publication, machine, delivery, step, messages, escalations }: {
+  constructor({
+    calls, publication, machine, delivery, step, messages, escalations,
+    announcements = null, stderr = () => undefined,
+  }: {
     calls: PlanCalls,
     publication: PlanPublication,
     machine: RunMachine,
@@ -43,6 +52,8 @@ export class DriveRun {
     step: ExecuteRunInstruction,
     messages: DeliverHeldMessages,
     escalations: ReadSliceEscalation,
+    announcements?: ClosureAnnouncements | null,
+    stderr?: (line: string) => void,
   }) {
     this.calls = calls
     this.publication = publication
@@ -51,6 +62,8 @@ export class DriveRun {
     this.step = step
     this.messages = messages
     this.escalations = escalations
+    this.announcements = announcements
+    this.stderr = stderr
     this.driving = new Map()
   }
 
@@ -93,9 +106,37 @@ export class DriveRun {
           await this.delivery.deliver(params.watch)
           return
         case 'refused':
+          await this.#announce(params.watch, instruction.work)
           throw new RunNotAdvanced(instruction.work.detail)
       }
     }
+  }
+
+  async #announce(watch: PlanWatch, refused: { closure: RunClosure | null }): Promise<void> {
+    const closure = refused.closure
+    if (this.announcements === null || closure === null) return
+    if (closure.state !== DriveRun.BLOCKED_JUDGE || closure.outcome !== DriveRun.VETOED) return
+    await this.#carriesOnWhetherOrNotItArrives(watch, this.announcements.announce({
+      repository: watch.repository,
+      issue: watch.issue.number,
+      task: closure.task,
+      findings: closure.findings,
+      verdict: closure.verdict,
+    }))
+  }
+
+  async #carriesOnWhetherOrNotItArrives(watch: PlanWatch, announcing: Promise<boolean>): Promise<void> {
+    try {
+      if (await announcing) return
+      this.stderr(DriveRun.#unheard(watch, 'no coordinating session was live to be told'))
+    } catch (cause) {
+      this.stderr(DriveRun.#unheard(watch, cause instanceof Error ? cause.message : String(cause)))
+    }
+  }
+
+  static #unheard(watch: PlanWatch, why: string): string {
+    return `drive run: ${watch.repository.text}#${watch.issue.number} closed at ${DriveRun.BLOCKED_JUDGE} `
+      + `and the closure was not announced: ${why}\n`
   }
 
   async #waiting(watch: PlanWatch): Promise<boolean> {

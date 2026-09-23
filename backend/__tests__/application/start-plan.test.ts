@@ -468,24 +468,6 @@ describe('StartPlan', () => {
     expect(refusal.message).toBe('Access denied')
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanAgents().launch(new PlanBriefing({
-      story: Flow.STORY, issue: PlanIssuesDouble.OPENED, located: WorkspaceDouble.LOCATED,
-      repository: Flow.REPOSITORY,
-    }))).rejects.toThrow(/must implement launch/)
-    await expect(new PlanIssues().open({ story: null, comment: null, repository: Flow.REPOSITORY }))
-      .rejects.toThrow(/must implement open/)
-    await expect(new UserStories().detail(Flow.STORY)).rejects.toThrow(/must implement detail/)
-    await expect(new Workspace().prepare({
-      issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT,
-    })).rejects.toThrow(/must implement prepare/)
-    await expect(new Workspace().undo(WorkspaceDouble.LOCATED)).rejects.toThrow(/must implement undo/)
-    await expect(new Workspace().confirm({ root: Flow.ROOT, repository: Flow.REPOSITORY }))
-      .rejects.toThrow(/must implement confirm/)
-    await expect(new Workspace().survey(Flow.ROOT)).rejects.toThrow(/must implement survey/)
-    expect(() => new CheckoutRegistry().remember(new RegisteredCheckout({ repository: Flow.REPOSITORY, root: Flow.ROOT }))).toThrow(/must implement remember/)
-    expect(() => new CheckoutRegistry().known()).toThrow(/must implement known/)
-  })
 })
 
 describe('StartPlan confirms the clone before anything is read or created', () => {

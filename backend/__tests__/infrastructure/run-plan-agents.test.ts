@@ -8,6 +8,7 @@ import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import { StepAnnouncement } from '../../../plugin/scripts/step-announcement.js'
 import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import {
+  AnotherRoundNotGranted,
   PlanAgentNeverLaunched,
   PlanAgentNotLaunched,
   PlanAgentNotNamed,
@@ -260,6 +261,11 @@ class MeasurementsDouble extends ClaudeRunMeasurements {
 class MachineDouble extends CtRunMachine {
   inspection = new RunInspection({ kind: 'absent' })
   establishmentValue: RunEstablishmentValue = RunEstablishment.ABSENT
+  anotherRoundAnswer: RunInstruction = new RunInstruction({
+    kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+  })
+
+  readonly anotherRoundAsked: Array<{ watch: PlanWatch, instruction: string }> = []
 
   constructor(journal: RunJournal) {
     super({
@@ -279,6 +285,11 @@ class MachineDouble extends CtRunMachine {
 
   override async establishment(): Promise<RunEstablishmentValue> {
     return this.establishmentValue
+  }
+
+  override async anotherRound(watch: PlanWatch, instruction: string): Promise<RunInstruction> {
+    this.anotherRoundAsked.push({ watch, instruction })
+    return this.anotherRoundAnswer
   }
 }
 
@@ -1541,5 +1552,100 @@ describe('RunPlanAgents', () => {
       issue: AgentMother.ISSUE.number,
       ticket: '66666666-6666-4666-8666-666666666666',
     }])
+  })
+
+  it('a granted round lifts the run and puts a driver back on it', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+    })
+    tested.machine.anotherRoundAnswer = new RunInstruction({
+      kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again, this time awaiting the flush.',
+    }
+
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+
+    await tested.agents.anotherRound(asked)
+
+    expect(tested.machine.anotherRoundAsked).toEqual([{ watch: AgentMother.WATCH, instruction: asked.instruction }])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(true)
+  })
+
+  it('a run nobody closed at the judge is refused before anything is journaled', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'active',
+      instruction: new RunInstruction({ kind: 'command', ticket: '44444444-4444-4444-8444-444444444444' }),
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again.',
+    }
+
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
+
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is active rather than blocked-judge (no closure)`,
+    )
+    expect(tested.machine.anotherRoundAsked).toEqual([])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+  })
+
+  it('an uncertain inspection with no closure is refused and journals nothing', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'the established run has unexplained plugin activity before its first command',
+      closure: null,
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again.',
+    }
+
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
+
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is uncertain rather than blocked-judge (no closure)`,
+    )
+    expect(tested.machine.anotherRoundAsked).toEqual([])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+  })
+
+  it('a reopen the plugin refused is never reported as a granted round', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+    })
+    const detail = 'ct-step did not print an executable consuming verb'
+    tested.machine.anotherRoundAnswer = new RunInstruction({ kind: 'refused', detail, closure: null })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again.',
+    }
+
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
+
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(detail)
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
   })
 })

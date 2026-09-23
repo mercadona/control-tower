@@ -1,8 +1,8 @@
-import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
 import { afterEach, describe, expect, it } from 'vitest'
+import { RunningServers } from '../servers.ts'
 import { CleanupPlan, type CleanupPlanParams } from '../../src/application/actions/cleanup-plan.ts'
 import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
@@ -39,7 +39,6 @@ class RecoveryProjectionSpy {
 }
 
 class RunningApi {
-  static readonly #servers: Server[] = []
 
   static async start(action: CleanupPlan, projection: RecoveryProjectionSpy): Promise<number> {
     const app = express()
@@ -50,14 +49,11 @@ class RunningApi {
       JsonBody.reader(),
       CleanupPlanRoute.handledBy(action, projection, new WorkInFlight()),
     )
-    const server = createServer(app)
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    RunningApi.#servers.push(server)
-    return (server.address() as AddressInfo).port
+    return RunningServers.listening(app)
   }
 
   static async stop(): Promise<void> {
-    await Promise.all(RunningApi.#servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))))
+    await RunningServers.stopAll()
   }
 }
 

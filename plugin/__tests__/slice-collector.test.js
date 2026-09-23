@@ -74,6 +74,8 @@ class CollectionCase {
   static PR_LIST = 'pr list --repo o/r --head feat/7 --state all --json number,state,headRefOid --limit 10'
   static STATUS = '-C /checkout/.worktrees/7 status --porcelain --untracked-files=all'
   static TIP = '-C /checkout rev-parse --verify --quiet refs/heads/feat/7'
+  static FETCH_MERGED_HEAD = '-C /checkout fetch --quiet origin refs/pull/71/head'
+  static HEAD_CONTAINS_TIP = `-C /checkout merge-base --is-ancestor ${GitHubTranscript.ANOTHER_HEAD} ${GitHubTranscript.MERGED_HEAD}`
   static REMOVE_WORKTREE = '-C /checkout worktree remove --force /checkout/.worktrees/7'
   static DELETE_BRANCH = '-C /checkout branch -D feat/7'
   static CLOSE_WORKSPACE = 'close-workspace --workspace workspace:3'
@@ -90,6 +92,14 @@ class CollectionCase {
       cmux: { [CollectionCase.CLOSE_WORKSPACE]: RunnerAnswer.ok('') },
       workspace: { [SliceOnDisk.WORKTREE]: { consultado: true, ref: 'workspace:3' } },
     })
+  }
+
+  static aMergedSliceThatSomebodyElseMovedBeforeMerging() {
+    const conversation = CollectionCase.aMergedSliceThatIsSafeToCollect()
+    conversation.git.answers[CollectionCase.TIP] = RunnerAnswer.ok(`${GitHubTranscript.ANOTHER_HEAD}\n`)
+    conversation.git.answers[CollectionCase.FETCH_MERGED_HEAD] = RunnerAnswer.ok('')
+    conversation.git.answers[CollectionCase.HEAD_CONTAINS_TIP] = RunnerAnswer.ok('')
+    return conversation
   }
 
   static collectedFrom(conversation, artifacts = SliceOnDisk.worktreeAndBranch()) {
@@ -196,13 +206,40 @@ describe('what the policy refuses to collect is never touched', () => {
     expect(conversation.spoken).not.toContain('find-workspace /checkout/.worktrees/7')
   })
 
-  it('a_local_tip_that_is_not_the_commit_the_pull_request_merged_is_kept', () => {
-    const conversation = CollectionCase.aMergedSliceThatIsSafeToCollect()
-    conversation.git.answers[CollectionCase.TIP] = RunnerAnswer.ok(`${GitHubTranscript.ANOTHER_HEAD}\n`)
+  it('a_local_tip_the_merged_head_does_not_contain_is_kept', () => {
+    const conversation = CollectionCase.aMergedSliceThatSomebodyElseMovedBeforeMerging()
+    conversation.git.answers[CollectionCase.HEAD_CONTAINS_TIP] = RunnerAnswer.failedOnBothChannels(1)
     const report = CollectionCase.collectedFrom(conversation)
     expect(report.outcome).toBe(CollectionOutcome.KEPT_TIP_NOT_MERGED)
     expect(report.delivery.headRefOid).toBe(GitHubTranscript.MERGED_HEAD)
     expect(report.done).toEqual([])
+  })
+
+  it('a_local_tip_the_merged_head_contains_is_collected_because_everything_local_landed', () => {
+    const conversation = CollectionCase.aMergedSliceThatSomebodyElseMovedBeforeMerging()
+    const report = CollectionCase.collectedFrom(conversation)
+    expect(report.outcome).toBe(CollectionOutcome.COLLECTED)
+    expect(conversation.spoken.slice(0, 5)).toEqual([
+      `gh ${CollectionCase.PR_LIST}`,
+      `git ${CollectionCase.STATUS}`,
+      `git ${CollectionCase.TIP}`,
+      `git ${CollectionCase.FETCH_MERGED_HEAD}`,
+      `git ${CollectionCase.HEAD_CONTAINS_TIP}`,
+    ])
+  })
+
+  it('a_local_tip_that_is_the_merged_head_asks_git_nothing_about_ancestry', () => {
+    const conversation = CollectionCase.aMergedSliceThatIsSafeToCollect()
+    CollectionCase.collectedFrom(conversation)
+    expect(conversation.spoken).not.toContain(`git ${CollectionCase.FETCH_MERGED_HEAD}`)
+  })
+
+  it('a_merged_head_that_could_not_be_fetched_is_a_read_that_failed_and_not_a_tip_to_keep', () => {
+    const conversation = CollectionCase.aMergedSliceThatSomebodyElseMovedBeforeMerging()
+    conversation.git.answers[CollectionCase.FETCH_MERGED_HEAD] = RunnerAnswer.failed(128, 'fatal: could not read from remote repository\n')
+    const report = CollectionCase.collectedFrom(conversation)
+    expect(report.outcome).toBe(CollectionOutcome.NOT_READ)
+    expect(report.read).toBe(CollectionRead.MERGED_HEAD)
   })
 
   it('a_disk_with_neither_worktree_nor_branch_has_nothing_left_and_runs_no_command', () => {

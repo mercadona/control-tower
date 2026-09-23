@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from '../../src/infrastructure/coordinating-sessions.ts'
 import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
@@ -111,26 +111,20 @@ class Hook {
 }
 
 class RunningApi {
-  static readonly #started: ApiServer[] = []
   static readonly PATH = SessionHooksRoute.PATH
-  static readonly NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
 
   static async listening(held: CoordinatingSessions): Promise<number> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      frontendRoot: RunningApi.NO_FRONTEND,
+      frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
       coordinatingSessions: held,
     })
-    const port = await server.start()
-    RunningApi.#started.push(server)
-
-    return port
+    return RunningServers.started(server)
   }
 
   static async stopAll(): Promise<void> {
-    const running = RunningApi.#started.splice(0)
-    await Promise.all(running.map((server) => server.stop()))
+    await RunningServers.stopAll()
   }
 
   static async post(held: CoordinatingSessions, body: string): Promise<Response> {

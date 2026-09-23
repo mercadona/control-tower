@@ -531,6 +531,14 @@ export class CtRunMachine extends RunMachine {
     return instruction.work satisfies never
   }
 
+  async anotherRound(watch: PlanWatch, instruction: string): Promise<RunInstruction> {
+    const state = await this.#state(watch)
+    if (state.manifest === null) throw new RunNotUnderstood('another round has no run manifest')
+    if (state.commands.length === 0) throw new RunNotUnderstood('another round has no command to grant from')
+    const last = state.commands[state.commands.length - 1]
+    return this.#execute(watch, state.manifest, last.ticket, this.#reopenArgv(state.manifest, instruction))
+  }
+
   async dispatch(watch: PlanWatch, ticket: string): Promise<RunDispatch> {
     const state = await this.#state(watch)
     if (state.manifest === null) throw new RunNotUnderstood('dispatch material has no run manifest')
@@ -659,6 +667,12 @@ export class CtRunMachine extends RunMachine {
 
   #nextArgv(manifest: RunManifest): readonly string[] {
     return this.#runnerArgv(['next', '--plan', manifest.plan, '--issue', String(manifest.issue)])
+  }
+
+  #reopenArgv(manifest: RunManifest, instruction: string): readonly string[] {
+    return this.#runnerArgv([
+      'reopen', '--plan', manifest.plan, '--issue', String(manifest.issue), '--instruction', instruction,
+    ])
   }
 
   #runnerArgv(argv: readonly string[]): readonly string[] {

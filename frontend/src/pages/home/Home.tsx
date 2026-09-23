@@ -10,6 +10,7 @@ import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { SliceSession, type SliceRecovery } from 'app/slice-session/components/slice-session'
+import { useAutomaticSliceSelection } from 'app/slice-session/useAutomaticSliceSelection'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -58,6 +59,7 @@ const Home = () => {
   const restoredRef = useRef(workflow !== null)
   const [reconciliation, setReconciliation] = useState<Reconciliation>(workflow === null ? 'not-required' : 'checking')
   const [slicesInFlight, setSlicesInFlight] = useState<ActivePlan[]>([])
+  const [activePlans, setActivePlans] = useState<ActivePlan[]>([])
   const [dispatchedSlices, setDispatchedSlices] = useState(0)
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
@@ -123,6 +125,18 @@ const Home = () => {
     }
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
+
+  const selectSlice = useCallback((slice: ActivePlan) => {
+    selectActivePlan(slice)
+    setSlicesInFlight(activePlans.filter((active) => activePlanIdentity(active) !== activePlanIdentity(slice)))
+  }, [activePlans, selectActivePlan])
+
+  const observeSliceProgress = useAutomaticSliceSelection({
+    workflow,
+    plans: activePlans,
+    enabled: reconciliation === 'confirmed' || reconciliation === 'stale',
+    onSelect: selectSlice,
+  })
 
   const adoptFromRead = useCallback((plans: ActivePlan[]): ActivePlan | null => {
     const current = workflowRef.current
@@ -201,6 +215,7 @@ const Home = () => {
       }
 
       const plans = outcome.plans.filter((active) => !discardedPlansRef.current.has(activePlanIdentity(active)))
+      setActivePlans(plans)
       const adopted = adoptFromRead(plans)
       setDispatchedSlices(plans.length)
       setSlicesInFlight(plans.filter((plan) => plan !== adopted))
@@ -385,6 +400,7 @@ const Home = () => {
     return {
       diagnostic: slice.diagnostic,
       action: slice.recovery.action,
+      refusal: slice.refusal ?? null,
       pending: recoveringSlice === identity,
       failure: sliceRecoveryFailure?.identity === identity ? sliceRecoveryFailure.detail : null,
       onAct: () => void runSliceRecovery(slice),
@@ -573,6 +589,8 @@ const Home = () => {
                   repo={slice.plan.repo}
                   phase={slice.phase}
                   recovery={sliceRecoveryOf(slice)}
+                  onSelect={() => selectSlice(slice)}
+                  onProgress={(progress) => observeSliceProgress(slice.plan, progress)}
                 />
               ))}
             </section>
@@ -667,6 +685,7 @@ const Home = () => {
                   root={workflow.plan.root ?? workflow.request.path}
                   repo={workflow.plan.repo}
                   phase="implementing"
+                  onProgress={(progress) => observeSliceProgress(workflow.plan, progress)}
                 />
               )}
             </WorkflowStep>

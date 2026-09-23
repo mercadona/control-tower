@@ -1,4 +1,4 @@
-import { CollectionCommands, CollectionPolicy, CollectionStep, CommitId, Delivery } from './slice-collection.js'
+import { CollectionCommands, CollectionPolicy, CollectionStep, CommitId, Delivery, DeliveryState } from './slice-collection.js'
 
 export const CollectionOutcome = Object.freeze({
   COLLECTED: 'collected',
@@ -15,6 +15,7 @@ export const CollectionRead = Object.freeze({
   PULL_REQUEST_LIST: 'gh pr list',
   WORKING_TREE_STATUS: 'git status',
   LOCAL_TIP: 'git rev-parse',
+  MERGED_HEAD: 'git merge-base',
   CMUX_WORKSPACE: 'cmux workspace list',
 })
 
@@ -220,12 +221,14 @@ export class SliceCollector {
     const delivery = this.#delivery({ repo, branch: artifacts.branch })
     const status = artifacts.hasWorktree ? this.#status(artifacts) : null
     const localTip = artifacts.hasBranch ? this.#localTip(artifacts) : null
+    const headContainsTip = this.#headContainsTip({ artifacts, delivery, localTip })
     const step = CollectionPolicy.stepFor({
       delivery,
       hasWorktree: artifacts.hasWorktree,
       hasBranch: artifacts.hasBranch,
       status,
       localTip,
+      headContainsTip,
     })
     if (step === CollectionStep.COLLECT) return CollectionReport.wouldCollect({ delivery, commands: this.#commandsFor(artifacts) })
     if (step === CollectionStep.WAIT) return CollectionReport.waiting(delivery)
@@ -254,6 +257,17 @@ export class SliceCollector {
       throw new CouldNotRead({ read: CollectionRead.LOCAL_TIP, detail: `printed something that is not a commit: ${JSON.stringify(printed)}` })
     }
     return printed
+  }
+
+  #headContainsTip({ artifacts, delivery, localTip }) {
+    if (delivery.state !== DeliveryState.MERGED || localTip === null || localTip === delivery.headRefOid) return false
+    this.#printedBy(CollectionRead.MERGED_HEAD, this.git(CollectionCommands.fetchMergedHeadArgv({ mainRoot: artifacts.mainRoot, number: delivery.number })))
+    const asked = SliceCollector.#answerOf(CollectionRead.MERGED_HEAD, this.git(CollectionCommands.headContainsTipArgv({
+      mainRoot: artifacts.mainRoot, localTip, headRefOid: delivery.headRefOid,
+    })))
+    if (asked.code === 0) return true
+    if (asked.code === 1) return false
+    throw new CouldNotRead({ read: CollectionRead.MERGED_HEAD, detail: `exit code ${asked.code}: ${SliceCollector.#diagnosisOf(asked)}` })
   }
 
   #commandsFor(artifacts) {

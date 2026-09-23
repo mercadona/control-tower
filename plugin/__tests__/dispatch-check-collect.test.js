@@ -59,6 +59,19 @@ const invocations = (b) => (existsSync(b.invokedLog) ? readFileSync(b.invokedLog
 const sessions = (b) => JSON.parse(readFileSync(b.stateFile, 'utf8'))
 const OTHER_TIP = '1122334455667788990011223344556677889900'
 
+const originWhosePullHeadIs = (b, sha) => {
+  const origin = join(b.dir, 'origin.git')
+  execFileSync('git', ['init', '-q', '--bare', origin], { stdio: ['ignore', 'ignore', 'pipe'] })
+  gitIn(b.repo, 'remote', 'add', 'origin', origin)
+  gitIn(b.repo, 'push', '-q', origin, `${sha}:refs/pull/71/head`)
+  return sha
+}
+const commitOnTopOf = (b, sha) => gitIn(b.repo, 'commit-tree', `${sha}^{tree}`, '-p', sha, '-m', 'Merge origin/master into feat/7').trim()
+const localCommitOn = (b) => {
+  gitIn(b.worktree, 'commit', '--allow-empty', '-q', '-m', 'work that never reached the pull request')
+  return gitIn(b.repo, 'rev-parse', 'feat/7').trim()
+}
+
 describe('dispatch-check --collect — the harvest', () => {
   it('a merged pull request with a clean tree and the tip that landed: closes cmux, deletes worktree and branch, exit 0', () => {
     const b = bench()
@@ -122,11 +135,33 @@ describe('dispatch-check --collect — the harvest', () => {
     cleanup(b)
   })
 
-  it('the local tip is not the one that merged the pull request: exit 10 and it names the commit that was', () => {
+  it('the local tip carries a commit the merged head does not contain: exit 10 and it names the head', () => {
+    const b = bench()
+    const base = b.tip
+    localCommitOn(b)
+    const head = originWhosePullHeadIs(b, base)
+    const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', head) })
+    expect(res.status).toBe(10)
+    expect(res.stdout.trim()).toBe(`kept #7: the local tip of feat/7 carries commits the head PR #71 merged (${head}) does not contain — nothing has been deleted`)
+    expect(existsSync(b.worktree)).toBe(true)
+    cleanup(b)
+  })
+
+  it('a merged head somebody moved past the local tip before merging is collected: everything local landed', () => {
+    const b = bench()
+    const head = originWhosePullHeadIs(b, commitOnTopOf(b, b.tip))
+    const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', head) })
+    expect(res.status).toBe(0)
+    expect(existsSync(b.worktree)).toBe(false)
+    expect(branches(b)).toBe('')
+    cleanup(b)
+  })
+
+  it('a merged head that could not be fetched is a read that failed: exit 3 and nothing deleted', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', OTHER_TIP) })
-    expect(res.status).toBe(10)
-    expect(res.stdout.trim()).toBe(`kept #7: the local tip of feat/7 is not the commit that PR #71 merged (${OTHER_TIP}) — nothing has been deleted`)
+    expect(res.status).toBe(3)
+    expect(res.stderr).toContain('the state of #7 could not be read: git merge-base failed')
     expect(existsSync(b.worktree)).toBe(true)
     cleanup(b)
   })
@@ -139,6 +174,17 @@ describe('dispatch-check --collect — the harvest', () => {
     expect(res.stdout).toBe('')
     expect(existsSync(b.worktree)).toBe(true)
     expect(branches(b)).toContain('feat/7')
+    cleanup(b)
+  })
+
+  it('with --no-workspace the harvest asks cmux nothing and collects with git alone, the way the cabin dispatched', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_LIST_WINDOWS_FAIL: '1' }, ['7', '--repo', 'o/r', '--collect', '--no-workspace'])
+    expect(res.status).toBe(0)
+    expect(res.stdout.trim()).toBe(`collected #7: worktree ${b.worktree} deleted, branch feat/7 deleted`)
+    expect(existsSync(b.worktree)).toBe(false)
+    expect(branches(b)).toBe('')
+    expect(invocations(b)).toBe('')
     cleanup(b)
   })
 

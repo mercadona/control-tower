@@ -37,6 +37,7 @@ import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
 import { SessionChangeAnnouncements } from './session-change-announcements.ts'
+import { SessionClosureAnnouncements } from './session-closure-announcements.ts'
 import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
@@ -574,6 +575,8 @@ class CtApi {
         messages: journal, calls: planCalls, measurements, escalations,
       }),
       escalations: readSliceEscalation,
+      announcements: new SessionClosureAnnouncements({ sessions: () => coordinatingSessions }),
+      stderr: (line) => process.stderr.write(line),
     })
     const planAgents = new RunPlanAgents({
       legacy: legacyPlanAgents,
@@ -743,6 +746,7 @@ class CtApi {
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       sliceHeldChange: (changed) => planAgents.hold(changed),
+      anotherRound: (asked) => planAgents.anotherRound(asked),
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       implementProgress: new ReadImplementationProgress({

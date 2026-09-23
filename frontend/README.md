@@ -135,6 +135,16 @@ which only repeats the GET. **Descartar estado** clears this page's local state
 and does not mutate backend work. The coordinating drawer and its live session
 remain mounted throughout recovery.
 
+Slice cards offer **Ver detalle** to select the slice shown by the main panel,
+breadcrumbs and task history, with the choice persisted across reloads.
+When the selected slice transitions to **Entregado**, the page automatically
+selects the sole confirmed running slice in the same repository and checkout.
+The handoff waits if that slice appears later, including after the delivered
+slice leaves active plans. Ambiguous or unreadable candidates prevent a jump.
+Manual selection cancels the pending handoff; restoring or opening an already
+delivered slice does not trigger one. `useAutomaticSliceSelection.ts` consumes
+the cards' existing progress reads rather than starting another polling loop.
+
 The mutation owns the active-plan read barrier from the click until its fresh
 GET completes. It first drains a GET that predates the click; timer and manual
 polls that wake while POST is pending start no read. After an accepted or

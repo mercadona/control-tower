@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
+import { RunningServers } from '../servers.ts'
 import { EpicPromotionRoute } from '../../src/infrastructure/epic-promotion-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
 import { CoordinatingSessionTarget } from '../../src/infrastructure/coordinating-session-target.ts'
@@ -195,7 +195,6 @@ class Mother {
 }
 
 class RunningApi {
-  static readonly #started: Server[] = []
   static readonly PATH = EpicPromotionRoute.PATH
 
   static async listening(
@@ -207,24 +206,11 @@ class RunningApi {
     const app = express()
     app.post(RunningApi.PATH, EpicPromotionRoute.promoting(held, promote, key, stderr))
     app.all(RunningApi.PATH, EpicPromotionRoute.refuseOtherMethods)
-    const server = createServer(app)
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject)
-      server.listen(0, '127.0.0.1', () => {
-        server.removeListener('error', reject)
-        resolve()
-      })
-    })
-    RunningApi.#started.push(server)
-
-    return (server.address() as AddressInfo).port
+    return RunningServers.listening(app)
   }
 
   static async stopAll(): Promise<void> {
-    const running = RunningApi.#started.splice(0)
-    await Promise.all(running.map((server) => new Promise<void>((resolve) => {
-      server.close(() => resolve())
-    })))
+    await RunningServers.stopAll()
   }
 
   static ownOrigin(port: number): string {

@@ -122,6 +122,51 @@ describe('the announcement declares its whole shape', () => {
     )
   })
 
+  it('a refusal prints the findings and the verdict path after its detail', () => {
+    const announcement = StepAnnouncement.refusal({
+      issue: 42,
+      task: 1,
+      tasksTotal: 5,
+      step: STEPS.JUDGE,
+      discards: 1,
+      state: RUN_STATES.BLOCKED_JUDGE,
+      outcome: OUTCOMES.FAILED,
+      exit: 1,
+      detail: 'the judge vetoed three times',
+      findings: '- [high] uno.txt:1: mal',
+      verdict: '.agent/run-42/task-1-verdict-3.json',
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+      + '"run":{"issue":42,"task":1,"tasksTotal":5,"step":"judge","discards":1},'
+      + '"detail":"the judge vetoed three times",'
+      + '"findings":"- [high] uno.txt:1: mal","verdict":".agent/run-42/task-1-verdict-3.json"}\n'
+    )
+  })
+
+  it('a refusal with nothing to say about the verdict prints neither key, because a stale reader must see what it always saw', () => {
+    const announcement = StepAnnouncement.refusal({
+      issue: 42,
+      task: 1,
+      tasksTotal: 5,
+      step: STEPS.JUDGE,
+      discards: 1,
+      state: RUN_STATES.BLOCKED_JUDGE,
+      outcome: OUTCOMES.FAILED,
+      exit: 1,
+      detail: 'the judge vetoed three times',
+      findings: null,
+      verdict: null,
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+      + '"run":{"issue":42,"task":1,"tasksTotal":5,"step":"judge","discards":1},'
+      + '"detail":"the judge vetoed three times"}\n'
+    )
+  })
+
   it('a refusal with no detail is malformed', () => {
     expect(() => StepAnnouncement.refusal({
       issue: 42,

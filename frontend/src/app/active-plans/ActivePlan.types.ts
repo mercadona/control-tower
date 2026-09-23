@@ -7,9 +7,23 @@ type ActivePlanIdentity = {
 
 export type RecoveryAction = 'observe' | 'continue' | 'cleanup' | 'inspect'
 
+export type PlanRefusal = {
+  state: string
+  outcome: string
+  exit: number
+  task: number | null
+  findings: string | null
+  verdict: string | null
+}
+
 export type ActivePlan = ActivePlanIdentity & (
   | { phase: 'planning' | 'implementing' }
-  | { phase: 'uncertain'; diagnostic: string; recovery: { action: RecoveryAction; detail: string } }
+  | {
+      phase: 'uncertain'
+      diagnostic: string
+      recovery: { action: RecoveryAction; detail: string }
+      refusal?: PlanRefusal
+    }
 )
 
 export type RecoveryOutcome =

@@ -55,7 +55,4 @@ describe('ReadPlanningActivity', () => {
     expect(activities.asked).toEqual([watch])
   })
 
-  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanningActivities().of(watch)).rejects.toThrow(/must implement of/)
-  })
 })

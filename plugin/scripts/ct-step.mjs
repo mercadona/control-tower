@@ -173,6 +173,7 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
   global                    runs the commands of ## 8. Global verification, after the last task
   slice-verdict <file.json>  the SLICE judge's verdict: ruling + walk + findings
   e2e <file.json>           the report of the slice's end-to-end journey
+  reopen --instruction "<text>"   grant another round after the judge's third veto
 
 The sequence is decided by run-machine.js: a verb that is not the step that is due
 exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.
@@ -181,7 +182,7 @@ exits with 9 and says which one it is. The state lives in .agent/run-<issue>.jso
 
 const verb = process.argv[2]
 if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
-if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e'].includes(verb)) {
+if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e', 'reopen'].includes(verb)) {
   die(`unknown verb: ${verb}\n\n${USAGE}`, EXIT.USAGE)
 }
 
@@ -358,6 +359,81 @@ if (existsSync(stateFile)) {
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
   }
+  // The judge's closure, given the shape of the good one right above: the state
+  // is READ from the file instead of rebuilt from the table, and the verbs that
+  // would transition are sequence errors. The pair (outcome, exit) is not
+  // persisted because it does not have to be — the discard budget exits before
+  // the persistence, so a `blocked-judge` on disk is always the veto.
+  if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
+    const WAY_OUT = `the judge vetoed task ${run.task} of issue ${issue} three times and the run is closed. `
+      + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+    if (verb === 'reopen') {
+      const instruction = arg('--instruction')
+      if (typeof instruction !== 'string' || instruction.trim() === '') {
+        die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
+      }
+      // The three fields a third veto leaves behind, and nothing else. The
+      // DISCARDS ARE NOT RESET: they count an answer that could not be read,
+      // which is a different failure from a judgement that said no, and clearing
+      // them here would hide a judge that is illegible behind a person's
+      // patience. The instruction travels as `lastAdvice` because that is the
+      // field the implementer's brief already appends (see adviceSection): the
+      // person's words reach the implementer by the road the adviser's already
+      // take.
+      const { closed: _lifted, ...reopened } = run
+      run = { ...reopened, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: instruction }
+      // Not `save()`: that helper is a `const` declared further down in this
+      // same module scope, and this block runs at load time, before that
+      // declaration is reached — calling it here is a temporal-dead-zone
+      // `ReferenceError`. Same write `save()` performs, inlined.
+      writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
+      // Same shape as the DELIVERED gate's own announcement (`:351-356`): a
+      // `transition` under the flag, before the prose and before the exit.
+      if (announcing) {
+        safeWrite(1, StepAnnouncement.transition({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: EXIT.OK,
+        }).text())
+      }
+      out(`run reopened at task ${run.task} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      process.exit(EXIT.OK)
+    }
+    if (verb === 'next') {
+      if (announcing) {
+        // The same two fields the closing verb announced, so a second `next`
+        // is not a contentless duplicate: the backend re-announces on every
+        // re-ask, and a line with no findings and no verdict path tells the
+        // coordinating session nothing it can act on.
+        //
+        // The attempt is read with `StepSeal.attemptOf` and the path is built
+        // here instead of through `archivedVerdictPath()`: that helper reaches
+        // `currentAttempt`, a `const` arrow declared far below, and this block
+        // is top-level module code — calling it here is a temporal-dead-zone
+        // `ReferenceError`, exactly as `save()` would be. The counters are
+        // untouched by the closure, so the attempt is the one that archived
+        // the verdict.
+        const archived = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${StepSeal.attemptOf(run)}.json`)
+        safeWrite(1, StepAnnouncement.refusal({
+          issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
+          state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
+          detail: WAY_OUT,
+          findings: run.lastFindings ?? null,
+          verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+        }).text())
+      }
+      out(WAY_OUT)
+      process.exit(EXIT.VETOED)
+    }
+    die(WAY_OUT, EXIT.WRONG_STEP)
+  }
+  // `reopen` outside its closure: the run is not the judge's to give back.
+  if (verb === 'reopen') {
+    die(
+      `the run of issue ${issue} is not closed at ${RUN_STATES.BLOCKED_JUDGE}: it stands at step ${run.step}, `
+      + 'so there is nothing to reopen.',
+      EXIT.WRONG_STEP,
+    )
+  }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
   // here means reimplementing on top of a task that is already committed.
@@ -459,9 +535,9 @@ const outProseMaterial = (prose) => { out(prose.heading); for (const line of pro
 // dragged in by a `git add` of the implementer's. That already has an answer,
 // the same one given to the verdict: it is written and staged by the PROGRAM,
 // at a path the program decides, and it is staged at `commit` — after the
-// checks and after the judge. If it were in the index while the checks run,
-// `declaredScope` would see it as a path the plan does not declare and would
-// veto the task.
+// checks and after the judge. While the scope control existed it would have
+// seen the telemetry as a path the plan does not declare and vetoed the task;
+// the order still holds for the judge, which reads the diff.
 //
 // The local file is still the machine's accumulated record (every repo, every
 // epic); the one in the repo is this slice's, and it is the one that gets read
@@ -963,6 +1039,24 @@ function writeJudgeBrief() {
 // already names them: it is what makes the paragraph actionable without
 // re-reading it.
 function adviceSection(advice) {
+  // `reopen` also writes `lastAdvice`, and it writes a plain string (the
+  // person's own words), not the adviser's `{ approach, files_to_reconsider }`
+  // shape — there is no adviser round behind a reopen, so there is nothing to
+  // walk two attempts of and no paths to list. Same heading, the person's text
+  // instead of the adviser's narrative.
+  if (typeof advice === 'string') {
+    return [
+      '',
+      '## Advice for this attempt',
+      '',
+      "The judge vetoed this task three times and the run was closed. A person read it and reopened it with an instruction of their own, instead of the adviser's:",
+      '',
+      advice,
+      '',
+      'This does not widen the task: `**Files:**` above is still its scope.',
+      '',
+    ].join('\n')
+  }
   const paths = advice.files_to_reconsider.length
     ? advice.files_to_reconsider.map((p) => `- \`${p}\``).join('\n')
     : '(none in particular)'
@@ -1163,6 +1257,16 @@ function archive(kind, content) {
   } catch (e) {
     err(`warning: ${kind} of attempt ${currentAttempt()} could not be archived (${String(e.message).trim()}): if this task reaches the advisor, its package will say so.`)
   }
+}
+
+// The path `archive('verdict', …)` has just written, relative to the repository
+// root so the line that travels to a person names something they can open. It
+// answers null when the file is not there: archiving is best effort (it warns
+// and carries on), and naming a file that does not exist is worse than naming
+// none.
+function archivedVerdictPath() {
+  const rel = join('.agent', `run-${issue}`, `task-${run.task}-verdict-${currentAttempt()}.json`)
+  return existsSync(join(repoRoot, rel)) ? rel : null
 }
 
 // ---------------------------------------------------------------------------
@@ -1525,43 +1629,48 @@ function controlsVerb() {
   const lines = []
   let result = OUTCOMES.DONE
 
-  // Scope goes ahead of everything, because it is the cheapest of all:
-  // comparing two lists of paths and looking at the previous commit's tree
-  // costs nothing, so it runs even before the test names.
-  const outOfScope = declaredScope(t)
-  if (outOfScope.length) {
-    lines.push('# scope declared by the task', ...outOfScope.map((f) => `- ${f}`), '')
+  // THE PLAN'S PROSE STOPPED BEING A GATE. Three controls used to run ahead of
+  // the names — `declaredScope` over **Files:**, `amendmentOnlyAdds` over the
+  // paths of HEAD's plan, and `declaredBlocks` over the block labels, the
+  // **TDD:** name and the `Final text` blocks. All three held the CODE against
+  // a sentence the PLAN wrote, and when they went red neither they nor anybody
+  // else could say which of the two was wrong: their own message admitted it
+  // ("two explanations are equally plausible and this control cannot arbitrate
+  // between them").
+  //
+  // The class failed three times and each time one case got patched. A plan
+  // whose **Files:** ended in prose — "create the empty `__init__.py` with
+  // `touch`" — declared a file named `touch`, and since an amendment could not
+  // remove a path, the run could only end in `blocked-controls` after three
+  // implementer attempts. Before that, a test name pulled out of an
+  // explanatory parenthesis blocked a task with a false positive
+  // (`plan-tasks.js`, trap 2), and a plan that named its own file in
+  // **Files:** was unsatisfiable by construction.
+  //
+  // What is left is what does not have the defect: `declaredTests`, whose
+  // value is measured —a task promised a function and its test, the function
+  // arrived alone and the suite stayed green on the previous commit's test—,
+  // the commands, which measure the code and not the plan, and the invariant
+  // below, which measures no claim at all. **Files:** goes back to what it is
+  // upstream in superpowers: documentation, read by the judge with its own
+  // eyes (`alcance`).
+  const governing = governingPlanIsTheCommittedOne(t)
+  if (governing.length) {
+    lines.push('# the plan that governs the controls', ...governing.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
-  // The other direction of the scope control: an amendment can only ADD paths
-  // to **Files:**, never remove them — removing one would switch the control
-  // above off from inside the plan itself.
-  const amendment = amendmentOnlyAdds(t)
-  if (amendment.length) {
-    lines.push('# amendment of the plan', ...amendment.map((f) => `- ${f}`), '')
-    result = OUTCOMES.FAILED
-  }
-
-  // Then the names, which are free too. A plan's yardstick measures that
+  // Then the names, which are free. A plan's yardstick measures that
   // nothing broke, not that what was promised was added — measured in the
   // field: a task asked for a function and its test, the function arrived
   // without the test, and the suite stayed green because the previous commit's
-  // one passed. Both controls share `inIndex`, so both can throw
+  // one passed. It goes through `inIndex`, so it can throw
   // `NameLookupDidNotRun` when the lookup itself could not run — that is not
   // a failed control, it is one that could not be measured.
   try {
     const failures = declaredTests(t)
     if (failures.length) {
       lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
-      result = OUTCOMES.FAILED
-    }
-
-    // And last what the plan's BLOCKS promise, which is still free: none of
-    // this runs a command.
-    const blocks = declaredBlocks(t)
-    if (blocks.length) {
-      lines.push('# blocks declared by the task', ...blocks.map((f) => `- ${f}`), '')
       result = OUTCOMES.FAILED
     }
   } catch (e) {
@@ -1621,21 +1730,12 @@ const stagedPaths = () => (git(['diff', '--cached', '--name-only']) || '').split
 // were the task's code would answer wrongly: the plan QUOTES verbatim the names
 // of the tests the task withdraws, so a control on names would see "it is still
 // there" for a test that really was deleted (the false positive that motivates
-// this function). The three controls that read content —`declaredScope`,
-// `declaredBlocks`, `inIndex`— filter out the plan and the rest of the
-// machinery before looking; `ajenoEnElIndice` goes on reading the raw index,
-// because to that question the plan does belong.
+// this function). `inIndex` —the one control left that reads content— filters
+// out the plan and the rest of the machinery before looking; `ajenoEnElIndice`
+// goes on reading the raw index, because to that question the plan does
+// belong.
 const workingPathsInTheIndex = () =>
   stagedPaths().filter((p) => p !== planRelPath() && !isMachineryPath(p))
-
-// AND THE VERSION FOR THE CONTROLS THAT COMPARE LISTS OF PATHS, which only
-// takes the plan out. The false positive above is one of CONTENT —the plan
-// quotes test names verbatim— and it does not happen to a comparison of paths:
-// exempting the whole machinery here would leave outside the scope control any
-// `docs/superpowers/**` path that reaches the index, which is exactly the
-// vector `scope.js` documents from dispatch 1, and would make it travel inside
-// the task's commit without any control seeing it.
-const workPathsInTheIndex = () => stagedPaths().filter((p) => p !== planRelPath())
 
 // WHAT IS NOT CODE, AND WHY THE LIST ONLY NAMES DOCUMENTATION. A task's
 // **Verification:** commands are declared by the plan and run whatever the diff
@@ -1687,84 +1787,28 @@ const foreignInIndex = (ours) => {
   return stagedPaths().filter((p) => !mine.includes(p))
 }
 
-// The task's scope is decided by the PLAN, not by the implementer: this check
-// crosses the INDEX (what is really going to be committed) against `t.files`
-// (what the task declares in **Files:**). A path on one side and not on the
-// other is a failure, and so is an action that does not square with the
-// previous commit's tree — `git cat-file -e HEAD:<path>`, not the disk,
-// because the implementer has already created the file by the time this runs.
-// A path with `action: null` is not checked against git: it is a decision of
-// the plan, not an oversight (task 1, `splitFiles`).
-//
-// Each failure's message says whether the PLAN or the CODE is what gets fixed,
-// because a plan that left a path out of its **Files:** is just as likely as
-// an implementer that touched too much, and confusing them costs a whole
-// cycle.
-function declaredScope(t) {
-  const failures = []
-  const touched = workPathsInTheIndex()
-  // The plan's own file is excluded from BOTH sides of the crossing, not just
-  // from the index. `workPathsInTheIndex` already drops it because this program
-  // stages it itself; leaving it in `declared` made a plan that names it in a
-  // **Files:** unsatisfiable — the path could never appear among what was
-  // touched, and the amendment control refuses to remove it, so the run could
-  // only sit in `blocked-controls`. The plan file belongs to the program, and
-  // no task declares it.
-  const declared = t.files.filter((f) => f.path !== planRelPath())
-
-  for (const path of touched) {
-    if (!declared.some((f) => f.path === path)) {
-      failures.push(`task ${t.n} touched '${path}' and the plan does not declare it in its **Files:** — two explanations are equally plausible and this control cannot arbitrate between them: it is surplus in the CODE, or it needs adding to the PLAN`)
-    }
-  }
-
-  for (const f of declared) {
-    if (!touched.includes(f.path)) {
-      failures.push(`the plan declares '${f.path}' in the **Files:** of task ${t.n} and it is not among what was touched: write the CODE the task promised. If it really is surplus in the PLAN, REMOVING IT IS NOT YOUR WAY OUT —an amendment can only add paths, because removing them switches this very control off— so say it in your report and leave the path in the plan`)
-      continue
-    }
-    if (f.action === null) continue
-    const existedBefore = git(['cat-file', '-e', `HEAD:${f.path}`], { allowFail: true }) !== null
-    if (f.action === 'create' && existedBefore) {
-      failures.push(`the plan declares '${f.path}' as (create) and it already existed in the previous commit — check the PLAN, the action should be (modify)`)
-    }
-    if (f.action === 'modify' && !existedBefore) {
-      failures.push(`the plan declares '${f.path}' as (modify) and it did not exist in the previous commit — check the PLAN, the action should be (create)`)
-    }
-  }
-
-  return failures
-}
-
-// The other direction of the scope control (issue 161): an amendment can ADD
-// paths to the **Files:** of its own task — that is what `declaredScope`
-// already lets through, comparing against TODAY'S INDEX — but it can never
-// REMOVE one it already declared, because that would switch the control above
-// off from inside the plan itself: deleting the surplus path from **Files:**
-// would be enough for `declaredScope` to stop seeing it.
+// THE PLAN THAT GOVERNS THE CONTROLS HAS TO BE THE ONE THAT IS GOING TO BE
+// COMMITTED. This used to be the first half of `amendmentOnlyAdds`, whose
+// second half —an amendment may only ADD paths to **Files:**— went with the
+// scope control it existed to protect. This half stays, because it is not a
+// gate over the plan's prose: it does not hold the code against a sentence,
+// it makes sure the sentence being measured is the sentence being committed.
 //
 // IT IS NOT CONDITIONED ON THE INDEX, and that was the open door. `t` comes
-// from the plan of the TREE, read when the process starts; the index is another
-// thing. With the guard conditioned on the plan being staged, editing it AFTER
-// `report` was enough: the guard did not run, `t.files` —already reduced—
-// governed `declaredScope`, and the commit took the old plan, so the judge
-// saw no amendment either. Delivering green with the committed plan
-// contradicting the code is exactly what this slice exists to prevent.
+// from the plan of the TREE, read when the process starts; the index is
+// another thing. With the guard conditioned on the plan being staged, editing
+// it AFTER `report` was enough for the controls to measure one text while the
+// commit took another. `declaredTests` and the **Verification:** commands both
+// come out of the tree's plan, so delivering green with a committed plan that
+// contradicts what was measured is still exactly what this prevents.
 //
-// Hence the first invariant, which covers both directions at once: THE PLAN
-// THAT GOVERNS THE CONTROLS HAS TO BE THE ONE THAT IS GOING TO BE COMMITTED.
-// The tree's text is compared against the index's if the plan is staged, and
-// against HEAD's if it is not.
-//
-// AND IT FAILS CLOSED, like `allWorkCommittedByCtStep` in state.js: if the plan
-// of HEAD cannot be read, or its text does not declare the task `t.n`, there is
-// nothing to compare against and that is NOT a permission — it is a control
-// that could not measure, and it is said.
-function amendmentOnlyAdds(t) {
+// AND IT FAILS CLOSED, like `allWorkCommittedByCtStep` in state.js: if the
+// plan of HEAD cannot be read there is nothing to compare against, and that is
+// NOT a permission — it is a control that could not measure, and it is said.
+function governingPlanIsTheCommittedOne(t) {
   const path = planRelPath()
-  const previous = git(['show', `HEAD:${path}`], { allowFail: true })
-  if (previous === null) {
-    return [`'${path}' could not be read at HEAD: with no committed plan there is nothing to compare the tree's against, and this control cannot measure whether task ${t.n} removed paths from its **Files:**. Commit the plan —the \`plan\` gate already asks for it before implementing— and ask for the step again.`]
+  if (git(['show', `HEAD:${path}`], { allowFail: true }) === null) {
+    return [`'${path}' could not be read at HEAD: with no committed plan there is nothing to compare the tree's against, and the controls of task ${t.n} cannot know whether the text they measure is the text that will be committed. Commit the plan —the kickoff already asks for it before implementing— and ask for the step again.`]
   }
 
   // GIT IS ASKED whether the tree and the index say the same thing, instead of
@@ -1777,14 +1821,7 @@ function amendmentOnlyAdds(t) {
     return [`the tree's plan is not the one that is going to be committed: the controls and the judge measure '${path}' of the TREE, and ${staged ? "the INDEX's says something else" : 'it is not among what is staged, so the commit would take HEAD\'s'}. Go through \`report\` again so that what is measured and what is committed are the same text.`]
   }
 
-  const previousTask = extractTasks(previous).tasks.find((tt) => tt.n === t.n)
-  if (!previousTask) {
-    return [`HEAD's plan declares no task ${t.n}, so this control cannot measure whether the amendment removed paths from its **Files:**. An amendment neither adds nor removes TASKS: that throws the run's count out.`]
-  }
-
-  return previousTask.files
-    .filter((f) => !t.files.some((tf) => tf.path === f.path))
-    .map((f) => `task ${t.n} amended the plan by removing '${f.path}' from its **Files:** — an amendment can only ADD paths: removing one switches the scope control off from inside. Put the path back in the PLAN, or write the CODE it promised.`)
+  return []
 }
 
 // A `git grep --cached` that did not answer 0 (match) or 1 (no match): git
@@ -1801,8 +1838,7 @@ class NameLookupDidNotRun extends Error {}
 // 1 of repo-pulse's slice #5) and the promised one "is already there" even
 // though nobody wrote it (a false negative, which is precisely the failure this
 // check exists to catch). With no staged files there is nowhere to look, and
-// that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
-// question, same scope, same mechanism.
+// that is a NO. Its one caller is `declaredTests`.
 function inIndex(name) {
   const scope = workingPathsInTheIndex()
   if (!scope.length) return false
@@ -1819,55 +1855,6 @@ function declaredTests(t) {
   const failures = []
   for (const n of t.testsAdded) if (!inIndex(n)) failures.push(`the task said it was adding the test '${n}' and it is not in what is staged`)
   for (const n of t.testsRemoved) if (inIndex(n)) failures.push(`the task said it was removing the test '${n}' and it is still there`)
-  return failures
-}
-
-// What the plan's BLOCKS promise has to be there, just as `declaredScope`
-// measures what **Files:** promises. Three checks, all of them narrowed to
-// what is staged for the same reason as `declaredTests`: the plan lives
-// committed inside the repo, so searching the repo is searching the plan.
-//
-//  - `blockPaths`: every `{role, path}` demands that `path` be among the
-//    touched paths. A Contract or a Call site nobody touched is scaffolding
-//    declared and never written.
-//  - `tddName`: the same `inIndex` as `declaredTests`, and the same
-//    message — the test the task promised in its **TDD:** is just as
-//    enforceable as those of **Tests:**.
-//  - `finalTexts`: the text has to appear verbatim in the INDEX of its path.
-//    It is compared against `git show :<path>` and not with `git grep`,
-//    because it is a MULTI-LINE block and `git grep` works line by line;
-//    comparing the whole staged content is what makes it possible to say
-//    WHICH line is missing, and that is half the value of this check.
-//
-// Each failure's message says whether the PLAN or the CODE is what gets fixed,
-// just as in `declaredScope`: confusing the two costs a whole cycle.
-function declaredBlocks(t) {
-  const failures = []
-  const touched = workPathsInTheIndex()
-
-  for (const { role, path } of t.blockPaths) {
-    if (!touched.includes(path)) {
-      failures.push(`task ${t.n} declares a ${role} block (${path}) and it is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
-    }
-  }
-
-  if (t.tddName && !inIndex(t.tddName)) {
-    failures.push(`the task said it was adding the test '${t.tddName}' and it is not in what is staged`)
-  }
-
-  for (const { path, text } of t.finalTexts) {
-    const staged = git(['show', `:${path}`], { allowFail: true })
-    if (staged === null) {
-      failures.push(`task ${t.n} declares a Final text (${path}) and that file is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
-      continue
-    }
-    for (const line of text.split('\n')) {
-      if (line.trim() !== '' && !staged.includes(line)) {
-        failures.push(`task ${t.n} declares Final text (${path}) and the line '${line}' is not verbatim in what is staged — it is missing from the CODE, or the PLAN quotes the text wrongly`)
-      }
-    }
-  }
-
   return failures
 }
 
@@ -2925,6 +2912,13 @@ try {
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
   if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
+  // The judge's veto is persisted for the same reason the good closure is: a
+  // closure that lives only in the exit code of a process that has gone leaves
+  // the run reading `step: judge` with the budget spent, so the next `next`
+  // re-enters the judge and re-closes for free. Only this state, and only from
+  // this path: the discard budget exits above, so a persisted `blocked-judge`
+  // is always the veto — `FAILED`, `EXIT.VETOED`. `reopen` is what lifts it.
+  if (transition.state === RUN_STATES.BLOCKED_JUDGE) run = { ...run, closed: RUN_STATES.BLOCKED_JUDGE }
   save()
 
   // The e2e report is committed HERE, after persisting the state and only if
@@ -2970,9 +2964,16 @@ try {
       issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
       state: transition.state, outcome, exit: code,
     }
+    // Only the judge's closure explains itself, and only because it is the one
+    // whose reason the run is already holding: `lastVerdict` and `lastFindings`
+    // are written by `verdictVerb` and `archive` has just put the verdict on
+    // disk. Nothing is recomputed here.
+    const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
+      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
+      : {}
     const announcement = code === EXIT.OK
       ? StepAnnouncement.transition(closure)
-      : StepAnnouncement.refusal({ ...closure, detail })
+      : StepAnnouncement.refusal({ ...closure, detail, ...explained })
     safeWrite(1, announcement.text())
   }
   process.exit(code)

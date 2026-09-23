@@ -48,6 +48,40 @@ describe('a veto leaves no trace to undo', () => {
     expect(ct('commit').status).toBe(0)
     expect(commits()).toBe(2)
   })
+
+  it('the third veto is written down, so the closure survives the process that reached it', () => {
+    for (let i = 0; i < 3; i++) {
+      ct('report', writeReport(['uno.txt']))
+      ct('controls')
+      veto()
+      if (runState().step === 'advise') advise()
+    }
+
+    expect(runState().closed).toBe('blocked-judge')
+  })
+
+  it('the refusal of the third veto carries what the judge found and where its verdict is', () => {
+    for (let i = 0; i < 2; i++) {
+      ct('report', writeReport(['uno.txt']))
+      ct('controls')
+      veto()
+      if (runState().step === 'advise') advise()
+    }
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    // `judgeTask` seals the review token into the verdict and forwards every
+    // extra argument to the verb (fixtures/ct-step-harness.js:245), so the
+    // announcement flag rides along without bypassing the token.
+    const third = judgeTask(
+      writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]),
+      '--output-format', 'json',
+    )
+    const announced = JSON.parse(third.stdout.trim().split('\n').pop())
+
+    expect(announced.state).toBe('blocked-judge')
+    expect(announced.findings).toContain('uno.txt')
+    expect(announced.verdict).toMatch(/task-\d+-verdict-\d+\.json$/)
+  })
 })
 
 describe('a verdict that cannot be read is not a verdict', () => {

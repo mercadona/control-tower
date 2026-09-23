@@ -2,6 +2,9 @@ export type RunClosure = {
   readonly state: string,
   readonly outcome: string,
   readonly exit: number,
+  readonly task: number | null,
+  readonly findings: string | null,
+  readonly verdict: string | null,
 }
 
 export type RunWork =

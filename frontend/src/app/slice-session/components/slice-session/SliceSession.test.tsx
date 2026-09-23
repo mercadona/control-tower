@@ -36,6 +36,24 @@ const renderSession = (issue = SliceSessionMother.ISSUE) => render(
   <SliceSession issue={issue} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="implementing" />
 )
 
+const vetoed = (over: Partial<SliceRecovery> = {}): SliceRecovery => ({
+  diagnostic: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
+  action: 'inspect',
+  pending: false,
+  failure: null,
+  onAct: () => {},
+  onRetry: () => {},
+  refusal: {
+    state: 'blocked-judge',
+    outcome: 'failed',
+    exit: 1,
+    task: 2,
+    findings: '- [high] src/pago.ts:41: el importe se redondea antes del descuento',
+    verdict: '.agent/run-7/task-2-verdict-3.json',
+  },
+  ...over,
+})
+
 const carriesNoField = () => {
   expect(screen.queryByLabelText(FIELD_LABEL)).toBeNull()
   expect(screen.queryByRole('button', { name: SEND_LABEL })).toBeNull()
@@ -154,5 +172,90 @@ describe('SliceSession', () => {
     expect(await screen.findByRole('region', { name: 'Slice #7' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Slice #8' })).toBeInTheDocument()
     carriesNoField()
+  })
+
+  it('a run the judge closed names the closure and shows what the judge found', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        phase="uncertain"
+        recovery={vetoed()}
+      />
+    )
+
+    expect(await screen.findByText('El juez cerró este slice')).toBeInTheDocument()
+    expect(screen.getByText(/el importe se redondea antes del descuento/)).toBeInTheDocument()
+    expect(screen.getByText('.agent/run-7/task-2-verdict-3.json')).toBeInTheDocument()
+  })
+
+  it('the card offers no way to decide, because the decision goes through the coordinating session', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        phase="uncertain"
+        recovery={vetoed()}
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: 'Reintentar recuperación' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /ronda/i })).toBeNull()
+  })
+
+  it('a veto with nothing major to show still names the closure', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        phase="uncertain"
+        recovery={vetoed({ refusal: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null } })}
+      />
+    )
+
+    expect(await screen.findByText('El juez cerró este slice')).toBeInTheDocument()
+    expect(screen.queryByText(/^\.agent\//)).toBeNull()
+  })
+
+  it('a run that spent its discards is not a veto, because no reopen gets it out', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        phase="uncertain"
+        recovery={vetoed({
+          refusal: {
+            state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+          },
+        })}
+      />
+    )
+
+    expect(await screen.findByText('No se puede confirmar el estado de implementación')).toBeInTheDocument()
+    expect(screen.queryByText('El juez cerró este slice')).toBeNull()
+  })
+
+  it('an uncertain slice with no closure is the card it always was', async () => {
+    stubFetch(SliceSessionMother.progress())
+    render(
+      <SliceSession
+        issue={SliceSessionMother.ISSUE}
+        root={SliceSessionMother.ROOT}
+        repo={SliceSessionMother.REPO}
+        phase="uncertain"
+        recovery={vetoed({ refusal: null })}
+      />
+    )
+
+    expect(await screen.findByText('No se puede confirmar el estado de implementación')).toBeInTheDocument()
+    expect(screen.queryByText('El juez cerró este slice')).toBeNull()
   })
 })

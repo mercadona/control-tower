@@ -21,6 +21,11 @@ import type { RunOptions } from '../../src/infrastructure/tool-runner.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 
+const REPOSITORY_FOUND_FROM_THIS_FILE_AND_NEVER_FROM_THE_WORKING_DIRECTORY =
+  join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+const DISPATCH_CHECK =
+  join(REPOSITORY_FOUND_FROM_THIS_FILE_AND_NEVER_FROM_THE_WORKING_DIRECTORY, 'plugin', 'scripts', 'dispatch-check.mjs')
+
 class DeliveredMachine extends CtRunMachine {
   override async inspect(): Promise<RunInspection> { return new RunInspection({ kind: 'delivered' }) }
 }
@@ -592,7 +597,7 @@ class DeliveryFixture {
     return new CheckedRunDelivery({
       journal, machine, git, node: releaseRunner.runWholeOutput.bind(releaseRunner), gh: externalGh,
       read: async (path) => fs.readFile(path, 'utf8').catch(() => null),
-      dispatchCheck: join(process.cwd(), '..', 'plugin', 'scripts', 'dispatch-check.mjs'),
+      dispatchCheck: DISPATCH_CHECK,
       newId: () => `20000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
       now: () => '2026-09-22T10:00:00.000Z',
     })
@@ -627,7 +632,7 @@ class DeliveryFixture {
       const publisherConfigPath = join(home, 'publisher-config.json')
       await fs.writeFile(publisherConfigPath, JSON.stringify({
         root, worktree, state, fakeGh: join(fakeBin, 'gh'), accountDirectory,
-        dispatchCheck: join(process.cwd(), '..', 'plugin', 'scripts', 'dispatch-check.mjs'),
+        dispatchCheck: DISPATCH_CHECK,
       }))
       const child = spawn(process.execPath, [
         join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'delivery-publisher.ts'), publisherConfigPath, join(home, outcome),
