@@ -130,7 +130,7 @@ describe('Home · navigation shell', () => {
     const trail = await screen.findByRole('navigation', { name: 'Ruta de navegación' })
     expect(within(trail).getByText(StartPlanMother.REPO)).toBeInTheDocument()
     expect(within(trail).getByText(`#${StartPlanMother.ISSUE.number}`)).toBeInTheDocument()
-    expect(within(trail).getByText('Revisar plan')).toBeInTheDocument()
+    expect(within(trail).getByText('Implementación')).toBeInTheDocument()
     expect(within(topBar()).queryByText('Control Tower')).not.toBeInTheDocument()
   })
 

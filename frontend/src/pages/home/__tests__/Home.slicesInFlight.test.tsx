@@ -291,7 +291,7 @@ describe('Home · the slices in flight', () => {
     await selectSliceDetail(user, 8)
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
-    expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText(HeadlessPlanMother.agentFor(8))).toBeInTheDocument()
+    expect(screen.getByText('Implementación iniciada automáticamente').closest('[role="status"]')).toHaveTextContent(HeadlessPlanMother.agentFor(8))
     expect(await (await panelOf(8)).findByText('Tarea 3 de 7')).toBeInTheDocument()
     expect(await screen.findByText('Todavía no ha terminado ningún paso')).toBeInTheDocument()
     expect(screen.queryByText('Cierre del slice')).toBeNull()
@@ -382,7 +382,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
-    expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText(HeadlessPlanMother.agentFor(8))).toBeInTheDocument()
+    expect(screen.getByText('Implementación iniciada automáticamente').closest('[role="status"]')).toHaveTextContent(HeadlessPlanMother.agentFor(8))
     expect(fetching).toHaveBeenCalledWith(
       `/implement-history/8?root=${encodeURIComponent(StartPlanMother.PATH)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,
     )
