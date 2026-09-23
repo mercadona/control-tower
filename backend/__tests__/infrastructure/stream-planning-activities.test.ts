@@ -4,7 +4,7 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PlanningActivityNotRead } from '../../src/domain/exceptions.ts'
+import { PlanningActivityNotRead, RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanningActivityState } from '../../src/domain/value-objects/planning-activity.ts'
@@ -20,6 +20,7 @@ import { StreamPlanningActivities } from '../../src/infrastructure/stream-planni
 
 class CallsDouble extends ClaudeCalls {
   historyRows: readonly RecordedCall[] = []
+  historyFailure: Error | null = null
 
   constructor() {
     super({
@@ -39,6 +40,7 @@ class CallsDouble extends ClaudeCalls {
   }
 
   override async history(): Promise<readonly RecordedCall[]> {
+    if (this.historyFailure !== null) throw this.historyFailure
     return this.historyRows
   }
 }
@@ -124,6 +126,27 @@ describe('StreamPlanningActivities, against a real claude -p --output-format str
 
   afterEach(async () => {
     if (root !== undefined) await rm(root, { recursive: true, force: true })
+  })
+
+  it.each([
+    new RunNotAdvanced('agent measurements could not be recorded: disk full'),
+    new RunNotUnderstood('agent measurements contain conflicting bytes'),
+  ])('measurement refusal %s retains its diagnostic in the planning observation contract', async (failure) => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    subject.calls.historyFailure = failure
+
+    await expect(subject.adapter().of(Mother.watch()))
+      .rejects.toEqual(new PlanningActivityNotRead(failure.message))
+  })
+
+  it('unexpected history failures remain programming errors rather than measurement refusals', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    const failure = new TypeError('a bug in history')
+    subject.calls.historyFailure = failure
+
+    await expect(subject.adapter().of(Mother.watch())).rejects.toBe(failure)
   })
 
   it('running_with_zero_tool_calls_before_the_file_exists', async () => {

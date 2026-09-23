@@ -24,6 +24,7 @@ export class CallInvocation {
   readonly argv: readonly string[]
   readonly prompt: string
   readonly requestId: string | null
+  readonly role: string | null
 
   constructor(asked: {
     conversation: string,
@@ -32,6 +33,7 @@ export class CallInvocation {
     argv: readonly string[],
     prompt: string,
     requestId?: string,
+    role?: string | null,
   }) {
     this.conversation = asked.conversation
     this.purpose = asked.purpose
@@ -39,6 +41,7 @@ export class CallInvocation {
     this.argv = Object.freeze([...asked.argv])
     this.prompt = asked.prompt
     this.requestId = asked.requestId ?? null
+    this.role = asked.role ?? null
     Object.freeze(this)
   }
 }
@@ -56,6 +59,7 @@ export class CallDescriptor {
   readonly conversation: string
   readonly purpose: PlanCallPurpose
   readonly requestId: string | null
+  readonly role: string | null
   readonly cwd: string
   readonly binary: string
   readonly argv: readonly string[]
@@ -67,6 +71,7 @@ export class CallDescriptor {
     conversation: string,
     purpose: PlanCallPurpose,
     requestId: string | null,
+    role?: string | null,
     cwd: string,
     binary: string,
     argv: readonly string[],
@@ -77,6 +82,10 @@ export class CallDescriptor {
     this.conversation = CallDescriptor.#nonempty('conversation', asked.conversation)
     this.purpose = CallDescriptor.#purpose(asked.purpose)
     this.requestId = CallDescriptor.#nullableNonempty('requestId', asked.requestId)
+    this.role = CallDescriptor.#nullableNonempty('role', asked.role ?? null)
+    if (this.role !== null && this.role.trim().length === 0) {
+      throw new Error(`role must be a nonempty string, got ${JSON.stringify(this.role)}`)
+    }
     this.cwd = CallDescriptor.#nonempty('cwd', asked.cwd)
     this.binary = CallDescriptor.#nonempty('binary', asked.binary)
     this.argv = Object.freeze(CallDescriptor.#argv(asked.argv))
@@ -90,11 +99,12 @@ export class CallDescriptor {
   static from(text: string): CallDescriptor {
     const raw: unknown = JSON.parse(text)
     if (!CallDescriptor.#isRecord(raw)) throw new Error(`expected a JSON object, got ${JSON.stringify(raw)}`)
-    CallDescriptor.#exactKeys(raw, CallDescriptor.#KEYS)
+    CallDescriptor.#exactKeys(raw, Object.hasOwn(raw, 'role') ? [...CallDescriptor.#KEYS, 'role'] : CallDescriptor.#KEYS)
     return new CallDescriptor({
       conversation: CallDescriptor.#nonempty('conversation', raw.conversation),
       purpose: CallDescriptor.#purpose(raw.purpose),
       requestId: CallDescriptor.#nullableNonempty('requestId', raw.requestId),
+      role: CallDescriptor.#nullableNonempty('role', Object.hasOwn(raw, 'role') ? raw.role : null),
       cwd: CallDescriptor.#nonempty('cwd', raw.cwd),
       binary: CallDescriptor.#nonempty('binary', raw.binary),
       argv: CallDescriptor.#argv(raw.argv),
@@ -109,6 +119,7 @@ export class CallDescriptor {
       conversation: this.conversation,
       purpose: this.purpose,
       requestId: this.requestId,
+      ...(this.role === null ? {} : { role: this.role }),
       cwd: this.cwd,
       binary: this.binary,
       argv: this.argv,
@@ -475,6 +486,7 @@ export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
         conversation: invocation.conversation,
         purpose: invocation.purpose,
         requestId: invocation.requestId,
+        role: invocation.role,
         cwd: invocation.cwd,
         binary: this.binary,
         argv: [...invocation.argv, CallDescriptor.opening(promptPath)],
@@ -540,6 +552,9 @@ export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
     descriptor: CallDescriptor,
     invocation: CallInvocation,
   ): Promise<void> {
+    if (descriptor.role !== null && descriptor.role !== invocation.role) {
+      throw new PlanAgentNotNamed(`request ${JSON.stringify(invocation.requestId)} was already recorded with a different role`)
+    }
     const promptPath = join(this.files.callDirectory(call), CallDescriptor.PROMPT)
     let prompt: string | null
     try {

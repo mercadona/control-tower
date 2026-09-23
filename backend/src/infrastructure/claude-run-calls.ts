@@ -65,6 +65,7 @@ export class ClaudeRunCalls extends RunCalls {
       argv: this.#argv(watch.agent, dispatch),
       prompt: ClaudeRunCalls.#prompt(watch, dispatch),
       requestId: `run:${dispatch.ticket}`,
+      role: dispatch.role,
     })
     const recorded = await this.calls.startedFor(invocation)
     if (recorded === null && dispatch.response.kind === 'file') {

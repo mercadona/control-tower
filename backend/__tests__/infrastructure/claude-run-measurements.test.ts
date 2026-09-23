@@ -195,6 +195,27 @@ class MeasurementScenario {
 afterEach(async () => MeasurementMother.clean())
 
 describe('ClaudeRunMeasurements', () => {
+  it.each([7, 'not a model map', [], { 'claude-sonnet-5': 7 }, { '': {} }].map((modelUsage) => ({ modelUsage })))(
+    'malformed model metadata $modelUsage stays unknown instead of becoming model names', async ({ modelUsage }) => {
+      const scenario = await MeasurementMother.stream({ stream: MeasurementMother.result({ modelUsage }) })
+
+      const measurements = await scenario.normalized()
+
+      expect(measurements.models).toBeNull()
+      expect(measurements.diagnostics).toContain('modelUsage must map nonempty model names to usage objects')
+    },
+  )
+
+  it('validating common model metadata preserves the historical provider projection', async () => {
+    const scenario = await MeasurementMother.stream({ stream: MeasurementMother.result({ modelUsage: 7 }) })
+
+    await scenario.normalized()
+
+    expect(await scenario.projection()).toMatchObject({
+      reported: { modelUsage: { value: 7, scope: 'reported-only' } }, diagnostics: [],
+    })
+  })
+
   it('measurements cannot attribute an in-memory completion that differs from its durable evidence', async () => {
     const scenario = await MeasurementMother.captured('initial')
     const completed = await scenario.calls.wait(scenario.call)

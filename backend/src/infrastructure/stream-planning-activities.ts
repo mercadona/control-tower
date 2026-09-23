@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { PlanAgentNotResumed, PlanningActivityNotRead } from '../domain/exceptions.ts'
+import { PlanAgentNotResumed, PlanningActivityNotRead, RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import { PlanningActivities } from '../domain/ports/planning-activity.ts'
 import { PlanningActivity, PlanningActivityState, PlanningToolCall } from '../domain/value-objects/planning-activity.ts'
 import type { PlanningActivityStateValue } from '../domain/value-objects/planning-activity.ts'
@@ -122,7 +122,9 @@ export class StreamPlanningActivities extends PlanningActivities {
     try {
       return await this.planCalls.planningRecordFor(watch)
     } catch (cause) {
-      if (cause instanceof PlanAgentNotResumed) throw new PlanningActivityNotRead(cause.message)
+      if (cause instanceof PlanAgentNotResumed || cause instanceof RunNotAdvanced || cause instanceof RunNotUnderstood) {
+        throw new PlanningActivityNotRead(cause.message)
+      }
       throw cause
     }
   }

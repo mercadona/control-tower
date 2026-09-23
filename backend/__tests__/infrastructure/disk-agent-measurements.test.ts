@@ -7,6 +7,7 @@ import { AgentCallMother } from '../agent-call-mother.ts'
 import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
+import { AgentCallMeasurements } from '../../src/domain/value-objects/agent-call-measurements.ts'
 
 class MeasurementDiskMother {
   static readonly roots: string[] = []
@@ -39,6 +40,34 @@ class MeasurementDisk {
 afterEach(async () => MeasurementDiskMother.clean())
 
 describe('disk agent measurements', () => {
+  it.each((['input', 'output', 'cacheRead', 'cacheCreation'] as const).flatMap((field) =>
+    [-1, 0.5, NaN, Infinity, -Infinity].map((value) => ({ field, value })),
+  ))('refuses $field=$value before invalid consumption can be serialized as unknown', ({ field, value }) => {
+    const valid = AgentCallMother.measurements(AgentCallMother.completed())
+
+    expect(() => new AgentCallMeasurements({ ...valid, tokens: { ...valid.tokens, [field]: value } }))
+      .toThrow(`tokens.${field} must be a nonnegative integer or null`)
+  })
+
+  it.each([
+    { field: 'provider', value: '' },
+    { field: 'provider', value: ' ' },
+    { field: 'requestId', value: '' },
+    { field: 'role', value: ' ' },
+    { field: 'startedAt', value: 'yesterday' },
+    { field: 'startedAt', value: '2026-02-30T10:00:00.000Z' },
+  ])('refuses invalid $field=$value at the measurement boundary', ({ field, value }) => {
+    const valid = AgentCallMother.measurements(AgentCallMother.completed())
+
+    expect(() => new AgentCallMeasurements({ ...valid, [field]: value })).toThrow(field)
+  })
+
+  it('refuses empty model identifiers instead of publishing an unnamed model', () => {
+    const valid = AgentCallMother.measurements(AgentCallMother.completed())
+
+    expect(() => new AgentCallMeasurements({ ...valid, models: [''] })).toThrow('model')
+  })
+
   it('the common file preserves invocation identity, execution, unknown values and reported consumption', async () => {
     const disk = await MeasurementDiskMother.empty()
 

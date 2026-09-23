@@ -234,3 +234,19 @@ The guarantee is attached to durable terminal observation, including restart rec
   launch. That test passed in isolation and in the subsequent complete suite.
   Its cause was not established, and neither its code nor its timeout was changed.
 - Implementation and documentation changes are staged; no commit was created.
+
+## Adversarial review follow-up
+
+The initial implementation was committed as `2c149a9d`. Its independent review
+requested four corrections: validating model metadata, retaining the functional
+role, projecting measurement errors through planning progress, and guarding the
+measurement value's invariants.
+
+The corrections extend existing types and adapters. Functional roles travel in
+the optional `role` field of `call.json`; historical descriptors retain their
+previous projection. No cache, service, registry or additional metadata file was
+introduced. The follow-up judge returned PASS with all four findings resolved.
+
+Follow-up verification: `npm run typecheck` passed and `npm test` passed all
+3,125 tests across 151 files. The judge assessed source and tests by reading;
+the parent session ran these checks independently.

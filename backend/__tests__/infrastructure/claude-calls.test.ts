@@ -390,6 +390,18 @@ describe('ClaudeCalls', () => {
     expect(observed).toMatchObject({ env: { CT_STATE_DIR: '/isolated/state', CLAUDE_CONFIG_DIR: '/account' } })
   })
 
+  it('a recorded request cannot be reused as another functional role', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-claude-role-conflict-'))
+    roots.push(root)
+    await CallMother.prepared(root, { requestId: 'same-request', role: 'judge' })
+    const calls = CallMother.calls(root, () => { throw new Error('request lookup must not spawn') })
+    const invocation = new CallInvocation({
+      ...CallMother.invocation({ prompt: 'A recorded prompt' }), requestId: 'same-request', role: 'implement',
+    })
+
+    await expect(calls.startedFor(invocation)).rejects.toThrow('already recorded with a different role')
+  })
+
   it('a failed record write launches nothing', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
@@ -847,6 +859,9 @@ describe('ClaudeCalls', () => {
       CallMother.descriptor('/checkout', { argv: ['--resume', 'another-conversation'] }),
       CallMother.descriptor('/checkout', { requestId: 7 }),
       CallMother.descriptor('/checkout', { requestId: '' }),
+      CallMother.descriptor('/checkout', { role: 7 }),
+      CallMother.descriptor('/checkout', { role: '' }),
+      CallMother.descriptor('/checkout', { role: ' ' }),
       CallMother.descriptorWithoutRequest('/checkout'),
       CallMother.descriptor('/checkout', {
         conversation: foreign,

@@ -100,7 +100,7 @@ class TerminalResult {
     if (Object.keys(extra).length > 0) reported.extra = extra
     return {
       kind: 'matched',
-      measurements: ReportedMeasurements.projected(reported, diagnostics),
+      measurements: ReportedMeasurements.projected(reported, diagnostics, this.#payload.modelUsage),
     }
   }
 
@@ -265,18 +265,20 @@ class TerminalResult {
 class ReportedMeasurements {
   readonly #reported: JsonRecord
   readonly #diagnostics: readonly string[]
+  readonly #modelUsage: unknown
 
-  private constructor(reported: JsonRecord, diagnostics: readonly string[]) {
+  private constructor(reported: JsonRecord, diagnostics: readonly string[], modelUsage: unknown) {
     this.#reported = reported
     this.#diagnostics = diagnostics
+    this.#modelUsage = modelUsage
   }
 
   static empty(): ReportedMeasurements {
-    return new ReportedMeasurements({}, [])
+    return new ReportedMeasurements({}, [], undefined)
   }
 
-  static projected(reported: JsonRecord, diagnostics: readonly string[]): ReportedMeasurements {
-    return new ReportedMeasurements(reported, Object.freeze([...new Set(diagnostics)]))
+  static projected(reported: JsonRecord, diagnostics: readonly string[], modelUsage: unknown): ReportedMeasurements {
+    return new ReportedMeasurements(reported, Object.freeze([...new Set(diagnostics)]), modelUsage)
   }
 
   normalized(asked: {
@@ -285,13 +287,16 @@ class ReportedMeasurements {
     diagnostics: readonly string[],
   }): AgentCallMeasurements {
     const usage = ReportedMeasurements.#record(this.#reported.usage)
-    const models = ReportedMeasurements.#record(this.#reported.modelUsage)
+    const diagnostics = [...new Set([
+      ...asked.completed.measurement.unavailable, ...asked.diagnostics, ...this.#diagnostics,
+    ])]
+    const models = this.#models(diagnostics)
     const roleIndex = asked.descriptor.argv.indexOf('--agent')
     return new AgentCallMeasurements({
       provider: 'claude-code',
       purpose: asked.descriptor.purpose,
       requestId: asked.descriptor.requestId,
-      role: roleIndex === -1 ? null : asked.descriptor.argv[roleIndex + 1] ?? null,
+      role: asked.descriptor.role ?? (roleIndex === -1 ? null : asked.descriptor.argv[roleIndex + 1] ?? null),
       startedAt: asked.descriptor.startedAt,
       completed: asked.completed,
       tokens: {
@@ -300,11 +305,20 @@ class ReportedMeasurements {
         cacheRead: ReportedMeasurements.#value(usage?.cache_read_input_tokens),
         cacheCreation: ReportedMeasurements.#value(usage?.cache_creation_input_tokens),
       },
-      models: models === null ? null : Object.keys(models).sort(),
-      diagnostics: [...new Set([
-        ...asked.completed.measurement.unavailable, ...asked.diagnostics, ...this.#diagnostics,
-      ])],
+      models,
+      diagnostics,
     })
+  }
+
+  #models(diagnostics: string[]): readonly string[] | null {
+    if (this.#modelUsage === undefined || this.#modelUsage === null) return null
+    if (!ReportedMeasurements.#isRecord(this.#modelUsage)
+      || Object.entries(this.#modelUsage).some(([name, usage]) => name.trim().length === 0
+        || !ReportedMeasurements.#isRecord(usage))) {
+      diagnostics.push('modelUsage must map nonempty model names to usage objects')
+      return null
+    }
+    return Object.keys(this.#modelUsage).sort()
   }
 
   static #record(value: unknown): JsonRecord | null {

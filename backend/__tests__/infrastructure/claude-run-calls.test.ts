@@ -388,6 +388,9 @@ describe('ClaudeRunCalls', () => {
       const promptPath = join(dirname(scenario.launch.descriptors[index]), CallDescriptor.PROMPT)
       expect(descriptor.purpose).toBe('implementation')
       expect(descriptor.requestId).toBe(`run:${dispatch.ticket}`)
+      expect(descriptor.role).toBe(dispatch.role)
+      expect(JSON.parse(readFileSync(join(dirname(scenario.launch.descriptors[index]), 'agent-measurements-v1.json'), 'utf8')))
+        .toMatchObject({ role: dispatch.role })
       expect(descriptor.cwd).toBe(scenario.watch.located.path)
       expect(descriptor.argv).toEqual(RunCallScenario.argv(dispatch, promptPath))
       expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch))
@@ -549,6 +552,13 @@ describe('ClaudeRunCalls', () => {
     await writeFile(response, 'stale model-written bytes\n', 'utf8')
     await scenario.perform('replay')
 
+    await rm(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'))
+    await new MeasuredAgentCalls({
+      executor: scenario.calls,
+      reader: new ClaudeRunMeasurements({ files: scenario.files }),
+      store: new DiskAgentMeasurements({ files: scenario.files }),
+    }).history(scenario.watch.agent)
+
     expect(scenario.launch.descriptors).toHaveLength(1)
     expect(await readFile(evidence, 'utf8')).toBe(immutable)
     expect(immutable).toBe(`${JSON.stringify(raw)}\n`)
@@ -557,7 +567,7 @@ describe('ClaudeRunCalls', () => {
       .toContain('"scope": "unverified-resume"')
     expect(JSON.parse(await readFile(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'), 'utf8')))
       .toMatchObject({
-        provider: 'claude-code', callId: call.id, requestId: 'run:replay',
+        provider: 'claude-code', callId: call.id, requestId: 'run:replay', role: 'implement',
         execution: { kind: 'success' }, cost: { attribution: 'unverified-resume' },
       })
   })

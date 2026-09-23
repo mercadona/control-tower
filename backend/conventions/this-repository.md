@@ -169,11 +169,20 @@ against disk evidence and retains the existing provider-specific projection. It
 does not call back into the executor. `DiskAgentMeasurements` publishes the
 common `agent-measurements-v1.json` beside that evidence, keyed by the existing
 conversation and call identity. Its fields include provider, purpose, request
-identity, explicit role when present, recorded timestamps, execution outcome,
+identity, explicit functional role when present, recorded timestamps, execution outcome,
 wall duration, reported cost and turns, token counts, model names and diagnostics.
 Token counts are reported values, not verified incremental bills; the Claude
 reader uses `usage` and never adds overlapping `modelUsage` totals. Missing
 counts are `null`, measured zero remains zero, and no total is invented.
+
+New role dispatches persist their functional role in the existing `call.json`
+descriptor, so measurement recovery does not depend on a provider's `--agent`
+argument. Older descriptors remain readable and retain their prior agent-name
+or unknown-role projection. Invalid model metadata produces an unknown model
+list with a diagnostic in the common record, without changing the historical
+provider projection. The common value guards its own identifiers, timestamp and
+token counts before serialization. Measurement failures observed through planning
+progress retain their diagnostic under `planning-progress-not-read`.
 
 Repeated or concurrent observations accept identical durable bytes and reject
 conflicts. A store failure stops the observation and leaves execution evidence
