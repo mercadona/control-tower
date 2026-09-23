@@ -93,6 +93,7 @@ var DEFAULT_BUDGETS = Object.freeze({
   correctionRetries: 2,
   reconcileRetries: 2
 });
+var freshCounters = Object.freeze({ controlRetries: 0, judgeRetries: 0, correctionRetries: 0 });
 
 // scripts/dispatch-gate.js
 var Dispatch = Object.freeze({

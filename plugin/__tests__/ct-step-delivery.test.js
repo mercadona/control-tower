@@ -10,7 +10,8 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, writeVerdict, writeRaw, log, commits, runState, judgeTask, taskOk, sliceOk } = makeHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeRaw, log, commits, runState, judgeTask, taskOk, reviewOk, sliceOk,
+  bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -18,13 +19,15 @@ afterEach(() => { rmSyncBestEffort(repo) })
 describe('the happy path', () => {
   it('two tasks, two commits, and it is the PROGRAM that commits them', () => {
     taskOk('uno.txt')
-    const r = taskOk('dos.txt')
-    expect(r.status).toBe(0)
-    // §3.7: the last commit no longer delivers — it opens Phase B (Task 8):
-    // before the global verification, the branch has to be reconciled with its
-    // base.
-    expect(r.stdout).toMatch(/step reconcile/)
+    expect(taskOk('dos.txt').status).toBe(0)
     expect(commits()).toBe(3)
+    // §3.7: the last commit no longer delivers — the review of the slice
+    // (#530) and then Phase B (Task 8): before the global verification, the
+    // branch has to be reconciled with its base.
+    const r = reviewOk()
+    expect(r.status).toBe(0)
+    expect(r.stdout).toMatch(/step reconcile/)
+    expect(commits()).toBe(4)
     expect(log()).toMatch(/the first one \(#7, task 1\/2\)/)
     expect(log()).toMatch(/the second one \(#7, task 2\/2\)/)
   })
@@ -34,8 +37,9 @@ describe('the happy path', () => {
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
     expect(r.stdout).toMatch(/ready for the pull request/)
-    // 1 base + 2 tasks + telemetry + the slice verdict, each in its own commit.
-    expect(commits()).toBe(5)
+    // 1 base + 2 tasks + the review + telemetry + the slice verdict, each in
+    // its own commit.
+    expect(commits()).toBe(6)
     expect(log()).toMatch(/Verdict of the whole slice \(#7\)/)
   })
 
@@ -139,12 +143,12 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
     expect(deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)).toEqual({ ok: true })
-    // 1 base + 2 tasks + telemetry + slice verdict + e2e report.
-    expect(commits()).toBe(6)
+    // 1 base + 2 tasks + the review + telemetry + slice verdict + e2e report.
+    expect(commits()).toBe(7)
     expect(log()).toMatch(/e2e report of issue #7/)
-    // The telemetry and slice verdict commits were COUNTED: that lets the next
-    // process cross the commits without the sums going wrong.
-    expect(runState().sliceCommits).toBe(2)
+    // The review, telemetry and slice verdict commits were COUNTED: that lets
+    // the next process cross the commits without the sums going wrong.
+    expect(runState().sliceCommits).toBe(3)
   })
 
   it('a `git add` before the e2e does not go into the writeReport commit (slice 12)', () => {
@@ -166,8 +170,11 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
 // capde's review (2026-08-19), point 3 / F37's closing criterion: a slice's PR
 // brings a VERDICT, not a sentence in the commit message asserting it.
 describe('the verdict travels in the pull request', () => {
+  // A run born before the final review (#530) judges every task; the verdict of
+  // the review travels in the review's commit (ct-step-review.test.js).
   it("each task's PASS ends up tracked and inside that task's commit", () => {
-    taskOk('uno.txt')
+    bornBeforeTheReview()
+    judgedTaskOk('uno.txt')
     const path = join('docs', 'superpowers', 'verdicts', 'issue-7-task-1.json')
     expect(existsSync(join(repo, path))).toBe(true)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
@@ -178,9 +185,9 @@ describe('the verdict travels in the pull request', () => {
   })
 
   it('a FAIL leaves no tracked verdict: only the one that passes travels', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
-    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
+    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-review.json'))).toBe(false)
   })
 })

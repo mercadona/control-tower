@@ -52,7 +52,6 @@ export const PLAN = [
   '',
   '### Task 1 — the first one',
   '**Objective:** one file.',
-  '**Judge:** checkpoint',
   '**Files:** `uno.txt` (create).',
   '**TDD:** No TDD — fixture.',
   '**Tests:** N/A — fixture.',
@@ -80,8 +79,7 @@ export const PLAN = [
 // from when creating the run (there is no `gh` in this program). It is written
 // with `renderState` and not by hand for the same reason the signal's is: what
 // parses it is a real YAML, and a journey is a sentence with commas and colons
-// inside it. `plan` replaces the plan a test drives; task 1 of `PLAN` is a
-// checkpoint (#530), so the tests written before checkpoints keep their judge.
+// inside it. `plan` replaces the plan a test drives.
 export function makeRepo({ e2e = null, plan = PLAN } = {}) {
   const d = mkdtempSync(join(tmpdir(), 'ct-step-'))
   const g = (...a) => execFileSync('git', a, { cwd: d, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -254,28 +252,64 @@ export function makeHelpers(ref) {
   const judgeTask = (...args) => { ct('next'); seal(args[0], taskPackage()); return ct('verdict', ...args) }
   const judgeSlice = (...args) => { ct('next'); seal(args[0], slicePackage()); return ct('slice-verdict', ...args) }
 
-  // A whole task down the happy path.
-  const taskOk = (file) => {
-    ct('report', writeReport([file]))
+  // One task of a new run (#530): the judge reviews the slice once, after the
+  // last commit, so a task goes implement → controls → commit with no judge.
+  const commitTask = (paths) => {
+    ct('next')
+    ct('report', writeReport(paths))
     ct('controls')
+    return ct('commit')
+  }
+  // A whole task down the happy path.
+  const taskOk = (file) => commitTask([file])
+  // One fix round at the review: the implementer touches files of the slice
+  // (the tasks committed them, so the round changes their content), and the
+  // controls of every task measure the fix.
+  const reviewFix = (paths = ['uno.txt']) => {
+    for (const declared of paths) writeFileSync(join(ref(), declared), `${declared}, fixed at the review\n`)
+    ct('report', writeReport(paths))
+    return ct('controls')
+  }
+  // The review down the happy path: the last commit left the run at the judge
+  // of the whole slice, which approves it with nothing to fix.
+  const reviewOk = () => {
     judgeTask(writeVerdict('PASS'))
     return ct('commit')
   }
-  // The whole slice down the happy path: the two tasks, the reconciliation with
-  // the base (Phase B, Task 8 — the fixture leaves the base unmoved, so it comes
-  // out on the first round), the Global verification and the slice's judgement
-  // (§3.7).
+  // The whole slice down the happy path: the two tasks, the review, the
+  // reconciliation with the base (Phase B, Task 8 — the fixture leaves the base
+  // unmoved, so it comes out on the first round), the Global verification and
+  // the slice's judgement (§3.7).
   const sliceOk = () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
     return judgeSlice(writeSliceVerdict('PASS'))
   }
 
+  // A run born before the final review (#530) carries no `judging` field and
+  // judges every task, as it always did. It is simulated by writing the run
+  // file the way that version wrote it: the fields #530 added, removed.
+  const bornBeforeTheReview = () => {
+    if (!existsSync(join(ref(), '.agent', 'run-7.json'))) ct('next')
+    const older = runState()
+    delete older.judging
+    delete older.reviewing
+    writeFileSync(join(ref(), '.agent', 'run-7.json'), JSON.stringify(older, null, 2) + '\n')
+  }
+  // A task of such a run down the happy path, with its own judge.
+  const judgedTaskOk = (file) => {
+    ct('report', writeReport([file]))
+    ct('controls')
+    judgeTask(writeVerdict('PASS'))
+    return ct('commit')
+  }
+
   return {
     ct, ctIn, ctFrom, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
     taskPackage, slicePackage, judgeRows, packageToken, seal,
-    judgeTask, judgeSlice, taskOk, sliceOk,
+    judgeTask, judgeSlice, commitTask, taskOk, reviewFix, reviewOk, sliceOk, bornBeforeTheReview, judgedTaskOk,
   }
 }

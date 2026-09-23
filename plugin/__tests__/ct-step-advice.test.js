@@ -17,24 +17,39 @@ import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 import { ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS } from '../scripts/step-contracts.js'
 
 let repo
-const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask, judgeRows } = makeHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask, judgeRows, taskOk, bornBeforeTheReview } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
 const FINDING = { severity: 'high', what: 'la lógica está en el sitio que no es', path: 'uno.txt', line: 1 }
 
-// A whole attempt that ends in a veto, with what the implementer said about it:
-// it is what the advisor's package has to be able to show afterwards.
+// The judge reviews the slice once, after the last commit (#530), so the
+// vetoes that reach the advisor are the review's. Its first attempt is the
+// slice as its tasks committed it, and what the implementer of the last task
+// said is what the advisor's package shows for it.
+const vetoedReview = (says) => {
+  taskOk('uno.txt')
+  ct('next')
+  ct('report', writeReport(['dos.txt'], 'report.json', says))
+  ct('controls')
+  ct('commit')
+  return judgeTask(writeVerdict('FAIL', [FINDING]))
+}
+
+// A whole fix round at the review that ends in a veto, with what the
+// implementer said about it: it is what the advisor's package has to be able to
+// show afterwards.
 const vetoedAttempt = (says) => {
   ct('next')
+  writeFileSync(join(repo, 'uno.txt'), `uno.txt, ${says}\n`)
   ct('report', writeReport(['uno.txt'], 'report.json', says))
   ct('controls')
   return judgeTask(writeVerdict('FAIL', [FINDING]))
 }
 
 const twoVetoes = () => {
-  vetoedAttempt('lo puse en el módulo viejo')
+  vetoedReview('lo puse en el módulo viejo')
   vetoedAttempt('lo volví a poner en el módulo viejo')
 }
 
@@ -80,7 +95,7 @@ describe('the second veto does not go back to implementing blindly', () => {
     expect(packageText).toContain('lo puse en el módulo viejo')
     expect(packageText).toContain('lo volví a poner en el módulo viejo')
     expect(packageText).toContain('la lógica está en el sitio que no es')
-    // The task's brief, which the two attempts came out of.
+    // The brief of the review, which the two attempts came out of.
     expect(packageText).toContain('the first one')
   })
 
@@ -192,13 +207,21 @@ describe('the third attempt starts with a clean tree and with the advice in fron
     askForAdvice(advice())
 
     ct('next')
-    const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
+    const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-2-brief.md'), 'utf8')
     expect(brief).toContain('saca la decisión a un tipo propio')
     expect(brief).toContain('uno.txt')
   })
 
+  // Only a run born before the final review (#530) has a task after a vetoed
+  // one: the review is the last judge of a new run.
   it('the advice is not inherited: the next task starts a brief without it', () => {
-    twoVetoes()
+    bornBeforeTheReview()
+    for (const says of ['lo puse en el módulo viejo', 'lo volví a poner en el módulo viejo']) {
+      ct('next')
+      ct('report', writeReport(['uno.txt'], 'report.json', says))
+      ct('controls')
+      judgeTask(writeVerdict('FAIL', [FINDING]))
+    }
     askForAdvice(advice())
     ct('next')
     ct('report', writeReport(['uno.txt']))
@@ -220,7 +243,7 @@ describe('what the advice leaves measured', () => {
     const [row] = judgeRows('advise')
     expect(row.outcome).toBe('done')
     expect(row.advice_bytes).toBeGreaterThan(0)
-    expect(row.task).toBe(1)
+    expect(row.task).toBe(2)
     expect(row.attempt).toBe(3)
     // The material of the role, as in any other step that dispatches somebody.
     expect(row.agent_bytes).toBeGreaterThan(0)
@@ -242,7 +265,7 @@ describe('the advisor cannot be left without what it was promised', () => {
     twoVetoes()
 
     ct('next')
-    expect(runState().nextSeal).toBe('1:advise:3')
+    expect(runState().nextSeal).toBe('2:advise:3')
   })
 
   it('the package survives a discard: it does not have to be regenerated to ask again', () => {

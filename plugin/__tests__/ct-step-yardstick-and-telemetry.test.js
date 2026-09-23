@@ -14,7 +14,10 @@ import { makeHelpers, makeRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harn
 
 let repo
 const { ct, ctIn, writeReport, writeVerdict, writeSliceVerdict, log, commits, runState, judgeTask,
-  judgeSlice, taskOk, taskPackage, slicePackage, judgeRows, seal } = makeHelpers(() => repo)
+  judgeSlice, taskOk, reviewFix, reviewOk, taskPackage, slicePackage, judgeRows, seal } = makeHelpers(() => repo)
+
+// Both tasks committed: the run stands at the judge's review of the slice (#530).
+const atTheReview = () => { taskOk('uno.txt'); taskOk('dos.txt') }
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -35,8 +38,7 @@ describe('what the implementer warns about, and the telemetry, do not stay where
 
   it('Step 4: `next` repeats it at the commit step, which is when the session writes the pull request', () => {
     ct('report', writeReport(['uno.txt'], 'report.json', 'la decisión de la tarea 2 deja el lockfile sin hacer valer'))
-    ct('controls')
-    judgeTask(writeVerdict('PASS'))
+    ct('controls')   // no judge on a task (#530): green controls lead to commit
     const r = ct('next')
     expect(r.stdout).toMatch(/step: commit/)
     expect(r.stdout).toMatch(/lockfile sin hacer valer/)
@@ -63,11 +65,9 @@ describe('what the implementer warns about, and the telemetry, do not stay where
   })
 
   it('Step 5: the rows of the attempt the judge vetoed travel too — the cost of the round trips is the datum', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'no', path: 'uno.txt', line: 1 }]))
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    reviewFix()
     judgeTask(writeVerdict('PASS'))
     ct('commit')
     const committed = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
@@ -154,7 +154,7 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     taskOk('uno.txt')
     const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    expect(rows.map((f) => f.step)).toEqual(['implement', 'controls', 'judge'])
+    expect(rows.map((f) => f.step)).toEqual(['implement', 'controls'])   // no judge on a task (#530)
   })
 })
 
@@ -170,9 +170,14 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/verdicts/\n')
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'ignore the verdicts'], { cwd: repo })
-    const r = taskOk('uno.txt')
+    // The verdict is the review's (#530): its commit carries the fix of uno.txt.
+    atTheReview()
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'no', path: 'uno.txt', line: 1 }]))
+    reviewFix()
+    judgeTask(writeVerdict('PASS'))
+    const r = ct('commit')
     expect(r.status).toBe(0)
-    expect(commits()).toBe(3)
+    expect(commits()).toBe(5)
     expect(execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })).toMatch(/uno\.txt/)
   })
 
@@ -209,6 +214,10 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     execFileSync('git', ['commit', '-q', '-m', 'ignore the evidence'], { cwd: repo })
     taskOk('uno.txt')
     taskOk('dos.txt')
+    // The review's evidence cannot travel either: nothing to commit, the run goes on.
+    const review = reviewOk()
+    expect(review.status).toBe(0)
+    expect(review.stderr).toMatch(/nothing to commit of the judge's review/)
     ct('reconcile')
     ct('global')
     const r = judgeSlice(writeSliceVerdict('PASS'))
@@ -216,7 +225,7 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     expect(r.stdout).toMatch(/run delivered/)
     expect(r.stderr).toMatch(/nothing to commit of the slice's verdict/)
     expect(runState().closed).toBe('delivered')
-    // 1 base + 1 gitignore + 2 tasks, and NO verdict commit at all.
+    // 1 base + 1 gitignore + 2 tasks, and NO review nor verdict commit at all.
     expect(commits()).toBe(4)
     expect(log()).not.toMatch(/Verdict of the whole slice/)
   })
@@ -350,30 +359,35 @@ describe('the ct yardstick travels in the brief, and goes ahead of the repo one'
 // the pasted document: `## Vara` goes FIRST, ahead even of `## Señal`, for the
 // same reason that `## Señal` goes ahead of the diff -U10.
 describe('the judge gets a brief of its own: the task, without the ct documents its package already lists by path', () => {
+  // The judge reviews the slice after the last commit (#530): its step is the
+  // review, at task 2.
   const toJudgeStep = () => {
     ct('next')
-    ct('report', writeReport(['uno.txt']))
+    ct('report', writeReport(['dos.txt']))
     ct('controls')
+    ct('commit')
     return ct('next')
   }
-  const implementerBrief = () => join(repo, '.agent', 'run-7', 'task-1-brief.md')
-  const judgeBrief = () => join(repo, '.agent', 'run-7', 'task-1-judge-brief.md')
+  const implementerBrief = () => join(repo, '.agent', 'run-7', 'task-2-brief.md')
+  const judgeBrief = () => join(repo, '.agent', 'run-7', 'task-2-judge-brief.md')
   const ctDocuments = () => PluginYardstick.FILES.map((name) => {
     const path = join(PLUGIN_ROOT_TEST, PluginYardstick.DIRECTORY, name)
     return { name, path, content: readFileSync(path, 'utf8') }
   })
 
   it('`next` at the judge step writes the judge brief and names it, and the implementer brief is untouched', () => {
+    taskOk('uno.txt')
     ct('next')
     const implementerBefore = readFileSync(implementerBrief(), 'utf8')
     const r = toJudgeStep()
-    expect(r.stdout).toMatch(/the task's brief: .*task-1-judge-brief\.md/)
-    expect(r.stdout).not.toMatch(/the task's brief: .*task-1-brief\.md/)
+    expect(r.stdout).toMatch(/the task's brief: .*task-2-judge-brief\.md/)
+    expect(r.stdout).not.toMatch(/the task's brief: .*task-2-brief\.md/)
     expect(existsSync(judgeBrief())).toBe(true)
     expect(readFileSync(implementerBrief(), 'utf8')).toBe(implementerBefore)
   })
 
   it('the judge brief carries the task and none of the pasted ct documents', () => {
+    taskOk('uno.txt')
     toJudgeStep()
     const brief = readFileSync(judgeBrief(), 'utf8')
     expect(brief).toMatch(/### Task 1/)
@@ -383,7 +397,12 @@ describe('the judge gets a brief of its own: the task, without the ct documents 
   })
 
   it('what the judge no longer reads twice is the whole pasted yardstick: the judge brief is smaller by exactly that', () => {
+    taskOk('uno.txt')
     toJudgeStep()
+    // The implementer brief of the review is the one a veto dispatches: the
+    // same tasks as the judge's, with the ct yardstick pasted behind them.
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'no', path: 'uno.txt', line: 1 }]))
+    ct('next')
     const pasted = Buffer.byteLength(PluginYardstick.composeSection(ctDocuments()))
     expect(statSync(implementerBrief()).size - statSync(judgeBrief()).size).toBe(pasted)
     expect(pasted).toBeGreaterThan(15_000)
@@ -394,6 +413,7 @@ describe('the judge gets a brief of its own: the task, without the ct documents 
     writeFileSync(join(repo, '.agent', 'conventions.md'), '# La vara\n\n- `AGENTS.md`\n')
     execFileSync('git', ['add', '.agent/conventions.md'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'declare the conventions'], { cwd: repo })
+    taskOk('uno.txt')
     toJudgeStep()
     const brief = readFileSync(judgeBrief(), 'utf8')
     expect(brief).toMatch(/leída directo de `\.agent\/conventions\.md`/)
@@ -406,6 +426,7 @@ describe('the slice package carries the path of simplicity.md, not the whole doc
   it('the "## Vara" section is the first of the package and carries the absolute path of simplicity.md', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
     ct('next')
@@ -454,8 +475,7 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
   })
 
   it('the judge row carries the agent, its skill and the review package it judged', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const packageBytes = statSync(taskPackage()).size
     const v = writeVerdict('PASS')
@@ -473,6 +493,7 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
   it('the slice judge loads no skill: its row notes zero, which is not the same as not having measured it', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
     ct('next')
@@ -487,8 +508,7 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
   })
 
   it('a discarded verdict names no input, nor its size', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('verdict', writeVerdict('PASS'))
     const row = judgeRows('judge').at(-1)
     expect(row.outcome).toBe('discarded')
@@ -498,6 +518,7 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
   it('with no reconciliation package in the run directory, the `reconcile` row does not invent the cost of a role nobody dispatched', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     expect(ct('reconcile').status).toBe(0)
     const row = judgeRows('reconcile').at(-1)
     expect(Object.hasOwn(row, 'agent_bytes')).toBe(false)

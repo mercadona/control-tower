@@ -5,17 +5,15 @@
 // fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
-
-// The harness plan without the marker it still carries for the older tests.
-const REVIEW_PLAN = PLAN.replace('**Judge:** checkpoint\n', '')
+import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, ctFrom, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask } = makeHelpers(() => repo)
+const { ct, ctFrom, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask,
+  bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
 
 const filesOf = (rev) => execFileSync('git', ['show', '--name-only', '--format=', rev], { cwd: repo, encoding: 'utf8' })
 const subjectOf = (rev) => execFileSync('git', ['log', '-1', '--format=%s', rev], { cwd: repo, encoding: 'utf8' }).trim()
@@ -35,7 +33,7 @@ const commitBothTasks = () => {
   }
 }
 
-beforeEach(() => { repo = makeRepo({ plan: REVIEW_PLAN }) })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
 describe('the review of the whole slice, after the last commit', () => {
@@ -151,5 +149,69 @@ describe('the review of the whole slice, after the last commit', () => {
     expect(diff).toMatch(/\+\+\+ b\/uno\.txt/)
     expect(diff).toMatch(/\+\+\+ b\/dos\.txt/)
     expect(readFileSync(taskPackage(), 'utf8')).not.toContain(TELEMETRY)
+  })
+
+  it('a review with nothing to commit, because its evidence is gitignored, goes on to reconcile with no commit to count', () => {
+    appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/\n')
+    execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'ignore the evidence'], { cwd: repo })
+    commitBothTasks()
+    judgeTask(writeVerdict('PASS'))
+
+    const r = ct('commit')
+    expect(r.status).toBe(0)
+    expect(r.stderr).toMatch(/nothing to commit of the judge's review/)
+    expect(commits()).toBe(4)
+    const state = runState()
+    expect(state.step).toBe('reconcile')
+    expect(state.reviewing).toBe(false)
+    expect(state.sliceCommits ?? 0).toBe(0)
+    // A new process reads the state again, and the commit count still agrees.
+    expect(ct('next').status).toBe(0)
+  })
+})
+
+// Moved from the checkpoints suite (#530), whose other facts the tests above
+// measure at the review.
+describe('a task is committed under the seal of its controls', () => {
+  it('green controls on a task go straight to commit, and the commit carries no verdict file and spends the seal', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    expect(runState().step).toBe('commit')
+
+    const r = ct('commit')
+    expect(r.status).toBe(0)
+    expect(commits()).toBe(2)
+    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
+    expect(runState().sealedTree).toBeNull()
+  })
+
+  it('an index changed after the controls is not committed on a task with no judge', () => {
+    ct('report', writeReport(['uno.txt']))
+    ct('controls')
+    writeFileSync(join(repo, 'extra.txt'), 'staged after the controls\n')
+    execFileSync('git', ['add', 'extra.txt'], { cwd: repo })
+
+    const r = ct('commit')
+    expect(r.status).toBe(8)
+    expect(r.stderr).toMatch(/the index is no longer the one the judge approved/)
+    expect(commits()).toBe(1)
+    expect(runState().step).toBe('commit')
+  })
+})
+
+describe('a run born before the final review judges every task over its own diff', () => {
+  it('the package of a task carries that task alone, after the task before it was judged and committed', () => {
+    bornBeforeTheReview()
+    judgedTaskOk('uno.txt')
+    ct('report', writeReport(['dos.txt']))
+    ct('controls')
+    expect(runState().step).toBe('judge')
+
+    ct('next')
+    const pkg = readFileSync(taskPackage(), 'utf8')
+    expect(pkg).toMatch(/^# Review package: task 2\/2 of issue #7 \(staged, not yet committed\)$/m)
+    expect(diffOf(taskPackage())).not.toMatch(/uno\.txt/)
+    expect(diffOf(taskPackage())).toMatch(/\+\+\+ b\/dos\.txt/)
   })
 })

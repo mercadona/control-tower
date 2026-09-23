@@ -9,10 +9,12 @@ import { makeHelpers, makeRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harn
 import { worktreeInConflict } from './fixtures/worktree-in-conflict.js'
 
 const BRANCH_BASE_SHA = '35303a16'
-const BYTE_IDENTICAL_STEPS = ['implement', 'controls', 'judge', 'commit', 'reconcile', 'global', 'slice-judge', 'e2e']
+const BYTE_IDENTICAL_STEPS = ['implement', 'controls', 'judge', 'commit', 'reconcile', 'global', 'e2e']
 const BASE_ADVISOR_HEADING = 'DISPATCH THE ADVISOR (subagent ct-advisor — declared with Read only) with:'
 const TREE_ADVISOR_HEADING = 'DISPATCH THE ADVISOR (subagent ct-advisor — declared with Read, StructuredOutput only) with:'
 const WORDING_THIS_TREE_CANNOT_PRINT = 'declared with Read only) with:'
+const BASE_VERDICTS_GLOB = 'docs/superpowers/verdicts/issue-7-task-*.json'
+const TREE_VERDICTS_GLOB = 'docs/superpowers/verdicts/issue-7-*.json'
 const DECLARED_JOURNEY = ['the journey']
 const VETOES_BEFORE_ADVICE = 2
 const REJECTED_FINDING = { severity: 'high', what: 'the logic stayed in the module it had to leave', path: 'uno.txt', line: 1 }
@@ -158,7 +160,7 @@ let footerBaseRepo
 let footerTreeRepo
 let reconcilePrinted
 let footerPrinted
-const { ct, writeReport, writeVerdict, writeSliceVerdict, taskOk, judgeTask, judgeSlice } = makeHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeSliceVerdict, judgedTaskOk, judgeTask, judgeSlice, bornBeforeTheReview } = makeHelpers(() => repo)
 
 beforeAll(() => {
   baseHome = mkdtempSync(join(tmpdir(), 'ct-step-branch-base-'))
@@ -166,6 +168,7 @@ beforeAll(() => {
 
   repo = makeRepo({ e2e: DECLARED_JOURNEY })
   happyPathRepo = repo
+  bornBeforeTheReview()
   comparison.capture('implement', repo)
   ct('report', writeReport(['uno.txt']))
   comparison.capture('controls', repo)
@@ -174,7 +177,7 @@ beforeAll(() => {
   judgeTask(writeVerdict('PASS'))
   comparison.capture('commit', repo)
   ct('commit')
-  taskOk('dos.txt')
+  judgedTaskOk('dos.txt')
   comparison.capture('reconcile', repo)
   ct('reconcile')
   comparison.capture('global', repo)
@@ -184,6 +187,7 @@ beforeAll(() => {
   comparison.capture('e2e', repo)
 
   repo = makeRepo()
+  bornBeforeTheReview()
   for (let veto = 0; veto < VETOES_BEFORE_ADVICE; veto += 1) {
     ct('next')
     ct('report', writeReport(['uno.txt']))
@@ -215,7 +219,7 @@ afterAll(() => {
 })
 
 describe('the prose a human reads is the prose of the branch base', () => {
-  it('eight_of_the_nine_steps_print_the_bytes_the_branch_base_printed', () => {
+  it('seven_of_the_nine_steps_print_the_bytes_the_branch_base_printed', () => {
     for (const step of BYTE_IDENTICAL_STEPS) {
       expect(comparison.tree(step), `the ${step} step no longer prints what the branch base printed`)
         .toBe(comparison.base(step))
@@ -225,6 +229,12 @@ describe('the prose a human reads is the prose of the branch base', () => {
   it('the_advise_step_differs_in_the_one_line_the_advisor_tool_declaration_moved', () => {
     expect(comparison.tree('advise'))
       .toBe(comparison.base('advise').replace(BASE_ADVISOR_HEADING, TREE_ADVISOR_HEADING))
+  })
+
+  it('the_slice_judge_step_differs_in_the_one_glob_the_review_verdict_widened', () => {
+    expect(comparison.base('slice-judge')).toContain(BASE_VERDICTS_GLOB)
+    expect(comparison.tree('slice-judge'))
+      .toBe(comparison.base('slice-judge').replace(BASE_VERDICTS_GLOB, TREE_VERDICTS_GLOB))
   })
 
   it('the_base_transcript_comes_from_git_and_not_from_the_tree_under_test', () => {

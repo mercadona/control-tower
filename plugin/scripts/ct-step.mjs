@@ -2674,6 +2674,12 @@ function resetTaskTree() {
   return entries.length
 }
 
+function stageTelemetry() {
+  if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
+    err(`warning: the telemetry (${METRICS_REL}) could not be staged — the task is committed without it. Is the path gitignored in this repo?`)
+  }
+}
+
 function commitVerb() {
   // WHAT GETS COMMITTED IS WHAT WAS APPROVED, and it is checked before
   // anything else.
@@ -2719,7 +2725,18 @@ function commitVerb() {
     err(String(e.message))
     return OUTCOMES.FAILED
   }
+  // A review (#530) with no fix staged commits only its evidence, the verdict
+  // and the telemetry, so the telemetry is staged before asking whether there
+  // is anything to commit. With both paths gitignored there is nothing: that is
+  // evidence that cannot travel, not a failure, so it warns and the run goes on
+  // with no commit to count — the doctrine of the slice's verdict.
+  if (run.reviewing) stageTelemetry()
   if (!(git(['diff', '--cached', '--name-only']) || '').trim()) {
+    if (run.reviewing) {
+      err("warning: nothing to commit of the judge's review (are the verdict and the telemetry gitignored?) — the run carries on.")
+      run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, sealedTree: null }
+      return OUTCOMES.DONE
+    }
     err(`task ${run.task} left nothing staged: there is nothing to commit`)
     return OUTCOMES.FAILED
   }
@@ -2742,9 +2759,7 @@ function commitVerb() {
   // with 1, the exception climbs up and the task is left UNCOMMITTED with the
   // run stuck. The measure is lost and the work is committed, never the other
   // way round.
-  if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
-    err(`warning: the telemetry (${METRICS_REL}) could not be staged — the task is committed without it. Is the path gitignored in this repo?`)
-  }
+  if (!run.reviewing) stageTelemetry()
   if (git(['commit', '-m', message], { allowFail: true }) === null) return OUTCOMES.FAILED
   const sha = headSha()
   // `lastAdvice` goes away with the committed task, like everything else that

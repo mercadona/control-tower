@@ -9,15 +9,15 @@ const MAX_DISCARDS = 6
 const RUN_STAYS_OPEN = 0
 
 let repo
-const { ct, writeReport, writeRaw, sliceOk, taskOk, judgeTask, judgeSlice, writeVerdict, writeSliceVerdict } = makeHelpers(() => repo)
+const { ct, writeReport, writeRaw, sliceOk, taskOk, reviewFix, reviewOk, judgeTask, judgeSlice, writeVerdict, writeSliceVerdict } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
 describe('ct-step next answers with the announcement under --output-format json', () => {
   it('the judge step answers with one JSON object carrying its response channel', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
 
     const r = ct('next', '--output-format', 'json')
 
@@ -26,26 +26,25 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(JSON.parse(r.stdout)).toEqual({
       version: 1,
       kind: 'step',
-      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', attempt: 1 },
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'judge', attempt: 1 },
       dispatch: {
         agent: 'ct-judge',
         inputs: [
-          { role: 'package', kind: 'literal', path: join(workDir, 'task-1-review.diff') },
-          { role: 'brief', kind: 'literal', path: join(workDir, 'task-1-judge-brief.md') },
-          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-1-controls-1.log') },
+          { role: 'package', kind: 'literal', path: join(workDir, 'task-2-review.diff') },
+          { role: 'brief', kind: 'literal', path: join(workDir, 'task-2-judge-brief.md') },
+          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-2-controls-1.log') },
         ],
-        response: { kind: 'file', path: join(workDir, 'task-1-verdict.json') },
+        response: { kind: 'file', path: join(workDir, 'task-2-verdict.json') },
       },
-      consuming: { argv: ['verdict', join(workDir, 'task-1-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
+      consuming: { argv: ['verdict', join(workDir, 'task-2-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
     })
   })
 
   it('the judge step announces its agent, its inputs and its consuming argv', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'it is sent back once', path: 'uno.txt', line: 1 }]))
-    ct('report', writeReport(['uno.txt'], 'report-2.json'))
-    ct('controls')
+    reviewFix()
 
     const r = ct('next', '--output-format', 'json')
 
@@ -54,23 +53,24 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(JSON.parse(r.stdout)).toEqual({
       version: 1,
       kind: 'step',
-      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', attempt: 2 },
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'judge', attempt: 2 },
       dispatch: {
         agent: 'ct-judge',
         inputs: [
-          { role: 'package', kind: 'literal', path: join(workDir, 'task-1-review.diff') },
-          { role: 'brief', kind: 'literal', path: join(workDir, 'task-1-judge-brief.md') },
-          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-1-controls-2.log') },
+          { role: 'package', kind: 'literal', path: join(workDir, 'task-2-review.diff') },
+          { role: 'brief', kind: 'literal', path: join(workDir, 'task-2-judge-brief.md') },
+          { role: 'controls-log', kind: 'literal', path: join(workDir, 'task-2-controls-2.log') },
         ],
-        response: { kind: 'file', path: join(workDir, 'task-1-verdict.json') },
+        response: { kind: 'file', path: join(workDir, 'task-2-verdict.json') },
       },
-      consuming: { argv: ['verdict', join(workDir, 'task-1-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
+      consuming: { argv: ['verdict', join(workDir, 'task-2-verdict.json'), '--plan', 'plan.md', '--issue', '7'] },
     })
   })
 
   it('the slice judge announces the committed verdicts as a glob', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
 
@@ -88,7 +88,7 @@ describe('ct-step next answers with the announcement under --output-format json'
           { role: 'package', kind: 'literal', path: join(workDir, 'slice-review.diff') },
           { role: 'plan', kind: 'literal', path: 'plan.md' },
           { role: 'global-log', kind: 'literal', path: join(workDir, 'global-verification.log') },
-          { role: 'verdicts', kind: 'glob', path: 'docs/superpowers/verdicts/issue-7-task-*.json' },
+          { role: 'verdicts', kind: 'glob', path: 'docs/superpowers/verdicts/issue-7-*.json' },
         ],
         response: { kind: 'file', path: join(workDir, 'slice-verdict.json') },
       },
@@ -97,8 +97,8 @@ describe('ct-step next answers with the announcement under --output-format json'
   })
 
   it('the default prose of the judge step still prints its four material lines', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
 
     const r = ct('next')
 
@@ -106,12 +106,12 @@ describe('ct-step next answers with the announcement under --output-format json'
     expect(r.status).toBe(0)
     expect(r.stdout).toContain([
       'DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: Read, Grep, Glob, Write, Skill) with:',
-      `  - the review package: ${join(workDir, 'task-1-review.diff')}`,
-      `  - the task's brief: ${join(workDir, 'task-1-judge-brief.md')}`,
-      `  - the logs of the controls, ALREADY green, in case it wants them: ${join(workDir, 'task-1-controls-1.log')}`,
-      `  - that it write its verdict to: ${join(workDir, 'task-1-verdict.json')}`,
+      `  - the review package: ${join(workDir, 'task-2-review.diff')}`,
+      `  - the task's brief: ${join(workDir, 'task-2-judge-brief.md')}`,
+      `  - the logs of the controls, ALREADY green, in case it wants them: ${join(workDir, 'task-2-controls-1.log')}`,
+      `  - that it write its verdict to: ${join(workDir, 'task-2-verdict.json')}`,
       '',
-      `When it comes back:  ct-step verdict ${join(workDir, 'task-1-verdict.json')} --plan plan.md --issue 7`,
+      `When it comes back:  ct-step verdict ${join(workDir, 'task-2-verdict.json')} --plan plan.md --issue 7`,
     ].join('\n'))
   })
 
@@ -141,6 +141,7 @@ describe('ct-step next answers with the announcement under --output-format json'
   it('the global step announces the commands of section eight', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
 
     const r = ct('next', '--output-format', 'json')
@@ -172,6 +173,7 @@ describe('ct-step next answers with the announcement under --output-format json'
   it('a verb that closes the run in failure answers with its refusal', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
 
@@ -213,8 +215,8 @@ describe('ct-step next answers with the announcement under --output-format json'
   })
 
   it('the submission past a spent discard budget announces the refusal that stops the run, and each submission that spent it left the run open at judge', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
 
     const spendingTheWholeBudget = Array.from({ length: MAX_DISCARDS }, () => judgeTask(writeRaw('not json')))
     const onePastTheWholeBudget = judgeTask(writeRaw('not json'), '--output-format', 'json')
@@ -227,7 +229,7 @@ describe('ct-step next answers with the announcement under --output-format json'
       state: 'blocked-judge',
       outcome: 'discarded',
       exit: 3,
-      run: { issue: 7, task: 1, tasksTotal: 2, step: 'judge', discards: MAX_DISCARDS },
+      run: { issue: 7, task: 2, tasksTotal: 2, step: 'judge', discards: MAX_DISCARDS },
       detail: `${MAX_DISCARDS} discards in this run: it stops instead of going on asking for answers that cannot be read`,
     })
   })
@@ -235,7 +237,6 @@ describe('ct-step next answers with the announcement under --output-format json'
   it('the commit step announces no command of its own and the verb that closes it', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    judgeTask(writeVerdict('PASS'))
 
     const r = ct('next', '--output-format', 'json')
 
@@ -252,6 +253,7 @@ describe('ct-step next answers with the announcement under --output-format json'
   it('the reconcile step announces the verb that reconciles the branch', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
 
     const r = ct('next', '--output-format', 'json')
 
@@ -291,13 +293,13 @@ describe('ct-step next in a checkout whose directory name carries a space', () =
   })
 
   it('a dispatch step announces and prints in a checkout whose path holds a space', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
 
     const prose = ct('next')
     const announced = ct('next', '--output-format', 'json')
 
-    const verdict = join(realpathSync(repo), '.agent', 'run-7', 'task-1-verdict.json')
+    const verdict = join(realpathSync(repo), '.agent', 'run-7', 'task-2-verdict.json')
     expect(prose.status).toBe(0)
     expect(prose.stdout).toContain(`When it comes back:  ct-step verdict ${verdict} --plan plan.md --issue 7`)
     expect(announced.status).toBe(0)

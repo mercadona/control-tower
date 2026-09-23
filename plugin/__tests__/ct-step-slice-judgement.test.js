@@ -11,7 +11,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, sliceRubric } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeSliceVerdict, commits, runState, judgeSlice, taskOk } = makeHelpers(() => repo)
+const { ct, writeSliceVerdict, commits, runState, judgeSlice, taskOk, reviewOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -20,7 +20,7 @@ afterEach(() => { rmSyncBestEffort(repo) })
 // judge ever looks at — whether the tasks together deliver the slice's end, and
 // whether they are coherent with each other.
 describe('the judgement of the whole slice (§3.7-B)', () => {
-  const atSliceJudge = () => { taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global') }
+  const atSliceJudge = () => { taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global') }
 
   it('next dispatches ct-slice-judge with the package of the commit RANGE', () => {
     atSliceJudge()
