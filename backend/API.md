@@ -61,6 +61,20 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 
 ## `POST /start-plan`
 
+Milestone dispatch checks repository preparation before claiming any candidate.
+A `repository-preparation-required` refusal carries the repository, the inspected
+remote commit, affected paths and proposed corrections in `detail`. The same
+diagnostic is sent to the matching coordinating session. No plan agent is launched
+on a failed check.
+
+For the supported Makefile/Compose layout, each freshly cut worktree receives an
+ignored `docker-compose.local.yml` with a worktree-specific project name and no
+published host ports. Existing overrides are inspected, not overwritten. Effective
+configuration is checked with `docker compose config --no-env-resolution --format
+json` before baseline execution. This does not start containers, read service
+env-file contents or verify live container mounts. Normal workspace preparation
+cleanup still applies when preparation fails.
+
 Starts a headless plan agent. The original loose request remains available; a
 milestone request instead selects **every** admissible ready issue with the
 plugin's ordering, dependency and token rules — there is no cap — claims each of

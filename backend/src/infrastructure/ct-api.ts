@@ -37,6 +37,9 @@ import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
 import { SessionChangeAnnouncements } from './session-change-announcements.ts'
+import { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
+import { ComposeRepositoryPreparations } from './compose-repository-preparations.ts'
+import { SessionPreparationAnnouncements } from './session-preparation-announcements.ts'
 import { SessionClosureAnnouncements } from './session-closure-announcements.ts'
 import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
@@ -440,7 +443,14 @@ class CtApi {
     CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const preparation = new CheckRepositoryPreparation({
+      preparations: new ComposeRepositoryPreparations({ git, docker: CtApi.#tool('docker'), files: fs }),
+      announcements: new SessionPreparationAnnouncements({
+        sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
+      }),
+    })
     const workspace = new GitWorkspace({
+      preparation,
       run: git,
       gh,
       write: Disk.write,
@@ -727,9 +737,10 @@ class CtApi {
       revisions: specRevisions,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
-    const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
+    const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues, preparation })
     const startsInFlight = new WorkInFlight()
     const startMilestonePlan = new StartMilestonePlan({
+      preparation,
       candidates: new GhDispatchCandidates({ gh }),
       claims,
       workspace,
@@ -744,6 +755,7 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
     })
     const server = new ApiServer({
+      preparation,
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,

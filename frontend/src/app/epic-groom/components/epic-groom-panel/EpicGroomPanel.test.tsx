@@ -28,6 +28,40 @@ const renderPanel = (
   />)
 
 describe('EpicGroomPanel', () => {
+  it('shows a dispatch preparation failure when returning to an already authorized milestone', async () => {
+    const body = JSON.parse(EpicGroomMother.authorised().body)
+    body.preparation = 'owner/repo at abc123: docker/docker-compose.local.yml publishes host ports.'
+    body.key = EpicGroomMother.KEY
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
+    renderPanel()
+    expect(await screen.findByText(body.preparation)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Volver a comprobar' })).toBeEnabled()
+    expect(screen.queryByText('Trabajo autorizado: el primer slice sale en el próximo barrido.')).not.toBeInTheDocument()
+  })
+
+  it('shows the preparation diagnostic and rechecks before authorizing after the fix', async () => {
+    let attempts = 0
+    const detail = 'owner/repo at abc123: Makefile forces a shared Compose project. Remove -p.'
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === '/epic-promotion') {
+        attempts++
+        return attempts === 1
+          ? new Response(JSON.stringify({ code: 'repository-preparation-required', detail }), { status: 400 })
+          : new Response(EpicGroomMother.promoted().body, { status: 200 })
+      }
+      return new Response(EpicGroomMother.groomed().body, { status: 200 })
+    }))
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(await screen.findByRole('button', PROMOTE_BUTTON))
+    expect(await screen.findByText('El repositorio necesita preparación antes de continuar')).toBeInTheDocument()
+    expect(screen.getByText(detail)).toBeInTheDocument()
+    expect(attempts).toBe(1)
+    await user.click(screen.getByRole('button', { name: 'Volver a comprobar y autorizar' }))
+    expect(attempts).toBe(2)
+    await waitFor(() => expect(screen.queryByText(detail)).not.toBeInTheDocument())
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()

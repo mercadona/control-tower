@@ -12,6 +12,7 @@ import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PlanTarget } from '../domain/value-objects/plan-target.ts'
 import {
   PlanFailure,
+  RepositoryPreparationRequired,
   DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood,
   UserStoryNotRead, UserStoryNotUnderstood, PlanIssueNotCreated, PlanIssueNotNamed,
   PlanIssueNotClaimed,
@@ -328,6 +329,7 @@ export class PlanCollapse {
     [PlanAgentNeverLaunched, PlanCollapse.#collapsed('plan-agent-never-launched')],
     [PlanAgentNotLaunched, PlanCollapse.#collapsed('plan-agent-not-launched')],
     [WorkspaceNotPrepared, PlanCollapse.#collapsed('workspace-not-prepared')],
+    [RepositoryPreparationRequired, PlanCollapse.#collapsed('repository-preparation-required')],
     [WorkspaceNotCleaned, PlanCollapse.#collapsed('workspace-not-cleaned')],
     [WorkspaceNotRead, PlanCollapse.#collapsed('workspace-not-read')],
     [CheckoutNotConfirmed, (cause) => new Refusal({

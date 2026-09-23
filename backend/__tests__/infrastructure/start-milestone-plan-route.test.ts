@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { RunningServers } from '../servers.ts'
@@ -54,6 +55,7 @@ class StartMilestonePlanDouble extends StartMilestonePlan {
       async () => Mother.dispatching(Mother.started()),
   ) {
     super({
+      preparation: PreparationMother.check(),
       candidates: new DispatchCandidates(),
       claims: new DispatchClaims(),
       workspace: new Workspace(),

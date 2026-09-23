@@ -13,6 +13,7 @@ import type { ReadEpicGroom, EpicGroomRead, EpicGroomStateValue } from '../appli
 import type { EpicGroomed } from '../application/actions/groom-epic.ts'
 import type { GroomPlanIssue } from '../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../domain/value-objects/epic-issue.ts'
+import type { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
 
 type WirePlanIssue = { readonly order: number, readonly title: string, readonly labels: readonly string[], readonly repo: string }
 type WireIssue = { readonly number: number, readonly url: string, readonly title: string, readonly status: string }
@@ -90,7 +91,7 @@ export class EpicGroomRoute {
   static readonly #PLAN_CHANGED_DETAIL =
     'the spec changed since this plan was shown: read the new plan before pressing again'
 
-  static reading(held: CoordinatingSessions, read: ReadEpicGroom, key: GateKey): RequestHandler {
+  static reading(held: CoordinatingSessions, read: ReadEpicGroom, key: GateKey, preparation: CheckRepositoryPreparation | null = null): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
       const reading = held.gateCheckout()
       if (reading === null) {
@@ -117,7 +118,8 @@ export class EpicGroomRoute {
         host: request.get('Host'),
         site: request.get(GateKey.SITE_HEADER),
       })
-      EpicGroomRoute.#answerRead(response, outcome, minted, reading.target)
+      const findings = preparation?.current({ root: reading.conversation.root, repository: reading.conversation.repository }) ?? []
+      EpicGroomRoute.#answerRead(response, outcome, minted, reading.target, findings.map((finding) => finding.summary).join('\n'))
     }
   }
 
@@ -175,7 +177,7 @@ export class EpicGroomRoute {
   }
 
   static #answerRead(
-    response: Response, outcome: EpicGroomRead, minted: string | null, target: string | null
+    response: Response, outcome: EpicGroomRead, minted: string | null, target: string | null, preparation: string
   ): void {
     switch (outcome.state) {
       case EpicGroomState.NO_SPEC:
@@ -234,6 +236,7 @@ export class EpicGroomRoute {
           target,
           milestone: outcome.milestone,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
+          ...(preparation === '' ? {} : { preparation }),
           ...(minted === null ? {} : { key: minted }),
         })
         return
@@ -243,6 +246,7 @@ export class EpicGroomRoute {
           target,
           milestone: outcome.milestone,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
+          ...(preparation === '' ? {} : { preparation, ...(minted === null ? {} : { key: minted }) }),
         })
         return
       default: {

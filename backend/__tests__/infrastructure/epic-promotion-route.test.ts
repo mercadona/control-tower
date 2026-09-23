@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
@@ -42,6 +43,7 @@ class PromoteEpicSpy extends PromoteEpic {
 
   constructor(answer: (params: PromoteEpicParams) => Promise<EpicPromoted>) {
     super({
+      preparation: PreparationMother.check(),
       read: new ReadEpicGroom({
         specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
         branch: new EpicBranch(), pullRequests: new PullRequests(),

@@ -58,7 +58,7 @@ const EPIC_GROOM_NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
 ]
 
 const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = [
-  'resliced', 'groomable', 'partially-groomed', 'groomed',
+  'resliced', 'groomable', 'partially-groomed', 'groomed', 'authorised',
 ]
 
 const dispatchedCount = (count: number): string =>
@@ -92,11 +92,12 @@ const EpicGroomPanel = ({
   const askBlocked = liveAsk === null ? openingBlocked : liveAsk !== 'ready'
   const presses = useGatePresses({ target, askBlocked, operationBusy, openSession })
   const { acted, refusal, session, reslicing } = presses
+  const preparationRefused = refusal?.kind === 'refused' && refusal.code === 'repository-preparation-required'
   const askWasRead = useAskRead(session, liveAsk)
   const isReviewingTheSlicing =
     session?.kind === 'opened' || session?.kind === 'typed' || refusal?.kind === 'unconfirmed'
-  const read = useEpicGroom(isReviewingTheSlicing, target)
-  const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
+  const read = useEpicGroom(isReviewingTheSlicing, target, true)
+  const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key ?? null : null
   useMergedReslicing({ read, operationBusy, press: (planFingerprint) => presses.groom(gateKey, planFingerprint) })
 
   if (read.phase === 'connecting') return null
@@ -133,6 +134,8 @@ const EpicGroomPanel = ({
   }
 
   const isPressing = presses.pressed !== 'none'
+  const preparationDetail = read.kind === 'groomed' || read.kind === 'authorised' ? read.preparation ?? null : null
+  const preparationBlocked = preparationRefused || preparationDetail !== null
 
   const gateNotice = gateKey === null && (
     <p className="epic-groom-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>
@@ -142,7 +145,9 @@ const EpicGroomPanel = ({
   )
   const askBanner =
     refusal?.kind === 'refused' ? (
-      <Banner type="error" role="alert" title={refusal.error} />
+      <Banner type="error" role="alert"
+        title={preparationBlocked ? 'El repositorio necesita preparación antes de continuar' : refusal.error}
+        description={preparationBlocked ? refusal.error : undefined} />
     ) : refusal?.kind === 'unconfirmed' ? (
       <Banner
         type="warning"
@@ -150,6 +155,8 @@ const EpicGroomPanel = ({
         title={GROOM_UNCONFIRMED_TITLE}
         description={GROOM_UNCONFIRMED_DETAIL}
       />
+    ) : preparationDetail !== null ? (
+      <Banner type="error" role="alert" title="El repositorio necesita preparación antes de continuar" description={preparationDetail} />
     ) : null
   const reslicingBanner =
     reslicing?.kind === 'refused' ? (
@@ -292,7 +299,7 @@ const EpicGroomPanel = ({
           ))}
         </ul>
         <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
-          {presses.pressed === 'promote' ? PROMOTING : PROMOTE}
+          {presses.pressed === 'promote' ? PROMOTING : preparationBlocked ? 'Volver a comprobar y autorizar' : PROMOTE}
         </Button>
         {gateNotice}
         {sessionNeeded}
@@ -320,8 +327,14 @@ const EpicGroomPanel = ({
           ))}
         </ul>
         <p className="epic-groom-panel__authorised">
-          {dispatched === 0 ? AWAITING_DISPATCH : EpicGroomPanelLabels.dispatchedCount(dispatched)}
+          {preparationBlocked ? 'Despacho pendiente de corregir la preparación del repositorio.' : dispatched === 0 ? AWAITING_DISPATCH : EpicGroomPanelLabels.dispatchedCount(dispatched)}
         </p>
+        {preparationBlocked && (
+          <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
+            {presses.pressed === 'promote' ? 'Comprobando la preparación' : 'Volver a comprobar'}
+          </Button>
+        )}
+        {askBanner}
       </div>
     )
   }

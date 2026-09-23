@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -760,6 +761,7 @@ describe('ApiServer', () => {
       '',
     ].join('\n')
     const workspace = (read: (path: string) => Promise<string | null>) => new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
       stderr: () => {},
       write: async () => {},
@@ -1066,6 +1068,7 @@ describe('ApiServer', () => {
     const defect = new TypeError('seed reader sentinel defect')
     const output = (stdout = '') => new ProcessOutput({ code: 0, stdout, stderr: '' })
     const adapter = new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
       stderr: () => {},
       write: async () => {},

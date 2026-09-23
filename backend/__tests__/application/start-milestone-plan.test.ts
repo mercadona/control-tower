@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import {
   SliceNotStarted, StartMilestonePlan, StartMilestonePlanParams, StartMilestonePlanResult,
 } from '../../src/application/actions/start-milestone-plan.ts'
@@ -207,6 +208,7 @@ class MilestoneFlow {
   }
 
   readonly steps: string[] = []
+  readiness = PreparationMother.check()
   readonly candidates: DispatchCandidatesDouble
   readonly claims: DispatchClaimsDouble
   readonly records: PlanRecordsDouble
@@ -236,6 +238,7 @@ class MilestoneFlow {
 
   async run(): Promise<StartMilestonePlanResult> {
     return new StartMilestonePlan({
+      preparation: this.readiness,
       candidates: this.candidates,
       claims: this.claims,
       workspace: this.workspace,
@@ -255,6 +258,13 @@ class MilestoneFlow {
 }
 
 describe('StartMilestonePlan', () => {
+  it('does not claim, prepare or launch when repository preparation refuses', async () => {
+    const flow = new MilestoneFlow()
+    flow.readiness = PreparationMother.check(PreparationMother.blocked())
+    await expect(flow.run()).rejects.toThrow(PreparationMother.blocked().summary)
+    expect(flow.steps).toEqual(['confirm', 'candidates'])
+  })
+
   it('selected work is claimed prepared and launched without opening an issue', async () => {
     const flow = new MilestoneFlow()
 

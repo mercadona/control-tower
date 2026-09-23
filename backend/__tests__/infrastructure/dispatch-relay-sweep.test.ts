@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { HarvestClock } from '../../src/infrastructure/harvest-clock.ts'
@@ -202,6 +203,7 @@ class Sweep {
 
   async run(): Promise<Sweep> {
     const startMilestonePlan = new StartMilestonePlan({
+      preparation: PreparationMother.check(),
       candidates: new GhDispatchCandidates({ gh: this.gh.build() }),
       claims: this.claims,
       workspace: this.workspace,

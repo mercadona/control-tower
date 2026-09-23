@@ -27,6 +27,7 @@ import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch } from './external-tool.ts'
 import type { Gh } from './gh.ts'
 import { HeadlessFiles } from './headless-files.ts'
+import type { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
 
 export type NumberedIssue = { readonly number: number }
 export type DiskWrite = (path: string, text: string) => Promise<void>
@@ -162,8 +163,9 @@ export class GitWorkspace extends Workspace {
   readonly baseline: Baseline
   readonly gh: Gh
   readonly inspectPath: typeof inspectPath
+  readonly preparation: CheckRepositoryPreparation
 
-  constructor({ run, write, read, stderr, baseline, gh, lstat }: {
+  constructor({ run, write, read, stderr, baseline, gh, lstat, preparation }: {
     run: ToolLaunch,
     write: DiskWrite,
     read: DiskRead,
@@ -171,6 +173,7 @@ export class GitWorkspace extends Workspace {
     baseline: Baseline,
     gh: Gh,
     lstat?: typeof inspectPath,
+    preparation: CheckRepositoryPreparation,
   }) {
     super()
     this.run = run
@@ -180,6 +183,7 @@ export class GitWorkspace extends Workspace {
     this.baseline = baseline
     this.gh = gh
     this.inspectPath = lstat ?? inspectPath
+    this.preparation = preparation
   }
 
   static branchFor(issue: NumberedIssue): string {
@@ -587,6 +591,7 @@ export class GitWorkspace extends Workspace {
     await this.#cut(root.text, issue, base)
     const located = new RootedWorkspaceLocation({ root: root.text, path, branch })
     try {
+      await this.preparation.prepare({ root, repository, path })
       return new SownWorkspace({ located, baseline: await this.#seed(located, slice, base, cut) })
     } catch (failure) {
       try {
