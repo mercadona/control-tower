@@ -1105,8 +1105,10 @@ function adviceSection(advice) {
 // comes out of the RANGE, because by then everything is committed (see
 // `writeSliceReviewPackage`).
 // #530: against the last judged commit, so a checkpoint shows every task of its
-// stretch; the telemetry those commits carried is no task's work.
-const taskDiff = () => git(['diff', '--cached', '-U10', run.judgedSha, '--', '.', `:(exclude)${METRICS_REL}`]) || ''
+// stretch; the telemetry those commits carried is no task's work. The
+// pathspecs are rooted at the top (`:/`) so the diff is the whole repo from
+// any cwd, as the plain `git diff --cached` it replaced was.
+const taskDiff = () => git(['diff', '--cached', '-U10', run.judgedSha, '--', ':/', `:(top,exclude)${METRICS_REL}`]) || ''
 const sliceDiff = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 
 // THE TREE OF THE INDEX — the identity of what is about to be committed, and
@@ -1165,7 +1167,7 @@ function writeReviewPackage() {
     // slice 10 decided on for the slice package.
     reviewTokenLine(reviewToken(diff)),
     ctYardstick,
-    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat', run.judgedSha, '--', '.', `:(exclude)${METRICS_REL}`]) || '',
+    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat', run.judgedSha, '--', ':/', `:(top,exclude)${METRICS_REL}`]) || '',
     '', `## ${PATHS_SECTION}`, paths,
     '', `## ${DIFF_SECTION}`, diff,
   ].join('\n'))

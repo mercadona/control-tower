@@ -33,7 +33,9 @@ of an earlier task of the stretch is in scope, and it lands in this task's commi
   conventions. They travel as paths: you have `Read`, so you open the ones you
   are going to cite. `## Files changed` lists the staged files; `## Rutas
   tocadas` lists every path the implementer touched; `## Diff` is the staged diff
-  of this task and nothing else. The two lists come from different places:
+  of this task, or of its stretch since the last judged commit. At a stretch,
+  `## Rutas tocadas` lists this task's implementer's own paths alone, so a file of
+  an earlier task absent from it is expected, a finding only on its own. The two lists come from different places:
   `## Files changed` is read off the index itself, and `## Rutas tocadas` is
   read off the implementer's own report of what it touched — a declared path
   and a changed path are two different facts. What each of those paths is, you

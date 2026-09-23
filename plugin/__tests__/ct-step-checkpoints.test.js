@@ -4,7 +4,7 @@
 // fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
@@ -15,7 +15,7 @@ import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 const UNMARKED = PLAN.replace('**Judge:** checkpoint\n', '')
 
 let repo
-const { ct, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask, taskOk } = makeHelpers(() => repo)
+const { ct, ctFrom, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask, taskOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo({ plan: UNMARKED }) })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -137,5 +137,38 @@ describe('the judge of a checkpoint sees its whole stretch', () => {
 
     const r = ct('next')
     expect(r.stdout).toContain('The judge reviewed tasks 1-2 together: a finding in a file of an earlier task of that stretch is yours to fix in this attempt, and it lands in the commit of task 2.')
+  })
+
+  it('the package of a checkpoint carries the whole stretch when ct-step runs from a subdirectory', () => {
+    rmSyncBestEffort(repo)
+    repo = makeRepo({ plan: SECOND_MARKED })
+    commitFirstUnjudged()
+    mkdirSync(join(repo, 'sub'))
+
+    const r = ctFrom('sub', 'next')
+    expect(r.status).toBe(0)
+    const diff = diffOf(taskPackage())
+    expect(diff).toMatch(/\+\+\+ b\/uno\.txt/)
+    expect(diff).toMatch(/\+\+\+ b\/dos\.txt/)
+    expect(readFileSync(taskPackage(), 'utf8')).not.toContain('docs/superpowers/metrics/issue-7.jsonl')
+  })
+
+  it('a retry after a veto at a checkpoint fixes a file of an earlier task, and the fix lands in the commit of the checkpoint', () => {
+    rmSyncBestEffort(repo)
+    repo = makeRepo({ plan: SECOND_MARKED })
+    commitFirstUnjudged()
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'wrong in the earlier task', path: 'uno.txt', line: 1 }]))
+    ct('next')
+
+    writeFileSync(join(repo, 'uno.txt'), 'uno.txt, fixed at the checkpoint\n')
+    ct('report', writeReport(['uno.txt', 'dos.txt']))
+    ct('controls')
+    judgeTask(writeVerdict('PASS'))
+    const r = ct('commit')
+
+    expect(r.status).toBe(0)
+    expect(commits()).toBe(3)
+    const committed = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
+    expect(committed).toContain('uno.txt')
   })
 })

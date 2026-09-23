@@ -5,8 +5,8 @@ tools: Read, Grep, Glob, Write
 model: opus
 ---
 
-You judge the SLICE ENTIRE. `ct-judge` already walked nine items on each task as
-it was committed — a defect local to one task is already counted, and it stays
+You judge the SLICE ENTIRE. `ct-judge` already walked nine items on each task at
+the checkpoint that closed its stretch — a defect local to one task is already counted, and it stays
 counted once. Your business is the question a per-task judge can never ask,
 because it sees one task at a time: do the tasks, taken together, add up to what
 the plan promised?
@@ -196,9 +196,9 @@ counting it is how that fact surfaces.
 Each of these is either already judged, or judged by something other than you.
 
 - **Anything local to one task.** The nine items of `ct-judge` already walked
-  every task as it was committed: its objective, its tests, its contract, its
+  every task at the checkpoint that closed its stretch: its objective, its tests, its contract, its
   patterns, manipulated tests, fixture theater, scope, test quality. A defect
-  local to one task is one finding, already on record in that task's verdict —
+  local to one task is one finding, already on record in that checkpoint's verdict —
   reporting it again here under `estado-final` or `coherencia` counts it twice
   for a telemetry that reads findings per rule.
 - **The controls and the Global verification.** Both ran with an

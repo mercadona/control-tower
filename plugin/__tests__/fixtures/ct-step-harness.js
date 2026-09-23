@@ -170,6 +170,13 @@ export function makeHelpers(ref) {
 
   const ct = (...args) => ctIn({}, ...args)
 
+  // The same call from a subdirectory of the repo, as a session that `cd`-ed
+  // into one runs it; the plan goes by absolute path so only the cwd changes.
+  const ctFrom = (subdir, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', join(ref(), 'plan.md'), '--issue', '7'], {
+    cwd: join(ref(), subdir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    env: environment({}),
+  })
+
   // What a subagent would write, to a file. `paths` is a list of plain paths:
   // the report does not tell production from test (see step-contracts.js). It
   // also writes the files it declares, if they are not there: an implementer
@@ -267,7 +274,7 @@ export function makeHelpers(ref) {
   }
 
   return {
-    ct, ctIn, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
+    ct, ctIn, ctFrom, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
     taskPackage, slicePackage, judgeRows, packageToken, seal,
     judgeTask, judgeSlice, taskOk, sliceOk,
   }
