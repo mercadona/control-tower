@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -83,13 +83,22 @@ class JournalMother {
     })
   }
 
-  static withPausedLink(path: string): { fs: typeof fs, reached: Promise<void>, release: () => void } {
+  static withPausedLink(path: string): {
+    fs: typeof fs, reached: Promise<void>, release: () => void, listings: () => number,
+  } {
     let arrive: () => void = () => undefined
     let release: () => void = () => undefined
+    let listings = 0
     const reached = new Promise<void>((resolve) => { arrive = resolve })
     const released = new Promise<void>((resolve) => { release = resolve })
     const paused = new Proxy(fs, {
       get(target, property, receiver) {
+        if (property === 'readdir') {
+          return async (...asked: Parameters<typeof fs.readdir>) => {
+            listings += 1
+            return Reflect.apply(target.readdir, target, asked)
+          }
+        }
         if (property !== 'link') return Reflect.get(target, property, receiver)
         return async (...asked: Parameters<typeof fs.link>) => {
           if (String(asked[1]) === path) {
@@ -100,7 +109,7 @@ class JournalMother {
         }
       },
     })
-    return { fs: paused, reached, release }
+    return { fs: paused, reached, release, listings: () => listings }
   }
 
   static withLinkFailure(path: string, cause: unknown): typeof fs {
@@ -213,10 +222,18 @@ describe('RunJournal', () => {
       ? journal.begin(watch, JournalMother.REQUEST)
       : journal.finish(watch, JournalMother.TICKET, JournalMother.RECEIPT)
     await paused.reached
+    const writeTurn = journal.operating.get(JournalMother.operations(root))
+    const listedBefore = paused.listings()
     const reading = journal.entries(watch)
-    await new Promise((resolve) => { setTimeout(resolve, 50) })
+    await vi.waitFor(() => expect(
+      paused.listings() > listedBefore || journal.operating.get(JournalMother.operations(root)) !== writeTurn,
+    ).toBe(true))
+    const listedWhileWriting = paused.listings() - listedBefore
     paused.release()
     await writing
+
+    expect(writeTurn).toBeDefined()
+    expect(listedWhileWriting).toBe(0)
 
     expect(await reading).toEqual([{
       ticket: JournalMother.TICKET,
@@ -248,6 +265,24 @@ describe('RunJournal', () => {
     expect(await readFile(join(JournalMother.operation(root), 'material-2.json'), 'utf8')).toBe('second seal\n')
     expect(await journal.material(watch, JournalMother.TICKET)).toBe('third seal\n')
     expect(await journal.entries(watch)).toHaveLength(1)
+  })
+
+  it('dispatch seals past the ninth keep their numeric order', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-order-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+
+    for (let version = 1; version <= 11; version += 1) {
+      await journal.seal(watch, JournalMother.TICKET, `seal ${version}\n`)
+    }
+    const eleventh = await journal.material(watch, JournalMother.TICKET)
+    await journal.seal(watch, JournalMother.TICKET, 'seal 12\n')
+
+    expect(eleventh).toBe('seal 11\n')
+    expect(await readFile(join(JournalMother.operation(root), 'material-12.json'), 'utf8')).toBe('seal 12\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('seal 12\n')
   })
 
   it('a dispatch seal returning to an earlier text is published as a new version', async () => {

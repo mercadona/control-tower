@@ -441,24 +441,69 @@ class OracleMother {
       + '"detail":"run blocked-judge: task 1/3, 0 discard(s)"}\n'
   }
 
-  static async settle(): Promise<void> {
-    await new Promise((resolve) => { setTimeout(resolve, 50) })
-  }
-
   static output(code: number, stdout: string, stderr = ''): ProcessOutput {
     return new ProcessOutput({ code, stdout, stderr })
   }
 }
 
+class EntriesPause {
+  readonly before: boolean
+  readonly listing: Promise<void>
+  readonly listed: Promise<void>
+  arriveListing: () => void
+  arriveListed: () => void
+  releaseListing: () => void
+  releaseListed: () => void
+  readonly listingReleased: Promise<void>
+  readonly listedReleased: Promise<void>
+
+  constructor(before: boolean) {
+    this.before = before
+    this.arriveListing = () => undefined
+    this.arriveListed = () => undefined
+    this.releaseListing = () => undefined
+    this.releaseListed = () => undefined
+    this.listing = new Promise((resolve) => { this.arriveListing = resolve })
+    this.listed = new Promise((resolve) => { this.arriveListed = resolve })
+    this.listingReleased = new Promise((resolve) => { this.releaseListing = resolve })
+    this.listedReleased = new Promise((resolve) => { this.releaseListed = resolve })
+  }
+}
+
+class PausingJournal extends RunJournal {
+  readonly pauses: EntriesPause[] = []
+
+  pauseNextEntries(asked: { before: boolean }): EntriesPause {
+    const pause = new EntriesPause(asked.before)
+    this.pauses.push(pause)
+    return pause
+  }
+
+  override async entries(watch: PlanWatch): ReturnType<RunJournal['entries']> {
+    const pause = this.pauses.shift()
+    if (pause?.before) {
+      pause.arriveListing()
+      await pause.listingReleased
+    }
+    const entries = await super.entries(watch)
+    if (pause !== undefined) {
+      pause.arriveListed()
+      await pause.listedReleased
+    }
+    return entries
+  }
+}
+
 class OracleFixture {
   readonly root: string
-  readonly journal: RunJournal
+  readonly journal: PausingJournal
   readonly asked: AskedCommand[]
   readonly gitAsked: AskedCommand[]
   readonly ids: string[]
   readonly answers: Map<string, () => Promise<ProcessOutput>>
   readonly gitAnswers: Map<string, () => Promise<ProcessOutput>>
   runBytes: string | null
+  runReads: number
 
   constructor(root: string) {
     this.root = root
@@ -468,7 +513,8 @@ class OracleFixture {
     this.answers = new Map()
     this.gitAnswers = new Map()
     this.runBytes = OracleMother.RUN_BYTES
-    this.journal = new RunJournal({
+    this.runReads = 0
+    this.journal = new PausingJournal({
       files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
       newId: () => {
         const id = this.ids.shift()
@@ -512,7 +558,10 @@ class OracleFixture {
   }
 
   readonly read = async (path: string): Promise<string | null> => {
-    if (path === OracleMother.RUN_PATH) return this.runBytes
+    if (path === OracleMother.RUN_PATH) {
+      this.runReads += 1
+      return this.runBytes
+    }
     if (path === join(OracleMother.WORKTREE, OracleMother.PLAN)) return OracleMother.PLAN_TEXT
     throw new Error(`unlisted read: ${JSON.stringify(path)}`)
   }
@@ -531,6 +580,10 @@ class OracleFixture {
       dispatchCheck: OracleMother.DISPATCH_CHECK,
       pluginRoot: '/plugin',
     })
+  }
+
+  async readRunSince(reads: number): Promise<void> {
+    await vi.waitFor(() => expect(this.runReads).toBeGreaterThan(reads))
   }
 
   operation(ticket: string, name: 'request.json' | 'receipt.json'): string {
@@ -1371,8 +1424,9 @@ describe('CtRunMachine', () => {
     const first = machine.open(OracleMother.watch())
     await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
     const inspection = await machine.inspect(OracleMother.watch())
+    const reads = fixture.runReads
     const second = machine.open(OracleMother.watch())
-    await OracleMother.settle()
+    await fixture.readRunSince(reads)
     fixture.runBytes = OracleMother.RUN_BYTES
     finish(OracleMother.output(0, OracleMother.controlsAnnouncementJson()))
 
@@ -1405,8 +1459,9 @@ describe('CtRunMachine', () => {
     await vi.waitFor(() => expect(fixture.asked).toHaveLength(2))
     const inspection = await machine.inspect(OracleMother.watch())
     if (inspection.fact.kind !== 'active') throw new Error(`expected active, got ${inspection.fact.kind}`)
+    const reads = fixture.runReads
     const waiting = machine.advance(OracleMother.watch(), inspection.fact.instruction)
-    await OracleMother.settle()
+    await fixture.readRunSince(reads)
     fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
     finish(OracleMother.output(0, OracleMother.openTransition()))
 
@@ -1434,13 +1489,72 @@ describe('CtRunMachine', () => {
     await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
     const inspection = await machine.inspect(OracleMother.watch())
     if (inspection.fact.kind !== 'active') throw new Error(`expected active, got ${inspection.fact.kind}`)
+    const reads = fixture.runReads
     const waiting = machine.advance(OracleMother.watch(), inspection.fact.instruction)
-    await OracleMother.settle()
+    await fixture.readRunSince(reads)
     fixture.runBytes = OracleMother.RUN_BYTES
     finish(OracleMother.output(0, OracleMother.implementAnnouncement()))
 
     expect(await driving).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }))
     expect(await waiting).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }))
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a command that begins and finishes while an open reads the journal is not taken for an orphan', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-began-during-read-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    let finish: (output: ProcessOutput) => void = () => undefined
+    const running = new Promise<ProcessOutput>((resolve) => { finish = resolve })
+    fixture.answer(OracleMother.nextArgv(), () => running)
+    const machine = fixture.machine()
+    const pause = fixture.journal.pauseNextEntries({ before: true })
+
+    const reading = machine.open(OracleMother.watch())
+    await pause.listing
+    const owning = machine.open(OracleMother.watch())
+    await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
+    pause.releaseListing()
+    await pause.listed
+    fixture.runBytes = OracleMother.RUN_BYTES
+    finish(OracleMother.output(0, OracleMother.controlsAnnouncementJson()))
+    const owned = await owning
+    pause.releaseListed()
+
+    expect(owned).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(await reading).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[0], 'receipt.json'), 'utf8')).toBe(
+      OracleMother.receipt(OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES),
+    )
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a command that was running when an open began reading and finished during the read is not taken for an orphan', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-finished-during-read-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    let finish: (output: ProcessOutput) => void = () => undefined
+    const running = new Promise<ProcessOutput>((resolve) => { finish = resolve })
+    fixture.answer(OracleMother.nextArgv(), () => running)
+    const machine = fixture.machine()
+
+    const owning = machine.open(OracleMother.watch())
+    await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
+    const pause = fixture.journal.pauseNextEntries({ before: false })
+    const reading = machine.open(OracleMother.watch())
+    await pause.listed
+    fixture.runBytes = OracleMother.RUN_BYTES
+    finish(OracleMother.output(0, OracleMother.controlsAnnouncementJson()))
+    const owned = await owning
+    pause.releaseListed()
+
+    expect(owned).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(await reading).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[0], 'receipt.json'), 'utf8')).toBe(
+      OracleMother.receipt(OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES),
+    )
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
   })
 
