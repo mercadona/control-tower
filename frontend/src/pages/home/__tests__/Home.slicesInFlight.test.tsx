@@ -414,6 +414,7 @@ describe('Home · the slices in flight', () => {
     })
     openHome()
     await act(async () => vi.advanceTimersByTimeAsync(30000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
   })
@@ -505,8 +506,10 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText('Corrigiendo lo pedido en la revisión')).toBeInTheDocument()
     inFlight = [7, 8]
     await act(async () => vi.advanceTimersByTimeAsync(30000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Slice #8' })).getByText('Tarea 3 de 7')).toBeInTheDocument()
   })
 
   it.each([
