@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/mercadona/control-tower/compare/frontend-v0.4.0...frontend-v0.5.0) (2026-09-23)
+
+
+### Funcionalidades
+
+* a person can get a run out of the judge's third veto ([#517](https://github.com/mercadona/control-tower/issues/517)) ([22559db](https://github.com/mercadona/control-tower/commit/22559dbbea0a41e1dbd18130dd8f083766cf84aa))
+* **frontend:** follow the next running slice after delivery ([#516](https://github.com/mercadona/control-tower/issues/516)) ([cdd649d](https://github.com/mercadona/control-tower/commit/cdd649dfbfbc05b0bab86bcf7805992b2138e2c6))
+* **frontend:** the slice panel shows the plan agent working ([#512](https://github.com/mercadona/control-tower/issues/512)) ([a2f71c2](https://github.com/mercadona/control-tower/commit/a2f71c2b3a352acee748f2af6a1cbc884b06db87))
+
+
+### Correcciones
+
+* **backend:** publish completed driver runs with recoverable delivery ([#506](https://github.com/mercadona/control-tower/issues/506)) ([c3fd7b3](https://github.com/mercadona/control-tower/commit/c3fd7b3672eb342ae78861e41bb616ed3f8c2c91))
+* **frontend:** follow the next running slice when the selected slice enters review ([#525](https://github.com/mercadona/control-tower/issues/525)) ([58f4a11](https://github.com/mercadona/control-tower/commit/58f4a11ada4ab67b9b630d84f5ba2ea86217edf4))
+* **frontend:** select the slice shown in the implementation detail ([#513](https://github.com/mercadona/control-tower/issues/513)) ([13dcb0d](https://github.com/mercadona/control-tower/commit/13dcb0dd71fb8d29459d2f2ef5a144c910bb547e))
+* remove the planning comment and require a ticket ([#531](https://github.com/mercadona/control-tower/issues/531)) ([9cfc2ba](https://github.com/mercadona/control-tower/commit/9cfc2ba3a58b708727c7849089acb1488502d09d))
+* the freeze asks for the Alcance line the scope gate reads, and the template writes it ([#508](https://github.com/mercadona/control-tower/issues/508)) ([1b5c17f](https://github.com/mercadona/control-tower/commit/1b5c17f0bd1463c08809ecf63a283efabda47640))
+
 ## [0.4.0](https://github.com/mercadona/control-tower/compare/frontend-v0.3.0...frontend-v0.4.0) (2026-09-21)
 
 
