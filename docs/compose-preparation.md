@@ -23,30 +23,37 @@ commit before its baseline or agent starts.
 
 ## Supported configuration
 
-This first implementation supports the Catalog/Playground Makefile layout:
-`DOCKER_COMPOSE_FILE` names a single base Compose file at the root or under `docker/`, relative to `ROOT_FOLDER`,
-and `DOCKER_COMPOSE_OVERRIDE_FILE` names the sibling `docker-compose.local.yml`,
-appended to `DOCKER_COMMAND` when it exists. A forced `-p` or `--project-name`
-refuses preparation. Unresolved wrappers, multiple base files and Compose includes
-are reported as not checked, not approved by a guessed interpretation.
+This check addresses the Playground incident: a Makefile forcing the same Compose
+project and `/app` pointing at a sibling checkout. The remote check reports a
+`-p` or `--project-name` override, which would outrank the local project name.
+It does not require particular Makefile lines, assignment spacing or variable
+definitions.
 
-Named external resources and fixed container names require a repository change.
-A normal default Compose `name:` does not: the local override replaces it.
+In the worktree, GNU Make resolves the existing `DOCKER_COMMAND` through `make
+-qp`. Exit 1 is the normal question-mode answer for an out-of-date target, not a
+failed lookup. The checker parses that expanded command into arguments and asks
+Compose for its configuration. It does not execute a shell recipe or start a
+service. Only the direct `docker compose` prefix with file/project-name options
+used by these repositories is supported; unresolved commands are not checked.
+
+Docker Compose parses its own configuration. There is no separate YAML parser or
+audit of external resources, custom container names or networking policies.
 Repositories with no discovered Compose configuration are not applicable to this
 check; that is not a certification of every other environment they may use.
 
 ## Per-worktree configuration
 
 The project name is derived from the absolute worktree path. The local override
-resets each service's published ports, allowing parallel tests over Compose's
-internal network. It must already be ignored by Git, and creation uses an
-exclusive write. Existing files are never overwritten by the preparer.
+resets the ports that the base configuration publishes: Playground's Centrifugo
+port would otherwise collide as soon as a second environment starts. The file
+must already be ignored by Git, and creation uses an exclusive write. Existing
+files are never overwritten by the preparer.
 
-Compose's effective configuration must name the reserved project, have no
-published ports, fixed container names, host networking or shared named volumes
-and networks. An application bind mount at `/app` must point to this worktree.
-This measures configuration, not the live mount table. No container is started
-and local credential files are neither copied nor filled in by this feature.
+The configuration read through Make's Compose command must select that project
+name and mount this worktree at `/app`. If the command ignores the override or
+still points at a sibling checkout, the agent does not start. This measures the
+configuration, not the live mount table. Local credential files are neither copied
+nor filled in by this feature.
 
 ## A refusal and the way back
 

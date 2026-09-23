@@ -67,13 +67,14 @@ remote commit, affected paths and proposed corrections in `detail`. The same
 diagnostic is sent to the matching coordinating session. No plan agent is launched
 on a failed check.
 
-For the supported Makefile/Compose layout, each freshly cut worktree receives an
-ignored `docker-compose.local.yml` with a worktree-specific project name and no
-published host ports. Existing overrides are inspected, not overwritten. Effective
-configuration is checked with `docker compose config --no-env-resolution --format
-json` before baseline execution. This does not start containers, read service
-env-file contents or verify live container mounts. Normal workspace preparation
-cleanup still applies when preparation fails.
+For the Playground/Catalog layout, each freshly cut worktree receives an ignored
+`docker-compose.local.yml` with a worktree-specific project name and resets for
+the base configuration's published ports. Existing overrides are inspected, not
+overwritten. Make resolves `DOCKER_COMMAND`; the checker asks that Compose
+invocation for `config --no-env-resolution --format json`, then verifies the
+project name and `/app` bind mount before baseline execution. This does not start
+containers, read service env-file contents or verify live mounts. Normal workspace
+preparation cleanup still applies when preparation fails.
 
 Starts a headless plan agent. The original loose request remains available; a
 milestone request instead selects **every** admissible ready issue with the

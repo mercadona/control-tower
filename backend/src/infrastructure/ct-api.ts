@@ -443,8 +443,9 @@ class CtApi {
     CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
     const preparation = new CheckRepositoryPreparation({
-      environments: new ComposeWorktreeEnvironments({ git, docker: CtApi.#tool('docker'), files: fs }),
+      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
       reports: new SessionPreparationReports({
         sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
       }),

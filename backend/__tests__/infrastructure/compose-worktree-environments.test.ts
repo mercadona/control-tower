@@ -8,7 +8,6 @@ class SourceMother {
   static readonly REVISION = 'a'.repeat(40)
   static readonly TARGET = { root: new CheckoutRoot('/repo'), repository: new RepositoryName('owner/repo') }
   static readonly WORKTREE = '/repo/.worktrees/10'
-  static readonly COMPOSE = 'name: playground\nservices:\n  app:\n    image: app\n  db:\n    image: postgres\n'
 
   static catalogMakefile(): string {
     return [
@@ -29,12 +28,16 @@ class SourceMother {
 class Environment {
   revision = SourceMother.REVISION
   makefile = SourceMother.catalogMakefile()
-  compose = SourceMother.COMPOSE
   tree = 'Makefile\ndocker/docker-compose.yml\n'
   failure: string | null = null
   dockerOutput: string | null = null
   dockerCode = 0
+  makeCode = 1
+  makeOutput: string | null = null
+  mountSource: string | null = null
+  canonicalPath: string | null = null
   readonly gitCalls: string[][] = []
+  readonly makeCalls: string[][] = []
   readonly dockerCalls: string[][] = []
   readonly written: string[] = []
   readonly files = new Map<string, string>()
@@ -46,21 +49,29 @@ class Environment {
     let stdout = ''
     switch (verb) {
       case 'ls-remote': stdout = `${this.revision}\tHEAD\n`; break
-      case 'rev-parse': stdout = `${this.revision}\n`; break
+      case 'rev-parse': stdout = `${argv[3] === '--show-toplevel' ? this.canonicalPath ?? argv[1] : this.revision}\n`; break
       case 'ls-tree': stdout = this.tree; break
       case 'fetch': case 'diff': case 'check-ignore': break
-      case 'show': stdout = argv[3].endsWith(':Makefile') ? this.makefile : this.compose; break
+      case 'show': stdout = this.makefile; break
       default: throw new Error(`unexpected git call ${argv.join(' ')}`)
     }
     return new ProcessOutput({ code: 0, stdout, stderr: '' })
   }
 
-  async docker(argv: string[]): Promise<ProcessOutput> {
+  async make(argv: string[]): Promise<ProcessOutput> {
+    this.makeCalls.push(argv)
+    return new ProcessOutput({ code: this.makeCode, stderr: '', stdout: this.makeOutput ??
+      `DOCKER_COMMAND := docker compose -f "${argv[1]}/docker/docker-compose.yml" -f "${argv[1]}/docker/docker-compose.local.yml"\n` })
+  }
+
+  async docker(argv: string[], cwd: string): Promise<ProcessOutput> {
     this.dockerCalls.push(argv)
-    const worktree = argv[2].replace(/\/docker\/docker-compose.yml$/, '')
-    const override = this.files.get(argv[4]) ?? ''
-    const name = override.match(/^name: (.+)$/m)?.[1]
-    const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: { volumes: [{ type: 'bind', source: worktree, target: '/app' }] } }, volumes: { pgdata: { name: `${name}_pgdata` } } })
+    const override = this.files.get(argv[argv.lastIndexOf('-f') + 1])
+    const name = override?.match(/^name: (.+)$/m)?.[1] ?? 'playground'
+    const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: {
+      volumes: [{ type: 'bind', source: this.mountSource ?? cwd, target: '/app' }],
+      ports: override === undefined ? [{ published: '8000', target: 8000 }] : [],
+    } } })
     return new ProcessOutput({ code: this.dockerCode, stdout, stderr: '' })
   }
 
@@ -78,7 +89,7 @@ class Environment {
   }
 
   adapter(): ComposeWorktreeEnvironments {
-    return new ComposeWorktreeEnvironments({ git: this.git.bind(this), docker: this.docker.bind(this), files: this })
+    return new ComposeWorktreeEnvironments({ git: this.git.bind(this), make: this.make.bind(this), docker: this.docker.bind(this), files: this })
   }
 
   prepare() {
@@ -87,6 +98,13 @@ class Environment {
 }
 
 describe('Compose preparation from repository configuration', () => {
+  it('accepts the canonical worktree path returned by Git when Make resolves a directory alias', async () => {
+    const env = new Environment()
+    env.canonicalPath = '/private/repo/.worktrees/10'
+    env.mountSource = env.canonicalPath
+    expect((await env.prepare()).state).toBe('compatible')
+  })
+
   it('two worktrees receive different project names without changing each other', async () => {
     const env = new Environment()
     const adapter = env.adapter()
@@ -95,21 +113,6 @@ describe('Compose preparation from repository configuration', () => {
     expect(env.written).toHaveLength(2)
     expect(env.written[0].split('\n')[0]).not.toBe(env.written[1].split('\n')[0])
     expect(env.files.get(`${SourceMother.WORKTREE}/docker/docker-compose.local.yml`)).toBe(env.written[0])
-  })
-
-  it('shared named resources are diagnosed on the remote base before cutting a worktree', async () => {
-    const env = new Environment()
-    env.compose += 'volumes:\n  pgdata:\n    external: true\n'
-    const result = await env.adapter().inspect(SourceMother.TARGET)
-    expect(result.state).toBe('required')
-    expect(result.summary).toContain('volumes/pgdata')
-    expect(env.written).toEqual([])
-  })
-
-  it('invalid Compose YAML is not mistaken for an absent Compose setup', async () => {
-    const env = new Environment()
-    env.compose = 'services: ['
-    expect((await env.adapter().inspect(SourceMother.TARGET)).state).toBe('not-checked')
   })
 
   it('the old Playground invocation is refused before a file or container can be changed', async () => {
@@ -160,10 +163,12 @@ describe('Compose preparation from repository configuration', () => {
     expect(result.permitsDispatch()).toBe(false)
   })
 
-  it('does not guess what an unfamiliar Compose wrapper will execute', async () => {
+  it('asks Make to resolve the command instead of requiring literal Makefile lines', async () => {
     const env = new Environment()
-    env.makefile = 'test:\n\t./scripts/run-tests\n'
-    expect((await env.adapter().inspect(SourceMother.TARGET)).state).toBe('not-checked')
+    env.makefile = SourceMother.catalogMakefile().replaceAll(' := ', ':=')
+    expect((await env.adapter().inspect(SourceMother.TARGET)).state).toBe('compatible')
+    expect((await env.prepare()).state).toBe('compatible')
+    expect(env.makeCalls).toEqual([['-C', SourceMother.WORKTREE, '--no-print-directory', '-qp']])
   })
 
   it('prepares a unique local override and checks effective configuration without starting containers', async () => {
@@ -172,7 +177,10 @@ describe('Compose preparation from repository configuration', () => {
     expect(env.written).toHaveLength(1)
     expect(env.written[0]).toMatch(/^name: ct-[a-f0-9]{16}\n/)
     expect(env.written[0]).toContain('"app":\n    ports: !reset []')
-    expect(env.dockerCalls).toEqual([['compose', '-f', `${SourceMother.WORKTREE}/docker/docker-compose.yml`, '-f', `${SourceMother.WORKTREE}/docker/docker-compose.local.yml`, 'config', '--no-env-resolution', '--format', 'json']])
+    expect(env.dockerCalls).toEqual([
+      ['compose', '-f', `${SourceMother.WORKTREE}/docker/docker-compose.yml`, 'config', '--no-env-resolution', '--format', 'json'],
+      ['compose', '-f', `${SourceMother.WORKTREE}/docker/docker-compose.yml`, '-f', `${SourceMother.WORKTREE}/docker/docker-compose.local.yml`, 'config', '--no-env-resolution', '--format', 'json'],
+    ])
     expect(env.gitCalls).toContainEqual(['-C', SourceMother.WORKTREE, 'check-ignore', '--quiet', '--', 'docker/docker-compose.local.yml'])
   })
 
@@ -184,17 +192,23 @@ describe('Compose preparation from repository configuration', () => {
     expect(result.state).toBe('required')
     expect(env.written).toEqual([])
     expect(env.files.get(path)).toBe('name: shared\nservices: {}\n')
-    expect(result.summary).toContain('worktree-specific name reserved by Control Tower')
+    expect(result.summary).toContain('does not select this worktree project')
   })
 
-  it('reports published ports, shared volumes and wrong application mounts', async () => {
+  it('reports the Playground failure when /app points to a sibling checkout', async () => {
     const env = new Environment()
-    env.dockerOutput = JSON.stringify({ name: 'shared', services: { app: { ports: [{ published: '8000', target: 8000 }], volumes: [{ type: 'bind', source: '/sibling', target: '/app' }] } }, volumes: { db: { name: 'shared_db', external: true } } })
+    env.mountSource = '/sibling'
     const result = await env.prepare()
     expect(result.state).toBe('required')
-    expect(result.summary).toContain('publishes host ports')
-    expect(result.summary).toContain('mounts another checkout')
-    expect(result.summary).toContain('shared with other projects')
+    expect(result.findings).toHaveLength(1)
+    expect(result.summary).toContain('not mounted from this worktree')
+  })
+
+  it.each(['', 'DOCKER_COMMAND := docker compose up -d', 'DOCKER_COMMAND := docker compose; touch unexpected'])('does not execute an unresolved or executable recipe as a configuration query: %s', async (printed) => {
+    const env = new Environment()
+    env.makeOutput = printed
+    expect((await env.prepare()).state).toBe('not-checked')
+    expect(env.dockerCalls).toHaveLength(1)
   })
 
   it('does not create configuration when it would enter the slice diff', async () => {
