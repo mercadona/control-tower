@@ -15,7 +15,7 @@ independent move forward without anybody having to remember anything.
 | | |
 |---|---|
 | Plugin | `control-tower-loop` `0.57.0` · slice table contract `v26` |
-| Backend | `0.2.0` · 21 endpoints on `http://127.0.0.1:8787` |
+| Backend | Local server on `http://127.0.0.1:8787` · [current endpoint map](#53-endpoint-map) |
 | Front end | `0.1.1` · one screen, Vite + React 19 + TypeScript |
 | Tests | 8,663 across three suites, all green |
 | Licence | [MIT](LICENSE) |
@@ -56,8 +56,10 @@ watches this: if `source` goes back to `"./"`, it fails.
 | **2 · `status:ready`** | The issues already exist | The groom creates them in `status:backlog`, never in `ready`. That a slice is written does not mean it should be started now. |
 | **3 · The merge** | The pull request is open and the claim released | The merge is the only thing that releases the area tokens and satisfies the dependencies. |
 
-On top of those three, every slice carries a `plan` gate, and a slice whose row
-declares journeys also carries an `e2e` gate. The plugin's README explains both.
+There is no human gate between a slice's technical plan and its implementation.
+The agent writes the plan, the automated controls evaluate the work, and a person
+reviews the resulting pull request. Additional `visual` or `apply` gates can be
+required by the slice's specification; the plugin's README explains them.
 
 ---
 
@@ -333,9 +335,34 @@ two you are running.
 
 ## 5. The journey of a milestone
 
-What the cabin puts on screen, in order. A name in **Spanish** below is a label
-the page really shows; the last two steps have no panel of their own and are
-named in English here.
+The main screen has two stages: **Solicitud → Implementación**. The coordinating
+session remains available throughout. A *slice* is one issue-sized piece of the
+milestone, executed in its own branch and worktree (an isolated working directory).
+
+### 5.1 From a request to merged work
+
+```text
+Solicitud
+  Ticket + repository + local checkout
+  -> conversation with the coordinating session
+  -> design and execution specification
+  -> human freezes the specification and merges its pull request
+  -> groom creates the milestone and its issues
+  -> human authorizes the work
+
+Implementación (one progress view per slice)
+  Automatic planning -> execution and checks -> publication -> review on GitHub
+                                                                  |
+                                             requested fixes <----+
+                                                                  |
+                                                        human merge
+                                                                  |
+                                              collect merged work and
+                                              dispatch unblocked slices
+```
+
+These are internal phases and human decisions, not additional navigation tabs.
+In particular, **Plan listo** does not ask the person to approve the plan.
 
 **Entrance — the brainstorming.** The form requires a ticket key (`ABC-123`) or a
 GitHub issue URL, plus the repository and the absolute path of its
@@ -361,16 +388,25 @@ session changed the slicing, **Publicar el nuevo slicing** sends the correction
 out as its own pull request; merging that pull request is the authorisation, so
 the groom then presses itself.
 
-**Solicitud → Revisar plan → Implementación.** `POST /start-plan` cuts the
-worktree, opens the plan issue and launches the plan agent; the progress arrives
-over Server-Sent Events. When the plan agent finishes, the backend publishes the
-plan as a comment on the issue and starts the implementation itself, in the same
-watch and with no second request to make: the plan is read there, not answered.
-Until `0.58.0` this stage was a gate — a human granted the go, the release
-refused to pass without it, and a `POST /implement-plan` resumed the work. A-3
-(issue #434) retired the protocol and #435 took that route out of the backend,
-where it now answers 404. The implementation goes on task by task, through
-`ct-step`.
+**Implementación, including planning.** Once work is authorized, the backend
+dispatches the slices that dependencies and shared-file constraints allow to run
+together. `POST /start-plan` is the explicit dispatch entrance: a milestone
+request selects eligible existing issues; the retained single-ticket request
+creates a plan issue. Each dispatched slice gets its own worktree and agent
+conversation. The agent writes its technical plan, the backend publishes it for
+tracking, and execution continues automatically through `ct-step`.
+
+The same progress panel shows planning activity, the current task and checks,
+publication, review and fixes. The issue link, agent identity, branch and worktree
+are available in the collapsed **Detalles del agente y del entorno** section.
+A finished planning call is not proof that its plan is ready; a finished local
+implementation is not proof that its pull request has been published.
+
+**Changes and blocked work.** Ask the coordinating session for changes; the
+slice cards have no separate message box. The coordinator can deliver a change,
+hold it for the next task boundary or act on an explicit recovery decision.
+If the state is uncertain, the page shows the diagnostic and the permitted
+recovery action. An unresolved decision stays with the person.
 
 **Gate 3 · the merge.** It has no panel: it happens on GitHub. Still yours, but
 you no longer have to announce it —
@@ -388,6 +424,92 @@ nothing (`--collect --no-workspace`): the cabin opened no workspace to close; th
 plugin's own `/ct-next` route still closes its own. If any of the three fails it
 touches nothing and says which. `/ct-harvest` then answers what the milestone
 cost.
+
+### 5.2 Three tracking responsibilities
+
+An endpoint is an HTTP method and path. `GET` reads information; `POST` requests
+an action. The browser combines these three tracking responsibilities:
+
+| Responsibility | Endpoint | What it answers | When the page reads it |
+|---|---|---|---|
+| **Work inventory and recovery information** | `GET /active-plans` | Which works exist, their recorded identities, broad phases, whether they accept changes, and any diagnostic or recovery action | On opening/reloading, after recovery actions, and about every two seconds while following work |
+| **Current progress of one work** | `GET /work-progress/:issue?repo=owner/name` | Plan readiness and agent activity, execution step/task/attempt, publication and review, or an uncertain state | One polling owner per displayed work; normally every three seconds, fifteen seconds for confirmed delivered/review/fixing states |
+| **Completed-step history** | `GET /implement-history/:issue?root=<absolute-path>&repo=owner/name` | Finished steps, outcomes, timings, summaries, verdicts and recorded token usage | Immediately when the history panel opens, then every three seconds while visible; paused when collapsed |
+
+Intervals are measured after the previous response. The current-progress route
+gets the checkout from the recorded work, so it accepts `repo`, not a caller's
+`root`. History retains its existing `root` parameter.
+
+The server interprets the evidence; the page presents it. If one part of a
+progress read fails, the other known facts remain available. If the connection
+fails, the last answer stays visible with a stale warning and the page retries.
+Stale or partial readings never trigger the automatic switch to another slice.
+
+**Reading the inventory or progress starts no publication or review watcher.**
+Automatic recovery belongs to the server: its own non-overlapping loop starts
+with the server and runs again two seconds after each scan completes. It works
+with no browser open. Explicit recovery and cleanup use the mutation endpoints
+below. The separate harvest sweep runs every minute.
+
+The coordinating terminal has its own live stream. Collapsing the drawer pauses
+history queries but keeps the terminal and its conversation connected.
+
+### 5.3 Endpoint map
+
+These are the routes currently mounted by the backend. `:issue` and `:id` are
+path parameters, replaced with an issue number and session identifier. The tables
+describe purpose; [`backend/API.md`](backend/API.md) contains the detailed request,
+response and refusal contracts.
+
+#### Request, specification and authorization
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /coordinating-session` | Open the coordinating conversation from a ticket, repository and local checkout |
+| `GET /coordinating-session` | Read its identity, current lifecycle operation, status and attention/history information |
+| `POST /coordinating-session/close` | Close or cancel the identified coordinating session |
+| `POST /groom-session` | Open or resume the coordinating conversation for reviewing the proposed slice breakdown |
+| `GET /spec-freeze` | Read the specification's state and the findings that determine whether it can be frozen |
+| `POST /spec-freeze` | Perform the person's freeze action and publish the specification in a pull request |
+| `POST /spec-reslicing` | Publish a correction to an already-frozen slice breakdown for review |
+| `GET /epic-groom` | Read the proposed issue creation, publication prerequisites and current groom/authorization state |
+| `POST /epic-groom` | Create the milestone and its issues from the published specification |
+| `POST /epic-promotion` | Perform the person's authorization action by promoting eligible issues to `status:ready` |
+| `POST /start-plan` | Dispatch authorized milestone work, or start the retained single-ticket planning path |
+
+The `epic-*` path names are existing contracts; they operate on the milestone.
+Freeze, groom and authorization controls enforce their own admission rules. A
+progress read never performs those actions, and no route merges a pull request.
+
+#### Work tracking and intervention
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /active-plans` | Discover and reconcile the inventory of work and its available recovery actions |
+| `GET /work-progress/:issue` | Read the unified current progress for an issue and repository |
+| `GET /implement-history/:issue` | Read completed-step history for an issue, checkout root and repository |
+| `POST /recover-plan` | Explicitly resume eligible supervision or continuation using the recorded repository, issue and agent identity |
+| `POST /cleanup-plan` | Explicitly clean up an eligible failed start; it does not start replacement work |
+| `POST /slices/:issue/message` | Deliver a requested change through the coordinator; a running driver holds it until a step boundary |
+| `POST /slices/:issue/held-change` | Record a change for delivery at a later step boundary and return its ticket |
+| `GET /slices/:issue/escalation` | Read a slice's declared block and the decision it needs; this read uses `root` and resumes nothing |
+| `POST /slices/:issue/another-round` | Apply the coordinator's explicit instruction to grant an eligible run another round after a judge veto |
+
+#### Terminal and environment
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /sessions` | List the live terminal sessions owned by the backend |
+| `GET /sessions/:id/stream` | Stream terminal output to the page using server-sent events, a persistent connection carrying new output |
+| `POST /sessions/:id/input` | Send keyboard input to the selected live terminal |
+| `POST /sessions/:id/resize` | Update the terminal's rows and columns to match its panel |
+| `POST /session-hooks` | Receive agent lifecycle notifications so the coordinator can be shown as working or waiting |
+| `GET /external-tools` | Check required tools and observable authentication state, and report the metrics-delivery configuration |
+
+**Retired routes:** `/review-plan` and `/implement-plan` belong to the removed
+human plan-review flow. `/plan-events`, `/planning-progress` and
+`/implement-progress` were replaced by `/work-progress`. They return 404. Update
+the served frontend and backend together and reload older browser tabs.
 
 ---
 
