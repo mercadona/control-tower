@@ -663,6 +663,82 @@ describe('Home · the slices in flight', () => {
     expect(WorkflowSnapshotStorage.load()?.plan.issue.number).toBe(9)
   })
 
+  it('should announce a slice that left the active plans after review while the next one still plans, instead of warning', async () => {
+    vi.useFakeTimers()
+    let plans = HeadlessPlanMother.slicesInFlight(7)
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => plans,
+      progress: (issue) => issue === 7 ? selectedProgress : ImplementProgressMother.progress(),
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    selectedProgress = ImplementProgressMother.inReview()
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    plans = HeadlessPlanMother.slicesInFlightPlanning(8)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(screen.getByText('Slice #7 entregado')).toBeInTheDocument()
+    expect(screen.getByText('Esperando a que #8 empiece a implementar.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cerrar' })).toBeNull()
+    expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
+  })
+
+  it('should announce the last slice that left the active plans after review and forget it when closed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let plans = HeadlessPlanMother.slicesInFlight(7)
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => plans,
+      progress: () => selectedProgress,
+    })
+    const { user } = openHome()
+    await (await panelOf(7)).findByText('Tarea 3 de 7')
+
+    selectedProgress = ImplementProgressMother.inReview()
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    plans = HeadlessPlanMother.empty()
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(screen.getByText('Slice #7 entregado')).toBeInTheDocument()
+    expect(screen.getByText('No hay más slices en marcha.')).toBeInTheDocument()
+    expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(screen.getByRole('heading', { name: 'Solicitud', level: 1 })).toBeInTheDocument()
+    expect(WorkflowSnapshotStorage.load()).toBeNull()
+  })
+
+  it('should not announce an earlier delivered slice once the person follows an uncertain slice that then leaves the active plans', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let plans = HeadlessPlanMother.slicesInFlight(7)
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => plans,
+      progress: () => selectedProgress,
+    })
+    const { user } = openHome()
+    await (await panelOf(7)).findByText('Tarea 3 de 7')
+    selectedProgress = ImplementProgressMother.inReview()
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    plans = HeadlessPlanMother.uncertainAmong(8, 'continue')
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await screen.findByText('Slice #7 entregado')
+
+    await selectSliceDetail(user, 8)
+    plans = HeadlessPlanMother.empty()
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
+    expect(screen.queryByText('Slice #7 entregado')).toBeNull()
+  })
+
   it('should require fresh progress when a candidate disappears and reappears', async () => {
     vi.useFakeTimers()
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
@@ -700,7 +776,9 @@ describe('Home · the slices in flight', () => {
     backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
     openHome()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('El plan guardado ya no está activo')
+    expect(alert).toHaveTextContent('El backend ya no informa de este plan y no se le vio terminar. Descarta el estado para quitarlo de la pantalla.')
     expect(screen.getByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Slice #9' })).toBeNull()

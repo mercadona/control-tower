@@ -130,7 +130,7 @@ const Home = () => {
     setSlicesInFlight(activePlans.filter((active) => activePlanIdentity(active) !== activePlanIdentity(slice)))
   }, [activePlans, selectActivePlan])
 
-  const observeSliceProgress = useAutomaticSliceSelection({
+  const { observe: observeSliceProgress, delivered: deliveredSlice } = useAutomaticSliceSelection({
     workflow,
     plans: activePlans,
     enabled: reconciliation === 'confirmed' || reconciliation === 'stale',
@@ -430,15 +430,29 @@ const Home = () => {
           )}
         </div>
       )}
-      {reconciliation === 'stale' && (
+      {reconciliation === 'stale' && deliveredSlice !== null && (
+        <div className="home__recovery">
+          <Banner
+            type="informative"
+            title={`Slice #${deliveredSlice.issue} entregado`}
+            description={deliveredSlice.successors.length === 0
+              ? 'No hay más slices en marcha.'
+              : `Esperando a que #${deliveredSlice.successors.join(', #')} empiece a implementar.`}
+          />
+          {deliveredSlice.successors.length === 0 && (
+            <Button variant="secondary" onClick={discardStaleWorkflow}>Cerrar</Button>
+          )}
+        </div>
+      )}
+      {reconciliation === 'stale' && deliveredSlice === null && (
         <div className="home__recovery">
           <Banner
             type="warning"
             role="alert"
             title={uncertainRequest === null ? 'El plan guardado ya no está activo' : 'El trabajo incierto ya no figura como activo'}
             description={uncertainRequest === null
-              ? 'El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva.'
-              : 'El backend ya no informa de este trabajo. Descarta el estado para crear una solicitud nueva.'}
+              ? 'El backend ya no informa de este plan y no se le vio terminar. Descarta el estado para quitarlo de la pantalla.'
+              : 'El backend ya no informa de este trabajo. Descarta el estado para quitarlo de la pantalla.'}
           />
           <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>
         </div>
