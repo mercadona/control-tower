@@ -42,12 +42,14 @@ export class RunJournal extends SliceMessages {
   readonly files: HeadlessFiles
   readonly newId: () => string
   readonly now: () => string
+  readonly operating: Map<string, Promise<void>>
 
   constructor(ports: { files: HeadlessFiles, newId: () => string, now: () => string }) {
     super()
     this.files = ports.files
     this.newId = ports.newId
     this.now = ports.now
+    this.operating = new Map()
   }
 
   override async hold(watch: PlanWatch, text: string): Promise<string> {
@@ -154,6 +156,10 @@ export class RunJournal extends SliceMessages {
   }
 
   async entries(watch: PlanWatch): Promise<readonly JournalEntry[]> {
+    return this.#operating(watch, () => this.#entries(watch))
+  }
+
+  async #entries(watch: PlanWatch): Promise<readonly JournalEntry[]> {
     const operations = this.#operationsPath(watch)
     const kind = await this.#kindOf(operations)
     if (kind === 'absent') return Object.freeze([])
@@ -174,15 +180,13 @@ export class RunJournal extends SliceMessages {
 
   async begin(watch: PlanWatch, request: string): Promise<string> {
     const ticket = this.#ticket(this.newId())
-    await this.#publish(join(this.#operationsPath(watch), ticket, RunJournal.#REQUEST), request)
+    await this.#operating(watch, () => this.#publish(join(this.#operationsPath(watch), ticket, RunJournal.#REQUEST), request))
     return ticket
   }
 
   async finish(watch: PlanWatch, ticket: string, receipt: string): Promise<void> {
-    await this.#publish(
-      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#RECEIPT),
-      receipt,
-    )
+    const path = join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#RECEIPT)
+    await this.#operating(watch, () => this.#publish(path, receipt))
   }
 
   async material(watch: PlanWatch, ticket: string): Promise<string | null> {
@@ -212,6 +216,18 @@ export class RunJournal extends SliceMessages {
     if (kind === 'absent') return Object.freeze([])
     if (kind !== 'directory') throw new RunNotUnderstood(`${directory} is not a publication directory`)
     return Object.freeze((await this.#list(directory)).sort())
+  }
+
+  async #operating<T>(watch: PlanWatch, work: () => Promise<T>): Promise<T> {
+    const key = this.#operationsPath(watch)
+    const turn = (this.operating.get(key) ?? Promise.resolve()).then(work)
+    const done = turn.then(() => undefined, () => undefined)
+    this.operating.set(key, done)
+    try {
+      return await turn
+    } finally {
+      if (this.operating.get(key) === done) this.operating.delete(key)
+    }
   }
 
   async #entryAt(operations: string, ticket: string): Promise<JournalEntry> {

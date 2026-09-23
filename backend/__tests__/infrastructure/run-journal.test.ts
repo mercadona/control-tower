@@ -83,6 +83,26 @@ class JournalMother {
     })
   }
 
+  static withPausedLink(path: string): { fs: typeof fs, reached: Promise<void>, release: () => void } {
+    let arrive: () => void = () => undefined
+    let release: () => void = () => undefined
+    const reached = new Promise<void>((resolve) => { arrive = resolve })
+    const released = new Promise<void>((resolve) => { release = resolve })
+    const paused = new Proxy(fs, {
+      get(target, property, receiver) {
+        if (property !== 'link') return Reflect.get(target, property, receiver)
+        return async (...asked: Parameters<typeof fs.link>) => {
+          if (String(asked[1]) === path) {
+            arrive()
+            await released
+          }
+          return Reflect.apply(target.link, target, asked)
+        }
+      },
+    })
+    return { fs: paused, reached, release }
+  }
+
   static withLinkFailure(path: string, cause: unknown): typeof fs {
     return new Proxy(fs, {
       get(target, property, receiver) {
@@ -176,6 +196,33 @@ describe('RunJournal', () => {
     }])
     expect(Object.isFrozen(entries[0])).toBe(true)
     expect(Object.isFrozen(entries[0].receipt)).toBe(true)
+  })
+
+  it.each([
+    ['request', 'request.json'],
+    ['receipt', 'receipt.json'],
+  ] as const)('an operation read while its %s is being written waits for the write', async (_name, file) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-concurrent-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    if (file === 'receipt.json') await JournalMother.journal(root).begin(watch, JournalMother.REQUEST)
+    const paused = JournalMother.withPausedLink(join(JournalMother.operation(root), file))
+    const journal = JournalMother.journal(root, () => JournalMother.TICKET, paused.fs)
+
+    const writing = file === 'request.json'
+      ? journal.begin(watch, JournalMother.REQUEST)
+      : journal.finish(watch, JournalMother.TICKET, JournalMother.RECEIPT)
+    await paused.reached
+    const reading = journal.entries(watch)
+    await new Promise((resolve) => { setTimeout(resolve, 50) })
+    paused.release()
+    await writing
+
+    expect(await reading).toEqual([{
+      ticket: JournalMother.TICKET,
+      request: JournalMother.REQUEST,
+      receipt: file === 'request.json' ? { kind: 'absent' } : { kind: 'present', text: JournalMother.RECEIPT },
+    }])
   })
 
   it('immutable journal collisions accept only identical bytes', async () => {
