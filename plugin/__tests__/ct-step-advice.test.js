@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 import { ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS } from '../scripts/step-contracts.js'
+import { PHASES } from '../scripts/run-machine.js'
 
 let repo
 const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask, judgeRows, taskOk, bornBeforeTheReview } = makeHelpers(() => repo)
@@ -62,7 +63,7 @@ const advice = (over = {}, name = 'advice.json') => {
   return p
 }
 
-const advicePackagePath = () => join(repo, '.agent', 'run-7', runState().reviewing ? 'review-advice.md' : `task-${runState().task}-advice.md`)
+const advicePackagePath = () => join(repo, '.agent', 'run-7', runState().phase === PHASES.REVIEW ? 'review-advice.md' : `task-${runState().task}-advice.md`)
 
 // `next` is the only verb that writes the advisor's package, the same as with
 // the judge: asking for the advice is, by definition, having asked before.

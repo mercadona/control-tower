@@ -10,6 +10,7 @@ import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
+import { PHASES } from '../scripts/run-machine.js'
 
 let repo
 const { ct, ctFrom, writeReport, writeVerdict, commits, runState, taskPackage, judgeTask,
@@ -44,7 +45,7 @@ describe('the review of the whole slice, after the last commit', () => {
     for (const rev of ['HEAD~1', 'HEAD']) expect(filesOf(rev)).not.toContain('docs/superpowers/verdicts/')
     const state = runState()
     expect(state.step).toBe('judge')
-    expect(state.reviewing).toBe(true)
+    expect(state.phase).toBe(PHASES.REVIEW)
     expect(state.task).toBe(2)
   })
 
@@ -68,7 +69,7 @@ describe('the review of the whole slice, after the last commit', () => {
     expect(filesOf('HEAD')).toContain('uno.txt')
     const state = runState()
     expect(state.step).toBe('reconcile')
-    expect(state.reviewing).toBe(false)
+    expect(state.phase).toBe(PHASES.SLICE)
     expect(state.sliceCommits).toBe(1)
     // A new process reads the state again, and the commit count still agrees.
     expect(ct('next').status).toBe(0)
@@ -204,7 +205,7 @@ describe('the review of the whole slice, after the last commit', () => {
     expect(commits()).toBe(4)
     const state = runState()
     expect(state.step).toBe('reconcile')
-    expect(state.reviewing).toBe(false)
+    expect(state.phase).toBe(PHASES.SLICE)
     expect(state.sliceCommits ?? 0).toBe(0)
     // A new process reads the state again, and the commit count still agrees.
     expect(ct('next').status).toBe(0)

@@ -93,6 +93,15 @@ var DEFAULT_BUDGETS = Object.freeze({
   correctionRetries: 2,
   reconcileRetries: 2
 });
+var JUDGING = Object.freeze({
+  EACH_TASK: "each-task",
+  FINAL: "final"
+});
+var PHASES = Object.freeze({
+  TASK: "task",
+  REVIEW: "review",
+  SLICE: "slice"
+});
 var freshCounters = Object.freeze({ controlRetries: 0, judgeRetries: 0, correctionRetries: 0 });
 
 // scripts/dispatch-gate.js

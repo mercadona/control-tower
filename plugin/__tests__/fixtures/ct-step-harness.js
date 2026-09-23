@@ -25,6 +25,7 @@ import { VERDICT_RULES, SLICE_VERDICT_RULES } from '../../scripts/step-contracts
 // reads `senal:` with parseStateSafe and not with a regex), and SIGNAL_ABSENT
 // is the single constant the slice judge's package declares absence with.
 import { renderState } from '../../scripts/state.js'
+import { PHASES } from '../../scripts/run-machine.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const SCRIPT = join(here, '..', '..', 'scripts', 'ct-step.mjs')
@@ -215,7 +216,7 @@ export function makeHelpers(ref) {
 
   // The package of the step at hand: the task's, or the review's (#530) while
   // the judge reviews the whole slice. A number names one task's package.
-  const artefactStem = () => (runState().reviewing ? 'review' : `task-${runState().task}`)
+  const artefactStem = () => (runState().phase === PHASES.REVIEW ? 'review' : `task-${runState().task}`)
   const taskPackage = (n) => join(ref(), '.agent', 'run-7', `${n === undefined ? artefactStem() : `task-${n}`}-review.diff`)
   const slicePackage = () => join(ref(), '.agent', 'run-7', 'slice-review.diff')
   const judgeRows = (step = 'judge') => readFileSync(join(ref(), '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
@@ -292,14 +293,14 @@ export function makeHelpers(ref) {
     return judgeSlice(writeSliceVerdict('PASS'))
   }
 
-  // A run born before the final review (#530) carries no `judging` field and
-  // judges every task, as it always did. It is simulated by writing the run
+  // A run born before the final review (#530) carries neither `judging` nor
+  // `phase` and judges every task, as it always did. It is simulated by writing the run
   // file the way that version wrote it: the fields #530 added, removed.
   const bornBeforeTheReview = () => {
     if (!existsSync(join(ref(), '.agent', 'run-7.json'))) ct('next')
     const older = runState()
     delete older.judging
-    delete older.reviewing
+    delete older.phase
     writeFileSync(join(ref(), '.agent', 'run-7.json'), JSON.stringify(older, null, 2) + '\n')
   }
   // A task of such a run down the happy path, with its own judge.
