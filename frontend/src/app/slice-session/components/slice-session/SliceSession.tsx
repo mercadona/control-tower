@@ -1,5 +1,6 @@
+import { useEffect } from 'react'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
-import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
+import { ImplementProgressRead, useImplementProgress } from 'app/implement-progress/useImplementProgress'
 import { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
@@ -32,16 +33,21 @@ interface SliceSessionProps {
   repo: string
   recovery?: SliceRecovery | null
   onSelect?: (() => void) | null
+  onProgress?: ((progress: ImplementProgressRead) => void) | null
 }
 
 const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_LABEL : RECOVER_LABEL)
 
-const SliceSession = ({ issue, root, repo, recovery = null, onSelect = null }: SliceSessionProps) => {
+const SliceSession = ({ issue, root, repo, recovery = null, onSelect = null, onProgress = null }: SliceSessionProps) => {
   const progress = useImplementProgress(issue, root, repo)
   const closure = recovery?.refusal ?? null
   const vetoed = closure !== null && closure.state === BLOCKED_JUDGE && closure.outcome === VETOED
     ? closure
     : null
+
+  useEffect(() => {
+    onProgress?.(progress)
+  }, [progress, onProgress])
 
   return (
     <section className="slice-session" aria-label={`Slice #${issue}`}>

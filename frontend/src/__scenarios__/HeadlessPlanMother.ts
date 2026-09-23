@@ -63,6 +63,18 @@ class HeadlessPlanMother {
     return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
   }
 
+  static slicesAcrossCheckouts(repo: string, root: string): Answer {
+    const other = HeadlessPlanMother.slice(8)
+    return {
+      status: 200,
+      body: JSON.stringify({ plans: [HeadlessPlanMother.slice(7), {
+        ...other,
+        request: { ...other.request, repo, path: root },
+        plan: { ...other.plan, repo, worktree: `${root}/.worktrees/8`, issue: { number: 8, url: `https://github.com/${repo}/issues/8` } },
+      }] }),
+    }
+  }
+
   static uncertainAmong(uncertain: number, action: RecoveryAction, ...others: number[]): Answer {
     const plans = [uncertain, ...others].map((issue) => (issue === uncertain
       ? {
