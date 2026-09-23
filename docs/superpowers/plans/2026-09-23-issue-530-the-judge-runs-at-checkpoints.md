@@ -222,7 +222,8 @@ test "$(grep -c 'export function isCheckpoint' plugin/scripts/run-machine.js)" -
 seal of its controls.
 
 **Files:** `plugin/scripts/ct-step.mjs` (modify), `plugin/__tests__/fixtures/ct-step-harness.js`
-(modify), `plugin/__tests__/ct-step-checkpoints.test.js` (create)
+(modify), `plugin/__tests__/ct-step-checkpoints.test.js` (create),
+`plugin/__tests__/ct-step-index.test.js` (modify)
 
 Current state (plugin/scripts/ct-step.mjs, lines 485-485):
 
@@ -355,7 +356,8 @@ Final text (plugin/agents/ct-judge.md):
 the last task is always one. A task between two checkpoints goes to its commit with
 no judge. So the package can open with `tasks A-B`: then `## Diff` runs from the last
 judged commit to the index, and the brief adds each earlier task of the stretch.
-Judge every task of the stretch against its own text.
+Judge every task of the stretch against its own text. After a veto, a fix in a file
+of an earlier task of the stretch is in scope, and it lands in this task's commit.
 ```
 
 That paragraph goes in `ct-judge.md` right after the paragraph that opens with *"The task's own
