@@ -530,7 +530,7 @@ export function extractTasks(markdown) {
         if (value === CHECKPOINT) {
           checkpoint = true
         } else {
-          push(h.n, 'judge-line', `task ${h.n} declares "${JUDGE} ${value}": the only value is "${CHECKPOINT}".`)
+          push(h.n, 'judge-line', `task ${h.n} declares "${JUDGE}${value ? ` ${value}` : ''}": the only value is "${CHECKPOINT}".`)
         }
       }
       if (t.startsWith(VERIFICATION) && commands === null) {

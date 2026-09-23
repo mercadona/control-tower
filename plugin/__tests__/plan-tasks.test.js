@@ -478,9 +478,9 @@ describe('the plan names its checkpoints', () => {
 
   it('a task that declares **Judge:** checkpoint is a checkpoint, and a task that declares nothing is not', () => {
     const plan = [
-      ...taskWith(1, 'con marca', '**Judge:** checkpoint'),
+      ...taskWith(1, 'marked', '**Judge:** checkpoint'),
       '',
-      ...taskWith(2, 'sin marca', null),
+      ...taskWith(2, 'unmarked', null),
     ].join('\n')
     const { tasks } = extractTasks(plan)
     expect(tasks[0].checkpoint).toBe(true)
@@ -488,7 +488,7 @@ describe('the plan names its checkpoints', () => {
   })
 
   it('any other value of **Judge:** is a problem that names the task', () => {
-    const plan = taskWith(1, 'valor equivocado', '**Judge:** always').join('\n')
+    const plan = taskWith(1, 'wrong value', '**Judge:** always').join('\n')
     const { problems } = extractTasks(plan)
     const judgeProblems = problems.filter((p) => p.rule === 'judge-line')
     expect(judgeProblems).toHaveLength(1)
