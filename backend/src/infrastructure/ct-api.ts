@@ -105,6 +105,8 @@ import { ReadSliceEscalation } from '../application/queries/read-slice-escalatio
 import { RunJournal } from './run-journal.ts'
 import { CtRunMachine } from './ct-run-machine.ts'
 import { ClaudeRunMeasurements } from './claude-run-measurements.ts'
+import { MeasuredAgentCalls } from './measured-agent-calls.ts'
+import { DiskAgentMeasurements } from './disk-agent-measurements.ts'
 import { ClaudeRunCalls } from './claude-run-calls.ts'
 import { RunPlanAgents, RunProvenance } from './run-plan-agents.ts'
 import { RunPlanRecovery } from './run-plan-recovery.ts'
@@ -461,7 +463,7 @@ class CtApi {
       now: () => new Date().toISOString(),
       exists: Disk.exists,
     })
-    const calls = new ClaudeCalls({
+    const executor = new ClaudeCalls({
       files,
       binary: ClaudeConversations.BIN,
       worker: fileURLToPath(new URL('./headless-call-worker.ts', import.meta.url)),
@@ -474,6 +476,11 @@ class CtApi {
       acceptanceMs: CtApi.#PLAN_CALL_ACCEPTANCE_MS,
       pollMs: CtApi.#PLAN_CALL_POLL_MS,
       sleep: (milliseconds) => after(milliseconds),
+    })
+    const calls = new MeasuredAgentCalls({
+      executor,
+      reader: new ClaudeRunMeasurements({ files }),
+      store: new DiskAgentMeasurements({ files }),
     })
     const brief = new PlanAgentBrief({
       dispatchCheck: PluginTree.dispatchCheck(),
@@ -553,11 +560,9 @@ class CtApi {
       newId: randomUUID,
       now: () => new Date().toISOString(),
     })
-    const measurements = new ClaudeRunMeasurements({ files, calls })
     const runCalls = new ClaudeRunCalls({
       calls,
       machine,
-      measurements,
       files,
       pluginRoot: PluginTree.root(),
     })
@@ -572,7 +577,7 @@ class CtApi {
       delivery: runDelivery,
       step: new ExecuteRunInstruction({ machine, calls: runCalls }),
       messages: new DeliverHeldMessages({
-        messages: journal, calls: planCalls, measurements, escalations,
+        messages: journal, calls: planCalls, escalations,
       }),
       escalations: readSliceEscalation,
       announcements: new SessionClosureAnnouncements({ sessions: () => coordinatingSessions }),
@@ -587,7 +592,6 @@ class CtApi {
       machine,
       journal,
       delivery: runDelivery,
-      measurements,
       announcements: new SessionChangeAnnouncements({ sessions: () => coordinatingSessions }),
       newId: randomUUID,
       nowMs: Date.now,

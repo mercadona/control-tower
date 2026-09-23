@@ -3,7 +3,6 @@ import {
   DeliverHeldMessages, DeliverHeldMessagesParams,
 } from '../../src/application/actions/deliver-held-messages.ts'
 import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
-import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceMessages } from '../../src/domain/ports/slice-messages.ts'
@@ -121,19 +120,6 @@ class PlanCallsDouble extends PlanCalls {
   }
 }
 
-class CallMeasurementsDouble extends CallMeasurements {
-  readonly trace: string[]
-
-  constructor(trace: string[]) {
-    super()
-    this.trace = trace
-  }
-
-  override async capture(call: StartedPlanCall): Promise<void> {
-    this.trace.push(`capture:${call.id}`)
-  }
-}
-
 describe('DeliverHeldMessages', () => {
   it('every held change reaches the conversation in order and settles', async () => {
     const trace: string[] = []
@@ -144,7 +130,6 @@ describe('DeliverHeldMessages', () => {
     const drain = new DeliverHeldMessages({
       messages,
       calls: new PlanCallsDouble(trace),
-      measurements: new CallMeasurementsDouble(trace),
       escalations: new SliceEscalationsDouble(trace),
     })
 
@@ -153,11 +138,9 @@ describe('DeliverHeldMessages', () => {
     expect(trace).toEqual([
       'start:fix:message:a:drop the flag',
       'wait:call-message:a',
-      'capture:call-message:a',
       'settle:a:call-message:a',
       'start:fix:message:bb:rename the port',
       'wait:call-message:bb',
-      'capture:call-message:bb',
       'settle:bb:call-message:bb',
       `lift:${DrainMother.WATCH.issue.number}`,
     ])
@@ -173,14 +156,13 @@ describe('DeliverHeldMessages', () => {
     const drain = new DeliverHeldMessages({
       messages,
       calls: new PlanCallsDouble(trace, 'call-message:a'),
-      measurements: new CallMeasurementsDouble(trace),
       escalations: new SliceEscalationsDouble(trace),
     })
 
     await expect(drain.execute(new DeliverHeldMessagesParams({ watch: DrainMother.WATCH })))
       .rejects.toThrow(PlanAgentNotResumed)
 
-    expect(trace).toEqual(['start:fix:message:a:drop the flag', 'wait:call-message:a', 'capture:call-message:a'])
+    expect(trace).toEqual(['start:fix:message:a:drop the flag', 'wait:call-message:a'])
     expect((await messages.pending()).map((message) => message.ticket)).toEqual(['a', 'bb'])
   })
 
@@ -189,7 +171,6 @@ describe('DeliverHeldMessages', () => {
     const drain = new DeliverHeldMessages({
       messages: new SliceMessagesDouble(trace, []),
       calls: new PlanCallsDouble(trace),
-      measurements: new CallMeasurementsDouble(trace),
       escalations: new SliceEscalationsDouble(trace),
     })
 

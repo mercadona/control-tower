@@ -11,7 +11,8 @@ import {
   type ActivePlanRecovery,
   type FoundActivePlan,
 } from './active-plans-route.ts'
-import type { ClaudeCalls } from './claude-calls.ts'
+import type { CallInvocation, CallDescriptor } from './claude-calls.ts'
+import type { AgentCalls } from '../domain/ports/agent-calls.ts'
 import type { ReviewWatch } from './review-watch.ts'
 
 type RecoveredPlanOutcome =
@@ -42,7 +43,7 @@ export class RecordedPlanRecovery {
 
   readonly records: PlanRecords
   readonly calls: PlanCalls
-  readonly ownership: ClaudeCalls
+  readonly ownership: AgentCalls<CallInvocation, CallDescriptor>
   readonly checkouts: CheckoutRegistry
   readonly activePlans: ActivePlans
   readonly reviews: ReviewWatch
@@ -51,7 +52,7 @@ export class RecordedPlanRecovery {
   constructor(ports: {
     records: PlanRecords,
     calls: PlanCalls,
-    ownership: ClaudeCalls,
+    ownership: AgentCalls<CallInvocation, CallDescriptor>,
     checkouts: CheckoutRegistry,
     activePlans: ActivePlans,
     reviews: ReviewWatch,

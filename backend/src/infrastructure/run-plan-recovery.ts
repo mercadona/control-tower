@@ -13,9 +13,10 @@ import {
   type ActivePlanRecovery,
   type ActivePlans,
 } from './active-plans-route.ts'
-import type { ClaudeCalls } from './claude-calls.ts'
+import type { CallInvocation, CallDescriptor } from './claude-calls.ts'
+import type { AgentCalls } from '../domain/ports/agent-calls.ts'
 import type { CtRunMachine, RunInspection } from './ct-run-machine.ts'
-import type { RecordedCall } from './recorded-call.ts'
+import type { RecordedCall } from '../domain/value-objects/recorded-call.ts'
 import type { RecordedPlanRecovery } from './recorded-plan-recovery.ts'
 import type { ReviewWatch } from './review-watch.ts'
 import type { RunJournal } from './run-journal.ts'
@@ -67,7 +68,7 @@ export class RunPlanRecovery {
   readonly legacy: RecordedPlanRecovery
   readonly records: PlanRecords
   readonly calls: PlanCalls
-  readonly transport: ClaudeCalls
+  readonly transport: AgentCalls<CallInvocation, CallDescriptor>
   readonly machine: CtRunMachine
   readonly journal: RunJournal
   readonly agents: RunPlanAgents
@@ -84,7 +85,7 @@ export class RunPlanRecovery {
     legacy: RecordedPlanRecovery,
     records: PlanRecords,
     calls: PlanCalls,
-    transport: ClaudeCalls,
+    transport: AgentCalls<CallInvocation, CallDescriptor>,
     machine: CtRunMachine,
     journal: RunJournal,
     agents: RunPlanAgents,

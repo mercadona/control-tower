@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { CallMeasurements } from '../domain/ports/call-measurements.ts'
-import type { CompletedPlanCall, PlanCallPurpose, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
-import { CallDescriptor, type ClaudeCalls } from './claude-calls.ts'
+import { AgentMeasurementReader } from '../domain/ports/agent-measurement-reader.ts'
+import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
+import { AgentCallMeasurements } from '../domain/value-objects/agent-call-measurements.ts'
+import type { CompletedPlanCall, PlanCallPurpose } from '../domain/value-objects/plan-call.ts'
+import { CallDescriptor, StoredCompletion } from './claude-calls.ts'
 import { HeadlessFiles } from './headless-files.ts'
 
 type JsonRecord = Record<string, unknown>
@@ -277,6 +279,47 @@ class ReportedMeasurements {
     return new ReportedMeasurements(reported, Object.freeze([...new Set(diagnostics)]))
   }
 
+  normalized(asked: {
+    descriptor: CallDescriptor,
+    completed: CompletedPlanCall,
+    diagnostics: readonly string[],
+  }): AgentCallMeasurements {
+    const usage = ReportedMeasurements.#record(this.#reported.usage)
+    const models = ReportedMeasurements.#record(this.#reported.modelUsage)
+    const roleIndex = asked.descriptor.argv.indexOf('--agent')
+    return new AgentCallMeasurements({
+      provider: 'claude-code',
+      purpose: asked.descriptor.purpose,
+      requestId: asked.descriptor.requestId,
+      role: roleIndex === -1 ? null : asked.descriptor.argv[roleIndex + 1] ?? null,
+      startedAt: asked.descriptor.startedAt,
+      completed: asked.completed,
+      tokens: {
+        input: ReportedMeasurements.#value(usage?.input_tokens),
+        output: ReportedMeasurements.#value(usage?.output_tokens),
+        cacheRead: ReportedMeasurements.#value(usage?.cache_read_input_tokens),
+        cacheCreation: ReportedMeasurements.#value(usage?.cache_creation_input_tokens),
+      },
+      models: models === null ? null : Object.keys(models).sort(),
+      diagnostics: [...new Set([
+        ...asked.completed.measurement.unavailable, ...asked.diagnostics, ...this.#diagnostics,
+      ])],
+    })
+  }
+
+  static #record(value: unknown): JsonRecord | null {
+    return ReportedMeasurements.#isRecord(value) ? value : null
+  }
+
+  static #isRecord(value: unknown): value is JsonRecord {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+  }
+
+  static #value(metric: unknown): number | null {
+    const value = ReportedMeasurements.#record(metric)?.value
+    return typeof value === 'number' ? value : null
+  }
+
   text(asked: {
     conversation: string,
     callId: string,
@@ -302,19 +345,30 @@ class ReportedMeasurements {
   }
 }
 
-export class ClaudeRunMeasurements extends CallMeasurements {
+export class ClaudeRunMeasurements extends AgentMeasurementReader {
   static readonly FILE = 'measurements-v1.json'
 
   readonly files: HeadlessFiles
-  readonly calls: ClaudeCalls
 
-  constructor(ports: { files: HeadlessFiles, calls: ClaudeCalls }) {
+  constructor(ports: { files: HeadlessFiles }) {
     super()
     this.files = ports.files
-    this.calls = ports.calls
   }
 
-  async capture(call: StartedPlanCall): Promise<void> {
+  async read(completion: CompletedPlanCall): Promise<AgentCallMeasurements> {
+    try {
+      return await this.#read(completion)
+    } catch (cause) {
+      if (cause instanceof RunNotAdvanced || cause instanceof RunNotUnderstood) throw cause
+      if (HeadlessFiles.isSystemFailure(cause)) {
+        throw new RunNotAdvanced(`measurement evidence for call ${completion.call.id} could not be read or recorded: ${String(cause)}`)
+      }
+      throw new RunNotUnderstood(`measurement evidence for call ${completion.call.id} could not be understood: ${String(cause)}`)
+    }
+  }
+
+  async #read(completion: CompletedPlanCall): Promise<AgentCallMeasurements> {
+    const call = completion.call
     const directory = this.files.callDirectory(call)
     const descriptorPath = join(directory, CallDescriptor.FILE)
     const streamPath = join(directory, CallDescriptor.STREAM)
@@ -327,10 +381,11 @@ export class ClaudeRunMeasurements extends CallMeasurements {
         + `got ${JSON.stringify(descriptor.conversation)}`
       )
     }
-    const completionText = await this.files.read(completionPath)
-    if (completionText === null) return
-    const completion = await this.calls.completed(call)
-    if (completion === null) return
+    const completionText = await this.#required(completionPath)
+    const recorded = StoredCompletion.read(completionText, call, descriptor.mode())
+    if (StoredCompletion.text(recorded) !== StoredCompletion.text(completion)) {
+      throw new RunNotUnderstood(`completion for call ${call.id} differs from its durable measurement evidence`)
+    }
     const streamText = await this.files.read(streamPath)
     const diagnostics: string[] = []
     let reported = ReportedMeasurements.empty()
@@ -357,11 +412,12 @@ export class ClaudeRunMeasurements extends CallMeasurements {
       diagnostics,
     })
     await this.#writeOnceOrMatch(join(directory, ClaudeRunMeasurements.FILE), text)
+    return reported.normalized({ descriptor, completed: completion, diagnostics })
   }
 
   async #required(path: string): Promise<string> {
     const text = await this.files.read(path)
-    if (text === null) throw new Error(`${path} is absent`)
+    if (text === null) throw new RunNotAdvanced(`${path} is absent`)
     return text
   }
 
@@ -373,8 +429,8 @@ export class ClaudeRunMeasurements extends CallMeasurements {
       if (!HeadlessFiles.isSystemFailure(cause) || cause.code !== 'EEXIST') throw cause
     }
     const existing = await this.files.read(path)
-    if (existing === null) throw new Error(`${path} is absent after immutable publication collided`)
-    if (existing !== text) throw new Error(`${path} contains different bytes after immutable publication collided`)
+    if (existing === null) throw new RunNotAdvanced(`${path} is absent after immutable publication collided`)
+    if (existing !== text) throw new RunNotUnderstood(`${path} contains different bytes after immutable publication collided`)
   }
 
   static #terminal(stream: string, conversation: string): TerminalReading {

@@ -24,10 +24,10 @@ import { ChangeAnnouncements } from '../domain/ports/change-announcements.ts'
 import { HeldMessage } from '../domain/value-objects/held-message.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import type { ClaudeCalls } from './claude-calls.ts'
-import type { ClaudeRunMeasurements } from './claude-run-measurements.ts'
+import type { CallInvocation, CallDescriptor } from './claude-calls.ts'
+import type { AgentCalls } from '../domain/ports/agent-calls.ts'
 import type { CtRunMachine, RunInspection } from './ct-run-machine.ts'
-import type { RecordedCall } from './recorded-call.ts'
+import type { RecordedCall } from '../domain/value-objects/recorded-call.ts'
 import type { RunJournal } from './run-journal.ts'
 import type { RunDelivery } from '../domain/ports/run-delivery.ts'
 import { RunDeliveryFailure, RunDeliveryUncertain } from '../domain/value-objects/run-delivery.ts'
@@ -56,12 +56,11 @@ export class RunPlanAgents extends PlanAgents {
   readonly legacy: PlanAgents
   readonly records: PlanRecords
   readonly calls: PlanCalls
-  readonly transport: ClaudeCalls
+  readonly transport: AgentCalls<CallInvocation, CallDescriptor>
   readonly driver: DriveRun
   readonly machine: CtRunMachine
   readonly journal: RunJournal
   readonly delivery: RunDelivery
-  readonly measurements: ClaudeRunMeasurements
   readonly announcements: ChangeAnnouncements
   readonly newId: () => string
   readonly nowMs: () => number
@@ -72,12 +71,11 @@ export class RunPlanAgents extends PlanAgents {
     legacy: PlanAgents,
     records: PlanRecords,
     calls: PlanCalls,
-    transport: ClaudeCalls,
+    transport: AgentCalls<CallInvocation, CallDescriptor>,
     driver: DriveRun,
     machine: CtRunMachine,
     journal: RunJournal,
     delivery: RunDelivery,
-    measurements: ClaudeRunMeasurements,
     announcements: ChangeAnnouncements,
     newId: () => string,
     nowMs: () => number,
@@ -92,7 +90,6 @@ export class RunPlanAgents extends PlanAgents {
     this.machine = ports.machine
     this.journal = ports.journal
     this.delivery = ports.delivery
-    this.measurements = ports.measurements
     this.announcements = ports.announcements
     this.newId = ports.newId
     this.nowMs = ports.nowMs
@@ -147,7 +144,6 @@ export class RunPlanAgents extends PlanAgents {
     let handedOff = false
     try {
       const history = await this.transport.history(watch.agent)
-      await this.#captureCompleted(history)
       const inspection = await this.machine.inspect(watch)
       if (inspection.fact.kind === 'delivered'
         && !(await this.#fixFacts(history)).length) {
@@ -278,7 +274,6 @@ export class RunPlanAgents extends PlanAgents {
 
   async #driveAfterPlanner(watch: PlanWatch, call: StartedPlanCall): Promise<void> {
     await this.calls.wait(call)
-    await this.measurements.capture(call)
     await this.driver.execute(new DriveRunParams({ watch, planner: call }))
   }
 
@@ -367,15 +362,8 @@ export class RunPlanAgents extends PlanAgents {
 
   async #completeFix(watch: PlanWatch, call: StartedPlanCall): Promise<void> {
     const completed = await this.calls.wait(call)
-    await this.measurements.capture(call)
     RunPlanAgents.#requireSuccess(completed)
     await this.#deliverHeld(watch)
-  }
-
-  async #captureCompleted(history: readonly RecordedCall[]): Promise<void> {
-    for (const recorded of history) {
-      if (recorded.completion !== null) await this.measurements.capture(recorded.call)
-    }
   }
 
   async #recoveryCall(
@@ -512,7 +500,6 @@ export class RunPlanAgents extends PlanAgents {
         watch, 'fix', held.text, `${HeldMessage.REQUEST_PREFIX}${held.ticket}`,
       )
       const completed = await this.calls.wait(call)
-      await this.measurements.capture(call)
       RunPlanAgents.#requireSuccess(completed)
       await this.journal.settle(watch, held.ticket, call.id)
       await this.#announce(watch, held.ticket)
@@ -543,7 +530,7 @@ export class RunPlanAgents extends PlanAgents {
     })
   }
 
-  static #requireOwnedIncomplete(history: readonly RecordedCall[], transport: ClaudeCalls): void {
+  static #requireOwnedIncomplete(history: readonly RecordedCall[], transport: AgentCalls<CallInvocation, CallDescriptor>): void {
     const unfinished = history.filter((recorded) => recorded.completion === null)
     if (unfinished.length > 1) throw new PlanRecoveryConflict('multiple unfinished calls are recorded')
     if (unfinished.length === 1 && !transport.owns(unfinished[0].call)) {

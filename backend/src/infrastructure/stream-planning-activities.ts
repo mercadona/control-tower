@@ -7,7 +7,7 @@ import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import { CallDescriptor } from './claude-calls.ts'
 import type { ClaudePlanCalls } from './claude-plan-calls.ts'
 import type { HeadlessFiles } from './headless-files.ts'
-import type { RecordedCall } from './recorded-call.ts'
+import type { RecordedCall } from '../domain/value-objects/recorded-call.ts'
 
 type StreamCursor = {
   consumedChars: number,

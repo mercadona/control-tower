@@ -15,7 +15,7 @@ import { CallDescriptor, ClaudeCalls } from '../../src/infrastructure/claude-cal
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
-import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { StreamPlanningActivities } from '../../src/infrastructure/stream-planning-activities.ts'
 
 class CallsDouble extends ClaudeCalls {

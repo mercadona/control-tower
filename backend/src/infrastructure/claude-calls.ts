@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { AgentCalls } from '../domain/ports/agent-calls.ts'
 import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
 import {
   CompletedPlanCall,
@@ -11,7 +12,7 @@ import {
 import { PlanNonLaunch, type PlanNonLaunchSource } from '../domain/value-objects/plan-non-launch.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { HeadlessFiles } from './headless-files.ts'
-import { RecordedCall } from './recorded-call.ts'
+import { RecordedCall } from '../domain/value-objects/recorded-call.ts'
 
 type JsonRecord = Record<string, unknown>
 type CallMode = 'initial' | 'resume'
@@ -380,7 +381,7 @@ export class StoredCompletion {
   }
 }
 
-export class ClaudeCalls {
+export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
   readonly files: HeadlessFiles
   readonly binary: string
   readonly worker: string
@@ -410,6 +411,7 @@ export class ClaudeCalls {
     pollMs: number,
     sleep: (ms: number) => Promise<void>,
   }) {
+    super()
     this.files = ports.files
     this.binary = ports.binary
     this.worker = ports.worker

@@ -26,6 +26,13 @@ describe('run driver real process', () => {
       measurement.conversation === evidence.admission.conversation
       && measurement.reported.total_cost_usd.scope === 'unverified-resume'
     ))).toBe(true)
+    expect(evidence.commonMeasurements).toHaveLength(evidence.modelCalls.length)
+    expect(evidence.commonMeasurements.map((text) => JSON.parse(text))).toEqual(expect.arrayContaining(
+      evidence.modelCalls.map((call) => expect.objectContaining({
+        version: 1, provider: 'claude-code', callId: call.callId,
+        conversation: evidence.admission.conversation, execution: { kind: 'success' },
+      })),
+    ))
     const implementations = evidence.modelCalls.filter((call) => call.role !== 'plan')
     expect(implementations.map((call) => call.conversation)).toEqual([
       evidence.admission.conversation,

@@ -73,6 +73,7 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Phase prompt** | What the coordinating session is told to do, written once to a file under the state root and read by the session itself; its path travels in `CT_PHASE_PROMPT`, never its text, so the backend hands over a path and pastes nothing into a prompt |
 | **Conversation** | The identity of a coordinating session across a restart: an id minted once, a repository and a checkout root, recorded on disk so `records.recall()` can find it again; a conversation Claude Code no longer holds answers `unresumable` instead of being silently reopened as a different one |
 | **Headless call** | One immutable invocation record under `harness/<conversation>/calls/<call>/`: purpose, request identity, cwd, binary, argv and operational bounds are published before its detached worker is spawned; output and completion are separate evidence |
+| **Measured agent call** | A headless invocation whose terminal observation passes through `MeasuredAgentCalls`. The decorator depends on the `AgentCalls`, `AgentMeasurementReader` and `AgentMeasurementStore` ports, never on a provider protocol. One invocation can contain multiple model requests; those requests are not separate calls in this contract |
 | **Reported call total** | Claude CLI's `total_cost_usd` retained exactly as reported. It is attributable to an initial invocation, but a resumed total has `unverified-resume` attribution and contributes `null` attributable cost; totals are never differenced, summed as invocation spending or replaced by token-price estimates |
 | **Run admission** | The immutable `harness/<conversation>/run/admission.json` written for every new plan before planning starts. It proves that the conversation belongs to the backend driver; it is not a flag or setting, and its absence does not by itself prove legacy ownership |
 | **Run journal** | The immutable manifest and linked request/receipt chain under `harness/<conversation>/run/`. It records exact oracle argv, cwd, plan hash, process output and before/after run bytes; it is execution evidence rather than a second phase, cursor or transition table |
@@ -153,6 +154,36 @@ are unchanged. A resumed `total_cost_usd` is an `unverified-resume` reported
 total, never an incremental own-call bill; totals are not differenced, summed as
 invocation spending or replaced by token-price estimates. The backend writes no
 plugin attempt rows. Issue #379 owns any future ingestion into those rows.
+
+Every headless role and both recovery paths receive the measured executor from
+`ct-api.ts`. `wait`, `completed` and `history` publish measurements before
+exposing a terminal completion. Role callers never invoke capture separately.
+The execution port is parameterized by the adapter's invocation and descriptor
+types: the decorator delegates these values without interpreting them. Claude
+argument construction and result parsing stay in Claude adapters; another
+provider supplies its own executor and measurement reader, reusing the decorator
+and store.
+
+`ClaudeRunMeasurements` receives an already observed completion, validates it
+against disk evidence and retains the existing provider-specific projection. It
+does not call back into the executor. `DiskAgentMeasurements` publishes the
+common `agent-measurements-v1.json` beside that evidence, keyed by the existing
+conversation and call identity. Its fields include provider, purpose, request
+identity, explicit role when present, recorded timestamps, execution outcome,
+wall duration, reported cost and turns, token counts, model names and diagnostics.
+Token counts are reported values, not verified incremental bills; the Claude
+reader uses `usage` and never adds overlapping `modelUsage` totals. Missing
+counts are `null`, measured zero remains zero, and no total is invented.
+
+Repeated or concurrent observations accept identical durable bytes and reject
+conflicts. A store failure stops the observation and leaves execution evidence
+intact, so another observation can retry recording without launching another
+agent. A restart reconciles missing measurements from completed calls. Wall time
+comes from persisted execution timestamps, not from time spent waiting in the
+restarted process. Missing completion remains uncertain; it is not a fabricated
+timeout. Calls rejected before durable execution exists have no terminal
+measurement. Interactive coordinating sessions and subagents dispatched inside
+the provider are not independently instrumented by this headless boundary.
 
 Deployment uses the existing entrypoint. Rollback means redeploying an older code
 revision only after driver-owned admissions are stopped or drained and their

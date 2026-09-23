@@ -4,7 +4,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
+import { RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
+import type { AgentCallMeasurements } from '../../src/domain/value-objects/agent-call-measurements.ts'
 import { ClaudeCallResult } from '../../src/infrastructure/claude-call-result.ts'
 import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
@@ -175,7 +177,14 @@ class MeasurementScenario {
   }
 
   async capture(): Promise<void> {
-    await new ClaudeRunMeasurements({ files: this.files, calls: this.calls }).capture(this.call)
+    const completed = await this.calls.completed(this.call)
+    if (completed !== null) await new ClaudeRunMeasurements({ files: this.files }).read(completed)
+  }
+
+  async normalized(): Promise<AgentCallMeasurements> {
+    const completed = await this.calls.completed(this.call)
+    if (completed === null) throw new Error('the scenario has no completion')
+    return new ClaudeRunMeasurements({ files: this.files }).read(completed)
   }
 
   async projection(): Promise<Projection> {
@@ -186,6 +195,77 @@ class MeasurementScenario {
 afterEach(async () => MeasurementMother.clean())
 
 describe('ClaudeRunMeasurements', () => {
+  it('measurements cannot attribute an in-memory completion that differs from its durable evidence', async () => {
+    const scenario = await MeasurementMother.captured('initial')
+    const completed = await scenario.calls.wait(scenario.call)
+    const changed = new CompletedPlanCall({ ...completed, wallDurationMs: 1 })
+
+    await expect(new ClaudeRunMeasurements({ files: scenario.files }).read(changed))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+
+    await expect(readFile(scenario.measurementPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('missing durable completion is a read failure rather than fabricated terminal measurements', async () => {
+    const scenario = await MeasurementMother.captured('initial')
+    const completed = await scenario.calls.wait(scenario.call)
+    await rm(join(scenario.directory, CallDescriptor.COMPLETION))
+
+    await expect(new ClaudeRunMeasurements({ files: scenario.files }).read(completed))
+      .rejects.toBeInstanceOf(RunNotAdvanced)
+  })
+
+  it('the captured initial result supplies common metrics without adding model totals to invocation usage', async () => {
+    const scenario = await MeasurementMother.captured('initial')
+
+    const measurements = await scenario.normalized()
+
+    expect(measurements.provider).toBe('claude-code')
+    expect(measurements.startedAt).toBe(MeasurementMother.STARTED_AT)
+    expect(measurements.completed.wallDurationMs).toBe(9000)
+    expect(measurements.tokens).toEqual({ input: 2, output: 13, cacheRead: 0, cacheCreation: 167907 })
+    expect(measurements.models).toEqual(['claude-haiku-4-5-20251001', 'claude-sonnet-5'])
+    expect(measurements.completed.measurement.cost).toEqual({
+      kind: 'reported', totalUsd: 0.4208795, attribution: 'initial-invocation',
+    })
+  })
+
+  it('a resumed result keeps zero usage distinct from unknown usage and its cost unattributable', async () => {
+    const scenario = await MeasurementMother.captured('resumed')
+
+    const measurements = await scenario.normalized()
+
+    expect(measurements.tokens).toEqual({ input: 0, output: 0, cacheRead: 0, cacheCreation: 0 })
+    expect(measurements.completed.attributableCostUsd).toBeNull()
+    expect(measurements.completed.measurement.cost).toEqual({
+      kind: 'reported', totalUsd: 1.051838, attribution: 'unverified-resume',
+    })
+    expect(measurements.diagnostics).toContain('Claude reported error_max_budget_usd')
+  })
+
+  it('invalid token counters stay unknown while valid zero survives in the common contract', async () => {
+    const scenario = await MeasurementMother.stream({ stream: MeasurementMother.result({
+      usage: { input_tokens: -1, output_tokens: '5', cache_read_input_tokens: 0 },
+      modelUsage: undefined,
+    }) })
+
+    const measurements = await scenario.normalized()
+
+    expect(measurements.tokens).toEqual({ input: null, output: null, cacheRead: 0, cacheCreation: null })
+    expect(measurements.models).toBeNull()
+    expect(measurements.diagnostics).toContain('/usage/input_tokens was not a nonnegative integer')
+  })
+
+  it('unreadable output leaves a diagnostic and durable timing rather than fabricated consumption', async () => {
+    const scenario = await MeasurementMother.stream({ stream: '{broken\n', wallDurationMs: 4321 })
+
+    const measurements = await scenario.normalized()
+
+    expect(measurements.tokens).toEqual({ input: null, output: null, cacheRead: null, cacheCreation: null })
+    expect(measurements.completed.wallDurationMs).toBe(4321)
+    expect(measurements.diagnostics.length).toBeGreaterThan(0)
+  })
+
   it('the resumed capture retains reported totals and omits an own-call bill', async () => {
     const scenario = await MeasurementMother.captured('resumed', 6123)
 

@@ -570,6 +570,7 @@ class LegacyRuntimeFixture {
     capture: { conversation: string, argv: string[], prompt: string },
     admission: string | null,
     ghCalls: string[][],
+    measurement: string,
   }> {
     return RuntimeProcess.until(async () => {
       try {
@@ -598,6 +599,7 @@ class LegacyRuntimeFixture {
             capture,
             admission,
             ghCalls: ghLines.filter(Boolean).map((line) => JSON.parse(line) as string[]),
+            measurement: await readFile(join(directory, 'agent-measurements-v1.json'), 'utf8'),
           }
         }
         return null
@@ -848,6 +850,12 @@ describe('run driver production runtime', () => {
     const expectedPrompt = LegacyRuntimeFixture.fixErrand()
 
     expect(evidence.admission).toBeNull()
+    expect(JSON.parse(evidence.measurement)).toMatchObject({
+      version: 1, provider: 'claude-code', purpose: 'fix',
+      conversation: LegacyRuntimeFixture.CONVERSATION,
+      requestId: LegacyRuntimeFixture.REVIEW,
+      execution: { kind: 'success' },
+    })
     expect(evidence.descriptor).toMatchObject({
       conversation: LegacyRuntimeFixture.CONVERSATION,
       purpose: 'fix',

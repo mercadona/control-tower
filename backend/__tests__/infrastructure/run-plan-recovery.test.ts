@@ -38,12 +38,14 @@ import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '.
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
-import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import type { ChangesAsked, Delivered } from '../../src/infrastructure/review-watch.ts'
@@ -55,7 +57,6 @@ import { RunPlanAgents, SilentChangeAnnouncements, RunProvenance, type RunProven
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
-import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
@@ -196,12 +197,6 @@ class RecoveryMachine extends CtRunMachine {
   }
 }
 
-class UnaskedMeasurements extends CallMeasurements {
-  override async capture(): Promise<void> {
-    throw new Error('the drain measures nothing here')
-  }
-}
-
 class RecoveryJournal extends RunJournal {
   readonly recorded = new Map<string, readonly JournalEntry[]>()
 
@@ -232,17 +227,12 @@ class RecoveryAgents extends RunPlanAgents {
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport,
         machine,
-        measurements: new ClaudeRunMeasurements({
-          files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
-          calls: transport,
-        }),
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         pluginRoot: '/plugin',
       }) }),
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: calls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
@@ -256,10 +246,6 @@ class RecoveryAgents extends RunPlanAgents {
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements: new ClaudeRunMeasurements({
-        files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
-        calls: transport,
-      }),
       announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused',
       nowMs: () => RecoveryMother.NOW,
@@ -1194,7 +1180,6 @@ describe('RunPlanRecovery projection', () => {
       transport.owned.add(calls.planner.id)
       const machine = new RecoveryMachine()
       machine.inspections.set(watch.agent, new RunInspection({ kind: 'absent' }))
-      const measurements = new ClaudeRunMeasurements({ files, calls: transport })
       const driver = new DriveRun({
         calls,
         publication: new PlanPublication(),
@@ -1202,12 +1187,11 @@ describe('RunPlanRecovery projection', () => {
         delivery: new CompletedRunDelivery(),
         step: new ExecuteRunInstruction({
           machine,
-          calls: new ClaudeRunCalls({ calls: transport, machine, measurements, files, pluginRoot: '/plugin' }),
+          calls: new ClaudeRunCalls({ calls: transport, machine, files, pluginRoot: '/plugin' }),
         }),
         messages: new DeliverHeldMessages({
           messages: journal,
           calls: calls,
-          measurements: measurements,
           escalations: new QuietEscalations(),
         }),
         escalations: QuietEscalations.reader(),
@@ -1224,7 +1208,6 @@ describe('RunPlanRecovery projection', () => {
         machine,
         journal,
         delivery: new CompletedRunDelivery(),
-        measurements,
         announcements: new SilentChangeAnnouncements(),
         newId: () => 'unused',
         nowMs: () => RecoveryMother.NOW,
@@ -1613,16 +1596,17 @@ class FiniteBridge {
       pollMs: 250,
       sleep: async () => { throw new Error('recovery must not poll a completed call') },
     })
-    const measurements = new ClaudeRunMeasurements({ files, calls: transport })
+    const measured = new MeasuredAgentCalls({
+      executor: transport, reader: new ClaudeRunMeasurements({ files }), store: new DiskAgentMeasurements({ files }),
+    })
     const runCalls = new ClaudeRunCalls({
-      calls: transport,
+      calls: measured,
       machine,
-      measurements,
       files,
       pluginRoot: FiniteBridge.pluginRoot,
     })
     const planCalls = new ClaudePlanCalls({
-      calls: transport,
+      calls: measured,
       records: new PlanRecords(),
       brief: new PlanAgentBrief({
         dispatchCheck: join(FiniteBridge.pluginRoot, 'scripts', 'dispatch-check.mjs'),
@@ -1642,7 +1626,6 @@ class FiniteBridge {
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: planCalls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
@@ -1665,19 +1648,18 @@ class FiniteBridge {
       legacy: new FiniteBridgeLegacy(),
       records,
       calls: planCalls,
-      transport,
+      transport: measured,
       driver,
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements,
       announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused-fix',
       nowMs: () => Date.parse(FiniteBridge.STARTED),
       stderr: (line) => { warnings.push(line) },
     })
     return { state, checkout, worktree, response, brief, files, journal, watch, calls, run, warnings, machine,
-      transport, measurements, runCalls, planCalls, driver, records, agents, spawns: () => spawns, reportArgv, nextArgv }
+      transport: measured, runCalls, planCalls, driver, records, agents, spawns: () => spawns, reportArgv, nextArgv }
   }
 
   static async recordWatch(fixture: Awaited<ReturnType<typeof FiniteBridge.build>>): Promise<void> {

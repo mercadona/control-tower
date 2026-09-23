@@ -24,6 +24,8 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudeRunCalls } from '../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
@@ -104,9 +106,12 @@ class RunCallMother {
       agent: RunCallMother.CONVERSATION,
     })
     const runCalls = new ClaudeRunCalls({
-      calls,
+      calls: new MeasuredAgentCalls({
+        executor: calls,
+        reader: new ClaudeRunMeasurements({ files }),
+        store: new DiskAgentMeasurements({ files }),
+      }),
       machine: new DispatchingMachine(files, RunCallMother.pluginRoot, dispatches),
-      measurements: new ClaudeRunMeasurements({ files, calls }),
       files,
       pluginRoot: RunCallMother.pluginRoot,
     })
@@ -550,6 +555,11 @@ describe('ClaudeRunCalls', () => {
     expect(await readFile(response, 'utf8')).toBe(immutable)
     expect(await readFile(join(scenario.files.callDirectory(call), ClaudeRunMeasurements.FILE), 'utf8'))
       .toContain('"scope": "unverified-resume"')
+    expect(JSON.parse(await readFile(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'), 'utf8')))
+      .toMatchObject({
+        provider: 'claude-code', callId: call.id, requestId: 'run:replay',
+        execution: { kind: 'success' }, cost: { attribution: 'unverified-resume' },
+      })
   })
 
   it('failed or unowned calls advance no verb and preserve measured evidence', async () => {
@@ -578,6 +588,8 @@ describe('ClaudeRunCalls', () => {
     )
     expect(measurements).toContain('Claude reported error_max_turns')
     expect(measurements).toContain('"total_cost_usd"')
+    expect(JSON.parse(await readFile(join(scenario.files.callDirectory(failedCall), 'agent-measurements-v1.json'), 'utf8')))
+      .toMatchObject({ execution: { kind: 'error', diagnostic: 'Claude reported error_max_turns' } })
     await scenario.seedUnowned(unowned, RunCallMother.stream('present'))
     await expect(scenario.perform('unowned')).rejects.toEqual(
       new RunNotAdvanced('recorded call unowned-call is incomplete and is not owned by this API process'),

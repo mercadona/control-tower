@@ -397,6 +397,16 @@ row per attempt to `docs/superpowers/metrics/issue-<n>.jsonl` inside the
 slice's worktree; this route reads that file. **Both** query parameters are
 required, same as `/implement-progress`.
 
+This endpoint reads plugin attempt metrics. Backend headless invocations also
+leave a private, provider-neutral `agent-measurements-v1.json` under
+`<stateRoot>/harness/<conversation>/calls/<callId>/`, alongside the existing
+provider-specific `measurements-v1.json`. These files are not returned by this
+endpoint or sent through harvest. They describe one agent invocation, which can
+contain several model requests, with execution outcome, durable timing and
+available reported consumption. Completion observations, including restart
+recovery, persist the record through the common measured executor. Unknown
+values remain unknown and resumed reported costs remain `unverified-resume`.
+
 **200 OK**
 
 ```json

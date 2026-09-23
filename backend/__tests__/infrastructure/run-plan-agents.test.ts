@@ -38,18 +38,16 @@ import { RunInstruction } from '../../src/domain/value-objects/run-instruction.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
-import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
-import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { ChangeAnnouncements } from '../../src/domain/ports/change-announcements.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents } from '../../src/infrastructure/run-plan-agents.ts'
 import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
-import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
@@ -243,18 +241,6 @@ class RefusingWriteFiles extends HeadlessFiles {
 
   override async writeOnce(): Promise<void> {
     throw this.cause
-  }
-}
-
-class MeasurementsDouble extends ClaudeRunMeasurements {
-  readonly captured: string[] = []
-
-  constructor(transport: ClaudeCalls) {
-    super({ files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }), calls: transport })
-  }
-
-  override async capture(call: StartedPlanCall): Promise<void> {
-    this.captured.push(call.id)
   }
 }
 
@@ -530,12 +516,6 @@ class AgentMother {
 }
 
 
-class UnaskedMeasurements extends CallMeasurements {
-  override async capture(): Promise<void> {
-    throw new Error('the drain measures nothing here')
-  }
-}
-
 class AnnouncementsDouble extends ChangeAnnouncements {
   readonly announced: Array<{ repository: string, issue: number, ticket: string }> = []
 
@@ -600,7 +580,6 @@ describe('RunPlanAgents', () => {
       if (!publicationRelease.settled) publicationRelease.resolve()
     })
     const transport = new TransportDouble()
-    const measurements = new MeasurementsDouble(transport)
     const machine = new MachineDouble(journal)
     const driverMachine = new ControlledRunMachine(events, oracle, release)
     const driver = new DriveRun({
@@ -612,7 +591,6 @@ describe('RunPlanAgents', () => {
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: calls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
@@ -629,7 +607,6 @@ describe('RunPlanAgents', () => {
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements,
       announcements,
       newId: () => '55555555-5555-4555-8555-555555555555',
       nowMs: () => Date.parse('2026-09-17T09:30:00.000Z'),
@@ -637,7 +614,7 @@ describe('RunPlanAgents', () => {
     })
     return {
       root, events, plannerDone, fixDone, publicationEntered, publicationRelease, oracle,
-      release, supervisor, journal, calls, transport, measurements, machine,
+      release, supervisor, journal, calls, transport, machine,
       driverMachine, legacy, warnings, announcements, agents,
       registerDriverSupervisor: () => {
         releases.push(release)
@@ -734,13 +711,11 @@ describe('RunPlanAgents', () => {
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: calls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
     })
     const legacy = new LegacyDouble()
-    const measurements = new MeasurementsDouble(transport)
     const agents = new RunPlanAgents({
       legacy,
       records: new RecordsDouble(AgentMother.WATCH, events),
@@ -750,7 +725,6 @@ describe('RunPlanAgents', () => {
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements,
       announcements: new AnnouncementsDouble(),
       newId: () => '55555555-5555-4555-8555-555555555555',
       nowMs: () => Date.parse('2026-09-17T09:30:00.000Z'),
@@ -758,7 +732,7 @@ describe('RunPlanAgents', () => {
     })
     return {
       root, events, plannerDone, publicationEntered, publicationRelease, oracle,
-      evidence, journal, calls, transport, legacy, measurements, agents, driver, machine,
+      evidence, journal, calls, transport, legacy, agents, driver, machine,
       spawns: () => spawns,
     }
   }
@@ -783,7 +757,6 @@ describe('RunPlanAgents', () => {
     tested.publicationRelease.resolve()
     await Bounded.wait(tested.oracle.promise)
     expect(tested.driverMachine.opened[0].agent).toBe(AgentMother.CONVERSATION)
-    expect(tested.measurements.captured).toEqual([tested.calls.planner.id])
     expect(tested.events).toEqual(['record', 'start-plan', 'publish-start', 'publish-complete', 'oracle'])
     tested.release.reject(new Error('driver stopped'))
     await Bounded.wait(tested.supervisor.promise)
@@ -927,12 +900,10 @@ describe('RunPlanAgents', () => {
     planner.registerDriverSupervisor()
 
     await planner.agents.recover(asked)
-    expect(planner.measurements.captured).toEqual([])
     expect(planner.publicationEntered.settled).toBe(false)
 
     planner.plannerDone.resolve(AgentMother.completed(planner.calls.planner, false))
     await Bounded.wait(planner.supervisor.promise)
-    expect(planner.measurements.captured).toEqual([planner.calls.planner.id])
     expect(planner.publicationEntered.settled).toBe(false)
 
     const successful = await scenario(true)
@@ -952,7 +923,6 @@ describe('RunPlanAgents', () => {
     await successful.agents.recover(asked)
     successful.plannerDone.resolve(AgentMother.completed(successful.calls.planner))
     await Bounded.wait(successful.publicationEntered.promise)
-    expect(successful.measurements.captured).toEqual([successful.calls.planner.id])
     successful.publicationRelease.resolve()
     await Bounded.wait(successful.oracle.promise)
     successful.release.reject(new Error('successful restart stopped'))
@@ -1438,7 +1408,7 @@ describe('RunPlanAgents', () => {
     })).rejects.toThrow('absent')
   })
 
-  it('a fix after delivery retains its original errand and measurements', async () => {
+  it('a fix after delivery retains its original errand', async () => {
     const tested = await scenario(true)
     const asked = {
       agent: AgentMother.CONVERSATION,
@@ -1455,7 +1425,6 @@ describe('RunPlanAgents', () => {
 
     tested.fixDone.resolve(AgentMother.completed(tested.calls.fixCall, false))
     await Bounded.wait(tested.supervisor.promise)
-    expect(tested.measurements.captured).toEqual([tested.calls.fixCall.id])
     expect(tested.warnings.join('')).toContain('recorded failure')
     expect(tested.warnings.join('')).toContain(tested.calls.fixCall.id)
     tested.transport.historyValue = [new RecordedCall({

@@ -4,8 +4,8 @@ import { RunCalls } from '../domain/ports/run-calls.ts'
 import type { CompletedPlanCall, StartedPlanCall } from '../domain/value-objects/plan-call.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RunInstruction } from '../domain/value-objects/run-instruction.ts'
-import { CallDescriptor, CallInvocation, type ClaudeCalls } from './claude-calls.ts'
-import type { ClaudeRunMeasurements } from './claude-run-measurements.ts'
+import { CallDescriptor, CallInvocation } from './claude-calls.ts'
+import type { AgentCalls } from '../domain/ports/agent-calls.ts'
 import type { CtRunMachine } from './ct-run-machine.ts'
 import { HeadlessFiles } from './headless-files.ts'
 import type { RunDispatch } from './run-dispatch.ts'
@@ -37,23 +37,20 @@ export class ClaudeRunCalls extends RunCalls {
   static readonly ERRAND_END = 'Complete this role. Return the CLI response. Do not run CT commands or dispatch another agent.'
   static readonly FILE_ERRAND_END = 'Complete this role. Write your answer to the path on the last line of this file. Do not run CT commands or dispatch another agent.'
 
-  readonly calls: ClaudeCalls
+  readonly calls: AgentCalls<CallInvocation, CallDescriptor>
   readonly machine: CtRunMachine
-  readonly measurements: ClaudeRunMeasurements
   readonly files: HeadlessFiles
   readonly pluginRoot: string
 
   constructor(ports: {
-    calls: ClaudeCalls,
+    calls: AgentCalls<CallInvocation, CallDescriptor>,
     machine: CtRunMachine,
-    measurements: ClaudeRunMeasurements,
     files: HeadlessFiles,
     pluginRoot: string,
   }) {
     super()
     this.calls = ports.calls
     this.machine = ports.machine
-    this.measurements = ports.measurements
     this.files = ports.files
     this.pluginRoot = ports.pluginRoot
   }
@@ -81,7 +78,6 @@ export class ClaudeRunCalls extends RunCalls {
       }
       completion = await this.calls.wait(call)
     }
-    await this.measurements.capture(call)
     if (!completion.succeeded) throw new RunNotAdvanced(ClaudeRunCalls.#failureOf(completion))
     switch (dispatch.response.kind) {
       case 'edits':

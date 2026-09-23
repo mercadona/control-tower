@@ -9,7 +9,6 @@ import {
 import {
   PlanAgentNotResumed, PlanProgressNotRead, RunNotAdvanced,
 } from '../../src/domain/exceptions.ts'
-import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ClosureAnnouncements, type AnnouncedClosure } from '../../src/domain/ports/closure-announcements.ts'
 import { PlanCalls } from '../../src/domain/ports/plan-calls.ts'
 import { PlanPublication } from '../../src/domain/ports/plan-publication.ts'
@@ -182,19 +181,6 @@ class HeldMessagesDouble extends SliceMessages {
   }
 }
 
-class CallMeasurementsDouble extends CallMeasurements {
-  readonly trace: string[]
-
-  constructor(trace: string[]) {
-    super()
-    this.trace = trace
-  }
-
-  override async capture(call: StartedPlanCall): Promise<void> {
-    this.trace.push(`capture:${call.id}`)
-  }
-}
-
 class PlanPublicationDouble extends PlanPublication {
   readonly trace: string[]
   readonly failure: Error | null
@@ -353,7 +339,6 @@ class DriveRunMother {
       messages: new DeliverHeldMessages({
         messages: asked.messages ?? new HeldMessagesDouble(),
         calls: asked.drainCalls ?? new PlanCallsDouble(this.trace),
-        measurements: new CallMeasurementsDouble(this.trace),
         escalations: new QuietEscalations(),
       }),
       escalations: asked.escalations === undefined
@@ -449,7 +434,6 @@ describe('DriveRun', () => {
       'pending',
       'start:fix:message:ticket-1',
       'wait:call-message:ticket-1',
-      'capture:call-message:ticket-1',
       'settle:ticket-1',
       'perform:c1',
       'advance:c1',
@@ -482,7 +466,6 @@ describe('DriveRun', () => {
       'pending',
       'start:fix:message:ticket-1',
       'wait:call-message:ticket-1',
-      'capture:call-message:ticket-1',
     ])
     expect(held.held).toHaveLength(1)
   })
