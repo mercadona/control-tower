@@ -25,6 +25,7 @@ import { VERDICT_RULES, SLICE_VERDICT_RULES } from '../../scripts/step-contracts
 // reads `senal:` with parseStateSafe and not with a regex), and SIGNAL_ABSENT
 // is the single constant the slice judge's package declares absence with.
 import { renderState } from '../../scripts/state.js'
+import { PHASES } from '../../scripts/run-machine.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const SCRIPT = join(here, '..', '..', 'scripts', 'ct-step.mjs')
@@ -79,8 +80,8 @@ export const PLAN = [
 // from when creating the run (there is no `gh` in this program). It is written
 // with `renderState` and not by hand for the same reason the signal's is: what
 // parses it is a real YAML, and a journey is a sentence with commas and colons
-// inside it.
-export function makeRepo({ e2e = null } = {}) {
+// inside it. `plan` replaces the plan a test drives.
+export function makeRepo({ e2e = null, plan = PLAN } = {}) {
   const d = mkdtempSync(join(tmpdir(), 'ct-step-'))
   const g = (...a) => execFileSync('git', a, { cwd: d, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   g('init', '-q', '-b', 'main')
@@ -91,7 +92,7 @@ export function makeRepo({ e2e = null } = {}) {
   writeFileSync(join(d, '.agent', 'SLICE.md'), e2e
     ? renderState({ meta: { issue: 7, epic: 12, e2e }, body: '# made-up slice' })
     : '---\nissue: 7\nepic: 12\n---\n\n# made-up slice\n')
-  writeFileSync(join(d, 'plan.md'), PLAN)
+  writeFileSync(join(d, 'plan.md'), plan)
   // WHAT THIS FIXTURE WRITES INSIDE THE REPO AND IS NO TASK'S WORK: the JSON
   // standing in for the subagent's answer (in a real run `next` dictates it
   // inside `.agent/run-<n>/`) and the telemetry, which here is diverted to
@@ -168,6 +169,13 @@ export function makeHelpers(ref) {
 
   const ct = (...args) => ctIn({}, ...args)
 
+  // The same call from a subdirectory of the repo, as a session that `cd`-ed
+  // into one runs it; the plan goes by absolute path so only the cwd changes.
+  const ctFrom = (subdir, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', join(ref(), 'plan.md'), '--issue', '7'], {
+    cwd: join(ref(), subdir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    env: environment({}),
+  })
+
   // What a subagent would write, to a file. `paths` is a list of plain paths:
   // the report does not tell production from test (see step-contracts.js). It
   // also writes the files it declares, if they are not there: an implementer
@@ -206,7 +214,10 @@ export function makeHelpers(ref) {
   const commits = () => log().trim().split('\n').filter(Boolean).length
   const runState = () => JSON.parse(readFileSync(join(ref(), '.agent', 'run-7.json'), 'utf8'))
 
-  const taskPackage = (n = runState().task) => join(ref(), '.agent', 'run-7', `task-${n}-review.diff`)
+  // The package of the step at hand: the task's, or the review's (#530) while
+  // the judge reviews the whole slice. A number names one task's package.
+  const artefactStem = () => (runState().phase === PHASES.REVIEW ? 'review' : `task-${runState().task}`)
+  const taskPackage = (n) => join(ref(), '.agent', 'run-7', `${n === undefined ? artefactStem() : `task-${n}`}-review.diff`)
   const slicePackage = () => join(ref(), '.agent', 'run-7', 'slice-review.diff')
   const judgeRows = (step = 'judge') => readFileSync(join(ref(), '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
     .trim().split('\n').map((l) => JSON.parse(l)).filter((row) => row.step === step)
@@ -245,28 +256,64 @@ export function makeHelpers(ref) {
   const judgeTask = (...args) => { ct('next'); seal(args[0], taskPackage()); return ct('verdict', ...args) }
   const judgeSlice = (...args) => { ct('next'); seal(args[0], slicePackage()); return ct('slice-verdict', ...args) }
 
-  // A whole task down the happy path.
-  const taskOk = (file) => {
-    ct('report', writeReport([file]))
+  // One task of a new run (#530): the judge reviews the slice once, after the
+  // last commit, so a task goes implement → controls → commit with no judge.
+  const commitTask = (paths) => {
+    ct('next')
+    ct('report', writeReport(paths))
     ct('controls')
+    return ct('commit')
+  }
+  // A whole task down the happy path.
+  const taskOk = (file) => commitTask([file])
+  // One fix round at the review: the implementer touches files of the slice
+  // (the tasks committed them, so the round changes their content), and the
+  // controls of every task measure the fix.
+  const reviewFix = (paths = ['uno.txt']) => {
+    for (const declared of paths) writeFileSync(join(ref(), declared), `${declared}, fixed at the review\n`)
+    ct('report', writeReport(paths))
+    return ct('controls')
+  }
+  // The review down the happy path: the last commit left the run at the judge
+  // of the whole slice, which approves it with nothing to fix.
+  const reviewOk = () => {
     judgeTask(writeVerdict('PASS'))
     return ct('commit')
   }
-  // The whole slice down the happy path: the two tasks, the reconciliation with
-  // the base (Phase B, Task 8 — the fixture leaves the base unmoved, so it comes
-  // out on the first round), the Global verification and the slice's judgement
-  // (§3.7).
+  // The whole slice down the happy path: the two tasks, the review, the
+  // reconciliation with the base (Phase B, Task 8 — the fixture leaves the base
+  // unmoved, so it comes out on the first round), the Global verification and
+  // the slice's judgement (§3.7).
   const sliceOk = () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
     return judgeSlice(writeSliceVerdict('PASS'))
   }
 
+  // A run born before the final review (#530) carries neither `judging` nor
+  // `phase` and judges every task, as it always did. It is simulated by writing the run
+  // file the way that version wrote it: the fields #530 added, removed.
+  const bornBeforeTheReview = () => {
+    if (!existsSync(join(ref(), '.agent', 'run-7.json'))) ct('next')
+    const older = runState()
+    delete older.judging
+    delete older.phase
+    writeFileSync(join(ref(), '.agent', 'run-7.json'), JSON.stringify(older, null, 2) + '\n')
+  }
+  // A task of such a run down the happy path, with its own judge.
+  const judgedTaskOk = (file) => {
+    ct('report', writeReport([file]))
+    ct('controls')
+    judgeTask(writeVerdict('PASS'))
+    return ct('commit')
+  }
+
   return {
-    ct, ctIn, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
+    ct, ctIn, ctFrom, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
     taskPackage, slicePackage, judgeRows, packageToken, seal,
-    judgeTask, judgeSlice, taskOk, sliceOk,
+    judgeTask, judgeSlice, commitTask, taskOk, reviewFix, reviewOk, sliceOk, bornBeforeTheReview, judgedTaskOk,
   }
 }

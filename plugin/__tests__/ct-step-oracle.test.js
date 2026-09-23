@@ -11,6 +11,9 @@ import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 let repo
 const { ct, writeReport, writeVerdict, writeSliceVerdict, commits, runState, judgeTask, taskOk } = makeHelpers(() => repo)
 
+// Both tasks committed: the run stands at the judge's review of the slice (#530).
+const atTheReview = () => { taskOk('uno.txt'); taskOk('dos.txt') }
+
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
@@ -36,22 +39,20 @@ describe('next: the session asks and the oracle answers', () => {
   })
 
   it('at the judge step it prepares the review package of the INDEX', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     const r = ct('next')
     expect(r.stdout).toMatch(/DISPATCH THE JUDGE .*ct-judge.*WITHOUT Bash/)
     // The property "implementer and judge read the same task" hangs off this
     // line: the judge's dispatch names its brief, or the judge never opens it.
     // It is the judge's own brief (#111): the task without the ct documents its
     // package already lists by path.
-    expect(r.stdout).toMatch(/the task's brief: .*task-1-judge-brief\.md/)
-    const reviewPackage = join(repo, '.agent', 'run-7', 'task-1-review.diff')
+    expect(r.stdout).toMatch(/the task's brief: .*review-judge-brief\.md/)
+    const reviewPackage = join(repo, '.agent', 'run-7', 'review-review.diff')
     expect(readFileSync(reviewPackage, 'utf8')).toMatch(/\+uno/)
   })
 
   it('when the judge sent the task back, next tells the implementer so', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'está mal', path: 'uno.txt', line: 1 }]))
     expect(ct('next').stdout).toMatch(/The judge sent this task back[\s\S]*uno\.txt:1: está mal/)
   })
@@ -76,11 +77,10 @@ describe('the step guard', () => {
   })
 
   it('the judge cannot be skipped in order to commit', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     const r = ct('commit')
     expect(r.status).toBe(9)
-    expect(commits()).toBe(1)
+    expect(commits()).toBe(3)
   })
 
   it('a task already committed cannot be measured again', () => {

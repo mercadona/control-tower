@@ -18,7 +18,7 @@ import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
 const { ct, writeReport, writeVerdict, writeSliceVerdict, commits, runState,
-  taskPackage, judgeTask, judgeSlice, taskOk } = makeHelpers(() => repo)
+  taskPackage, judgeTask, judgeSlice, taskOk, reviewOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -45,7 +45,7 @@ describe('the amended plan travels inside the commit of its task', () => {
     enmendar()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
-    judgeTask(writeVerdict('PASS'))
+    // No judge on a task (#530): green controls go straight to commit.
     expect(ct('commit').status).toBe(0)
 
     const enElCommit = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
@@ -65,9 +65,13 @@ describe('the amended plan travels inside the commit of its task', () => {
   })
 
   it('the task\'s review package brings the plan\'s diff', () => {
+    // The judge reviews the slice after the last commit (#530): its package
+    // carries the diff since the base, where task 1's amendment is.
     enmendar()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
+    ct('commit')
+    taskOk('dos.txt')
     ct('next')
 
     const paquete = readFileSync(taskPackage(), 'utf8')
@@ -79,9 +83,9 @@ describe('the amended plan travels inside the commit of its task', () => {
     enmendar()
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     ct('controls')
-    judgeTask(writeVerdict('PASS'))
     expect(ct('commit').status).toBe(0)
     expect(taskOk('dos.txt').status).toBe(0)
+    expect(reviewOk().status).toBe(0)
 
     expect(ct('reconcile').status).not.toBe(8)
     expect(ct('global').status).not.toBe(8)
@@ -89,10 +93,11 @@ describe('the amended plan travels inside the commit of its task', () => {
   })
 
   it('a vetoed verdict returns the tree and HEAD\'s plan does not declare the path the amendment added', () => {
-    // First attempt: a veto with no amendment yet — it only opens the retry
-    // budget, it does not fire the advisor (that takes the SECOND veto).
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    // First attempt: the review of the slice as its tasks committed it (#530),
+    // vetoed with no amendment yet — it only opens the retry budget, it does not
+    // fire the advisor (that takes the SECOND veto).
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     judgeTask(writeVerdict('FAIL', [HALLAZGO]))
     expect(runState().step).toBe('implement')
 

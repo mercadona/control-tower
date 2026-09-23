@@ -13,7 +13,10 @@ import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 let repo
 const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, commits, runState,
   taskPackage, slicePackage, judgeRows, packageToken, seal, judgeTask,
-  judgeSlice, taskOk } = makeHelpers(() => repo)
+  judgeSlice, taskOk, reviewOk, bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
+
+// Both tasks committed: the run stands at the judge's review of the slice (#530).
+const atTheReview = () => { taskOk('uno.txt'); taskOk('dos.txt') }
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -27,8 +30,7 @@ describe('the review package gives the ct yardstick by path, not pasted', () => 
   const reviewPackage = () => readFileSync(taskPackage(), 'utf8')
 
   it('the section opens the package and lists the path of every document that reaches the task', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const text = reviewPackage()
     expect(text).toContain('## Vara de ct')
@@ -39,8 +41,7 @@ describe('the review package gives the ct yardstick by path, not pasted', () => 
   })
 
   it('it pastes the text of no document at all', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const style = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', 'style.md'), 'utf8')
     expect(reviewPackage()).not.toContain(style.trim())
@@ -63,9 +64,8 @@ describe('the review package is single-use: the verdict that reads it consumes i
 
   it('THE ATTACK: after a FAIL, chaining report→controls→verdict without next is DISCARDED', () => {
     // ATTEMPT 1, through the real flow: `next` builds the package and the
-    // judge VETOES.
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    // judge VETOES. The judge reviews the slice after the last commit (#530).
+    atTheReview()
     const r1 = judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
     expect(r1.stdout).toMatch(/verdict FAIL/)
     expect(runState().step).toBe('implement')      // the veto hands the task back
@@ -86,8 +86,8 @@ describe('the review package is single-use: the verdict that reads it consumes i
     expect(r2.stdout).toContain('The package is SINGLE USE')
     expect(runState().step).toBe('judge')          // does NOT advance: it asks again
     expect(runState().discards).toBe(1)
-    expect(commits()).toBe(1)                    // the stale PASS commits nothing
-    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
+    expect(commits()).toBe(3)                    // the stale PASS commits nothing
+    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-review.json'))).toBe(false)
 
     // The TELEMETRY, which is the layer where the failure was mute: two judge
     // rows, and the one from attempt 2 asserts no package at all.
@@ -106,12 +106,11 @@ describe('the review package is single-use: the verdict that reads it consumes i
     expect(r3.stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     expect(ct('commit').status).toBe(0)
-    expect(commits()).toBe(2)
+    expect(commits()).toBe(4)
   })
 
   it('the DISCARD does not consume: the retry over unreadable JSON judges the SAME .diff, without going back to next', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const before = readFileSync(taskPackage(), 'utf8')
 
@@ -133,17 +132,19 @@ describe('the review package is single-use: the verdict that reads it consumes i
     expect(existsSync(taskPackage())).toBe(false)             // accepted: now it really is spent
   })
 
+  // A run born before the final review (#530) judges every task.
   it('the happy path does not change: every task comes back through next, and its package is spent when it is approved', () => {
-    expect(taskOk('uno.txt').status).toBe(0)
+    bornBeforeTheReview()
+    expect(judgedTaskOk('uno.txt').status).toBe(0)
     expect(existsSync(taskPackage(1))).toBe(false)
     expect(runState().task).toBe(2)
-    expect(taskOk('dos.txt').status).toBe(0)
+    expect(judgedTaskOk('dos.txt').status).toBe(0)
     expect(existsSync(taskPackage(2))).toBe(false)
     expect(commits()).toBe(3)
   })
 
   it('THE SLICE TWIN: the discard keeps the package and the accepted verdict spends it', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     ct('next')
     const before = readFileSync(slicePackage(), 'utf8')
 
@@ -162,7 +163,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
   })
 
   it('THE SLICE TWIN: a FAIL also spends the package — it too is a verdict that was read', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     const r = judgeSlice(writeSliceVerdict('FAIL', [{ severity: 'high', what: 'la tarea 2 deshace la 1', path: 'uno.txt', line: 1 }]))
     expect(r.status).toBe(1)                       // the slice veto closes the run
     expect(existsSync(slicePackage())).toBe(false)
@@ -178,14 +179,14 @@ describe('the review package is single-use: the verdict that reads it consumes i
 // recomputed from the snapshot of that instant all match.
 describe('the verdict is tied to the package: the content-addressed token the judge copies', () => {
   it('the package declares the sha256 of the staged diff it captures, and the verdict that copies it gets through', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const token = packageToken(taskPackage())
     expect(token).toMatch(/^[0-9a-f]{64}$/)
     // CONTENT-ADDRESSED, and here is where WHAT gets hashed is fixed: the raw
-    // staged diff, which is byte for byte what goes into the `## Diff` section.
-    const diff = execFileSync('git', ['diff', '--cached', '-U10'], { cwd: repo, encoding: 'utf8' })
+    // staged diff, which is byte for byte what goes into the `## Diff` section —
+    // at the review (#530), from the run base, without the loop's telemetry.
+    const diff = execFileSync('git', ['diff', '--cached', '-U10', runState().baseSha, '--', ':/', ':(top,exclude)docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
     expect(token).toBe(createHash('sha256').update(diff, 'utf8').digest('hex'))
     expect(readFileSync(taskPackage(), 'utf8').split('\n')[1]).toBe(`Review token: ${token}`)
 
@@ -193,7 +194,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(runState().step).toBe('commit')
     expect(ct('commit').status).toBe(0)
     // The token travels in the pull request's verdict and in its row.
-    const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo, encoding: 'utf8' }))
+    const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-review.json'], { cwd: repo, encoding: 'utf8' }))
     expect(saved.verdict.review_token).toBe(token)
     expect(judgeRows().at(-1).review_token).toBe(token)
     expect(judgeRows().at(-1).ruling).toBe('PASS')
@@ -203,8 +204,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // JUDGING 1, legitimate, over code A: a PASS with a medium finding is an
     // ACCEPTED verdict that hands the task back to the implementer, and leaves
     // the verdict file on disk (the same path in every attempt).
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     const v = writeVerdict('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'uno.txt', line: 1 }])
     expect(judgeTask(v).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('implement')
@@ -223,7 +223,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(r.stdout).toContain('REDISPATCH the judge')
     expect(runState().step).toBe('judge')          // does NOT advance
     expect(runState().discards).toBe(1)            // and it counts towards MAX_DISCARDS
-    expect(commits()).toBe(1)                    // the recycled verdict commits nothing
+    expect(commits()).toBe(3)                    // the recycled verdict commits nothing
 
     // The TELEMETRY, which is where the failure was mute: the row of the
     // recycled one asserts neither a judging nor an input.
@@ -241,8 +241,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('THE ATTACK (b): code changed in the gap left by the discard does not slip through with the old package', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     expect(ct('verdict', writeRaw('esto no es json')).stdout).toMatch(/verdict discarded: the verdict at/)
     expect(existsSync(taskPackage())).toBe(true)   // the discard still does not consume
@@ -262,8 +261,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(r.stdout).toMatch(/verdict discarded: the review package no longer describes the code as it is now/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(2)
-    expect(commits()).toBe(1)
-    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
+    expect(commits()).toBe(3)
+    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-review.json'))).toBe(false)
     const judge = judgeRows()
     expect(judge).toHaveLength(2)
     expect(judge[1].review_package).toBeUndefined()
@@ -276,8 +275,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('with a stale package AND unreadable JSON, the row tells the package: the cause rules over the symptom', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     writeFileSync(join(repo, 'uno.txt'), 'otra cosa\n')
     execFileSync('git', ['add', 'uno.txt'], { cwd: repo })
@@ -291,8 +289,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // The same input, the same snapshot: the token matches and there is no
     // extra round trip. It is the property that makes NOT consuming on a
     // discard still worth it.
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const before = readFileSync(taskPackage(), 'utf8')
     expect(ct('verdict', writeRaw('nada de json')).stdout).toMatch(/discarded/)
@@ -308,8 +305,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   // not having copied 64 hex characters from a line the program itself had just
   // written. Now it is accepted and the program fills in what it already knew.
   it('a verdict with no review_token is accepted: the program writes the token it computed itself', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const r = ct('verdict', writeVerdict('PASS'))    // nobody seals it: the judge does not write the token
     expect(r.status).toBe(0)
@@ -320,13 +316,12 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // package, just as when the judge copied it: the field is not lost, it
     // changes author.
     expect(judgeRows().at(-1).review_token).toMatch(/^[0-9a-f]{64}$/)
-    const saved = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'), 'utf8'))
+    const saved = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-review.json'), 'utf8'))
     expect(saved.verdict.review_token).toBe(judgeRows().at(-1).review_token)
   })
 
   it('a verdict carrying the token of ANOTHER package is still discarded: the defence in depth is not touched', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const p = join(repo, 'ajeno.json')
     writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: fullRubric(), findings: [], review_token: 'f'.repeat(64) }))
@@ -337,8 +332,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('a package with no token line (an older plugin, or an edited one) is discarded and sends you back to next', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     ct('next')
     const withoutHeader = readFileSync(taskPackage(), 'utf8').split('\n').filter((l) => !l.startsWith('Review token: ')).join('\n')
     writeFileSync(taskPackage(), withoutHeader)
@@ -351,7 +345,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('THE SLICE TWIN: the token comes out of the RANGE diff and travels in the committed verdict', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     ct('next')
     const token = packageToken(slicePackage())
     const diff = execFileSync('git', ['diff', '-U10', runState().baseSha, 'HEAD'], { cwd: repo, encoding: 'utf8' })
@@ -365,7 +359,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('THE SLICE TWIN: a slice verdict with no review_token is accepted, and the committed token is the one of the package', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     ct('next')
     const token = packageToken(slicePackage())
     const r = ct('slice-verdict', writeSliceVerdict('PASS'))
@@ -376,7 +370,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
   })
 
   it('THE SLICE TWIN: a slice verdict carrying the token of another package does not deliver the run', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     ct('next')
     const p = join(repo, 'sv.json')
     writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: sliceRubric(), findings: [], review_token: 'f'.repeat(64) }))
@@ -392,7 +386,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // The variant of (b) that the state's commit invariant does NOT catch: an
     // `--amend` leaves the count the same (`hechos === esperados`) and the
     // content different. Without the token, this gets through.
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     ct('next')
     expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/discarded/)
     writeFileSync(join(repo, 'dos.txt'), 'dos, reescrito después del juicio\n')

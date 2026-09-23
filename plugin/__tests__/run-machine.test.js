@@ -7,7 +7,7 @@
 // with a gap is not a table, it is a table plus an implicit decision taken by
 // omission.
 import { describe, it, expect } from 'vitest'
-import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
+import { after, newRun, judgesEachTask, judgesBeforeCommit, JUDGING, PHASES, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
 import { ReconcileOutcome } from '../scripts/reconcile-outcome.js'
 
 const run = (over = {}) => ({ ...newRun({ plan: 'p.md', issue: 7, baseSha: 'abc', tasksTotal: 3 }), ...over })
@@ -71,6 +71,34 @@ describe('controls', () => {
 
   it('done → judge', () => {
     expect(after(atControls(), OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
+  })
+
+  it('done on a task before the last → commit, with no judge', () => {
+    const r = atControls({ judging: JUDGING.FINAL, tasksTotal: 3, task: 1 })
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.COMMIT)
+  })
+
+  it('done in the review → judge', () => {
+    const r = atControls({ judging: JUDGING.FINAL, tasksTotal: 3, task: 3, phase: PHASES.REVIEW })
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
+  })
+
+  it('a run born before the final review judges every task, as it always did', () => {
+    // No `judging` override: the default helper's run is the one `newRun`
+    // builds with no `judging` argument, which is what ct-step translates an
+    // old run file to.
+    const r = atControls({ tasksTotal: 3, task: 2 })
+    expect(r.judging).toBe(JUDGING.EACH_TASK)
+    expect(judgesEachTask(r)).toBe(true)
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
+  })
+
+  it('a judging this version does not know throws instead of choosing a side', () => {
+    expect(() => judgesEachTask(run({ judging: 'sometimes' }))).toThrow(/"sometimes"/)
+  })
+
+  it('the controls of the slice phase have no judge to answer to, so the question throws', () => {
+    expect(() => judgesBeforeCommit(run({ phase: PHASES.SLICE }))).toThrow(/"slice"/)
   })
 
   it('failed goes back to implement while retries remain, counting them', () => {
@@ -184,9 +212,29 @@ describe('commit', () => {
     const { run: r, state } = after(atCommit({ task: 3, tasksTotal: 3 }), OUTCOMES.DONE)
     expect(state).toBe(RUN_STATES.OPEN)
     expect(r.step).toBe(STEPS.RECONCILE)
+    expect(r.phase).toBe(PHASES.SLICE)
     expect([r.controlRetries, r.judgeRetries, r.correctionRetries]).toEqual([0, 0, 0])
     // The discards and the money belong to the whole slice: they are not touched here.
     expect(r.discards).toBe(0)
+  })
+
+  it('the last commit opens the review: judge, with the counters at zero', () => {
+    const r = atCommit({ judging: JUDGING.FINAL, task: 3, tasksTotal: 3, controlRetries: 1, judgeRetries: 0, correctionRetries: 2 })
+    const { run: next, state } = after(r, OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect(next.step).toBe(STEPS.JUDGE)
+    expect(next.phase).toBe(PHASES.REVIEW)
+    expect(next.task).toBe(3)
+    expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
+  })
+
+  it('the commit after the review opens reconcile', () => {
+    const r = atCommit({ judging: JUDGING.FINAL, task: 3, tasksTotal: 3, phase: PHASES.REVIEW, judgeRetries: 1 })
+    const { run: next, state } = after(r, OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect(next.step).toBe(STEPS.RECONCILE)
+    expect(next.phase).toBe(PHASES.SLICE)
+    expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
   })
 
   it('failed closes in blocked-commit without retrying', () => {

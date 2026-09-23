@@ -11,7 +11,11 @@ import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
 const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
-  judgeRows, judgeTask, judgeSlice, taskOk, sliceOk } = makeHelpers(() => repo)
+  judgeRows, judgeTask, judgeSlice, taskOk, reviewOk, sliceOk, bornBeforeTheReview, judgedTaskOk } = makeHelpers(() => repo)
+
+// Both tasks committed: the run stands at the judge's review of the slice (#530).
+const atTheReview = () => { taskOk('uno.txt'); taskOk('dos.txt') }
+const REVIEW_VERDICT = 'docs/superpowers/verdicts/issue-7-review.json'
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -24,8 +28,7 @@ afterEach(() => { rmSyncBestEffort(repo) })
 // to find it unchanged.
 describe('what gets committed is what was approved: the index seal', () => {
   it('THE ATTACK: code re-staged AFTER the accepted verdict does not get into the commit', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     // THE THIRD WINDOW: the verdict is already accepted and its package consumed.
@@ -34,16 +37,15 @@ describe('what gets committed is what was approved: the index seal', () => {
     const r = ct('commit')
     expect(r.status).toBe(8)
     expect(r.stderr).toMatch(/the index is no longer the one the judge approved/)
-    expect(commits()).toBe(1)                    // NOTHING gets committed
+    expect(commits()).toBe(3)                    // NOTHING gets committed
     expect(runState().step).toBe('commit')         // the run neither advances nor goes back
-    expect(runState().task).toBe(1)
+    expect(runState().task).toBe(2)
     // And there is still no `commit` row: this failure does not open it.
     expect(judgeRows('commit')).toHaveLength(0)
   })
 
   it('the message carries the command that gives the approved index back, and that command gives it back', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('PASS'))
     writeFileSync(join(repo, 'uno.txt'), 'otra versión\n')
     execFileSync('git', ['add', 'uno.txt'], { cwd: repo })
@@ -64,8 +66,7 @@ describe('what gets committed is what was approved: the index seal', () => {
   })
 
   it('the seal is the tree of the INDEX at the moment the verdict is accepted, with the machinery artefact inside', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('PASS'))
     // Measured from the outside: the seal is exactly the index tree of right now.
     const tree = execFileSync('git', ['write-tree'], { cwd: repo, encoding: 'utf8' }).trim()
@@ -73,39 +74,44 @@ describe('what gets committed is what was approved: the index seal', () => {
     // And the verdict that travels is INSIDE that tree: sealing before its
     // `git add` would make every commit fail.
     expect(execFileSync('git', ['ls-tree', '-r', '--name-only', tree], { cwd: repo, encoding: 'utf8' }))
-      .toMatch(/docs\/superpowers\/verdicts\/issue-7-task-1\.json/)
+      .toMatch(/docs\/superpowers\/verdicts\/issue-7-review\.json/)
     expect(ct('commit').status).toBe(0)
   })
 
   it('a FORGED verdict staged in the gap does not travel in the pull request', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('PASS'))
-    const verdictPath = join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json')
-    writeFileSync(verdictPath, JSON.stringify({ issue: 7, task: 1, verdict: { ruling: 'PASS', findings: ['FORJADO'] } }))
-    execFileSync('git', ['add', '--', 'docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo })
+    const verdictPath = join(repo, REVIEW_VERDICT)
+    writeFileSync(verdictPath, JSON.stringify({ issue: 7, task: 2, verdict: { ruling: 'PASS', findings: ['FORJADO'] } }))
+    execFileSync('git', ['add', '--', REVIEW_VERDICT], { cwd: repo })
     const r = ct('commit')
     expect(r.status).toBe(8)
     expect(r.stderr).toMatch(/the index is no longer the one the judge approved/)
-    expect(commits()).toBe(1)
+    expect(commits()).toBe(3)
   })
 
+  // A run born before the final review (#530) judges every task; the review's
+  // verdict travels in the review's commit (ct-step-review.test.js).
   it('the happy path does not change: the verdict STILL travels inside its task\'s commit', () => {
-    expect(taskOk('uno.txt').status).toBe(0)
+    bornBeforeTheReview()
+    expect(judgedTaskOk('uno.txt').status).toBe(0)
     const committedFiles = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(committedFiles).toMatch(/docs\/superpowers\/verdicts\/issue-7-task-1\.json/)   // F37's closure criterion
     expect(committedFiles).toMatch(/docs\/superpowers\/metrics\/issue-7\.jsonl/)
     expect(committedFiles).toMatch(/uno\.txt/)
-    expect(runState().sealedTree).toMatch(/^[0-9a-f]{40,64}$/)   // sha1 or sha256: it makes no difference
+    // The commit spends its seal (#530): the next task seals its own, from its
+    // verdict or from its controls. The seal's value before the commit is
+    // pinned by "the seal is the tree of the INDEX…" above.
+    expect(runState().sealedTree).toBeNull()
     // And the second task too, with its new artefact and the telemetry already tracked.
-    expect(taskOk('dos.txt').status).toBe(0)
+    expect(judgedTaskOk('dos.txt').status).toBe(0)
     expect(commits()).toBe(3)
     expect(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-2.json'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/"ruling": "PASS"/)
   })
 
   it('THE SLICE\'S TWIN: code staged before the slice verdict does not get into its commit', () => {
-    taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
+    taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile'); ct('global')
     const before = commits()
     const sliceCommitsBefore = runState().sliceCommits
     writeFileSync(join(repo, 'colado.txt'), 'nadie ha visto esto\n')
@@ -117,7 +123,7 @@ describe('what gets committed is what was approved: the index seal', () => {
     expect(commits()).toBe(before)                // the refused verdict adds no commit
     expect(log()).not.toMatch(/Verdict of the whole slice/)
     expect(execFileSync('git', ['log', '--oneline', '--', 'colado.txt'], { cwd: repo, encoding: 'utf8' }).trim()).toBe('')
-    expect(sliceCommitsBefore).toBe(1)             // global committed the telemetry
+    expect(sliceCommitsBefore).toBe(2)             // the review's commit (#530), and global committed the telemetry
     expect(runState().sliceCommits).toBe(sliceCommitsBefore)
     // The evidence stays STAGED: taking the foreign file out and committing it is one line.
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
@@ -125,8 +131,7 @@ describe('what gets committed is what was approved: the index seal', () => {
   })
 
   it('a run with no seal in its state does not commit: absence is not a guardrail-free mode', () => {
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    atTheReview()
     judgeTask(writeVerdict('PASS'))
     // The run of an earlier version of the plugin: the field is not there. It
     // is simulated by DELETING it, which is also the shortcut a conductor with
@@ -136,7 +141,7 @@ describe('what gets committed is what was approved: the index seal', () => {
     const r = ct('commit')
     expect(r.status).toBe(8)
     expect(r.stderr).toMatch(/does not carry the index seal/)
-    expect(commits()).toBe(1)
+    expect(commits()).toBe(3)
   })
 })
 
@@ -145,7 +150,7 @@ describe('where it has got to lives on disk, not in the conversation', () => {
     ct('report', writeReport(['uno.txt']))
     expect(runState().step).toBe('controls')
     ct('controls')
-    expect(runState().step).toBe('judge')
+    expect(runState().step).toBe('commit')   // no judge on a task (#530)
   })
 
   it('if the state and git do not tell the same story, it stops instead of carrying on', () => {
@@ -208,8 +213,8 @@ describe('the index does not accumulate between attempts', () => {
     // attempt 1's dos.txt is not left quietly staged either.
     rmSync(join(repo, 'dos.txt'))
     ct('report', writeReport(['uno.txt']))
+    // No judge on a task (#530): green controls go straight to commit.
     expect(ct('controls').stdout).toMatch(/controls: done/)
-    judgeTask(writeVerdict('PASS'))
     expect(ct('commit').status).toBe(0)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(files).toMatch(/uno\.txt/)

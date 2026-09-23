@@ -8,7 +8,10 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, commits, runState, judgeTask, taskOk } = makeHelpers(() => repo)
+const { ct, writeVerdict, writeRaw, writeSliceVerdict, commits, runState, judgeTask, taskOk, reviewFix, reviewOk } = makeHelpers(() => repo)
+
+// Both tasks committed: the run stands at the judge's review of the slice (#530).
+const atTheReview = () => { taskOk('uno.txt'); taskOk('dos.txt') }
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -27,32 +30,32 @@ describe('a veto leaves no trace to undo', () => {
   it('three vetoes exhaust the budget, exit with 1 and do NOT commit', () => {
     // H9: between the second veto and the third attempt the run passes through
     // `advise`, so the third attempt does not start until advice is accepted.
+    atTheReview()
     for (let i = 0; i < 3; i++) {
-      ct('report', writeReport(['uno.txt']))
-      ct('controls')
+      if (i > 0) reviewFix()
       var r = veto()
       if (runState().step === 'advise') advise()
     }
     expect(r.status).toBe(1)
-    expect(commits()).toBe(1)
+    expect(commits()).toBe(3)
   })
 
   it('a PASS with medium findings corrects and then delivers all the same', () => {
     const complaint = () => judgeTask(writeVerdict('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'uno.txt', line: 1 }]))
+    atTheReview()
     for (let i = 0; i < 3; i++) {
-      ct('report', writeReport(['uno.txt']))
-      ct('controls')
+      if (i > 0) reviewFix()
       complaint()
     }
     expect(runState().step).toBe('commit')     // budget exhausted: it delivers
     expect(ct('commit').status).toBe(0)
-    expect(commits()).toBe(2)
+    expect(commits()).toBe(4)
   })
 
   it('the third veto is written down, so the closure survives the process that reached it', () => {
+    atTheReview()
     for (let i = 0; i < 3; i++) {
-      ct('report', writeReport(['uno.txt']))
-      ct('controls')
+      if (i > 0) reviewFix()
       veto()
       if (runState().step === 'advise') advise()
     }
@@ -61,14 +64,13 @@ describe('a veto leaves no trace to undo', () => {
   })
 
   it('the refusal of the third veto carries what the judge found and where its verdict is', () => {
+    atTheReview()
     for (let i = 0; i < 2; i++) {
-      ct('report', writeReport(['uno.txt']))
-      ct('controls')
+      if (i > 0) reviewFix()
       veto()
       if (runState().step === 'advise') advise()
     }
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
+    reviewFix()
     // `judgeTask` seals the review token into the verdict and forwards every
     // extra argument to the verb (fixtures/ct-step-harness.js:245), so the
     // announcement flag rides along without bypassing the token.
@@ -80,12 +82,12 @@ describe('a veto leaves no trace to undo', () => {
 
     expect(announced.state).toBe('blocked-judge')
     expect(announced.findings).toContain('uno.txt')
-    expect(announced.verdict).toMatch(/task-\d+-verdict-\d+\.json$/)
+    expect(announced.verdict).toMatch(/review-verdict-\d+\.json$/)
   })
 })
 
 describe('a verdict that cannot be read is not a verdict', () => {
-  const prepare = () => { ct('report', writeReport(['uno.txt'])); ct('controls') }
+  const prepare = atTheReview
 
   it('a JSON that does not parse is a DISCARD, not a usage error', () => {
     prepare()
@@ -128,9 +130,8 @@ describe('a verdict issued with no review package is not a verdict', () => {
     // The exact failure mode, with no tricks: `verdict` is reached WITHOUT
     // passing through `next`. Nothing is deleted — the file does not exist
     // because nobody generated it.
-    ct('report', writeReport(['uno.txt']))
-    ct('controls')
-    expect(existsSync(join(repo, '.agent', 'run-7', 'task-1-review.diff'))).toBe(false)
+    atTheReview()
+    expect(existsSync(join(repo, '.agent', 'run-7', 'review-review.diff'))).toBe(false)
 
     const r = ct('verdict', writeVerdict('PASS'))
     expect(r.status).toBe(0)                 // a discard, not a closure: it gets asked again
@@ -139,8 +140,8 @@ describe('a verdict issued with no review package is not a verdict', () => {
     expect(r.stdout).toContain('go back to "ct-step next"')
     expect(runState().step).toBe('judge')      // it does NOT advance the step
     expect(runState().discards).toBe(1)        // and it counts towards MAX_DISCARDS
-    expect(commits()).toBe(1)                // the blind PASS commits nothing
-    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
+    expect(commits()).toBe(3)                // the blind PASS commits nothing
+    expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-review.json'))).toBe(false)
 
     // RESERVATION 3 of the review: the ROW of the discard, not only the
     // discard. Telemetry is the layer that let the gap be seen (a judge row
@@ -159,10 +160,11 @@ describe('a verdict issued with no review package is not a verdict', () => {
   })
 
   it('slice-verdict with no slice-review.diff on disk discards, does not advance the step, and measures it as discarded', () => {
-    // The two tasks committed and the Global verification green, but without
+    // The two tasks and the review committed and the Global verification green, but without
     // going back to `next`: `writeSliceReviewPackage` has never run.
     taskOk('uno.txt')
     taskOk('dos.txt')
+    reviewOk()
     ct('reconcile')
     ct('global')
     expect(existsSync(join(repo, '.agent', 'run-7', 'slice-review.diff'))).toBe(false)

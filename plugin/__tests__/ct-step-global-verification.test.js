@@ -9,7 +9,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN, GLOBAL_VERIFICATION } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, commits, runState, taskOk } = makeHelpers(() => repo)
+const { ct, commits, runState, taskOk, reviewOk } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -18,11 +18,11 @@ afterEach(() => { rmSyncBestEffort(repo) })
 // after the last committed task. Until this slice nobody ran it: `controls`
 // only measures the **Verification:** block of each task.
 describe('the Global verification is run by the program (§3.7-A)', () => {
-  // `reconcile` (Phase B, Task 8) slips in between the last commit and the
-  // global verification: the fixture leaves the base unmoved, so it comes out
+  // The review (#530) and `reconcile` (Phase B, Task 8) slip in between the
+  // last task commit and the global verification: the fixture leaves the base unmoved, so it comes out
   // on the first round (up-to-date) and leaves the run exactly where these
   // tests already expected it.
-  const twoTasks = () => { taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile') }
+  const twoTasks = () => { taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile') }
 
   it('after the last commit, next announces the global phase with the §8 commands', () => {
     twoTasks()
@@ -47,7 +47,7 @@ describe('the Global verification is run by the program (§3.7-A)', () => {
     twoTasks()
     const r = ct('global')
     expect(r.status).toBe(11)
-    expect(commits()).toBe(4)   // nothing is un-committed: the red is for the human; the fourth is the loop's telemetry (#501)
+    expect(commits()).toBe(5)   // nothing is un-committed: the red is for the human; the fourth is the review (#530), the fifth the loop's telemetry (#501)
   })
 
   it('a command that could not be MEASURED closes with 12, which is not the same red', () => {
@@ -78,7 +78,7 @@ describe('the telemetry the loop writes after the last task commit travels befor
   const CLEAN_TREE = 'test -z "$(git status --porcelain)"'
   const TELEMETRY = 'docs/superpowers/metrics/issue-7.jsonl'
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
-  const twoTasks = () => { taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile') }
+  const twoTasks = () => { taskOk('uno.txt'); taskOk('dos.txt'); reviewOk(); ct('reconcile') }
   const cleanTreePlan = () => writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt && test -f dos.txt', CLEAN_TREE))
   const ignoreAsCtInitDoes = (extra = '') => {
     writeFileSync(join(repo, '.gitignore'), `.telemetria/\n/*.json\n.agent/run-*.json\n.agent/run-*/\n${extra}`)
@@ -105,7 +105,7 @@ describe('the telemetry the loop writes after the last task commit travels befor
     cleanTreePlan()
     twoTasks()
     ct('global')
-    expect(runState().sliceCommits).toBe(1)
+    expect(runState().sliceCommits).toBe(2)   // the review's (#530) and the telemetry's
     const r = ct('next')
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/slice/i)
@@ -122,11 +122,11 @@ describe('the telemetry the loop writes after the last task commit travels befor
     expect(commits()).toBe(before + 1)
     expect(ct('next').status).toBe(0)
     expect(runState().step).toBe('global')
-    expect(runState().sliceCommits).toBe(1)
+    expect(runState().sliceCommits).toBe(2)   // the review's (#530) and the telemetry's
 
     expect(ct('global').status).toBe(0)
     expect(commits()).toBe(before + 1)
-    expect(runState().sliceCommits).toBe(1)
+    expect(runState().sliceCommits).toBe(2)
     expect(runState().step).toBe('slice-judge')
     expect(ct('next').status).toBe(0)
   })

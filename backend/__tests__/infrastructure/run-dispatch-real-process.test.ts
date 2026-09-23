@@ -292,6 +292,7 @@ class DispatchRepository {
   async #reachJudge(): Promise<string> {
     await this.#submitReport(this.#next())
     this.#step('controls')
+    this.#step('commit')
     return this.#next()
   }
 
@@ -471,7 +472,6 @@ class ProducerOutput {
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.JUDGE, [
           ProducerOutput.pathOf(stdout, INPUT_ROLES.PACKAGE),
           ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF),
-          ProducerOutput.pathOf(stdout, INPUT_ROLES.CONTROLS_LOG),
         ]))
       case 'advise':
         return Object.freeze(ProducerOutput.withRoleFiles(STEPS.ADVISE, [
@@ -657,7 +657,7 @@ describe('RunDispatch real process', () => {
       const verdict = await DispatchRepository.create()
       repositories.push(verdict)
       const produced = await verdict.output('slice-judge')
-      const relativeGlob = `docs/superpowers/verdicts/issue-${DispatchRepository.ISSUE}-task-*.json`
+      const relativeGlob = `docs/superpowers/verdicts/issue-${DispatchRepository.ISSUE}-*.json`
       const absoluteGlob = join(verdict.root, relativeGlob)
       const machine = await verdict.machine(produced.replace(relativeGlob, absoluteGlob))
       const globDispatch = await machine.dispatch(verdict.watch(), DispatchRepository.TICKET)
