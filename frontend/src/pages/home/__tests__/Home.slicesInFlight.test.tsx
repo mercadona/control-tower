@@ -357,7 +357,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
@@ -365,7 +365,7 @@ describe('Home · the slices in flight', () => {
     expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/9'))).toBe(false)
   })
 
-  it('should advance to the sole running slice when the selected slice is delivered', async () => {
+  it('should advance to the sole running slice when the selected slice enters review directly', async () => {
     vi.useFakeTimers()
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     let selectedProgress = ImplementProgressMother.progress()
@@ -377,7 +377,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
@@ -390,7 +390,29 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByRole('region', { name: 'Slice #7' })).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
   })
 
-  it('should wait for the next running slice to appear after delivery', async () => {
+  it.each([
+    ['delivered', ImplementProgressMother.delivered()],
+    ['publishing', ImplementProgressMother.publishing()],
+  ])('should not advance when implementation is %s without entering review', async (_state, progress) => {
+    vi.useFakeTimers()
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
+      progress: (issue) => issue === 7 ? selectedProgress : ImplementProgressMother.progress(),
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    selectedProgress = progress
+    await act(async () => vi.advanceTimersByTimeAsync(30000))
+
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+    expect(WorkflowSnapshotStorage.load()?.plan.issue.number).toBe(7)
+  })
+
+  it('should wait for the next running slice to appear after entering review', async () => {
     vi.useFakeTimers()
     let inFlight = [7]
     let selectedProgress = ImplementProgressMother.progress()
@@ -402,7 +424,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
 
@@ -428,26 +450,30 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(6000))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
   })
 
-  it('should keep an already delivered slice selected on restoration', async () => {
+  it.each([
+    ['delivered', ImplementProgressMother.delivered()],
+    ['in review', ImplementProgressMother.inReview()],
+  ])('should keep a slice already %s selected on restoration', async (_state, selectedProgress) => {
     vi.useFakeTimers()
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
-      progress: (issue) => issue === 7 ? ImplementProgressMother.delivered() : ImplementProgressMother.progress(),
+      progress: (issue) => issue === 7 ? selectedProgress : ImplementProgressMother.progress(),
     })
     openHome()
     await act(async () => vi.advanceTimersByTimeAsync(30000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
   })
 
-  it('should let the user return to the delivered slice after automatic advancement', async () => {
+  it('should let the user return to the slice in review after automatic advancement', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     let selectedProgress = ImplementProgressMother.progress()
@@ -458,7 +484,7 @@ describe('Home · the slices in flight', () => {
     const { user } = openHome()
     await (await panelOf(7)).findByText('Tarea 3 de 7')
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
     await selectSliceDetail(user, 7)
@@ -467,19 +493,19 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
   })
 
-  it('should cancel a pending handoff when the user selects another delivered slice', async () => {
+  it('should cancel a pending handoff when the user selects another slice in review', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     let inFlight = [7, 8]
     let selectedProgress = ImplementProgressMother.progress()
     backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(...inFlight),
-      progress: (issue) => issue === 7 ? selectedProgress : issue === 8 ? ImplementProgressMother.delivered() : ImplementProgressMother.progress(),
+      progress: (issue) => issue === 7 ? selectedProgress : issue === 8 ? ImplementProgressMother.inReview() : ImplementProgressMother.progress(),
     })
     const { user } = openHome()
     await (await panelOf(7)).findByText('Tarea 3 de 7')
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     await selectSliceDetail(user, 8)
     inFlight = [7, 8, 9]
@@ -488,7 +514,10 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
   })
 
-  it('should keep the handoff pending while the delivered slice enters review', async () => {
+  it.each([
+    ['delivered', ImplementProgressMother.delivered()],
+    ['fixing', ImplementProgressMother.fixing()],
+  ])('should wait for a running slice when %s is followed by review', async (_state, progress) => {
     vi.useFakeTimers()
     let inFlight = [7]
     let selectedProgress = ImplementProgressMother.progress()
@@ -500,7 +529,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = progress
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(15000))
@@ -509,6 +538,32 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
+  })
+
+  it('should cancel a pending handoff when the selected slice returns to fixing', async () => {
+    vi.useFakeTimers()
+    let inFlight = [7]
+    let selectedProgress = ImplementProgressMother.progress()
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(...inFlight),
+      progress: (issue) => issue === 7 ? selectedProgress : ImplementProgressMother.progress(),
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    selectedProgress = ImplementProgressMother.inReview()
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText('En revisión')).toBeInTheDocument()
+    selectedProgress = ImplementProgressMother.fixing()
+    await act(async () => vi.advanceTimersByTimeAsync(15000))
+    expect(within(screen.getByLabelText('Implementación', { selector: 'section' })).getByText('Corrigiendo lo pedido en la revisión')).toBeInTheDocument()
+    inFlight = [7, 8]
+    await act(async () => vi.advanceTimersByTimeAsync(30000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Slice #8' })).getByText('Tarea 3 de 7')).toBeInTheDocument()
   })
 
   it.each([
@@ -526,7 +581,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(6000))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
@@ -544,7 +599,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(6000))
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
@@ -565,7 +620,7 @@ describe('Home · the slices in flight', () => {
 
     activePlans = backendFallsOver
     await act(async () => vi.advanceTimersByTimeAsync(2000))
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(1000))
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
 
@@ -576,7 +631,7 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
   })
 
-  it('should follow three sequential slices when delivered slices leave the active plans', async () => {
+  it('should follow three sequential slices when slices in review leave the active plans', async () => {
     vi.useFakeTimers()
     let inFlight = [7]
     let firstProgress = ImplementProgressMother.progress()
@@ -589,7 +644,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
-    firstProgress = ImplementProgressMother.delivered()
+    firstProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     inFlight = []
     await act(async () => vi.advanceTimersByTimeAsync(2000))
@@ -598,7 +653,7 @@ describe('Home · the slices in flight', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
 
-    secondProgress = ImplementProgressMother.delivered()
+    secondProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
     inFlight = [9]
     await act(async () => vi.advanceTimersByTimeAsync(2000))
@@ -625,7 +680,7 @@ describe('Home · the slices in flight', () => {
     inFlight = [7]
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     expect(screen.queryByRole('region', { name: 'Slice #8' })).toBeNull()
-    selectedProgress = ImplementProgressMother.delivered()
+    selectedProgress = ImplementProgressMother.inReview()
     await act(async () => vi.advanceTimersByTimeAsync(1000))
     candidateProgress = ImplementProgressMother.notRead()
     inFlight = [7, 8]
