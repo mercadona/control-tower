@@ -144,10 +144,6 @@ const typeTicket = async (user: User, ticket: string) => {
   await user.type(await editable('Ticket'), ticket)
 }
 
-const typeUserComment = async (user: User, comment: string) => {
-  await user.type(await editable('Qué quieres planificar'), comment)
-}
-
 const typeRepository = async (user: User, repository: string) => {
   await user.type(await editable(/Repositorio/), repository)
 }
@@ -228,7 +224,6 @@ export {
   openHome,
   selectSliceDetail,
   typeTicket,
-  typeUserComment,
   typeRepository,
   typePath,
   pressStart,

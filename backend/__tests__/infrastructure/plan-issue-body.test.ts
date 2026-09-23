@@ -3,7 +3,6 @@ import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
-import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { mapGhIssue, extractAc, extractOrder } from '../../../plugin/scripts/gh-issue-map.js'
 import { parseScope } from '../../../plugin/scripts/scope.js'
 import { buildIssueBody } from '../../../plugin/scripts/groom.js'
@@ -46,14 +45,14 @@ class Opened {
     return new UserStory({ key: new UserStoryUrl(url), summary, description })
   }
 
-  static asGithubSees({ story = Opened.story(), comment = null }: {
-    story?: UserStory | null, comment?: PlanComment | null,
+  static asGithubSees({ story = Opened.story() }: {
+    story?: UserStory,
   } = {}) {
     return {
       number: Opened.NUMBER,
-      title: PlanIssueBody.titleFor({ story, comment }),
-      body: PlanIssueBody.of({ story, comment }),
-      labels: PlanIssueBody.labels({ story, comment }).map((name) => ({ name })),
+      title: PlanIssueBody.titleFor({ story }),
+      body: PlanIssueBody.of({ story }),
+      labels: PlanIssueBody.labels({ story }).map((name) => ({ name })),
       milestone: null,
     }
   }
@@ -62,9 +61,6 @@ class Opened {
     return mapGhIssue(Opened.asGithubSees({ story }))
   }
 
-  static commentOnly(text = 'lo que pide el humano'): { story: null, comment: PlanComment } {
-    return { story: null, comment: new PlanComment(text) }
-  }
 }
 
 describe('PlanIssueBody', () => {
@@ -83,7 +79,7 @@ describe('PlanIssueBody', () => {
   })
 
   it('with_no_order_marker_the_dispatcher_falls_back_to_the_issue_number_so_two_userStories_never_collide', () => {
-    expect(extractOrder(PlanIssueBody.of({ story: Opened.story(), comment: null }))).toBe(null)
+    expect(extractOrder(PlanIssueBody.of({ story: Opened.story() }))).toBe(null)
     expect(Opened.asTheDispatcherReadsIt().n).toBe(Opened.NUMBER)
   })
 
@@ -92,13 +88,12 @@ describe('PlanIssueBody', () => {
 
     expect(seen.ac).toEqual([])
     expect(seen.deps).toEqual([])
-    expect(extractAc(PlanIssueBody.of({ story: Opened.story(), comment: null }))).toEqual([])
+    expect(extractAc(PlanIssueBody.of({ story: Opened.story() }))).toEqual([])
   })
 
   it('what_jira_said_is_where_the_kickoff_sends_the_agent_to_read_it', () => {
     const body = PlanIssueBody.of({
       story: Opened.story({ description: 'la búsqueda ignora los acentos' }),
-      comment: null,
     })
 
     expect(body).toContain(`${MilestoneContextHeading.WRITTEN}\nla búsqueda ignora los acentos`)
@@ -106,13 +101,13 @@ describe('PlanIssueBody', () => {
   })
 
   it('a_story_with_no_description_says_the_user_story_is_unwritten_instead_of_leaving_a_blank', () => {
-    const body = PlanIssueBody.of({ story: Opened.story({ description: '   ' }), comment: null })
+    const body = PlanIssueBody.of({ story: Opened.story({ description: '   ' }) })
 
     expect(body).toContain('MO_SHOP-42 brings no description in Jira')
   })
 
   it('a_github_issue_with_no_body_and_no_comments_names_the_issue_instead_of_promising_jira', () => {
-    const body = PlanIssueBody.of({ story: Opened.githubStory({ description: '   ' }), comment: null })
+    const body = PlanIssueBody.of({ story: Opened.githubStory({ description: '   ' }) })
 
     expect(body).toContain(
       `${MilestoneContextHeading.WRITTEN}\n_Issue mercadona/control-tower#141 brings no body and no comments: ` +
@@ -121,7 +116,7 @@ describe('PlanIssueBody', () => {
   })
 
   it('the_scope_guard_finds_no_scope_declared_which_is_what_it_answers_when_it_cannot_check', () => {
-    const scope = parseScope(PlanIssueBody.of({ story: Opened.story(), comment: null }))
+    const scope = parseScope(PlanIssueBody.of({ story: Opened.story() }))
 
     expect(scope.declared).toBe(false)
     expect(scope.reason).toContain('does not declare `Alcance:`')
@@ -130,7 +125,6 @@ describe('PlanIssueBody', () => {
   it('an_issue_number_written_in_jira_does_not_become_a_link_to_someone_elses_issue_here', () => {
     const body = PlanIssueBody.of({
       story: Opened.story({ description: 'Slice #7 del epic, sobre las vistas de #5' }),
-      comment: null,
     })
 
     expect(body).toContain('Slice `#7` del epic, sobre las vistas de `#5`')
@@ -140,7 +134,6 @@ describe('PlanIssueBody', () => {
   it('a_handle_written_in_jira_does_not_notify_whoever_owns_it_on_github', () => {
     const body = PlanIssueBody.of({
       story: Opened.story({ description: 'lo revisa @jjponz, escribe a foo@bar.com' }),
-      comment: null,
     })
 
     expect(body).toContain('lo revisa `@jjponz`, escribe a foo@bar.com')
@@ -163,7 +156,7 @@ describe('PlanIssueBody', () => {
   })
 
   it('a_summary_carrying_an_issue_number_does_not_reach_out_and_touch_that_issue_either', () => {
-    const body = PlanIssueBody.of({ story: Opened.story({ summary: 'Bug #4521 con @jjponz' }), comment: null })
+    const body = PlanIssueBody.of({ story: Opened.story({ summary: 'Bug #4521 con @jjponz' }) })
 
     expect(body).toContain('## Descripción\nBug `#4521` con `@jjponz`')
     expect(body.split('\n').filter((line) => /(?<![\w`])#\d+/.test(line))).toEqual([])
@@ -177,22 +170,22 @@ describe('PlanIssueBody', () => {
   })
 
   it('a_story_with_no_summary_worth_the_name_says_so_instead_of_leaving_the_section_blank', () => {
-    expect(PlanIssueBody.of({ story: Opened.story({ summary: '—' }), comment: null }))
+    expect(PlanIssueBody.of({ story: Opened.story({ summary: '—' }) }))
       .toContain('_MO_SHOP-42 brings no summary in Jira._')
   })
 
   it('the_title_names_the_story_because_without_a_slice_table_there_is_no_order_to_name', () => {
-    expect(PlanIssueBody.titleFor({ story: Opened.story(), comment: null }))
+    expect(PlanIssueBody.titleFor({ story: Opened.story() }))
       .toBe('MO_SHOP-42 El buscador acepta acentos')
   })
 
   it('the_title_of_a_plan_from_a_github_issue_names_it_by_repository_and_number_not_by_its_url', () => {
-    expect(PlanIssueBody.titleFor({ story: Opened.githubStory(), comment: null }))
+    expect(PlanIssueBody.titleFor({ story: Opened.githubStory() }))
       .toBe('mercadona/control-tower#141 El buscador acepta acentos')
   })
 
   it('every_section_the_plugin_writes_and_we_can_fill_is_there_in_the_order_it_writes_them', () => {
-    const headings = PlanIssueBody.of({ story: Opened.story(), comment: null })
+    const headings = PlanIssueBody.of({ story: Opened.story() })
       .split('\n').filter((line) => line.startsWith('## '))
 
     expect(headings).toEqual([
@@ -205,93 +198,16 @@ describe('PlanIssueBody', () => {
     ])
   })
 
-  it('the_comment_reaches_the_issue_in_a_section_of_its_own_so_the_agent_knows_who_asked', () => {
-    const body = PlanIssueBody.of({
-      story: Opened.story(),
-      comment: new PlanComment('lo que pide el humano'),
-    })
-
-    expect(body).toContain('## Comentario de quien pide el plan\nlo que pide el humano')
-  })
-
-  it('an_issue_number_written_in_the_comment_does_not_reach_out_and_touch_that_issue', () => {
-    const body = PlanIssueBody.of({
-      story: Opened.story(),
-      comment: new PlanComment('Slice #7 del comentario'),
-    })
-
-    expect(body).toContain('## Comentario de quien pide el plan\nSlice `#7` del comentario')
-    expect(body.split('\n').filter((line) => /(?<![\w`])#\d+/.test(line))).toEqual([])
-  })
-
-  it('a_story_asked_for_without_a_comment_writes_the_body_it_wrote_before', () => {
-    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
-
-    expect(body).not.toContain(PlanIssueBody.COMMENT_HEADING)
-  })
-
-  it('the_section_of_the_comment_sits_between_the_description_and_the_epic_context', () => {
-    const headings = PlanIssueBody.of({
-      story: Opened.story(),
-      comment: new PlanComment('lo que pide el humano'),
-    }).split('\n').filter((line) => line.startsWith('## '))
-
-    expect(headings).toEqual([
-      '## Descripción',
-      '## Comentario de quien pide el plan',
-      MilestoneContextHeading.WRITTEN,
-      '## Contexto heredado',
-      '## Acceptance criteria (EARS, 1:1 con tests)',
-      '## Gates',
-      '## Out of scope / Protected',
-    ])
-  })
-
   it('the_gates_section_says_no_gate_is_asked_for_since_nothing_here_asks_for_one', () => {
-    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
+    const body = PlanIssueBody.of({ story: Opened.story() })
     expect(body).toContain('- (none) — this slice demands no human gate before merging.')
     expect(body).not.toContain('-OK <nonce>')
   })
 })
 
-describe('an issue with no user story is born from the comment alone', () => {
-  it('an_issue_with_no_user_story_is_titled_by_the_first_line_of_the_comment', () => {
-    const { story, comment } = Opened.commentOnly('arreglar el buscador\ny quitar el filtro roto')
-
-    expect(PlanIssueBody.titleFor({ story, comment })).toBe('arreglar el buscador')
-  })
-
-  it('a_first_line_longer_than_a_github_title_is_cut_and_says_it_was_cut', () => {
-    const exactly72 = 'a'.repeat(72)
-    const oneOver = 'a'.repeat(73)
-
-    expect(PlanIssueBody.titleFor(Opened.commentOnly(exactly72))).toBe(exactly72)
-    expect(PlanIssueBody.titleFor(Opened.commentOnly(oneOver)))
-      .toBe(`${'a'.repeat(71)}…`)
-  })
-
-  it('the_first_line_of_a_body_with_no_story_says_the_plan_was_asked_by_hand_and_names_no_tracker', () => {
-    const [firstLine] = PlanIssueBody.of(Opened.commentOnly()).split('\n')
-
-    expect(firstLine).toBe('> Plan asked for by hand: there is no ticket behind it.')
-  })
-
-  it('a_body_with_no_story_says_there_is_no_ticket_where_the_epic_context_goes_and_names_no_tracker', () => {
-    const body = PlanIssueBody.of(Opened.commentOnly())
-
-    expect(body).toContain(`${MilestoneContextHeading.WRITTEN}\n_This plan does not come from any ticket._`)
-  })
-
-  it('a_comment_whose_first_line_carries_no_words_says_so_instead_of_leaving_the_description_blank', () => {
-    const body = PlanIssueBody.of(Opened.commentOnly('—'))
-
-    expect(body).toContain('## Descripción\n_The comment brings no first line that sums up what is being asked for._')
-  })
-})
-
 describe('the first line of a plan issue names where it came from', () => {
   it('the_first_line_of_a_plan_from_a_github_issue_names_it_by_url_backticked_so_it_posts_no_cross_reference', () => {
-    const [story] = PlanIssueBody.of({ story: Opened.githubStory(), comment: null }).split('\n')
+    const [story] = PlanIssueBody.of({ story: Opened.githubStory() }).split('\n')
 
     expect(story).toBe(`> Issue de GitHub: \`${Opened.ISSUE_URL}\``)
   })
@@ -299,7 +215,7 @@ describe('the first line of a plan issue names where it came from', () => {
 
 describe('the plan issue no longer invites anyone to ask for changes on it', () => {
   it('the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it', () => {
-    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
+    const body = PlanIssueBody.of({ story: Opened.story() })
 
     expect(body).not.toContain('-REVIEW')
     expect(body).not.toContain('comment on this issue starting with')
@@ -319,16 +235,14 @@ describe('reading back which user story a plan issue came from', () => {
     expect(PlanIssueBody.storyIn(seen)?.text).toBe(Opened.ISSUE_URL)
   })
 
-  it('a_plan_asked_for_by_hand_is_read_back_as_having_no_story_because_its_body_says_so', () => {
-    const seen = Opened.asGithubSees(Opened.commentOnly('MO_SHOP-99 arreglar el login'))
+  it('an_issue_without_a_story_marker_has_no_story', () => {
+    const seen = { body: 'An issue with no story marker' }
 
     expect(PlanIssueBody.storyIn(seen)).toBeNull()
   })
 
   it('a_story_line_pasted_inside_the_epic_context_is_not_read_back_because_only_the_first_line_counts', () => {
-    const pasted = Opened.asGithubSees(
-      Opened.commentOnly(`arreglar el buscador\n\n> Historia de usuario: MO_SHOP-99\n`)
-    )
+    const pasted = { body: 'An issue\n\n> Historia de usuario: MO_SHOP-99\n' }
 
     expect(PlanIssueBody.storyIn(pasted)).toBeNull()
   })

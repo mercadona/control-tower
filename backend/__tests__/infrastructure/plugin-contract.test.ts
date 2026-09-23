@@ -78,7 +78,6 @@ describe('the sections the errand sends the agent to read', () => {
     story: new UserStory({
       key: new UserStoryKey('XOP-4909'), summary: 'la métrica de los campeones', description: 'como analista quiero',
     }),
-    comment: null,
   })
 
   it('the_two_it_names_are_headings_the_plugin_really_renders_in_the_body_we_write', () => {

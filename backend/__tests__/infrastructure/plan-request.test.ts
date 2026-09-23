@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-plan-route.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
-import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
@@ -124,43 +123,19 @@ describe('PlanRequest', () => {
       .toBe(PlanRequestOutcome.ACCEPTED)
   })
 
-  it('a_body_with_neither_an_id_nor_a_comment_is_refused_by_naming_both_fields', () => {
+  it('a_body_without_a_ticket_is_refused', () => {
     expect(PlanRequest.from('{"repo":"owner/name","path":"/repo/checkout"}').outcome)
       .toBe(PlanRequestOutcome.NOTHING_TO_PLAN)
   })
 
-  it('a_body_with_a_comment_and_no_id_is_accepted_because_the_comment_says_what_to_plan', () => {
-    const accepted = PlanRequest.from(
-      '{"user_comment":"añade el endpoint de salud","repo":"owner/name","path":"/repo/checkout"}'
-    )
+  it.each([undefined, 'ABC-1'])('rejects the removed description field with ticket %s', (id) => {
+    const refused = PlanRequest.from(JSON.stringify({
+      id, user_comment: 'Plan the health endpoint', repo: 'owner/name', path: '/repo/checkout',
+    }))
 
-    expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
-    expect(accepted.story).toBeNull()
-  })
-
-  it('a_comment_that_is_not_text_or_is_only_whitespace_is_refused_before_it_becomes_an_issue_body', () => {
-    const refused = [
-      '{"user_comment":123,"repo":"owner/name","path":"/repo/checkout"}',
-      '{"user_comment":null,"repo":"owner/name","path":"/repo/checkout"}',
-      '{"user_comment":"","repo":"owner/name","path":"/repo/checkout"}',
-      '{"user_comment":"   ","repo":"owner/name","path":"/repo/checkout"}',
-    ].map((raw) => PlanRequest.from(raw).outcome)
-
-    expect(refused).toEqual(Array(4).fill(PlanRequestOutcome.MALFORMED_USER_COMMENT))
-  })
-
-  it('a_malformed_id_is_reported_before_the_comment_so_the_first_thing_wrong_is_what_gets_named', () => {
-    expect(PlanRequest.from('{"id":"nope","user_comment":123}').outcome)
-      .toBe(PlanRequestOutcome.MALFORMED_ID)
-  })
-
-  it('an_accepted_body_hands_back_the_comment_as_a_domain_value_and_not_as_the_raw_string', () => {
-    const accepted = PlanRequest.from(
-      '{"user_comment":"añade el endpoint de salud","repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}'
-    )
-
-    expect(accepted.comment).toBeInstanceOf(PlanComment)
-    expect(accepted.comment!.text).toBe('añade el endpoint de salud')
+    expect(refused.outcome).toBe(PlanRequestOutcome.UNKNOWN_FIELD)
+    expect(refused.fields).toEqual(['user_comment'])
+    expect(refused.targets).toBeNull()
   })
 
   it('the_refusal_about_a_field_carries_the_name_of_the_field_it_is_about', () => {
@@ -200,25 +175,24 @@ describe('PlanRequest', () => {
 
   it('nothing_is_parsed_out_of_the_retired_field_so_no_target_is_built_from_what_it_held', () => {
     const refused = PlanRequest.from(
-      '{"id":"ABC-1","user_comment":"plan it","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}'
+      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}'
     )
 
     expect(refused.targets).toBeNull()
     expect(refused.story).toBeNull()
-    expect(refused.comment).toBeNull()
     expect(refused.named).toBeNull()
   })
 
   it('loose requests and repo list retirement retain their contracts', () => {
     const accepted = PlanRequest.from(
-      '{"user_comment":"plan the health endpoint","repo":"owner/name","path":"/repo/checkout"}'
+      '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
     )
     const retired = PlanRequest.from(
       '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}'
     )
 
     expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
-    expect(accepted.comment?.text).toBe('plan the health endpoint')
+    expect(accepted.story?.text).toBe('ABC-1')
     expect(accepted.targets?.[0].repository.text).toBe('owner/name')
     expect(accepted.targets?.[0].root.text).toBe('/repo/checkout')
     expect(retired.outcome).toBe(PlanRequestOutcome.REPO_LIST_RETIRED)

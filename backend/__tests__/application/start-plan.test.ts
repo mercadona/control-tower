@@ -9,7 +9,6 @@ import { RegisteredCheckout } from '../../src/domain/value-objects/registered-ch
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
-import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
 import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.ts'
@@ -54,7 +53,7 @@ class PlanIssuesDouble extends PlanIssues {
   answer: PlanIssue | Error
   claimFailure: PlanIssueNotClaimed | null
   claimFailureRepository: RepositoryName | null
-  asked: { story: UserStory | null, comment: PlanComment | null, repository: RepositoryName }[]
+  asked: { story: UserStory, repository: RepositoryName }[]
   claimed: { issue: PlanIssue, repository: RepositoryName }[]
   requeued: { issue: PlanIssue, repository: RepositoryName }[]
   steps: string[]
@@ -89,12 +88,11 @@ class PlanIssuesDouble extends PlanIssues {
     })
   }
 
-  async open({ story, comment, repository }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  async open({ story, repository }: {
+    story: UserStory,
     repository: RepositoryName,
   }): Promise<PlanIssue> {
-    this.asked.push({ story, comment, repository })
+    this.asked.push({ story, repository })
     if (this.answer instanceof Error) throw this.answer
     return this.answer
   }
@@ -291,7 +289,6 @@ class PlanRecordsDouble extends PlanRecords {
 
 class Flow {
   static STORY = new UserStoryKey('MO_SHOP-42')
-  static COMMENT = new PlanComment('añade un modo oscuro al panel')
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static ROOT = new CheckoutRoot('/repo')
   static OTHER_TARGET = new PlanTarget({
@@ -330,9 +327,9 @@ class Flow {
     this.claims.steps = this.steps
   }
 
-  async run(story: UserStoryKey | UserStoryUrl | null = Flow.STORY, comment: PlanComment | null = null) {
+  async run(story: UserStoryKey | UserStoryUrl = Flow.STORY) {
     const result = await this.runAcross(
-      [new PlanTarget({ repository: Flow.REPOSITORY, root: Flow.ROOT })], story, comment
+      [new PlanTarget({ repository: Flow.REPOSITORY, root: Flow.ROOT })], story
     )
     if (result.failed.length > 0) throw result.failed[0].cause
     return result.started[0]
@@ -340,21 +337,12 @@ class Flow {
 
   async runAcross(
     targets: readonly PlanTarget[],
-    story: UserStoryKey | UserStoryUrl | null = Flow.STORY,
-    comment: PlanComment | null = null
+    story: UserStoryKey | UserStoryUrl = Flow.STORY,
   ) {
-    return new StartPlan(this).execute(new StartPlanParams({ story, comment, targets }))
+    return new StartPlan(this).execute(new StartPlanParams({ story, targets }))
   }
 
-  async runWithComment() {
-    return this.run(Flow.STORY, Flow.COMMENT)
-  }
-
-  async runWithOnlyAComment() {
-    return this.run(null, Flow.COMMENT)
-  }
-
-  async refusal(story: UserStoryKey | UserStoryUrl | null = Flow.STORY) {
+  async refusal(story: UserStoryKey | UserStoryUrl = Flow.STORY) {
     return this.run(story).catch((cause) => cause)
   }
 }
@@ -685,36 +673,6 @@ describe('StartPlan claims the issue so no second dispatcher takes it', () => {
     await expect(new PlanIssues().requeue({
       issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY,
     })).rejects.toThrow(/must implement requeue/)
-  })
-})
-
-describe('StartPlan plans from a comment when there is no user story', () => {
-  it('a_plan_asked_for_with_only_a_comment_never_asks_jira_for_anything', async () => {
-    const flow = new Flow()
-
-    await flow.runWithOnlyAComment()
-
-    expect(flow.userStories.asked).toEqual([])
-    expect(flow.planIssues.asked[0]).toEqual({ story: null, comment: Flow.COMMENT, repository: Flow.REPOSITORY })
-  })
-
-  it('the_comment_reaches_the_issue_beside_the_story_when_both_were_asked_for', async () => {
-    const flow = new Flow()
-
-    await flow.runWithComment()
-
-    const [asked] = flow.planIssues.asked
-    expect(asked.comment).toBe(Flow.COMMENT)
-    expect(asked.story?.key).toBe(Flow.STORY)
-  })
-
-  it('a_plan_asked_for_with_only_a_story_opens_its_issue_with_no_comment_at_all', async () => {
-    const flow = new Flow()
-
-    await flow.run()
-
-    const [asked] = flow.planIssues.asked
-    expect(asked.comment).toBe(null)
   })
 })
 

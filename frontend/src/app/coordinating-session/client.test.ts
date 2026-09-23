@@ -4,7 +4,6 @@ import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 
 const submission = () => ({
   id: StartPlanMother.TICKET,
-  userComment: null,
   repo: StartPlanMother.REPO,
   path: StartPlanMother.PATH,
 })

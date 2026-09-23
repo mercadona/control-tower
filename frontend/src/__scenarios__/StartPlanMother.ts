@@ -1,6 +1,5 @@
 const TICKET = 'ABC-123'
 const ISSUE_URL = 'https://github.com/owner/name/issues/141'
-const COMMENT = 'revisar la caché de precios en el checkout'
 const REPO = 'owner/name'
 const ANOTHER_REPO = 'owner/other-name'
 const PATH = '/Users/pedro/code/name'
@@ -11,11 +10,6 @@ const WORKTREE = '/Users/pedro/code/name/.worktrees/7'
 const REQUEST_BODY = '{"id":"ABC-123","repo":"owner/name","path":"/Users/pedro/code/name"}'
 const NON_CANONICAL_ROOT = '/private/var/code/name'
 const NON_CANONICAL_WORKTREE = '/private/var/code/name/.worktrees/7'
-const REQUEST_BODY_COMMENT_ONLY =
-  '{"user_comment":"revisar la caché de precios en el checkout","repo":"owner/name","path":"/Users/pedro/code/name"}'
-const REQUEST_BODY_WITH_COMMENT =
-  '{"id":"ABC-123","user_comment":"revisar la caché de precios en el checkout","repo":"owner/name",' +
-  '"path":"/Users/pedro/code/name"}'
 const REQUEST_BODY_ISSUE_URL =
   '{"id":"https://github.com/owner/name/issues/141","repo":"owner/name","path":"/Users/pedro/code/name"}'
 
@@ -104,7 +98,6 @@ export const StartPlanMother = {
   startedOnARedRepository,
   TICKET,
   ISSUE_URL,
-  COMMENT,
   REPO,
   ANOTHER_REPO,
   PATH,
@@ -115,8 +108,6 @@ export const StartPlanMother = {
   REQUEST_BODY,
   NON_CANONICAL_ROOT,
   NON_CANONICAL_WORKTREE,
-  REQUEST_BODY_COMMENT_ONLY,
-  REQUEST_BODY_WITH_COMMENT,
   REQUEST_BODY_ISSUE_URL,
   started,
   startedWithoutStory,

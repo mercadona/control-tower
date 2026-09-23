@@ -1,6 +1,5 @@
 import type { CheckoutRoot } from './checkout-root.ts'
 import type { EpicSpec } from './epic-spec.ts'
-import type { PlanComment } from './plan-comment.ts'
 import type { RepositoryName } from './repository-name.ts'
 import type { UserStory } from './user-story.ts'
 
@@ -51,9 +50,8 @@ export class PhasePrompt {
     Object.freeze(this)
   }
 
-  static brainstorming({ story, comment, repository, root }: {
-    story: UserStory | null,
-    comment: PlanComment | null,
+  static brainstorming({ story, repository, root }: {
+    story: UserStory,
     repository: RepositoryName,
     root: CheckoutRoot,
   }): PhasePrompt {
@@ -61,7 +59,7 @@ export class PhasePrompt {
       `Invoke the skill ${PhasePrompt.BRAINSTORMING_SKILL}.`,
       PhasePrompt.#roleOf({ repository, root }),
       PhasePrompt.FREEZE_IS_NOT_YOURS,
-      ...PhasePrompt.#idea({ story, comment }),
+      PhasePrompt.#idea(story),
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
@@ -94,16 +92,9 @@ export class PhasePrompt {
     return `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`
   }
 
-  static #idea({ story, comment }: { story: UserStory | null, comment: PlanComment | null }): string[] {
-    const idea: string[] = []
-    if (story !== null) {
-      idea.push(story.hasDescription()
-        ? `The ticket ${story.key.text} says: "${story.summary}". ${story.description}`
-        : `The ticket ${story.key.text} says: "${story.summary}".`)
-    }
-    if (comment !== null) {
-      idea.push(comment.text)
-    }
-    return idea
+  static #idea(story: UserStory): string {
+    return story.hasDescription()
+      ? `The ticket ${story.key.text} says: "${story.summary}". ${story.description}`
+      : `The ticket ${story.key.text} says: "${story.summary}".`
   }
 }

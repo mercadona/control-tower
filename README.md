@@ -337,12 +337,13 @@ What the cabin puts on screen, in order. A name in **Spanish** below is a label
 the page really shows; the last two steps have no panel of their own and are
 named in English here.
 
-**Entrance — the brainstorming.** The form takes a ticket key (`ABC-123`), a
-GitHub issue URL or free text, plus the repository and the absolute path of its
+**Entrance — the brainstorming.** The form requires a ticket key (`ABC-123`) or a
+GitHub issue URL, plus the repository and the absolute path of its
 local clone. Its button opens a coordinating session with
 `POST /coordinating-session`: a `claude` conversation in the governed checkout,
 with no worktree cut and no branch created. That conversation writes the design
-document and the execution spec.
+document and the execution spec. Additional context and feedback go directly
+into the coordinating conversation.
 
 **Puerta 1 · Congelación del spec.** The panel polls `GET /spec-freeze` and
 shows the yardstick's findings over the spec on disk. **Congelar el spec** stays

@@ -92,14 +92,6 @@ describe('PlanAgentBrief', () => {
     expect(errand()).not.toContain('nonce')
   })
 
-  it('sends the agent to the section where a person wrote by hand what they want planned', () => {
-    expect(errand()).toContain('Comentario de quien pide el plan')
-    expect(errand()).toContain('planning input')
-  })
-
-  it('says the criteria are the agents to propose when the issue declares none instead of leaving it stuck', () => {
-    expect(errand()).toContain('there is no spec from which to fill them')
-  })
 })
 
 describe('PlanAgentBrief resuming the agent', () => {

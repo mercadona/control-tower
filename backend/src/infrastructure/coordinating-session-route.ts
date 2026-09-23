@@ -137,8 +137,7 @@ export class CoordinatingSessionRoute {
       let opened: CoordinatingSessionOpened
       try {
         opened = await open.execute(new OpenCoordinatingSessionParams({
-          story: asked.story,
-          comment: asked.comment,
+          story: asked.story!,
           repository: target.repository,
           root: target.root,
         }))

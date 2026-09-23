@@ -83,13 +83,12 @@ gate 2 must already have left the work groomed or authorised.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
-| `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123`, or a GitHub issue url, `https://github.com/owner/name/issues/123` |
-| `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
+| `id` | string | yes | a user story key, `ABC-123`, or a GitHub issue url, `https://github.com/owner/name/issues/123` |
 | `repo` | string | yes | `owner/name` |
 | `path` | string | yes | absolute path of the local clone |
 
-`id` and `user_comment` may both be sent. Omit a field to leave it unsaid; do
-not send `null`, which is a malformed value.
+All three fields are required. `null` is a malformed value. Additional context
+belongs in the coordinating conversation.
 
 ### 202 Accepted
 
@@ -178,8 +177,7 @@ Of the request:
 | `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
 | `unknown-field` | 400 | `detail` names the fields, sorted |
 | `malformed-id` | 400 | `id` is not a story key such as `ABC-123` nor a GitHub issue url such as `https://github.com/owner/name/issues/123` |
-| `malformed-user-comment` | 400 | `user_comment` is blank or not text |
-| `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
+| `nothing-to-plan` | 400 | `id` was not sent |
 | `repo-list-retired` | 400 | the body carried `repo_list`; `detail` says to send `repo` and `path` for one repository instead |
 | `malformed-repo` | 400 | a repo is not `owner/name`; `detail` names which field |
 | `malformed-path` | 400 | a path is not absolute; `detail` names which field |
@@ -973,14 +971,13 @@ here as it does there.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
-| `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123`, or a GitHub issue url |
-| `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
+| `id` | string | yes | a user story key, `ABC-123`, or a GitHub issue url |
 | `repo` | string | yes | `owner/name` |
 | `path` | string | yes | absolute path of the local clone |
 
-`id` and `user_comment` may both be sent, the same as `POST /start-plan`. A
-user story hydrates the conversation — the coordinating session starts already
-knowing its summary and description — it does not replace it.
+The required user story hydrates the conversation: the coordinating session
+starts knowing its summary and description. Additional context and feedback
+are entered directly in that conversation.
 
 **202 Accepted**
 
@@ -1008,8 +1005,7 @@ Shared with `POST /start-plan`, because both read the body through the same
 | `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
 | `unknown-field` | 400 | `detail` names the fields, sorted |
 | `malformed-id` | 400 | `id` is not a story key nor a GitHub issue url |
-| `malformed-user-comment` | 400 | `user_comment` is blank or not text |
-| `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
+| `nothing-to-plan` | 400 | `id` was not sent |
 | `malformed-repo` | 400 | `repo` is not `owner/name` |
 | `malformed-path` | 400 | `path` is not absolute |
 | `checkout-not-confirmed` | 400 | `path` is not a checkout of `repo` |

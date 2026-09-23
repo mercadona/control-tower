@@ -6,7 +6,6 @@ import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
 import { RegisteredCheckout } from '../../domain/value-objects/registered-checkout.ts'
 import type { CheckoutRegistry } from '../../domain/ports/checkout-registry.ts'
 import type { PlanAgents } from '../../domain/ports/plan-agents.ts'
-import type { PlanComment } from '../../domain/value-objects/plan-comment.ts'
 import type { PlanIssue } from '../../domain/value-objects/plan-issue.ts'
 import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
@@ -21,17 +20,14 @@ import type { DispatchClaims } from '../../domain/ports/dispatch-claims.ts'
 import type { PlanRecords } from '../../domain/ports/plan-records.ts'
 
 export class StartPlanParams {
-  readonly story: UserStoryKey | UserStoryUrl | null
-  readonly comment: PlanComment | null
+  readonly story: UserStoryKey | UserStoryUrl
   readonly targets: readonly PlanTarget[]
 
-  constructor({ story, comment, targets }: {
-    story: UserStoryKey | UserStoryUrl | null,
-    comment: PlanComment | null,
+  constructor({ story, targets }: {
+    story: UserStoryKey | UserStoryUrl,
     targets: readonly PlanTarget[],
   }) {
     this.story = story
-    this.comment = comment
     this.targets = targets
     Object.freeze(this)
   }
@@ -105,13 +101,13 @@ export class StartPlan {
       const root = await this.workspace.confirm({ root: target.root, repository: target.repository })
       confirmed.push(new PlanTarget({ repository: target.repository, root }))
     }
-    const detail = params.story === null ? null : await this.userStories.detail(params.story)
+    const detail = await this.userStories.detail(params.story)
 
     const started: PlanStarted[] = []
     const failed: PlanNotStarted[] = []
     for (const target of confirmed) {
       try {
-        started.push(await this.#start(target, params.story, params.comment, detail))
+        started.push(await this.#start(target, params.story, detail))
       } catch (failure) {
         if (!(failure instanceof PlanFailure)) throw failure
         failed.push(new PlanNotStarted({ repository: target.repository, cause: failure }))
@@ -123,11 +119,10 @@ export class StartPlan {
 
   async #start(
     target: PlanTarget,
-    story: UserStoryKey | UserStoryUrl | null,
-    comment: PlanComment | null,
-    detail: UserStory | null
+    story: UserStoryKey | UserStoryUrl,
+    detail: UserStory
   ): Promise<PlanStarted> {
-    const issue = await this.planIssues.open({ story: detail, comment, repository: target.repository })
+    const issue = await this.planIssues.open({ story: detail, repository: target.repository })
     await this.claims.claim({ issue, repository: target.repository, root: target.root })
     const sown = await this.#prepare(target, issue)
     const located = sown.located
@@ -153,7 +148,7 @@ export class StartPlan {
 
   async #launch(
     target: PlanTarget,
-    story: UserStoryKey | UserStoryUrl | null,
+    story: UserStoryKey | UserStoryUrl,
     issue: PlanIssue,
     located: RootedWorkspaceLocation
   ): Promise<string> {
