@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { ResizeSession, ResizeSessionParams } from '../../src/application/actions/resize-session.ts'
 import { LiveSessions, LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -54,23 +54,17 @@ class ResizeSessionThatFoundTheSessionGone extends ResizeSession {
 }
 
 class RunningApi {
-  static readonly NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
 
   static async listening(liveSessions: LiveSessions, resizeSession: ResizeSession): Promise<number> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementProgress: undefined,
       externalTools: undefined,
       listLiveSessions: undefined,
       liveSessions,
       resizeSession,
       sessions: new PlanSessions(),
       activePlans: undefined,
-      planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })

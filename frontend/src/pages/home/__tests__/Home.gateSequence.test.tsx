@@ -45,7 +45,7 @@ const stubGates = (specFreeze: Answer, epicGroom: Answer, coordinating: Answer =
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinating)
-    if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
+    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
@@ -191,3 +191,4 @@ describe('Home and the gate sequence', () => {
     expect(await screen.findByRole('button', GROOM_BUTTON)).toBeEnabled()
   })
 })
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

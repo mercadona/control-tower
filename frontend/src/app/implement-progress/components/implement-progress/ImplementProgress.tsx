@@ -1,5 +1,5 @@
 import { STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
-import type { ImplementProgressRead } from 'app/implement-progress/useImplementProgress'
+import type { ImplementProgressRead } from 'app/implement-progress/ImplementProgress.types'
 import { Banner } from 'system-ui/banner'
 import './ImplementProgress.css'
 

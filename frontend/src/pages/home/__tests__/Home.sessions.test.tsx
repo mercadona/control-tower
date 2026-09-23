@@ -46,7 +46,7 @@ const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDIN
     if (url === `/sessions/${SESSION_ID}/input`) return responseFor(TYPED)
     if (url === `/sessions/${SESSION_ID}/resize`) return responseFor(RESIZED)
     if (url === '/coordinating-session' && init === undefined) return responseFor(coordinatingSession)
-    if (url.startsWith('/implement-progress/')) return responseFor(NO_IMPLEMENTATION_RUN_YET)
+    if (url.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(NO_IMPLEMENTATION_RUN_YET))
     if (url.startsWith('/implement-history/')) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     throw new Error(`unexpected fetch to ${url}`)
   })
@@ -161,3 +161,4 @@ describe('Home · sessions panel', () => {
     expect(scrolling).toHaveBeenCalled()
   })
 })
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

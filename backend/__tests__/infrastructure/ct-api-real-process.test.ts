@@ -434,8 +434,8 @@ describe('ct-api entrypoint', () => {
     const first = await opened.json() as {
       conversation: string, target: string, session: { id: string },
     }
-    await expect.poll(() => fixture.launchCount()).toBe(1)
     await TheCoordinatingSessionEndpoint.waitsForOutput(firstPort, first.session.id, LifecycleFixture.READY)
+    expect(await fixture.launchCount()).toBe(1)
     expect(await TheCoordinatingSessionEndpoint.type(
       firstPort, first.session.id, `${LifecycleFixture.INPUT}\r`
     )).toHaveProperty('status', 202)
@@ -476,8 +476,8 @@ describe('ct-api entrypoint', () => {
     }
     expect(second.conversation).not.toBe(first.conversation)
     expect(second.target).not.toBe(first.target)
-    await expect.poll(() => fixture.launchCount()).toBe(2)
     await TheCoordinatingSessionEndpoint.waitsForOutput(firstPort, second.session.id, LifecycleFixture.READY)
+    expect(await fixture.launchCount()).toBe(2)
     expect((await TheCoordinatingSessionEndpoint.close(firstPort, second.conversation, second.target)).status).toBe(200)
 
     await Entrypoint.killAll()
@@ -491,10 +491,11 @@ describe('ct-api entrypoint', () => {
       restartedPort, LifecycleFixture.REPOSITORY, fixture.checkout
     )
     expect(replacementAfterRestart.status).toBe(202)
-    const third = await replacementAfterRestart.json() as { conversation: string, target: string }
+    const third = await replacementAfterRestart.json() as { conversation: string, target: string, session: { id: string } }
     expect(third.conversation).not.toBe(second.conversation)
     expect(third.target).not.toBe(second.target)
-    await expect.poll(() => fixture.launchCount()).toBe(3)
+    await TheCoordinatingSessionEndpoint.waitsForOutput(restartedPort, third.session.id, LifecycleFixture.READY)
+    expect(await fixture.launchCount()).toBe(3)
     expect(fixture.checkoutSnapshot()).toEqual(beforeClose)
     expect(() => process.kill(unrelated.pid!, 0)).not.toThrow()
   }, 60_000)
@@ -662,28 +663,23 @@ describe('ct-api entrypoint', () => {
     expect(body.detail).toMatch(/^gh issue view failed: /)
   })
 
-  it('the_progress_of_a_slice_is_served_by_the_running_api', async () => {
+  it('the_running_api_does_not_read_an_arbitrary_checkout_as_recorded_work', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
     const root = await RunFileFixture.inATemporaryRoot()
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/implement-progress/${RunFileFixture.ISSUE}?root=${encodeURIComponent(root)}&repo=owner%2Fname`
+        `http://127.0.0.1:${port}/work-progress/${RunFileFixture.ISSUE}?root=${encodeURIComponent(root)}&repo=owner%2Fname`
       )
 
-      expect(response.status).toBe(200)
-      const body = await response.json() as
-        { step: string, task: number, total_tasks: number, attempt: number }
-      expect(body.step).toBe('implement')
-      expect(body.task).toBe(1)
-      expect(body.total_tasks).toBe(1)
-      expect(body.attempt).toBe(1)
+      expect(response.status).toBe(400)
+      expect((await response.json() as Failure).code).toBe('unknown-work-field')
     } finally {
       await RunFileFixture.remove(root)
     }
   })
 
-  it('a_slice_whose_second_veto_sent_it_to_the_adviser_is_served_as_that_step', async () => {
+  it('the_retired_progress_route_is_absent_even_when_a_run_file_exists', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
     const root = await RunFileFixture.inATemporaryRoot('advise')
 
@@ -692,22 +688,20 @@ describe('ct-api entrypoint', () => {
         `http://127.0.0.1:${port}/implement-progress/${RunFileFixture.ISSUE}?root=${encodeURIComponent(root)}&repo=owner%2Fname`
       )
 
-      expect(response.status).toBe(200)
-      const body = await response.json() as { step: string, task: number }
-      expect(body.step).toBe('advise')
-      expect(body.task).toBe(1)
+      expect(response.status).toBe(404)
+      expect((await response.json() as Failure).code).toBe('not-found')
     } finally {
       await RunFileFixture.remove(root)
     }
   })
 
-  it('plan_events_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
+  it('unified_progress_is_mounted_in_the_real_process_and_refuses_unknown_work', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
-    const response = await fetch(`http://127.0.0.1:${port}/plan-events/54?repo=jjponz%2Frepo-pulse`)
+    const response = await fetch(`http://127.0.0.1:${port}/work-progress/54?repo=jjponz%2Frepo-pulse`)
 
     expect(response.status).toBe(400)
-    expect((await response.json() as Failure).code).toBe('not-watched')
+    expect((await response.json() as Failure).code).toBe('work-not-found')
   })
 
   it('a_whole_request_to_spec_freeze_reaches_the_wiring_the_entrypoint_built', async () => {

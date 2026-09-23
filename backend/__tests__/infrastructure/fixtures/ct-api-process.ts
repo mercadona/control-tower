@@ -37,6 +37,16 @@ export class Entrypoint {
   static readonly #ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
   static readonly #TIMEOUT_MS = 30_000
   static readonly #spawned: ChildProcess[] = []
+  static readonly #configs: string[] = []
+
+  static async isolated(environment: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {
+    let config = environment.CLAUDE_CONFIG_DIR
+    if (config === undefined) {
+      config = await mkdtemp(join(tmpdir(), 'ct-api-isolated-config-'))
+      Entrypoint.#configs.push(config)
+    }
+    return { ...process.env, ...environment, CT_STATE_DIR: environment.CT_STATE_DIR, CLAUDE_CONFIG_DIR: config }
+  }
 
   static startPlan(port: number, body: string = '{"id":"ABC-123"}'): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/start-plan`, {
@@ -53,6 +63,7 @@ export class Entrypoint {
       if (child.pid !== undefined) pids.add(child.pid)
     }
     await Promise.all([...pids].map((pid) => Entrypoint.killPid(pid)))
+    await Promise.all(Entrypoint.#configs.splice(0).map((config) => rm(config, { recursive: true, force: true })))
   }
 
   static descendantsOf(pid: number | undefined): number[] {
@@ -100,9 +111,10 @@ export class Entrypoint {
     throw new Error(`fixture process ${pid} did not exit within 5000ms`)
   }
 
-  static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
+  static async refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
+    const isolated = await Entrypoint.isolated(environment)
     const child = spawn(process.execPath, [Entrypoint.#PATH], {
-      env: { ...process.env, ...environment },
+      env: isolated,
       stdio: ['ignore', 'ignore', 'pipe'],
     })
     Entrypoint.#spawned.push(child)
@@ -130,12 +142,15 @@ export class Entrypoint {
   }
 
   static async makeRunBackendWithoutReinstalling(environment: NodeJS.ProcessEnv): Promise<number> {
+    const isolated = await Entrypoint.isolated(environment)
     const child = spawn('make', [
       '--silent', '-o', 'install-backend', 'run-backend',
       ...Entrypoint.#asOverridesThatBeatALocalEnvFile(environment),
+      `CT_STATE_DIR=${isolated.CT_STATE_DIR ?? ''}`,
+      `CLAUDE_CONFIG_DIR=${isolated.CLAUDE_CONFIG_DIR}`,
     ], {
       cwd: Entrypoint.#ROOT,
-      env: { ...process.env, ...environment },
+      env: isolated,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     Entrypoint.#spawned.push(child)
@@ -183,8 +198,9 @@ export class Entrypoint {
   }
 
   static async started(environment: NodeJS.ProcessEnv): Promise<StartedEntrypoint> {
+    const isolated = await Entrypoint.isolated(environment)
     const child = spawn(process.execPath, [Entrypoint.#PATH], {
-      env: { ...process.env, ...environment },
+      env: isolated,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     Entrypoint.#spawned.push(child)

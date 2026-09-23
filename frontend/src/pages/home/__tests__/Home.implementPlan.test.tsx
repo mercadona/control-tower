@@ -1,6 +1,7 @@
 import { act, screen } from '@testing-library/react'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { openHome } from './helpers'
 
@@ -13,8 +14,9 @@ describe('Home · automatic implementation', () => {
   it('a ready plan follows backend implementation without posting an order', async () => {
     vi.useFakeTimers()
     const changes = HeadlessPlanMother.deferredChanges()
+    let progress = WorkProgressMother.planning('ready')
     WorkflowSnapshotStorage.save({
-      phase: 'ready',
+      phase: 'planning',
       request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
       plan: {
         id: StartPlanMother.TICKET,
@@ -31,7 +33,8 @@ describe('Home · automatic implementation', () => {
       if (input === '/sessions') return Promise.resolve(new Response('{"sessions":[]}'))
       if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response('{"status":"none"}'))
       if (input === '/spec-freeze' || input === '/epic-groom') return Promise.resolve(new Response('{"status":"none"}'))
-      if (String(input).startsWith('/implement-progress/') || String(input).startsWith('/implement-history/')) {
+      if (String(input).startsWith('/work-progress/')) return Promise.resolve(new Response(progress.body))
+      if (String(input).startsWith('/implement-history/')) {
         return Promise.resolve(new Response('{}', { status: 400 }))
       }
       throw new Error(`unexpected fetch to ${String(input)}`)
@@ -40,9 +43,11 @@ describe('Home · automatic implementation', () => {
     openHome()
     expect(changes.activeReadCount()).toBe(1)
     await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
 
     expect(screen.getByRole('link', { name: 'Abrir el plan en GitHub' })).toHaveAttribute('href', StartPlanMother.ISSUE.url)
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
+    progress = WorkProgressMother.implementing()
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     expect(changes.activeReadCount()).toBe(2)
     await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))

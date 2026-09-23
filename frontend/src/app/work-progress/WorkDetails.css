@@ -1,46 +1,42 @@
-.plan-progress {
+.work-details {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.plan-progress__state {
+.work-details__facts {
   margin: 0;
 }
 
-.plan-progress__facts {
-  margin: 0;
-}
-
-.plan-progress__facts code,
-.plan-progress__details code {
+.work-details__facts code,
+.work-details__disclosure code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: break-word;
 }
 
-.plan-progress__details {
+.work-details__disclosure {
   margin-top: 8px;
 }
 
-.plan-progress__details summary {
+.work-details__disclosure summary {
   cursor: pointer;
 }
 
-.plan-progress__details dl {
+.work-details__disclosure dl {
   display: grid;
   gap: 8px;
   margin: 12px 0 0;
 }
 
-.plan-progress__details dt {
+.work-details__disclosure dt {
   color: var(--foreground-secondary);
 }
 
-.plan-progress__details dd {
+.work-details__disclosure dd {
   margin: 2px 0 0;
 }
 
-.plan-progress__copy-result {
+.work-details__copy-result {
   margin: 0;
   color: var(--foreground-secondary);
 }

@@ -31,6 +31,10 @@ const workflowWithoutStory = (): WorkflowSnapshot => ({
 })
 
 describe('WorkflowSnapshotStorage', () => {
+  it('restores old ready snapshots as planning hints rather than asserting current document readiness', () => {
+    localStorage.setItem(WORKFLOW_SNAPSHOT_KEY, JSON.stringify({ version: 2, workflow: { ...workflow(), phase: 'ready' } }))
+    expect(WorkflowSnapshotStorage.load()).toEqual(workflow())
+  })
   it('should load a saved versioned workflow', () => {
     WorkflowSnapshotStorage.save(workflow())
 

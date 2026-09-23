@@ -11,7 +11,7 @@ import type { StartPlanParams } from '../../src/application/actions/start-plan.t
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CoordinatingSessions, CoordinatingSessionState, HeldCoordinatingSession } from '../../src/infrastructure/coordinating-sessions.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { DispatchCandidates } from '../../src/domain/ports/dispatch-candidates.ts'

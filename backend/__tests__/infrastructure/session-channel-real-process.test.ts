@@ -7,7 +7,7 @@ import { RunningServers } from '../servers.ts'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import type { TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
 import { ListLiveSessions } from '../../src/application/queries/list-live-sessions.ts'
@@ -40,10 +40,6 @@ class RealTerminals {
 
 class RunningApi {
   static readonly #NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
-  static readonly #NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
 
   static async openedOn(realTerminals: RealTerminals): Promise<{ port: number, session: LiveSession }> {
     const liveSessions = new PtyLiveSessions({
@@ -61,7 +57,6 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementProgress: undefined,
       implementHistory: undefined,
       externalTools: undefined,
       listLiveSessions: new ListLiveSessions({ liveSessions }),
@@ -70,7 +65,6 @@ class RunningApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       sessions: new PlanSessions(),
       activePlans: undefined,
-      planEvents: RunningApi.#NO_EVENTS,
       stderr: undefined,
       frontendRoot: RunningApi.#NO_FRONTEND,
     })

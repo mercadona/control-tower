@@ -6,10 +6,10 @@ import { useCoordinatingSession } from 'app/coordinating-session/useCoordinating
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
-import { PlanProgress } from 'app/plan-events/components/plan-progress'
-import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
+import { WorkDetails } from 'app/work-progress/WorkDetails'
+import { useWorkProgress } from 'app/work-progress/useWorkProgress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
-import { SliceSession, type SliceRecovery } from 'app/slice-session/components/slice-session'
+import { SliceSession, SliceProgress, type SliceRecovery } from 'app/slice-session/components/slice-session'
 import { useAutomaticSliceSelection } from 'app/slice-session/useAutomaticSliceSelection'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
@@ -154,7 +154,7 @@ const Home = () => {
       uncertainActiveRef.current = null
       const reconciled: WorkflowSnapshot = {
         ...current,
-        phase: active.phase === 'implementing' ? 'implementing' : current.phase === 'ready' ? 'ready' : 'planning',
+        phase: active.phase,
       }
       workflowRef.current = reconciled
       setWorkflow(reconciled)
@@ -279,15 +279,6 @@ const Home = () => {
     setBrainstormingUnreachable(true)
   }, [])
 
-  const planReady = useCallback(() => {
-    const current = workflowRef.current
-    if (current === null || current.phase === 'implementing') return
-    const ready: WorkflowSnapshot = { ...current, phase: 'ready' }
-    workflowRef.current = ready
-    setWorkflow(ready)
-    WorkflowSnapshotStorage.save(ready)
-  }, [])
-
   const discardWorkflow = () => {
     const current = workflowRef.current
     const uncertain = uncertainActiveRef.current
@@ -405,6 +396,12 @@ const Home = () => {
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
   const restoredNeedsRecovery = reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain'
   const restoredIsConfirmed = reconciliation === 'confirmed' || reconciliation === 'not-required'
+  const workRead = useWorkProgress(workflow !== null && restoredIsConfirmed
+    ? { repo: workflow.plan.repo, issue: workflow.plan.issue.number, agent: workflow.plan.agent }
+    : null)
+  const workProgress = workRead.kind === 'read' || workRead.kind === 'stale' ? workRead.snapshot.progress : null
+  const planIsReady = workProgress?.phase === 'planning' && workProgress.plan.kind === 'available' && workProgress.plan.value === 'ready'
+  const executionStarted = workProgress?.phase === 'implementing'
   const showRestoredDiscard = restoredRef.current && workflow?.phase !== 'implementing' && !restoredNeedsRecovery
 
   const currentStage: WorkflowStageName = workflow === null ? 'request' : 'implementation'
@@ -412,9 +409,9 @@ const Home = () => {
   const implementationStatus: WorkflowStepStatus = workflow === null ? 'pending' : 'active'
   const implementationDescription = !restoredIsConfirmed
     ? 'Estamos comprobando el estado del plan guardado.'
-    : workflow?.phase === 'implementing'
+    : executionStarted
       ? 'Seguimos la implementación. Aquí verás el progreso que comunica el backend.'
-      : workflow?.phase === 'planning'
+      : !planIsReady
         ? 'El agente está preparando el plan como parte de la implementación. No necesitas aprobarlo.'
         : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
   const activePlan = uncertainActiveRef.current
@@ -521,7 +518,7 @@ const Home = () => {
         { label: STAGE_LABEL[currentStage] },
       ]
   const showStartAnother = workflow?.phase === 'implementing' && restoredIsConfirmed
-  const showHistory = workflow !== null && workflow.phase === 'implementing' && restoredIsConfirmed
+  const showHistory = workflow !== null && executionStarted && restoredIsConfirmed
 
   return (
     <div className="home">
@@ -574,9 +571,8 @@ const Home = () => {
                 <SliceSession
                   key={`${slice.plan.repo}:${slice.plan.issue.number}`}
                   issue={slice.plan.issue.number}
-                  root={slice.plan.root ?? slice.request.path}
                   repo={slice.plan.repo}
-                  phase={slice.phase}
+                  agent={slice.plan.agent}
                   recovery={sliceRecoveryOf(slice)}
                   onSelect={() => selectSlice(slice)}
                   onProgress={(progress) => observeSliceProgress(slice.plan, progress)}
@@ -621,37 +617,26 @@ const Home = () => {
             >
               {recovery}
               <BaselineNotice baseline={workflow.plan.baseline} />
-              {restoredIsConfirmed && workflow.phase === 'implementing' && (
+              {restoredIsConfirmed && executionStarted && (
                 <Banner
                   type="informative"
                   title="Implementación iniciada automáticamente"
                   description={<>El backend ha registrado al agente <code>{workflow.plan.agent}</code>.</>}
                 />
               )}
-              {restoredIsConfirmed && workflow.phase === 'implementing' && (
-                <SliceSession
+              {restoredIsConfirmed && (
+                <SliceProgress
                   key={`${workflow.plan.repo}:${workflow.plan.issue.number}:implementation`}
                   issue={workflow.plan.issue.number}
-                  root={workflow.plan.root ?? workflow.request.path}
-                  repo={workflow.plan.repo}
-                  phase="implementing"
+                  read={workRead}
                   onProgress={(progress) => observeSliceProgress(workflow.plan, progress)}
                 />
               )}
-              {restoredIsConfirmed && workflow.phase === 'planning' && (
-                <PlanningProgress
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}:planning`}
-                  issue={workflow.plan.issue.number}
-                  repo={workflow.plan.repo}
-                />
-              )}
-              <PlanProgress
+              <WorkDetails
                 key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                 plan={workflow.plan}
-                onReady={planReady}
-                observe={restoredIsConfirmed && workflow.phase !== 'implementing'}
               />
-              {workflow.phase === 'ready' && restoredIsConfirmed && (
+              {planIsReady && restoredIsConfirmed && (
                 <div className="home__plan-link">
                   <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
                     Abrir el plan en GitHub
@@ -726,11 +711,12 @@ const Home = () => {
               </div>
               {showHistory && workflow !== null && (
                 <aside className="home__history" aria-label="Progreso de la implementación">
-                  <ImplementHistory
+                    <ImplementHistory
                     key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
                     issue={workflow.plan.issue.number}
                     root={workflow.plan.root ?? workflow.request.path}
-                    repo={workflow.plan.repo}
+                      repo={workflow.plan.repo}
+                      visible={!sessionsColumnCollapse.collapsed}
                   />
                 </aside>
               )}

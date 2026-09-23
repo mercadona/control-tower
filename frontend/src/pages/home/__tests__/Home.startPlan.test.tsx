@@ -243,8 +243,8 @@ describe('Home · opens the brainstorming', () => {
     openRestored({ phase: 'planning' })
 
     await screen.findByRole('status')
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.BRANCH)
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.WORKTREE)
+    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.BRANCH)
+    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.WORKTREE)
   })
 
   it('should show a compact read-only request summary when the completed request reopens', async () => {

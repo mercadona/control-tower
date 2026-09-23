@@ -18,8 +18,8 @@ import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measu
 class RealCallMother {
   static readonly CONVERSATION = '11111111-1111-4111-8111-111111111111'
   static readonly CALL = '22222222-2222-4222-8222-222222222222'
-  static readonly WORKER = new URL('../../src/infrastructure/headless-call-worker.ts', import.meta.url).pathname
-  static readonly FIXTURE = new URL('fixtures/headless-child.ts', import.meta.url).pathname
+  static readonly WORKER = fileURLToPath(new URL('../../src/infrastructure/headless-call-worker.ts', import.meta.url))
+  static readonly FIXTURE = fileURLToPath(new URL('fixtures/headless-child.ts', import.meta.url))
   static readonly groups = new Set<number>()
 
   static directory(root: string): string {
@@ -351,3 +351,4 @@ describe('ClaudeCalls with real local processes', () => {
     expect(capture.promptVariable).toBeNull()
   })
 })
+import { fileURLToPath } from 'node:url'

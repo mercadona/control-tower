@@ -5,6 +5,11 @@ export class PlanFailure extends Error {
   }
 }
 
+export class WorkProgressFailure extends PlanFailure {}
+export class WorkNotFound extends WorkProgressFailure {}
+export class WorkNotRead extends WorkProgressFailure {}
+export class WorkNotUnderstood extends WorkProgressFailure {}
+
 export class UserStoryFailure extends PlanFailure {}
 
 export class UserStoryNotRead extends UserStoryFailure {}

@@ -223,168 +223,85 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ---
 
-## `GET /plan-events/:issue?repo=owner/name`
+## `GET /work-progress/:issue?repo=owner/name`
 
-Server-sent events. It reports whether the plan is being written or is
-committed. The stream stays open until the client disconnects, and polls in the
-meantime.
+One current-progress query for recorded work, from planning through review and
+fixes. Only `repo` is accepted; the checkout comes from durable work evidence,
+never from a caller-supplied path. Inventory and progress use the same inspection
+of that evidence. Neither query launches publication or manages review watchers.
 
-It only serves an issue whose plan **this process** started or recovered. A
-restarted backend has forgotten every session it did not recover from cmux.
+Every successful answer carries `{repo, issue, agent, progress}`. The identity
+lets the caller reject an answer from a replaced conversation. `progress` is
+one of three variants:
 
-**200** with `Content-Type: text/event-stream`. Two frame kinds:
+| `phase` | Fields |
+|---|---|
+| `planning` | `plan`, `activity` |
+| `implementing` | `execution` |
+| `uncertain` | `diagnostic`, `recovery: {action, detail}`, `refusal` |
 
-```
-data: {"state":"writing"}
+A reading is `{kind:"available", value:...}` or
+`{kind:"unavailable", detail:"..."}`. Plan and activity are independent: one
+failed read does not erase the other. Execution can also be
+`{kind:"partial", value:..., detail:"..."}` when local progress is known but
+delivery evidence could not be checked. Never treat partial delivery as a
+confirmed publication or use it to advance automatically to another slice.
 
-data: {"state":"ready"}
-
-event: error
-data: {"code":"plan-progress-not-read","detail":"git status refused"}
-```
-
-`state` is `writing` or `ready`. A frame is only sent when the state
-**changes**, so expect nothing on the wire while the agent works. An `error`
-frame does not close the stream; the next poll may succeed.
-
-**Refusals** (before the stream opens, as JSON)
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `malformed-watched-issue` | 400 | `:issue` is not a positive whole number |
-| `malformed-repo` | 400 | `repo` is missing or not `owner/name` |
-| `not-watched` | 400 | this process started no plan for that issue |
-
-```
-curl -N 'http://127.0.0.1:8787/plan-events/7?repo=owner/name'
-```
-
----
-
-## `GET /planning-progress/:issue?repo=owner/name`
-
-What the plan agent is doing while it plans, before the plan is written. The
-plan agent's own `stream-json` output already carries this — every tool call
-and every text block the agent produces — but nothing read it until the call
-ended, so a person watching the page saw only the agent's id and its branch for
-as long as the agent kept working. This route polls the same growing stream
-file the plan agent's process writes, and reports where it is now.
-
-Poll it; there is no stream. Only `repo` is required — the watch is resolved
-through the same in-memory registry `plan-events` uses, and the stream file's
-path comes from this process's own state root, never from the caller.
-
-**200 OK, while the agent is still running**
+**Planning example**
 
 ```json
-{"state":"running","running_ms":372000,"tool_calls":41,
- "last_tool":{"name":"Read","argument":"plugin/conventions/testing.md"},
- "last_text":"Ahora escribo el plan"}
+{"repo":"owner/name","issue":7,"agent":"conversation-7","progress":{
+  "phase":"planning",
+  "plan":{"kind":"available","value":"writing"},
+  "activity":{"kind":"available","value":{
+    "state":"running","running_ms":372000,"tool_calls":41,
+    "last_tool":{"name":"Read","argument":"plugin/conventions/testing.md"},
+    "last_text":"Reading conventions"
+  }}
+}}
 ```
 
-**200 OK, once the call has ended**
+The plan value is `writing` or `ready`, measured by its contract and committed
+files. Activity state is `running` or `finished`; a finished call alone proves
+neither readiness nor successful execution. Activity includes elapsed wall time,
+tool-call count, last tool (a nullable object with a name and nullable argument)
+and last text (nullable).
+
+**Execution example**
 
 ```json
-{"state":"finished","running_ms":614000,"tool_calls":57,
- "last_tool":{"name":"Write","argument":"docs/plan-500.md"},
- "last_text":"El plan queda escrito."}
+{"repo":"owner/name","issue":7,"agent":"conversation-7","progress":{
+  "phase":"implementing","execution":{"kind":"available","value":{
+    "step":"implement","task":2,"total_tasks":5,"name":"Answer the route",
+    "attempt":2,"discards":1,"pull_request":null
+  }}
+}}
 ```
 
-| Field | Type | Meaning |
-|---|---|---|
-| `state` | `running` \| `finished` | whether the planning call is still going |
-| `running_ms` | number | now minus the call's start; once `finished`, its whole wall duration |
-| `tool_calls` | number | tool calls seen so far; `0`, never `null` |
-| `last_tool` | `{name, argument}` \| `null` | `null` until the first tool call is seen; `argument` is `null` for a tool with no string input |
-| `last_text` | string \| `null` | the agent's last text block; `null` until one is seen |
+The execution vocabulary remains `starting`, `implement`, `controls`, `judge`,
+`advise`, `commit`, `reconcile`, `global`, `slice-judge`, `e2e`, `publishing`,
+`delivered`, `in-review`, and `fixing`. Taskless steps carry null task/name/attempt.
+Local delivery is not remote publication: driver-owned work remains `publishing`
+until checked delivery is proven. Review and fixes carry the pull request link;
+publication can also carry an already-created pull request while release is pending.
 
-Once `state` is `finished` the body stops changing: `tool_calls`, `last_tool`
-and `last_text` hold whatever they last read, and the client can stop polling.
+**Refusals** — all use status 400 and `{code, detail}`:
 
-**Refusals**
+| `code` | Meaning |
+|---|---|
+| `malformed-work-issue` | issue is not a positive safe integer |
+| `malformed-work-repo` | repo is missing or malformed |
+| `unknown-work-field` | a query field other than repo was supplied |
+| `work-not-found` | no recorded work has this identity |
+| `work-not-read` | inventory evidence could not be inspected |
+| `work-not-understood` | the recorded work lacks its checkout root |
 
-| `code` | Status | Meaning |
-|---|---|---|
-| `malformed-planning-issue` | 400 | `:issue` is not a positive whole number |
-| `malformed-repo` | 400 | `repo` is missing or not `owner/name` (shared on purpose with `plan-events`) |
-| `not-watched` | 400 | this process started no plan for that issue (shared on purpose with `plan-events`) |
-| `planning-progress-not-read` | 400 | the conversation has no single recorded planning call, or the stream could not be read |
-
-```
-curl -s 'http://127.0.0.1:8787/planning-progress/7?repo=owner/name'
-```
-
----
-
-## `GET /implement-progress/:issue?root=<abs path>&repo=owner/name`
-
-Where the implementation stands. Poll it; there is no stream. **Both** query
-parameters are required — `repo` since the answer may name a pull request.
-
-**200 OK**
-
-```json
-{"step":"implement","task":2,"total_tasks":5,"name":"La ruta contesta",
- "attempt":2,"discards":1,"pull_request":null}
-```
-
-Six fields plus `pull_request`, always all seven present. `null` means *not
-applicable at this step*, not *unknown*.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `step` | string | see the table below |
-| `task` | number \| null | the task in progress |
-| `total_tasks` | number \| null | tasks in the plan |
-| `name` | string \| null | the task's heading, read from the plan file |
-| `attempt` | number \| null | 1 plus every retry so far |
-| `discards` | number \| null | work thrown away |
-| `pull_request` | `{number, url}` \| null | set only under review |
-
-**Steps**
-
-| `step` | Meaning | Has `task` |
-|---|---|---|
-| `starting` | the worktree exists, no run file yet | no |
-| `implement` | writing the task | yes |
-| `controls` | running the controls | yes |
-| `judge` | the judge is reading it | yes |
-| `advise` | advice is being applied | yes |
-| `commit` | committing | yes |
-| `reconcile` | reconciling with the base | no |
-| `global` | the global gates | no |
-| `slice-judge` | the slice judge | no |
-| `e2e` | the end-to-end gate | no |
-| `delivered` | the plugin machine reached its delivered result | no |
-| `in-review` | waiting for a person on the pull request | no |
-| `fixing` | applying what a person asked for | no |
-
-`starting`, and every `no` row, answer `task`, `name` and `attempt` as `null`.
-
-The last three are the same underlying delivery, told apart by the plan issue's
-status: `in-review` from `in-review`, `fixing` from `in-progress`, and
-`delivered` from any other. **`pull_request` is only sent for the first two.**
-The backend driver stops when the plugin reports delivery; it does not open,
-edit or merge a pull request and makes no delivery model call. The coordinating
-flow owns pull-request publication and checked release, so `delivered` alone is
-not evidence that either happened.
-
-**Refusals**
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `malformed-root` | 400 | `root` is missing or not absolute |
-| `malformed-progress-repo` | 400 | `repo` is missing or not `owner/name` |
-| `implementation-progress-not-read` | 400 | see below |
-
-`implementation-progress-not-read` is one code for three different situations —
-the worktree is not there, the run file cannot be read, or it is not valid JSON.
-Only `detail` tells them apart. Treat it as *keep polling*: a run file caught
-mid-write reads as unparsable and the next poll succeeds.
-
-```
-curl -s 'http://127.0.0.1:8787/implement-progress/7?root=/repo/checkout&repo=owner/name'
-```
+The frontend polls every three seconds after a response, or fifteen seconds for
+confirmed delivered/review/fixing states. It retries read failures, retaining a
+last-known answer explicitly as stale. Unmounting aborts the request and timer.
+The retired `/plan-events`, `/planning-progress` and `/implement-progress` routes
+are not mounted and answer 404. Upgrade the served frontend and backend together;
+an old browser must reload to acquire the new client.
 
 ---
 
@@ -393,7 +310,8 @@ curl -s 'http://127.0.0.1:8787/implement-progress/7?root=/repo/checkout&repo=own
 What already happened, one row per finished step. `ct-step commit` appends one
 row per attempt to `docs/superpowers/metrics/issue-<n>.jsonl` inside the
 slice's worktree; this route reads that file. **Both** query parameters are
-required, same as `/implement-progress`.
+required. The frontend reads this endpoint only while its history panel is visible,
+and requests a fresh answer immediately when the panel opens again.
 
 This endpoint reads plugin attempt metrics. Backend headless invocations also
 leave a private, provider-neutral `agent-measurements-v1.json` under
@@ -428,7 +346,7 @@ not a refusal.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `step` | string | the same step vocabulary `/implement-progress` uses |
+| `step` | string | the same execution-step vocabulary `/work-progress` uses |
 | `task` | number \| null | the task the row measures |
 | `task_name` | string \| null | the task's heading, read from the plan file |
 | `tasks_total` | number \| null | tasks in the plan |
@@ -497,8 +415,8 @@ workspace.
 
 | `phase` | Meaning | What the UI can do |
 |---|---|---|
-| `planning` | this API owns a live planning call | watch `/plan-events` |
-| `implementing` | this API owns implementation/fix, or durable completion proves it began | poll `/implement-progress` |
+| `planning` | this API owns a live planning call | poll `/work-progress` |
+| `implementing` | this API owns implementation/fix, or durable completion proves it began | poll `/work-progress` |
 | `uncertain` | durable evidence cannot prove whether publication, continuation or an incomplete call finished | show it for human investigation; never replay it automatically |
 
 `acceptsChange` is the answer to *would `POST /slices/:issue/message` be
@@ -523,8 +441,13 @@ refusal is the same answer, later.
 |---|---|---|
 | `active-plans-recovery-inconclusive` | **400** | dispatch/call records are unreadable, corrupt or ambiguous, so an empty list would be a lie |
 
-Recovery enumerates `<state root>/harness/<conversation>/dispatch.json` before
-reading call records and never consults a process registry or the network.
+Inspection enumerates `<state root>/harness/<conversation>/dispatch.json` before
+reading call records, machine state and delivery evidence. GET requests update
+the inventory projection but do not publish, resume calls or manage review watchers.
+`WorkRecoveryClock` runs recovery at server startup and every two seconds after a
+completed scan, independently of browser requests. It does not overlap its own
+scans and server shutdown cancels its timer and drains an in-flight scan.
+Explicit recovery and cleanup mutations retain their existing contracts.
 The durable layout is:
 
 ```text
@@ -2084,9 +2007,7 @@ curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/co
 | Endpoint | Client | Types |
 |---|---|---|
 | `POST /start-plan` | `frontend/src/app/start-plan/client.ts` | `StartPlan.types.ts` |
-| `GET /plan-events` | `frontend/src/app/plan-events/client.ts` | `PlanEvents.types.ts` |
-| `GET /planning-progress` | `frontend/src/app/planning-progress/client.ts` | `PlanningProgress.types.ts` |
-| `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
+| `GET /work-progress` | `frontend/src/app/work-progress/client.ts` | `WorkProgress.types.ts` |
 | `GET /implement-history` | `frontend/src/app/implement-history/client.ts` | `ImplementHistory.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
 | `GET /external-tools` | `frontend/src/app/external-tools/client.ts` | `ExternalTools.types.ts` |

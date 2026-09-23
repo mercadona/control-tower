@@ -41,7 +41,7 @@ import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-c
 import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
 import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
-import { PlanSessions } from '../../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../../src/infrastructure/plan-sessions.ts'
 import { RecordedPlanRecovery } from '../../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
 import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
@@ -307,7 +307,7 @@ class RuntimeProcess {
   constructor(environment: NodeJS.ProcessEnv, processes: FixtureProcesses) {
     this.#processes = processes
     this.child = processes.spawn(process.execPath, [RuntimeProcess.#ENTRYPOINT], {
-      env: { ...process.env, ...environment },
+      env: { ...process.env, CT_STATE_DIR: undefined, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     this.port = this.#port()
@@ -997,6 +997,7 @@ export class RunDriverMother {
   #publication(files: HeadlessFiles): GhPlanPublication {
     const environment = {
       ...process.env,
+      CT_STATE_DIR: undefined,
       CLAUDE_CONFIG_DIR: this.state,
       CT_FIXTURE_CAPTURES: this.captures,
       CT_FIXTURE_PUBLICATION: this.publication,
@@ -1473,7 +1474,7 @@ export class RunDriverMother {
       '--plan', RunDriverMother.PLAN, '--issue', String(RunDriverMother.ISSUE),
     ], {
       cwd: this.checkout,
-      env: { ...process.env, CLAUDE_CONFIG_DIR: this.state },
+      env: { ...process.env, CT_STATE_DIR: undefined, CLAUDE_CONFIG_DIR: this.state },
       encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL',
     })
     if (result.error !== undefined) throw result.error

@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
-import type { ActivePlan } from 'app/active-plans/ActivePlan.types'
+import { useEffect, useMemo } from 'react'
 import { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
-import { ImplementProgressRead, useImplementProgress } from 'app/implement-progress/useImplementProgress'
+import type { ImplementProgressRead } from 'app/implement-progress/ImplementProgress.types'
+import type { WorkProgressRead } from 'app/work-progress/WorkProgress.types'
+import { useWorkProgress } from 'app/work-progress/useWorkProgress'
+import { WorkProgressPresentation } from 'app/work-progress/presentation'
 import { PlanningProgress } from 'app/planning-progress/components/planning-progress'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
@@ -29,13 +31,10 @@ type SliceRecovery = {
   onRetry: () => void
 }
 
-type SlicePhase = ActivePlan['phase']
-
 type SliceSessionProps = {
   issue: number
-  root: string
   repo: string
-  phase: SlicePhase
+  agent: string
   recovery?: SliceRecovery | null
   onSelect?: (() => void) | null
   onProgress?: ((progress: ImplementProgressRead) => void) | null
@@ -44,29 +43,27 @@ type SliceSessionProps = {
 const actionLabel = (action: RecoveryAction) => (action === 'cleanup' ? CLEANUP_LABEL : RECOVER_LABEL)
 
 type SliceImplementationPanelProps = {
-  issue: number
-  root: string
-  repo: string
   recovery: SliceRecovery | null
   onSelect: (() => void) | null
   onProgress: ((progress: ImplementProgressRead) => void) | null
+  progress: ImplementProgressRead
+  observation: ImplementProgressRead
 }
 
-const SliceImplementationPanel = ({ issue, root, repo, recovery, onSelect, onProgress }: SliceImplementationPanelProps) => {
-  const progress = useImplementProgress(issue, root, repo)
+const SliceImplementationPanel = ({ recovery, onSelect, onProgress, progress, observation }: SliceImplementationPanelProps) => {
   const closure = recovery?.refusal ?? null
   const vetoed = closure !== null && closure.state === BLOCKED_JUDGE && closure.outcome === VETOED
     ? closure
     : null
 
   useEffect(() => {
-    onProgress?.(progress)
-  }, [progress, onProgress])
+    onProgress?.(observation)
+  }, [observation, onProgress])
 
   return (
     <>
       {onSelect !== null && <Button variant="secondary" onClick={onSelect}>Ver detalle</Button>}
-      <ImplementProgress progress={progress} />
+      {progress.phase !== 'unreachable' && (recovery === null || progress.phase !== 'waiting') && <ImplementProgress progress={progress} />}
       {recovery !== null && (
         <div className="slice-session__recovery">
           <Banner
@@ -104,45 +101,48 @@ const SliceImplementationPanel = ({ issue, root, repo, recovery, onSelect, onPro
   )
 }
 
-const SlicePanel = ({ issue, root, repo, phase, recovery, onSelect, onProgress }: SliceImplementationPanelProps & { phase: SlicePhase }) => {
-  switch (phase) {
-    case 'planning':
-      return <PlanningProgress issue={issue} repo={repo} />
-    case 'implementing':
-    case 'uncertain':
-      return (
-        <SliceImplementationPanel
-          issue={issue}
-          root={root}
-          repo={repo}
-          recovery={recovery}
-          onSelect={onSelect}
-          onProgress={onProgress}
-        />
-      )
-    default: {
-      const exhaustive: never = phase
-      throw new Error(`unsupported slice phase: ${JSON.stringify(exhaustive)}`)
-    }
-  }
-}
-
-const SliceSession = ({ issue, root, repo, phase, recovery = null, onSelect = null, onProgress = null }: SliceSessionProps) => {
+const SliceProgress = ({ issue, read, recovery = null, onSelect = null, onProgress = null }: Omit<SliceSessionProps, 'repo' | 'agent'> & { read: WorkProgressRead }) => {
+  const progress = useMemo(() => WorkProgressPresentation.execution(read), [read])
+  const observation = useMemo(() => WorkProgressPresentation.observation(read), [read])
+  const snapshot = read.kind === 'read' || read.kind === 'stale' ? read.snapshot : null
+  const planning = snapshot?.progress.phase === 'planning' ? snapshot.progress : null
+  const uncertain = snapshot?.progress.phase === 'uncertain' ? snapshot.progress : null
+  const partial = snapshot?.progress.phase === 'implementing' && snapshot.progress.execution.kind === 'partial'
+    ? snapshot.progress.execution
+    : null
   return (
     <section className="slice-session" aria-label={`Slice #${issue}`}>
       <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
-      <SlicePanel
-        issue={issue}
-        root={root}
-        repo={repo}
-        phase={phase}
+      {(read.kind === 'stale' || read.kind === 'unavailable') && <Banner type="warning" role="alert" title={read.detail} description={read.kind === 'stale' ? 'Mostramos la última lectura. Reintentando la conexión…' : 'Reintentando la lectura…'} />}
+      {uncertain !== null && recovery === null && <Banner type="warning" role="alert" title={UNCERTAIN_TITLE} description={uncertain.diagnostic} />}
+      {partial !== null && <Banner type="warning" role="alert" title="Entrega a GitHub sin confirmar" description={partial.detail} />}
+      {planning !== null ? (
+        <>
+          {onSelect !== null && <Button variant="secondary" onClick={onSelect}>Ver detalle</Button>}
+          <section aria-label="Progreso del plan">
+            {planning.plan.kind === 'available'
+              ? <p role="status">{planning.plan.value === 'ready' ? 'Plan listo' : 'Escribiendo el plan…'}</p>
+              : <Banner type="warning" role="alert" title="Estado del plan no disponible" description={planning.plan.detail} />}
+          </section>
+          <PlanningProgress progress={planning.activity} />
+        </>
+      ) : (
+      <SliceImplementationPanel
+        progress={progress}
+        observation={observation}
         recovery={recovery}
         onSelect={onSelect}
         onProgress={onProgress}
       />
+      )}
     </section>
   )
 }
 
-export { SliceSession }
+const SliceSession = (props: SliceSessionProps) => {
+  const read = useWorkProgress({ repo: props.repo, issue: props.issue, agent: props.agent })
+  return <SliceProgress {...props} read={read} />
+}
+
+export { SliceSession, SliceProgress }
 export type { SliceRecovery, SliceSessionProps }

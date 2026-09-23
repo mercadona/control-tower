@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
@@ -73,20 +73,14 @@ type Answered = { response: Response, spy: SurveySpy }
 
 class RunningApi {
   static readonly PATH = '/external-tools'
-  static readonly NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
 
   static async listening(spy: SurveySpy): Promise<number> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementProgress: undefined,
       externalTools: spy,
       sessions: new PlanSessions(),
       activePlans: undefined,
-      planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })

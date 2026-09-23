@@ -11,9 +11,8 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
 the required ticket, repository and local path open a coordinating session,
-plan progress arrives over `GET /plan-events/:issue` (Server-Sent Events), and
-what the plan agent is doing meanwhile arrives over `GET
-/planning-progress/:issue`, polled. The page shows implementation progress, the
+current progress arrives over `GET /work-progress/:issue`, polled. It combines
+plan readiness, planning-agent activity and execution progress. The page shows the
 panels of gates 1 and 2, and the live terminals of the sessions the backend
 owns. `POST /start-plan` accepts the
 retained loose request or a milestone-only command. The milestone path selects
@@ -27,11 +26,21 @@ directly in the coordinating conversation.
 The main workflow has two stages: **Solicitud → Implementación**. Planning and
 the ready-plan wait are internal phases of Implementation, with plan state,
 agent activity, failures and environment details visible there. Saved planning,
-ready and implementing workflows all restore into that stage. Plan events and
-planning-activity polling keep their existing contracts; once execution starts,
-implementation progress takes over. The progress appears first; the issue link,
+ready and implementing workflows all restore into that stage; old saved ready
+states become planning hints until fresh evidence confirms readiness. One progress
+owner per displayed work supplies both its panel and automatic selection. The
+progress appears first; the issue link,
 environment details and copy action remain in a disclosure closed by default. There
 is no separate plan-review stage or completed plan-review summary.
+
+`app/work-progress` checks the full `{repo, issue, agent}` identity on each answer,
+rejects unknown payload fields and retries failed reads. Last-known progress stays
+visible with an explicit stale warning, but never drives automatic selection.
+Planning state and agent activity may be independently unavailable; a failed
+delivery check preserves local execution as a partial reading without claiming a
+published pull request. Polls wait three seconds after the previous response, or
+fifteen seconds for confirmed delivered/review/fixing states. Unmounting aborts the
+request and timer. The old three progress routes and their clients are retired.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
@@ -132,6 +141,10 @@ plan conversation plans and implements. They have different roles: expanding
 the drawer exposes the coordinating session as the interactive entrance in its
 PTY, while durable headless call records drive the selected slice without
 replacing that entrance.
+
+History queries pause while the drawer is collapsed and refresh immediately when
+it opens. The terminal remains mounted and connected throughout; pausing history
+does not stop the coordinating conversation.
 
 `app/active-plans` reads `GET /active-plans` on load and while following work.
 An uncertain entry carries a diagnostic, its original repo/issue/agent identity
@@ -267,9 +280,9 @@ worst move available when nobody can tell what was created.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
   CORS and no preflight.
-- **The client is `fetch` with no wrapper** (`src/app/start-plan/client.ts`,
-  `src/app/active-plans/client.ts`) and native `EventSource` for the event
-  stream (`src/app/plan-events/client.ts`).
+- **The client is `fetch`** (`src/app/start-plan/client.ts`,
+  `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
+  `EventSource` remains for the coordinating terminal stream, not work progress.
   The in-house libraries are waiting for CI to have access to the private
   registry.
 

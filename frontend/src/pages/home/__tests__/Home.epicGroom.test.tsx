@@ -65,7 +65,7 @@ const stubGroomableBackendWithASession = () => {
     if (path === '/coordinating-session') return opened
       ? new Response(groomLive)
       : responseFor(CoordinatingSessionMother.ended())
-    if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
+    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
@@ -87,7 +87,7 @@ const stubBackend = (
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinatingSession)
-    if (path.startsWith('/implement-progress/')) return responseFor(IMPLEMENTATION_PROGRESS_NOT_READ)
+    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
     if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
@@ -169,3 +169,4 @@ describe('Home and gate 2', () => {
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(1)
   })
 })
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

@@ -144,15 +144,17 @@ class Flow {
   }
 
   async run(): Promise<ImplementationState> {
-    const read = await new ReadImplementationProgress({
+    return (await this.read()).state
+  }
+
+  read(): ReturnType<ReadImplementationProgress['execute']> {
+    return new ReadImplementationProgress({
       ...this,
       isDriver: async () => this.driver,
     })
       .execute(new ReadImplementationProgressParams({
         root: Flow.ROOT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
       }))
-
-    return read.state
   }
 }
 
@@ -248,12 +250,15 @@ describe('ReadImplementationProgress', () => {
     expect(flow.planIssues.asked).toEqual([{ issueNumber: Flow.ISSUE, repository: Flow.REPOSITORY }])
   })
 
-  it('a_pull_request_that_could_not_be_read_travels_out_typed_instead_of_looking_still_delivered', async () => {
+  it('a failed remote read preserves local completion but explicitly refuses to confirm delivery', async () => {
     const flow = new Flow({
       pullRequests: new PullRequestsDouble({ failing: new PullRequestNotRead('HTTP 502') }),
     })
 
-    await expect(flow.run()).rejects.toBeInstanceOf(PullRequestNotRead)
+    const result = await flow.read()
+    expect(result.state.step).toBe(ImplementationStep.DELIVERED)
+    expect(result.state.pullRequest).toBeNull()
+    expect(result.delivery).toEqual({ kind: 'unavailable', detail: 'HTTP 502' })
   })
 
   it('a_run_that_could_not_be_read_travels_out_before_github_is_asked_anything', async () => {

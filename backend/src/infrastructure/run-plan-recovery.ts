@@ -25,6 +25,7 @@ import { RunPlanAgents, RunProvenance, type RunProvenanceValue } from './run-pla
 
 type PlanOutcome =
   | { readonly phase: typeof ActivePlanPhase.PLANNING }
+  | { readonly phase: 'publishing' }
   | {
     readonly phase: typeof ActivePlanPhase.IMPLEMENTING,
     readonly review: boolean,
@@ -79,7 +80,9 @@ export class RunPlanRecovery {
   readonly nowMs: () => number
   readonly reviewing: Map<string, object>
   readonly publications: Map<string, RunPublication>
+  readonly maintained: Map<string, PlanWatch>
   recovering: Promise<string | null> | null
+  inspecting: Promise<string | null> | null
 
   constructor(ports: {
     legacy: RecordedPlanRecovery,
@@ -109,11 +112,16 @@ export class RunPlanRecovery {
     this.nowMs = ports.nowMs
     this.reviewing = new Map()
     this.publications = new Map()
+    this.maintained = new Map()
     this.recovering = null
+    this.inspecting = null
   }
 
   async recover(): Promise<string | null> {
-    this.recovering = this.recovering ?? this.#recover()
+    this.recovering = this.recovering ?? this.#read(
+      (plans) => this.#resume(plans),
+      () => this.legacy.recover(),
+    )
     const recovery = this.recovering
     try {
       return await recovery
@@ -133,10 +141,29 @@ export class RunPlanRecovery {
     }
   }
 
-  async #recover(): Promise<string | null> {
+  async inspect(): Promise<string | null> {
+    this.inspecting = this.inspecting ?? this.#read((plans) => this.#project(plans), () => this.legacy.inspect())
+    const inspection = this.inspecting
+    try {
+      return await inspection
+    } finally {
+      if (this.inspecting === inspection) this.inspecting = null
+    }
+  }
+
+  async #read(
+    accept: (plans: readonly RecoveredRunPlan[]) => void,
+    legacy: () => Promise<string | null>,
+  ): Promise<string | null> {
     const found = await this.records.inFlight()
     if (!found.wereListed) return found.reason
     const watches = found.watches ?? []
+    const identities = new Set<string>()
+    for (const watch of watches) {
+      const key = this.#key(watch)
+      if (identities.has(key)) throw new PlanRecoveryConflict(`multiple recorded conversations claim ${key}`)
+      identities.add(key)
+    }
     let provenances: WatchProvenance[]
     try {
       provenances = await Promise.all(watches.map((watch) => this.#provenanceOf(watch)))
@@ -145,7 +172,7 @@ export class RunPlanRecovery {
     }
     if (watches.length > 0
       && provenances.every((entry) => entry.kind === 'proven' && entry.provenance === RunProvenance.LEGACY)) {
-      return this.legacy.recover()
+      return legacy()
     }
 
     const recovered: RecoveredRunPlan[] = []
@@ -164,23 +191,54 @@ export class RunPlanRecovery {
       return RunPlanRecovery.#diagnostic(cause)
     }
 
-    const foundKeys = new Set(watches.map((watch) => this.#key(watch)))
+    accept(recovered)
+    return null
+  }
+
+  #project(plans: readonly RecoveredRunPlan[]): void {
+    const foundKeys = new Set(plans.map((plan) => this.#key(plan.watch)))
     for (const watch of this.activePlans.watches()) {
+      if (!foundKeys.has(this.#key(watch))) {
+        this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
+      }
+    }
+    for (const plan of plans) {
+      switch (plan.outcome.phase) {
+        case ActivePlanPhase.PLANNING:
+          this.activePlans.rememberPlanning(plan.watch)
+          break
+        case ActivePlanPhase.IMPLEMENTING:
+          this.activePlans.rememberImplementing(plan.watch, plan.outcome.acceptsChange)
+          break
+        case 'publishing':
+          this.activePlans.rememberImplementing(plan.watch, false)
+          break
+        case ActivePlanPhase.UNCERTAIN:
+          this.activePlans.rememberUncertain(plan.watch, plan.outcome.diagnostic, plan.outcome.recovery, plan.outcome.refusal)
+          break
+      }
+    }
+  }
+
+  #resume(recovered: readonly RecoveredRunPlan[]): void {
+    const foundKeys = new Set(recovered.map((plan) => this.#key(plan.watch)))
+    for (const watch of [...this.activePlans.watches(), ...this.maintained.values()]) {
       const key = this.#key(watch)
       if (foundKeys.has(key)) continue
       this.reviews.stop({ issue: watch.issue.number, repository: watch.repository })
       this.#forgetReviewing(key)
       this.publications.delete(key)
+      this.maintained.delete(key)
       this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
     }
     for (const plan of recovered) {
+      this.maintained.set(this.#key(plan.watch), plan.watch)
       this.checkouts.remember(new RegisteredCheckout({
         repository: plan.watch.repository,
         root: new CheckoutRoot(plan.watch.located.root),
       }))
       this.#remember(plan)
     }
-    return null
   }
 
   async #provenanceOf(watch: PlanWatch): Promise<WatchProvenance> {
@@ -306,15 +364,11 @@ export class RunPlanRecovery {
     const key = this.#key(watch)
     const publication = await this.delivery.inspect(watch)
     if (publication.kind === 'delivered') {
-      this.publications.delete(key)
       return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
     }
     if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
     const started = this.publications.get(key)
     if (started === undefined) {
-      this.publications.set(key, new RunPublication(
-        this.delivery.deliver(watch), (cause) => RunPlanRecovery.#diagnostic(cause),
-      ))
       return this.#publishing(watch)
     }
     return started.failure === null ? this.#publishing(watch) : this.#continuable(watch, started.failure)
@@ -322,7 +376,7 @@ export class RunPlanRecovery {
 
   #publishing(watch: PlanWatch): RecoveredRunPlan {
     return new RecoveredRunPlan(watch, {
-      phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange: false,
+      phase: 'publishing',
     })
   }
 
@@ -400,6 +454,16 @@ export class RunPlanRecovery {
   #remember(recovered: RecoveredRunPlan): void {
     const key = this.#key(recovered.watch)
     switch (recovered.outcome.phase) {
+      case 'publishing':
+        if (!this.publications.has(key)) {
+          this.publications.set(key, new RunPublication(
+            this.delivery.deliver(recovered.watch), (cause) => RunPlanRecovery.#diagnostic(cause),
+          ))
+        }
+        this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })
+        this.#forgetReviewing(key)
+        this.activePlans.rememberImplementing(recovered.watch, false)
+        return
       case ActivePlanPhase.PLANNING:
         this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })
         this.#forgetReviewing(key)
@@ -426,6 +490,7 @@ export class RunPlanRecovery {
           this.activePlans.rememberImplementing(recovered.watch, recovered.outcome.acceptsChange)
           return
         }
+        this.publications.delete(key)
         this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })
         this.#forgetReviewing(key)
         const registration = Object.freeze({})

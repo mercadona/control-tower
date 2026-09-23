@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome } from './helpers'
@@ -16,7 +17,7 @@ const stubFetch = (progress = ImplementProgressMother.inReview()) => {
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(NO_SESSIONS)
     if (url === '/active-plans') return responseFor(HeadlessPlanMother.implementing())
-    if (url.startsWith('/implement-progress/')) return responseFor(progress)
+    if (url.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(progress))
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)

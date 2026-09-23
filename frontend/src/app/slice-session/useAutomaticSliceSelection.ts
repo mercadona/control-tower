@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ImplementationStep } from 'app/implement-progress/ImplementProgress.types'
-import { ImplementProgressRead } from 'app/implement-progress/useImplementProgress'
+import { ImplementProgressRead } from 'app/implement-progress/ImplementProgress.types'
 import { StartedPlan } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot } from 'app/workflow-snapshot/storage'
 
