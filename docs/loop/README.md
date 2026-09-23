@@ -96,11 +96,10 @@ second-hand description:
 - `templates/STATE.template.md`;
 - `hooks/hooks.json`;
 - `templates/_TEMPLATE-execution-spec.md` — the execution spec template.
-  It already travels with the plugin: `ct-init` seeds it into
-  `docs/superpowers/specs/_TEMPLATE-execution-spec.md` of the target repo, which
-  is where `skills/ct-brainstorming/SKILL.md` looks for it. It used to live loose in
-  menoplus, and step 8 of brainstorming was left without a source in any other
-  repo.
+  `skills/ct-brainstorming/SKILL.md` reads it directly from the installed plugin,
+  alongside the validator. Repository conventions stay in the documents indexed
+  by `.agent/conventions.md`; generated specs stay in the target repository.
+  `ct-init` no longer seeds a template copy, and preserves any old copy.
 
 **When any of those sources changes, this document goes stale and nothing checks
 it.** There is no test watching it; it is a document, not code.

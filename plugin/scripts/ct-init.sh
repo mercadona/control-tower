@@ -83,7 +83,7 @@ say() {
 # a comparison, so it never contradicts a class's promise not to compare.
 #
 #   user-owned  — create-if-absent, NEVER compared: STATE.md, conventions.md,
-#                 the execution-spec template, the AGENTS.md skeleton, the
+#                 the AGENTS.md skeleton, the
 #                 .gitignore rules, the scope-gate workflow, the scope-gate
 #                 package.json and .claude/settings.json (merged, but never
 #                 byte-compared against a golden copy either). `.claude/
@@ -104,7 +104,6 @@ say() {
 ARTIFACT_CLASSES='
 state-md             user-owned
 conventions-md       user-owned
-spec-template        user-owned
 gitignore            user-owned
 scope-gate-workflow  user-owned
 scope-gate-package   user-owned
@@ -277,36 +276,6 @@ if [ ! -f "$CONVENTIONS_MD" ]; then
 else
   say "conventions.md already exists, not overwritten"
   record conventions-md .agent/conventions.md already-present
-fi
-
-# The execution spec's template. The flow after this bootstrap is
-# brainstorming -> design doc -> execution spec, and skills/ct-brainstorming/SKILL.md
-# orders the spec to be written «from the repo's `_TEMPLATE-execution-spec.md`»:
-# without this, that step is left with no source and the spec has to be written
-# guessing at its sections.
-#
-# The destination is `docs/superpowers/specs/` because it is the folder the
-# plugin ALREADY declares as the spec's home in code that runs —
-# LOOP_ARTIFACT_PATTERNS (scripts/scope.js) exempts `docs/superpowers/specs/**`
-# precisely because «the brainstorming skill writes the design doc and the
-# execution spec here». It is also the path docs/loop/README.md documents.
-#
-# It is NOT added to the .gitignore, unlike .agent/SLICE.md: the template is an
-# artefact of the repo that the skill reads, and it gets committed.
-SPEC_TEMPLATE_DIR="$TARGET/docs/superpowers/specs"
-SPEC_TEMPLATE="$SPEC_TEMPLATE_DIR/_TEMPLATE-execution-spec.md"
-if [ ! -f "$SPEC_TEMPLATE" ]; then
-  mkdir -p "$SPEC_TEMPLATE_DIR"
-  cp "$HERE/templates/_TEMPLATE-execution-spec.md" "$SPEC_TEMPLATE"
-  say "created $SPEC_TEMPLATE"
-  record spec-template docs/superpowers/specs/_TEMPLATE-execution-spec.md created
-else
-  # Same doctrine as STATE.md and as the contract section in AGENTS.md: a
-  # template that is already present may carry the repo's edits (sections of its
-  # own, invariants of its own) and a scaffolder does not overwrite them on its
-  # own initiative.
-  say "_TEMPLATE-execution-spec.md already exists, not overwritten"
-  record spec-template docs/superpowers/specs/_TEMPLATE-execution-spec.md already-present
 fi
 
 GITIGNORE="$TARGET/.gitignore"
