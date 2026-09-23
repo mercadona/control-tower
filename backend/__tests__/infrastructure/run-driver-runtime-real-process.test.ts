@@ -266,6 +266,7 @@ class MachineRuntimeFixture {
     afterJournal: string,
     beforeReviewReads: number,
     afterReviewReads: number,
+    capturedRequests: string,
     plans: RecoveredPlans,
   }> {
     const calls = join(this.state, 'control-tower', 'harness', started.agent, 'calls')
@@ -303,6 +304,7 @@ class MachineRuntimeFixture {
       afterJournal: await this.#journalBytes(started),
       beforeReviewReads,
       afterReviewReads: await this.#reviewReads(),
+      capturedRequests: await readFile(join(this.captures, 'gh.jsonl'), 'utf8'),
       plans,
     }
   }
@@ -807,7 +809,7 @@ describe('run driver production runtime', () => {
     expect(recovered.afterCalls).toEqual(recovered.beforeCalls)
     expect(recovered.afterJournal).toBe(recovered.beforeJournal)
     expect(recovered.beforeReviewReads).toBe(0)
-    expect(recovered.afterReviewReads).toBe(0)
+    expect(recovered.afterReviewReads, recovered.capturedRequests).toBe(0)
     expect(recovered.plans).toEqual({ plans: [expect.objectContaining({
       phase: 'uncertain',
       diagnostic,
