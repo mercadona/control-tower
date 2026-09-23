@@ -7,7 +7,7 @@
 // with a gap is not a table, it is a table plus an implicit decision taken by
 // omission.
 import { describe, it, expect } from 'vitest'
-import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
+import { after, newRun, isCheckpoint, stretchOf, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
 import { ReconcileOutcome } from '../scripts/reconcile-outcome.js'
 
 const run = (over = {}) => ({ ...newRun({ plan: 'p.md', issue: 7, baseSha: 'abc', tasksTotal: 3 }), ...over })
@@ -73,6 +73,24 @@ describe('controls', () => {
     expect(after(atControls(), OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
   })
 
+  it('done on a task that is not a checkpoint → commit, with no judge', () => {
+    const r = atControls({ tasksTotal: 3, task: 1, checkpoints: [2] })
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.COMMIT)
+  })
+
+  it('done on the last task → judge, even when the plan names no checkpoint', () => {
+    const r = atControls({ tasksTotal: 3, task: 3, checkpoints: [] })
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
+  })
+
+  it('a run with no checkpoints list judges every task, as a run born before the field did', () => {
+    // No `checkpoints` override: the default helper's run carries the one
+    // `newRun` set with no `checkpoints` argument. Task 2 of 3, not the last,
+    // so the only thing making it a checkpoint is the absent list.
+    const r = atControls({ tasksTotal: 3, task: 2 })
+    expect(after(r, OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
+  })
+
   it('failed goes back to implement while retries remain, counting them', () => {
     const first = after(atControls(), OUTCOMES.FAILED)
     expect(first.run.step).toBe(STEPS.IMPLEMENT)
@@ -94,6 +112,13 @@ describe('controls', () => {
     const { run: r, state } = after(atControls(), OUTCOMES.INDETERMINATE)
     expect(state).toBe(RUN_STATES.BLOCKED_CONTROLS)
     expect(r.controlRetries).toBe(0)
+  })
+})
+
+describe('the stretch of a checkpoint', () => {
+  it('the stretch of a checkpoint starts one past the previous checkpoint', () => {
+    const r = run({ tasksTotal: 4, task: 4, checkpoints: [2] })
+    expect(stretchOf(r)).toEqual({ from: 3, to: 4 })
   })
 })
 
