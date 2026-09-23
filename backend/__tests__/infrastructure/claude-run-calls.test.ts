@@ -563,8 +563,8 @@ describe('ClaudeRunCalls', () => {
     expect(await readFile(evidence, 'utf8')).toBe(immutable)
     expect(immutable).toBe(`${JSON.stringify(raw)}\n`)
     expect(await readFile(response, 'utf8')).toBe(immutable)
-    expect(await readFile(join(scenario.files.callDirectory(call), ClaudeRunMeasurements.FILE), 'utf8'))
-      .toContain('"scope": "unverified-resume"')
+    await expect(readFile(join(scenario.files.callDirectory(call), 'measurements-v1.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
     expect(JSON.parse(await readFile(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'), 'utf8')))
       .toMatchObject({
         provider: 'claude-code', callId: call.id, requestId: 'run:replay', role: 'implement',
@@ -593,13 +593,11 @@ describe('ClaudeRunCalls', () => {
 
     await expect(scenario.perform('failed')).rejects.toEqual(new RunNotAdvanced('Claude reported error_max_turns'))
     const failedCall = scenario.call()
-    const measurements = await readFile(
-      join(scenario.files.callDirectory(failedCall), ClaudeRunMeasurements.FILE), 'utf8',
-    )
-    expect(measurements).toContain('Claude reported error_max_turns')
-    expect(measurements).toContain('"total_cost_usd"')
     expect(JSON.parse(await readFile(join(scenario.files.callDirectory(failedCall), 'agent-measurements-v1.json'), 'utf8')))
-      .toMatchObject({ execution: { kind: 'error', diagnostic: 'Claude reported error_max_turns' } })
+      .toMatchObject({
+        execution: { kind: 'error', diagnostic: 'Claude reported error_max_turns' },
+        cost: { kind: 'reported', totalUsd: 0.5, attribution: 'unverified-resume' },
+      })
     await scenario.seedUnowned(unowned, RunCallMother.stream('present'))
     await expect(scenario.perform('unowned')).rejects.toEqual(
       new RunNotAdvanced('recorded call unowned-call is incomplete and is not owned by this API process'),

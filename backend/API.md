@@ -399,9 +399,11 @@ required, same as `/implement-progress`.
 
 This endpoint reads plugin attempt metrics. Backend headless invocations also
 leave a private, provider-neutral `agent-measurements-v1.json` under
-`<stateRoot>/harness/<conversation>/calls/<callId>/`, alongside the existing
-provider-specific `measurements-v1.json`. These files are not returned by this
-endpoint or sent through harvest. They describe one agent invocation, which can
+`<stateRoot>/harness/<conversation>/calls/<callId>/`. This is the only generated
+metrics projection; the original output remains in `stream.ndjson`. Historical
+`measurements-v1.json` files are left untouched and are not read or regenerated.
+The common record is not returned by this endpoint or sent through harvest.
+It describes one agent invocation, which can
 contain several model requests, with execution outcome, durable timing and
 available reported consumption. Completion observations, including restart
 recovery, persist the record through the common measured executor. Unknown
@@ -552,7 +554,7 @@ harness/<conversation>/run/manifest.json
 harness/<conversation>/run/operations/<ticket>/request.json
 harness/<conversation>/run/operations/<ticket>/receipt.json
 harness/<conversation>/run/operations/<ticket>/material.json
-harness/<conversation>/calls/<call>/measurements-v1.json
+harness/<conversation>/calls/<call>/agent-measurements-v1.json
 ```
 
 `admission.json` has exactly `version` and `conversation`; it is provenance, not
@@ -575,18 +577,16 @@ cwd conflicts do not prove legacy ownership. Post-delivery fixes retain their
 existing resume path after positive provenance; a fix is refused while machine
 work is active.
 
-Each completed backend call may add `measurements-v1.json` beside its raw stream
-and completion. It includes SHA-256 source references, independently measured
-`wallDurationMs`, diagnostics and only available finite nonnegative CLI values.
-Missing values are omitted and measured zero remains zero. `total_cost_usd` is
-labelled `initial-invocation` for an initial call and `unverified-resume` for a
-resumed call; other retained CLI values are `reported-only`. These are raw
-reported totals, never incremental own-call bills, an aggregate spend, an
-invoice or a billing-limit guarantee. Existing completion records and API
-history rows keep their legacy nullable fields, for example
-`{"duration_ms":null,"tool_total_tokens":null}`; they are not migrated into the
-new private projection. The plugin still writes no backend-derived attempt row:
-issue #379 owns plugin attempt-row ingestion.
+Each observed completed backend call leaves `agent-measurements-v1.json` beside
+its raw stream and completion. It contains durable identity, role, execution
+outcome, wall duration, reported consumption and diagnostics. Missing values are
+`null` and measured zero remains zero. Cost retains `initial-invocation` or
+`unverified-resume` attribution; token counts are reported values, not verified
+incremental bills. The reader extracts only the named fields of this contract,
+using the same Claude result parser as completion recording. It does not produce
+a second provider-specific projection or infer additional metrics from field
+names. Historical `measurements-v1.json` files remain untouched. The plugin still
+writes no backend-derived attempt row: issue #379 owns plugin attempt-row ingestion.
 
 An initial OS child-spawn failure writes a typed `child-spawn-failed` terminal
 before its matching non-launch receipt. The terminal has no exit code, signal or

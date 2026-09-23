@@ -146,12 +146,12 @@ definition. Implementer, task judge, advisor, slice judge and `ct-reconciler`
 are supported. E2E and slice-agent reconciliation fallback are refused while the
 plugin supplies no complete role package for them.
 
-Issue #331 records whole outer calls only. Issue #332 adds private immutable
-`measurements-v1.json` projections beside completed call evidence: source hashes,
-wall duration, diagnostics and available CLI-reported values. Missing metric keys
-are omitted, zero is retained, and existing nullable completion/history fields
-are unchanged. A resumed `total_cost_usd` is an `unverified-resume` reported
-total, never an incremental own-call bill; totals are not differenced, summed as
+Issue #331 records whole outer calls only. The provider-specific
+`measurements-v1.json` projection introduced by #332 is retired: existing files
+are preserved but neither read nor regenerated. The original stream remains the
+provider evidence, and `agent-measurements-v1.json` is the single metrics
+projection. A resumed reported cost retains `unverified-resume` attribution,
+never an incremental own-call bill; totals are not differenced, summed as
 invocation spending or replaced by token-price estimates. The backend writes no
 plugin attempt rows. Issue #379 owns any future ingestion into those rows.
 
@@ -164,10 +164,12 @@ argument construction and result parsing stay in Claude adapters; another
 provider supplies its own executor and measurement reader, reusing the decorator
 and store.
 
-`ClaudeRunMeasurements` receives an already observed completion, validates it
-against disk evidence and retains the existing provider-specific projection. It
-does not call back into the executor. `DiskAgentMeasurements` publishes the
-common `agent-measurements-v1.json` beside that evidence, keyed by the existing
+`ClaudeResultEnvelope` owns the interpretation of Claude's terminal result and
+the explicit fields consumed from it. Both completion recording and measurement
+reading use this parser. `ClaudeRunMeasurements` receives the already validated
+completion, reads descriptor and stream evidence, and returns common metrics.
+It does not reread completion, write files or call back into the executor.
+`DiskAgentMeasurements` alone publishes `agent-measurements-v1.json`, keyed by the existing
 conversation and call identity. Its fields include provider, purpose, request
 identity, explicit functional role when present, recorded timestamps, execution outcome,
 wall duration, reported cost and turns, token counts, model names and diagnostics.
@@ -179,8 +181,8 @@ New role dispatches persist their functional role in the existing `call.json`
 descriptor, so measurement recovery does not depend on a provider's `--agent`
 argument. Older descriptors remain readable and retain their prior agent-name
 or unknown-role projection. Invalid model metadata produces an unknown model
-list with a diagnostic in the common record, without changing the historical
-provider projection. The common value guards its own identifiers, timestamp and
+list with a diagnostic in the common record. Unconsumed provider fields are
+ignored rather than traversed for additional numbers. The common value guards its own identifiers, timestamp and
 token counts before serialization. Measurement failures observed through planning
 progress retain their diagnostic under `planning-progress-not-read`.
 

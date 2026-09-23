@@ -75,10 +75,6 @@ import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalat
 import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
-type Measurement = {
-  readonly conversation: string,
-  readonly reported: { readonly total_cost_usd: { readonly scope: string } },
-}
 export type ModelCapture = {
   readonly callId: string,
   readonly role: string,
@@ -642,7 +638,6 @@ export class RunDriverMother {
     roles: string[],
     callIds: string[],
     requests: string[],
-    measurements: Measurement[],
     commonMeasurements: string[],
     modelCalls: ModelCapture[],
     attemptSteps: string[],
@@ -735,9 +730,6 @@ export class RunDriverMother {
       if (call.descriptor.argv[at + 1] === 'ct-slice-judge') return 'slice-judge'
       throw new Error(`unexpected model role: ${JSON.stringify(call.descriptor.argv)}`)
     })
-    const measurements = await Promise.all(implementations.map(async (call) => JSON.parse(
-      await readFile(join(harness, 'calls', call.id, 'measurements-v1.json'), 'utf8'),
-    ) as Measurement))
     const commonMeasurements = await Promise.all(calls.map((call) =>
       readFile(join(harness, 'calls', call.id, 'agent-measurements-v1.json'), 'utf8'),
     ))
@@ -774,7 +766,6 @@ export class RunDriverMother {
       roles,
       callIds: implementations.map((call) => call.id),
       requests: implementations.map((call) => call.descriptor.requestId ?? ''),
-      measurements,
       commonMeasurements,
       modelCalls,
       attemptSteps,

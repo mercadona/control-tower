@@ -250,3 +250,30 @@ introduced. The follow-up judge returned PASS with all four findings resolved.
 Follow-up verification: `npm run typecheck` passed and `npm test` passed all
 3,125 tests across 151 files. The judge assessed source and tests by reading;
 the parent session ran these checks independently.
+
+## Approved simplification during pull-request review
+
+The user approved retiring the duplicated provider projection and simplifying
+result interpretation. This supersedes the earlier decision to keep generating
+`measurements-v1.json`: existing files remain untouched, and only the common
+`agent-measurements-v1.json` is generated. Raw process output remains in
+`stream.ndjson`.
+
+`ClaudeResultEnvelope`, extracted from the existing completion reader, is shared
+by completion recording and metrics reading. It explicitly reads cost, turns,
+duration, the four token counts and model names. Recursive metric discovery,
+field-name heuristics, intermediate value/scope wrapping, source hashes and
+provider-projection publication are removed. The metrics reader trusts the
+completed value delivered by its execution port instead of rereading and
+revalidating that completion file. Call identity and source-result consistency
+checks remain at the descriptor and stream boundaries.
+
+Tests for the retired projection are replaced by assertions on common metrics,
+read-only extraction, preservation of historical files, consumed-field validation
+and unchanged execution evidence. The completion reader's behavioral tests remain
+in place. This introduces no cache, background process or additional storage.
+
+Simplification verification: `npm run typecheck` passed; the fast backend subset
+passed 3,043 tests, and `npm test` passed all 3,143 tests across 151 files.
+The independent follow-up judge returned PASS, confirming the read-only reader,
+single metrics output and shared explicit result parser against the amended scope.
