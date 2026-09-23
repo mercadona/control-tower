@@ -368,10 +368,19 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
     // ratchet above the real size lets the next addition in for free, and a
     // retirement is exactly the moment that invites one. Accumulated since
     // 16,314: +1,137 bytes, 7.0%.
+    //
+    // Cap raised from 17,451 to 17,799 (issue #530, task 5). `## Structure`
+    // gains the paragraph that teaches `**Judge:** checkpoint`: which tasks
+    // the judge reviews, why a task carries the marker, what a task with none
+    // gets, and that any other value fails `--check-plan`. It has no other
+    // durable copy — the plan writer is the one place that decides where the
+    // marker goes, so the skill has to teach it. Trimming was not attempted:
+    // the paragraph is new content for a new mechanism, not a rewording of
+    // something already there. Accumulated since 16,314: +1,485 bytes, 9.1%.
     expect(
       bytes('SKILL.md'),
       'SKILL.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
-    ).toBeLessThanOrEqual(17451)
+    ).toBeLessThanOrEqual(17799)
     expect(
       bytes('plan-template.md'),
       'plan-template.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'

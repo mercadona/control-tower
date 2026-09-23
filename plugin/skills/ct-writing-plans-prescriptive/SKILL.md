@@ -193,6 +193,11 @@ deliberately removed, named one by one), and `**Verification:**` (exact commands
 and their output) — **the commands go in a fenced block right after the marker, one per line,
 each one a predicate**, for the reason above.
 
+**A task may carry `**Judge:** checkpoint`.** The judge reviews only the checkpoints and
+the last task, each time over the whole stretch since the previous checkpoint. Mark a task
+that fixes a contract, an interface or a shape that later tasks lean on. A task with no
+marker goes to its commit with no judge. Any other value fails `--check-plan`.
+
 **No control may pin the number of tests in the whole suite.** A `grep -c '52 passed'` is a
 proxy, and it breaks the moment the judge demands one more assertion: the stale number then
 needs fixing in every later task that repeated it. Worse, it blocks what

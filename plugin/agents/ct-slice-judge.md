@@ -48,10 +48,10 @@ global`), and its result is a fact you inherit.
 - **The Global verification log**, already green — the path, in case you want
   it, of the log a program wrote when it ran `## 8. Global verification` after
   the last commit. It ran and it passed, and that result stands as it is.
-- **The task verdicts**, one JSON per task, already committed under
+- **The task verdicts**, one JSON per checkpoint, already committed under
   `docs/superpowers/verdicts/issue-<n>-task-*.json`. Each one is what
-  `ct-judge` already found for that task alone — read them to see which defects
-  are already on the record, which is what keeps you off them.
+  `ct-judge` already found for the stretch that checkpoint closed — read them to
+  see which defects are already on the record, which is what keeps you off them.
 
 Read the package, then read whatever the plan or the repository requires: a
 diff read with its surroundings is how a reviewer sees what is really there. The

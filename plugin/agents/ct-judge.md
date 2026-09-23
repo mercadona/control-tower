@@ -18,6 +18,13 @@ Plan your work as reading.
 The task's own verification commands **already ran and passed** — a program ran
 them, not the agent that wrote the code.
 
+**You may judge a stretch.** The plan marks some tasks `**Judge:** checkpoint`, and
+the last task is always one. A task between two checkpoints goes to its commit with
+no judge. So the package can open with `tasks A-B`: then `## Diff` runs from the last
+judged commit to the index, and the brief adds each earlier task of the stretch.
+Judge every task of the stretch against its own text. After a veto, a fix in a file
+of an earlier task of the stretch is in scope, and it lands in this task's commit.
+
 ## What you are given
 
 - **The review package.** `## Vara de ct` lists, by path, the documents of ct's
