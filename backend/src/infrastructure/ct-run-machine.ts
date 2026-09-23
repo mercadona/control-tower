@@ -591,7 +591,6 @@ export class CtRunMachine extends RunMachine {
       command: effect.command,
       cwd: command.request.cwd,
       pluginRoot: this.pluginRoot,
-      sealed: await this.journal.material(watch, ticket),
     })
     await this.journal.seal(watch, ticket, resolved.seal)
     return resolved.dispatch

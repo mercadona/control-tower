@@ -225,6 +225,72 @@ describe('RunJournal', () => {
     }])
   })
 
+  it('a dispatch seal is published again under the next version only when its text changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await journal.finish(watch, JournalMother.TICKET, JournalMother.RECEIPT)
+
+    const absent = await journal.material(watch, JournalMother.TICKET)
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'third seal\n')
+
+    expect(absent).toBeNull()
+    expect((await fs.readdir(JournalMother.operation(root))).sort()).toEqual([
+      'material-2.json', 'material-3.json', 'material.json', 'receipt.json', 'request.json',
+    ])
+    expect(await readFile(join(JournalMother.operation(root), 'material.json'), 'utf8')).toBe('first seal\n')
+    expect(await readFile(join(JournalMother.operation(root), 'material-2.json'), 'utf8')).toBe('second seal\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('third seal\n')
+    expect(await journal.entries(watch)).toHaveLength(1)
+  })
+
+  it('a dispatch seal returning to an earlier text is published as a new version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-return-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+
+    expect(await readFile(join(JournalMother.operation(root), 'material-3.json'), 'utf8')).toBe('first seal\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('first seal\n')
+  })
+
+  it('a dispatch seal history with a gap is not understood', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-gap-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await writeFile(join(JournalMother.operation(root), 'material-2.json'), 'second seal\n', 'utf8')
+
+    await expect(journal.material(watch, JournalMother.TICKET)).rejects.toThrow('has a gap in its dispatch seals')
+    await expect(journal.seal(watch, JournalMother.TICKET, 'third seal\n'))
+      .rejects.toThrow('has a gap in its dispatch seals')
+  })
+
+  it.each([
+    'material-1.json', 'material-02.json', 'material-x.json', 'material-2.json.bak', 'material-.json',
+  ])('an operation holding %s is not understood', async (name) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-name-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await writeFile(join(JournalMother.operation(root), name), 'seal\n', 'utf8')
+
+    await expect(journal.entries(watch)).rejects.toThrow('contains an unexpected journal entry')
+  })
+
   it('immutable journal collisions accept only identical bytes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-collision-'))
     roots.push(root)
