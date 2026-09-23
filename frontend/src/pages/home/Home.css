@@ -83,7 +83,7 @@
 
 .home__flow ol {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   padding: 0;
   margin: 0;
@@ -136,7 +136,7 @@
   border-color: var(--border-brand-primary);
 }
 
-.home__review-action {
+.home__plan-link {
   display: flex;
   flex-direction: column;
   gap: 16px;

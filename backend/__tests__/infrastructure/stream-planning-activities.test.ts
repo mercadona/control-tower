@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanningActivityNotRead } from '../../src/domain/exceptions.ts'
+import { AgentMeasurementReader } from '../../src/domain/ports/agent-measurement-reader.ts'
+import { AgentMeasurementStore } from '../../src/domain/ports/agent-measurement-store.ts'
+import type { AgentCallMeasurements } from '../../src/domain/value-objects/agent-call-measurements.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanningActivityState } from '../../src/domain/value-objects/planning-activity.ts'
@@ -15,11 +18,25 @@ import { CallDescriptor, ClaudeCalls } from '../../src/infrastructure/claude-cal
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
-import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { StreamPlanningActivities } from '../../src/infrastructure/stream-planning-activities.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+
+class UnaskedMeasurementReader extends AgentMeasurementReader {
+  override async read(): Promise<AgentCallMeasurements> {
+    throw new Error('a planning observation must not extract measurements')
+  }
+}
+
+class UnaskedMeasurementStore extends AgentMeasurementStore {
+  override async record(): Promise<void> {
+    throw new Error('a planning observation must not publish measurements')
+  }
+}
 
 class CallsDouble extends ClaudeCalls {
   historyRows: readonly RecordedCall[] = []
+  historyFailure: Error | null = null
 
   constructor() {
     super({
@@ -39,6 +56,7 @@ class CallsDouble extends ClaudeCalls {
   }
 
   override async history(): Promise<readonly RecordedCall[]> {
+    if (this.historyFailure !== null) throw this.historyFailure
     return this.historyRows
   }
 }
@@ -91,7 +109,9 @@ class Subject {
     this.calls = new CallsDouble()
     this.nowMsValue = Date.parse('2026-09-22T10:06:12.000Z')
     this.planCalls = new ClaudePlanCalls({
-      calls: this.calls,
+      calls: new MeasuredAgentCalls({
+        executor: this.calls, reader: new UnaskedMeasurementReader(), store: new UnaskedMeasurementStore(),
+      }),
       brief: new PlanAgentBrief({
         dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
         conventions: '/plugin/conventions',
@@ -124,6 +144,26 @@ describe('StreamPlanningActivities, against a real claude -p --output-format str
 
   afterEach(async () => {
     if (root !== undefined) await rm(root, { recursive: true, force: true })
+  })
+
+  it('polling a finished planner reads its activity without extracting or publishing measurements', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    subject.calls.historyRows = [Mother.finished()]
+    const adapter = subject.adapter()
+
+    expect((await adapter.of(Mother.watch())).state).toBe(PlanningActivityState.FINISHED)
+    expect((await adapter.of(Mother.watch())).state).toBe(PlanningActivityState.FINISHED)
+    expect(await fs.readdir(root)).toEqual([])
+  })
+
+  it('unexpected history failures remain programming errors rather than measurement refusals', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ct-planning-activity-'))
+    const subject = new Subject(root)
+    const failure = new TypeError('a bug in history')
+    subject.calls.historyFailure = failure
+
+    await expect(subject.adapter().of(Mother.watch())).rejects.toBe(failure)
   })
 
   it('running_with_zero_tool_calls_before_the_file_exists', async () => {

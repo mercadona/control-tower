@@ -21,15 +21,16 @@ Every project goes through this process. A todo list, a single-function utility,
 
 You MUST create a task for each of these items and complete them in order:
 
-1. **Explore project context** — check files, docs, recent commits
+1. **Explore project context** — read `.agent/conventions.md` and its listed documents, then check files, docs and recent commits. Follow the declared skills where applicable.
 2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit. It becomes the `Handoff origen:` of the execution spec — after the freeze it is history, nobody edits it.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **Write the execution spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md` from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md` (seeded by `/ct-init`), estado DRAFT. Every frozen decision carries its provenance and the freeze refuses while one keeps quiet: `hablada` / `deducida` / `propuesta` / `historia <id>` / `prd <name>` / `prototipo <version>` (see below)
-9. **Request the freeze (congelación)** — present the 15-line summary and STOP. The user's OK mutates `DRAFT → CONGELADA`. Without it there is no groom.
+8. **Write the execution spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md` from this plugin's `../../templates/_TEMPLATE-execution-spec.md`, state DRAFT. Every frozen decision carries its provenance and the freeze refuses while one keeps quiet: `hablada` / `deducida` / `propuesta` / `historia <id>` / `prd <name>` / `prototipo <version>` (see below)
+9. **Validate the draft** — run this plugin's `../../scripts/ct-spec-check.mjs` against the written file and resolve its findings before presenting it as ready.
+10. **Request the freeze (congelación)** — present the 15-line summary and STOP. The user's OK mutates `DRAFT → CONGELADA`. Without it there is no groom.
 
 ## Process Flow
 
@@ -55,7 +56,9 @@ digraph brainstorming {
     "User approves design?" -> "Write design doc" [label="yes"];
     "Write design doc" -> "Spec self-review\n(fix inline)";
     "Spec self-review\n(fix inline)" -> "Write execution spec (DRAFT)\nwith provenance per decision";
-    "Write execution spec (DRAFT)\nwith provenance per decision" -> "Request the freeze:\n15-line summary";
+    "Write execution spec (DRAFT)\nwith provenance per decision" -> "Validate the written draft";
+    "Validate the written draft" -> "Write execution spec (DRAFT)\nwith provenance per decision" [label="findings"];
+    "Validate the written draft" -> "Request the freeze:\n15-line summary" [label="clean"];
     "Request the freeze:\n15-line summary" -> "User approves the freeze?";
     "User approves the freeze?" -> "Write execution spec (DRAFT)\nwith provenance per decision" [label="changes requested"];
     "User approves the freeze?" -> "Mark spec CONGELADA and stop" [label="OK"];
@@ -69,6 +72,7 @@ digraph brainstorming {
 **Understanding the idea:**
 
 - Check out the current project state first (files, docs, recent commits)
+- Read `.agent/conventions.md` and the documents it lists before designing. This index selects the repository's rules; it does not replace them. If the index is missing, empty or points to unreadable files, ask the person to identify the existing convention sources instead of inventing defaults. Keep those rules in their existing documents, not copied into each execution spec.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
 - If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
@@ -123,11 +127,16 @@ After writing the spec document, look at it with fresh eyes:
 Fix any issues inline. No need to re-review — just fix and move on.
 
 **Execution Spec:**
-After the self-review passes, write the execution spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md`, created from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md` (seeded by `/ct-init`; if it is missing, the repo was never bootstrapped — say so instead of inventing the sections), estado `DRAFT`. The design doc you just committed is its `Handoff origen:`.
+After the self-review passes, write the execution spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md`, created from `../../templates/_TEMPLATE-execution-spec.md` relative to this skill's base directory, state `DRAFT`. Resolve the template and checker from this same installed plugin, not from the working directory or another installed copy. The design document is its `Handoff origen:`. Create the destination directory if necessary.
+
+An old `docs/superpowers/specs/_TEMPLATE-execution-spec.md` in the repository is not the format authority. Read it for local additions if it exists, preserve the file, and ask where any unique repository rules belong in the existing convention documents. Do not carry obsolete format instructions into new specs. Existing frozen specs stay unchanged.
 
 - The spec records the join AND its compressed inputs: what the executor needs and cannot derive.
 - **Provenance per frozen decision** (D-1, D-2…), as the suffix `*(Procedencia: …)*` at the end of the decision, on ONE line: `hablada` (with the user's phrase when possible), `deducida` (follows from something hablada), `propuesta` (yours), or the source that decided it by name — `historia <id>`, `prd <name>`, `prototipo <version>`. **A `propuesta` is never frozen** — ask the user, or park it under «Decisiones aparcadas». Gaps are not filled in: they are asked or parked. **A decision with no provenance does not freeze**: the yardstick reports it with its line and the freeze refuses while one remains.
 - `[NEEDS CLARIFICATION]` markers are admitted in DRAFT; freezing with one pending is invalid (groom will refuse the spec).
+
+**Draft validation:**
+Run `node "<this skill's base directory>/../../scripts/ct-spec-check.mjs" "docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md"` after writing or revising the draft. It reads the file without changing it and runs the freeze analyzer used by gate 1. Exit 0 means that analysis has no findings; exit 2 prints findings to fix, and exit 1 means the file could not be checked. Resolve mechanical omissions within the agreed scope; ask the person about missing decisions. If validation cannot pass, report the blocker rather than saying the spec is ready. Validation does not freeze, approve, commit or groom anything; gate 1 still checks the current bytes on the person's click.
 
 **The Freeze Gate (congelación):**
 This replaces any full-document review — the user does not read the spec; they read a summary that fits on one screen. Present, in the conversation, **at most 15 lines**:

@@ -24,6 +24,8 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudeRunCalls } from '../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
@@ -104,9 +106,12 @@ class RunCallMother {
       agent: RunCallMother.CONVERSATION,
     })
     const runCalls = new ClaudeRunCalls({
-      calls,
+      calls: new MeasuredAgentCalls({
+        executor: calls,
+        reader: new ClaudeRunMeasurements({ files }),
+        store: new DiskAgentMeasurements({ files }),
+      }),
       machine: new DispatchingMachine(files, RunCallMother.pluginRoot, dispatches),
-      measurements: new ClaudeRunMeasurements({ files, calls }),
       files,
       pluginRoot: RunCallMother.pluginRoot,
     })
@@ -383,6 +388,9 @@ describe('ClaudeRunCalls', () => {
       const promptPath = join(dirname(scenario.launch.descriptors[index]), CallDescriptor.PROMPT)
       expect(descriptor.purpose).toBe('implementation')
       expect(descriptor.requestId).toBe(`run:${dispatch.ticket}`)
+      expect(descriptor.role).toBe(dispatch.role)
+      expect(JSON.parse(readFileSync(join(dirname(scenario.launch.descriptors[index]), 'agent-measurements-v1.json'), 'utf8')))
+        .toMatchObject({ role: dispatch.role })
       expect(descriptor.cwd).toBe(scenario.watch.located.path)
       expect(descriptor.argv).toEqual(RunCallScenario.argv(dispatch, promptPath))
       expect(readFileSync(promptPath, 'utf8')).toBe(RunCallScenario.prompt(dispatch))
@@ -544,12 +552,24 @@ describe('ClaudeRunCalls', () => {
     await writeFile(response, 'stale model-written bytes\n', 'utf8')
     await scenario.perform('replay')
 
+    await rm(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'))
+    await new MeasuredAgentCalls({
+      executor: scenario.calls,
+      reader: new ClaudeRunMeasurements({ files: scenario.files }),
+      store: new DiskAgentMeasurements({ files: scenario.files }),
+    }).recover(scenario.watch.agent)
+
     expect(scenario.launch.descriptors).toHaveLength(1)
     expect(await readFile(evidence, 'utf8')).toBe(immutable)
     expect(immutable).toBe(`${JSON.stringify(raw)}\n`)
     expect(await readFile(response, 'utf8')).toBe(immutable)
-    expect(await readFile(join(scenario.files.callDirectory(call), ClaudeRunMeasurements.FILE), 'utf8'))
-      .toContain('"scope": "unverified-resume"')
+    await expect(readFile(join(scenario.files.callDirectory(call), 'measurements-v1.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    expect(JSON.parse(await readFile(join(scenario.files.callDirectory(call), 'agent-measurements-v1.json'), 'utf8')))
+      .toMatchObject({
+        provider: 'claude-code', callId: call.id, requestId: 'run:replay', role: 'implement',
+        execution: { kind: 'success' }, cost: { attribution: 'unverified-resume' },
+      })
   })
 
   it('failed or unowned calls advance no verb and preserve measured evidence', async () => {
@@ -573,11 +593,11 @@ describe('ClaudeRunCalls', () => {
 
     await expect(scenario.perform('failed')).rejects.toEqual(new RunNotAdvanced('Claude reported error_max_turns'))
     const failedCall = scenario.call()
-    const measurements = await readFile(
-      join(scenario.files.callDirectory(failedCall), ClaudeRunMeasurements.FILE), 'utf8',
-    )
-    expect(measurements).toContain('Claude reported error_max_turns')
-    expect(measurements).toContain('"total_cost_usd"')
+    expect(JSON.parse(await readFile(join(scenario.files.callDirectory(failedCall), 'agent-measurements-v1.json'), 'utf8')))
+      .toMatchObject({
+        execution: { kind: 'error', diagnostic: 'Claude reported error_max_turns' },
+        cost: { kind: 'reported', totalUsd: 0.5, attribution: 'unverified-resume' },
+      })
     await scenario.seedUnowned(unowned, RunCallMother.stream('present'))
     await expect(scenario.perform('unowned')).rejects.toEqual(
       new RunNotAdvanced('recorded call unowned-call is incomplete and is not owned by this API process'),

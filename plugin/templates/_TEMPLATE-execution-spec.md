@@ -67,8 +67,9 @@ rationale that each slice's plan needs and cannot deduce.>
      - no single-line HTML comments (they truncate the section)
      - no unclosed fence or comment (it swallows the rest of the spec, the
        slices table included)
-     Typical content: stack, repo conventions, calculation rules, invariants
-     that EVERY slice must respect.
+     Keep only milestone-specific constraints here. Repository-wide conventions
+     stay in the documents indexed by `.agent/conventions.md`: reference them
+     when needed, rather than copying their rules into every milestone.
 
      One line is not optional: `Alcance:` with the paths the milestone may
      touch. `ct-scope-gate` reads it from every issue of the milestone, and the
@@ -77,8 +78,8 @@ rationale that each slice's plan needs and cannot deduce.>
 
 ## Contexto del milestone
 
-- **Alcance:** `<dir/>`, `<dir/**>` — the paths every slice of this milestone may touch; `ct-scope-gate` reads this line from each issue and fails a pull request that steps outside it.
-- Stack: <language, frameworks, versions>.
+- **Alcance:** `<dir/>`, `<dir/**>`
+- Convention sources: `.agent/conventions.md`.
 - <Cross-cutting invariant 1>.
 - <Cross-cutting invariant 2>.
 

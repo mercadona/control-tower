@@ -22,10 +22,19 @@ describe('run driver real process', () => {
     expect(evidence.dispatches.map((dispatch) => dispatch.response.kind)).toEqual(['structured', 'file', 'file'])
     expect(new Set(evidence.callIds).size).toBe(evidence.callIds.length)
     expect(evidence.requests.every((request) => request.startsWith('run:'))).toBe(true)
-    expect(evidence.measurements.every((measurement) => (
-      measurement.conversation === evidence.admission.conversation
-      && measurement.reported.total_cost_usd.scope === 'unverified-resume'
-    ))).toBe(true)
+    expect(evidence.commonMeasurements.map((text) => JSON.parse(text))).toEqual(expect.arrayContaining(
+      evidence.callIds.map((callId, index) => expect.objectContaining({
+        callId, conversation: evidence.admission.conversation, role: evidence.roles[index],
+        cost: expect.objectContaining({ attribution: 'unverified-resume' }),
+      })),
+    ))
+    expect(evidence.commonMeasurements).toHaveLength(evidence.modelCalls.length)
+    expect(evidence.commonMeasurements.map((text) => JSON.parse(text))).toEqual(expect.arrayContaining(
+      evidence.modelCalls.map((call) => expect.objectContaining({
+        version: 1, provider: 'claude-code', callId: call.callId,
+        conversation: evidence.admission.conversation, execution: { kind: 'success' },
+      })),
+    ))
     const implementations = evidence.modelCalls.filter((call) => call.role !== 'plan')
     expect(implementations.map((call) => call.conversation)).toEqual([
       evidence.admission.conversation,
@@ -71,6 +80,7 @@ describe('run driver real process', () => {
       run: { issue: 7, task: 1, tasksTotal: 1, step: 'slice-judge', discards: 0 },
     })
     expect(evidence.publication).toContain(`Source: ${RunDriverMother.PLAN}`)
+    expect(await fixture.observeWithoutMeasurements(evidence.admission.conversation)).toEqual([])
     const owned = fixture.holdOwnedProcess()
     await fixture.dispose()
     expect(fixture.disposedWith(owned)).toBe(true)

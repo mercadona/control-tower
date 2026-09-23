@@ -19,7 +19,7 @@ describe('Home · the baseline the plan started on', () => {
   it('should say nothing about the baseline when the repository was green', async () => {
     openRestored({ phase: 'ready' })
 
-    await screen.findByRole('heading', { name: 'Revisar plan' })
+    await screen.findByRole('heading', { name: 'Implementación' })
     expect(screen.queryByText('El repositorio ya estaba en rojo antes de empezar')).toBeNull()
   })
 })

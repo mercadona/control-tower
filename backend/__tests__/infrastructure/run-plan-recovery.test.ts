@@ -38,12 +38,14 @@ import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '.
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
-import { RecordedCall } from '../../src/infrastructure/recorded-call.ts'
+import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import type { ChangesAsked, Delivered } from '../../src/infrastructure/review-watch.ts'
@@ -55,7 +57,6 @@ import { RunPlanAgents, SilentChangeAnnouncements, RunProvenance, type RunProven
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
-import { CallMeasurements } from '../../src/domain/ports/call-measurements.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
 import { SliceEscalations } from '../../src/domain/ports/slice-escalations.ts'
 import { SliceEscalation } from '../../src/domain/value-objects/slice-escalation.ts'
@@ -134,6 +135,8 @@ class RecoveryTransport extends ClaudeCalls {
   readonly descriptors = new Map<string, CallDescriptor>()
   readonly deadlines = new Map<string, number>()
   readonly owned = new Set<string>()
+  readonly restored: string[] = []
+  restorationFailure: Error | null = null
   spawns = 0
 
   constructor() {
@@ -155,6 +158,12 @@ class RecoveryTransport extends ClaudeCalls {
 
   override async history(conversation: string): Promise<readonly RecordedCall[]> {
     return this.histories.get(conversation) ?? []
+  }
+
+  override async recover(conversation: string): Promise<readonly RecordedCall[]> {
+    this.restored.push(conversation)
+    if (this.restorationFailure !== null) throw this.restorationFailure
+    return this.history(conversation)
   }
 
   override async descriptorOf(call: StartedPlanCall): Promise<CallDescriptor> {
@@ -196,12 +205,6 @@ class RecoveryMachine extends CtRunMachine {
   }
 }
 
-class UnaskedMeasurements extends CallMeasurements {
-  override async capture(): Promise<void> {
-    throw new Error('the drain measures nothing here')
-  }
-}
-
 class RecoveryJournal extends RunJournal {
   readonly recorded = new Map<string, readonly JournalEntry[]>()
 
@@ -232,17 +235,12 @@ class RecoveryAgents extends RunPlanAgents {
       step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
         calls: transport,
         machine,
-        measurements: new ClaudeRunMeasurements({
-          files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
-          calls: transport,
-        }),
         files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
         pluginRoot: '/plugin',
       }) }),
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: calls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
@@ -256,10 +254,6 @@ class RecoveryAgents extends RunPlanAgents {
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements: new ClaudeRunMeasurements({
-        files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
-        calls: transport,
-      }),
       announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused',
       nowMs: () => RecoveryMother.NOW,
@@ -567,6 +561,35 @@ class ProjectionScenario {
 }
 
 describe('RunPlanRecovery projection', () => {
+  it('startup restores recorded calls while subsequent plan observations leave measurements alone', async () => {
+    const tested = new ProjectionScenario()
+
+    expect(await tested.recovery.restoreCalls()).toBeNull()
+    expect(tested.transport.restored).toEqual(tested.watches.map((watch) => watch.agent))
+    tested.transport.restored.length = 0
+    expect(await tested.recovery.recover()).toBeNull()
+    expect(await tested.recovery.recover()).toBeNull()
+
+    expect(tested.transport.restored).toEqual([])
+    expect(tested.transport.spawns).toBe(0)
+  })
+
+  it('startup reports a failed measurement restoration without replaying an agent', async () => {
+    const tested = new ProjectionScenario()
+    tested.transport.restorationFailure = new Error('measurement disk is full')
+
+    expect(await tested.recovery.restoreCalls()).toContain('measurement disk is full')
+    expect(tested.transport.spawns).toBe(0)
+  })
+
+  it('startup refuses an unreadable call registry instead of treating it as empty', async () => {
+    const tested = new ProjectionScenario()
+    tested.records.found = PlansInFlight.refused('call registry is unreadable')
+
+    expect(await tested.recovery.restoreCalls()).toBe('call registry is unreadable')
+    expect(tested.transport.restored).toEqual([])
+  })
+
   it('continues publication during startup without a GET and starts review only after checked delivery', async () => {
     const watch = RecoveryMother.watch()
     const delivery = new StartupRunDelivery()
@@ -1245,7 +1268,6 @@ describe('RunPlanRecovery projection', () => {
       transport.owned.add(calls.planner.id)
       const machine = new RecoveryMachine()
       machine.inspections.set(watch.agent, new RunInspection({ kind: 'absent' }))
-      const measurements = new ClaudeRunMeasurements({ files, calls: transport })
       const driver = new DriveRun({
         calls,
         publication: new PlanPublication(),
@@ -1253,12 +1275,11 @@ describe('RunPlanRecovery projection', () => {
         delivery: new CompletedRunDelivery(),
         step: new ExecuteRunInstruction({
           machine,
-          calls: new ClaudeRunCalls({ calls: transport, machine, measurements, files, pluginRoot: '/plugin' }),
+          calls: new ClaudeRunCalls({ calls: transport, machine, files, pluginRoot: '/plugin' }),
         }),
         messages: new DeliverHeldMessages({
           messages: journal,
           calls: calls,
-          measurements: measurements,
           escalations: new QuietEscalations(),
         }),
         escalations: QuietEscalations.reader(),
@@ -1275,7 +1296,6 @@ describe('RunPlanRecovery projection', () => {
         machine,
         journal,
         delivery: new CompletedRunDelivery(),
-        measurements,
         announcements: new SilentChangeAnnouncements(),
         newId: () => 'unused',
         nowMs: () => RecoveryMother.NOW,
@@ -1664,16 +1684,17 @@ class FiniteBridge {
       pollMs: 250,
       sleep: async () => { throw new Error('recovery must not poll a completed call') },
     })
-    const measurements = new ClaudeRunMeasurements({ files, calls: transport })
+    const measured = new MeasuredAgentCalls({
+      executor: transport, reader: new ClaudeRunMeasurements({ files }), store: new DiskAgentMeasurements({ files }),
+    })
     const runCalls = new ClaudeRunCalls({
-      calls: transport,
+      calls: measured,
       machine,
-      measurements,
       files,
       pluginRoot: FiniteBridge.pluginRoot,
     })
     const planCalls = new ClaudePlanCalls({
-      calls: transport,
+      calls: measured,
       records: new PlanRecords(),
       brief: new PlanAgentBrief({
         dispatchCheck: join(FiniteBridge.pluginRoot, 'scripts', 'dispatch-check.mjs'),
@@ -1693,7 +1714,6 @@ class FiniteBridge {
       messages: new DeliverHeldMessages({
         messages: journal,
         calls: planCalls,
-        measurements: new UnaskedMeasurements(),
         escalations: new QuietEscalations(),
       }),
       escalations: QuietEscalations.reader(),
@@ -1716,19 +1736,18 @@ class FiniteBridge {
       legacy: new FiniteBridgeLegacy(),
       records,
       calls: planCalls,
-      transport,
+      transport: measured,
       driver,
       machine,
       journal,
       delivery: new CompletedRunDelivery(),
-      measurements,
       announcements: new SilentChangeAnnouncements(),
       newId: () => 'unused-fix',
       nowMs: () => Date.parse(FiniteBridge.STARTED),
       stderr: (line) => { warnings.push(line) },
     })
     return { state, checkout, worktree, response, brief, files, journal, watch, calls, run, warnings, machine,
-      transport, measurements, runCalls, planCalls, driver, records, agents, spawns: () => spawns, reportArgv, nextArgv }
+      transport: measured, runCalls, planCalls, driver, records, agents, spawns: () => spawns, reportArgv, nextArgv }
   }
 
   static async recordWatch(fixture: Awaited<ReturnType<typeof FiniteBridge.build>>): Promise<void> {
@@ -2002,6 +2021,8 @@ describe('RunPlanRecovery finite bridge', () => {
     expect(fixture.calls.count).toBe(0)
     expect(restarted.spawns()).toBe(0)
     expect(await restarted.journal.entries(restarted.watch)).toEqual(beforeGet)
+    const metricPath = join(fixture.files.callDirectory(implementation), 'agent-measurements-v1.json')
+    await expect(readFile(metricPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
 
     await restarted.agents.recover({
       agent: restarted.watch.agent,
@@ -2010,6 +2031,10 @@ describe('RunPlanRecovery finite bridge', () => {
     })
     await FiniteBridge.bounded(() => fixture.warnings.length > 0)
     expect(fixture.warnings.join('')).toContain('finite recovery boundary')
+    expect(JSON.parse(await readFile(metricPath, 'utf8'))).toMatchObject({
+      callId: implementation.id, conversation: implementation.conversation,
+      cost: { kind: 'reported', attribution: 'unverified-resume' },
+    })
 
     expect(fixture.calls.asked).toEqual([
       { argv: fixture.reportArgv, cwd: fixture.worktree },

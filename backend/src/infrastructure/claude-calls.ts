@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { AgentCalls } from '../domain/ports/agent-calls.ts'
 import { PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
 import {
   CompletedPlanCall,
@@ -11,7 +12,7 @@ import {
 import { PlanNonLaunch, type PlanNonLaunchSource } from '../domain/value-objects/plan-non-launch.ts'
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { HeadlessFiles } from './headless-files.ts'
-import { RecordedCall } from './recorded-call.ts'
+import { RecordedCall } from '../domain/value-objects/recorded-call.ts'
 
 type JsonRecord = Record<string, unknown>
 type CallMode = 'initial' | 'resume'
@@ -23,6 +24,7 @@ export class CallInvocation {
   readonly argv: readonly string[]
   readonly prompt: string
   readonly requestId: string | null
+  readonly role: string | null
 
   constructor(asked: {
     conversation: string,
@@ -31,6 +33,7 @@ export class CallInvocation {
     argv: readonly string[],
     prompt: string,
     requestId?: string,
+    role?: string | null,
   }) {
     this.conversation = asked.conversation
     this.purpose = asked.purpose
@@ -38,6 +41,7 @@ export class CallInvocation {
     this.argv = Object.freeze([...asked.argv])
     this.prompt = asked.prompt
     this.requestId = asked.requestId ?? null
+    this.role = asked.role ?? null
     Object.freeze(this)
   }
 }
@@ -55,6 +59,7 @@ export class CallDescriptor {
   readonly conversation: string
   readonly purpose: PlanCallPurpose
   readonly requestId: string | null
+  readonly role: string | null
   readonly cwd: string
   readonly binary: string
   readonly argv: readonly string[]
@@ -63,19 +68,24 @@ export class CallDescriptor {
   readonly killGraceMs: number
 
   constructor(asked: {
-    conversation: string,
-    purpose: PlanCallPurpose,
-    requestId: string | null,
-    cwd: string,
-    binary: string,
-    argv: readonly string[],
-    startedAt: string,
-    budgetMs: number,
-    killGraceMs: number,
+    conversation: unknown,
+    purpose: unknown,
+    requestId: unknown,
+    role?: unknown,
+    cwd: unknown,
+    binary: unknown,
+    argv: unknown,
+    startedAt: unknown,
+    budgetMs: unknown,
+    killGraceMs: unknown,
   }) {
     this.conversation = CallDescriptor.#nonempty('conversation', asked.conversation)
     this.purpose = CallDescriptor.#purpose(asked.purpose)
     this.requestId = CallDescriptor.#nullableNonempty('requestId', asked.requestId)
+    this.role = CallDescriptor.#nullableNonempty('role', asked.role ?? null)
+    if (this.role !== null && this.role.trim().length === 0) {
+      throw new Error(`role must be a nonempty string, got ${JSON.stringify(this.role)}`)
+    }
     this.cwd = CallDescriptor.#nonempty('cwd', asked.cwd)
     this.binary = CallDescriptor.#nonempty('binary', asked.binary)
     this.argv = Object.freeze(CallDescriptor.#argv(asked.argv))
@@ -89,17 +99,18 @@ export class CallDescriptor {
   static from(text: string): CallDescriptor {
     const raw: unknown = JSON.parse(text)
     if (!CallDescriptor.#isRecord(raw)) throw new Error(`expected a JSON object, got ${JSON.stringify(raw)}`)
-    CallDescriptor.#exactKeys(raw, CallDescriptor.#KEYS)
+    CallDescriptor.#exactKeys(raw, Object.hasOwn(raw, 'role') ? [...CallDescriptor.#KEYS, 'role'] : CallDescriptor.#KEYS)
     return new CallDescriptor({
-      conversation: CallDescriptor.#nonempty('conversation', raw.conversation),
-      purpose: CallDescriptor.#purpose(raw.purpose),
-      requestId: CallDescriptor.#nullableNonempty('requestId', raw.requestId),
-      cwd: CallDescriptor.#nonempty('cwd', raw.cwd),
-      binary: CallDescriptor.#nonempty('binary', raw.binary),
-      argv: CallDescriptor.#argv(raw.argv),
-      startedAt: CallDescriptor.#timestamp('startedAt', raw.startedAt),
-      budgetMs: CallDescriptor.#duration('budgetMs', raw.budgetMs),
-      killGraceMs: CallDescriptor.#duration('killGraceMs', raw.killGraceMs),
+      conversation: raw.conversation,
+      purpose: raw.purpose,
+      requestId: raw.requestId,
+      role: raw.role,
+      cwd: raw.cwd,
+      binary: raw.binary,
+      argv: raw.argv,
+      startedAt: raw.startedAt,
+      budgetMs: raw.budgetMs,
+      killGraceMs: raw.killGraceMs,
     })
   }
 
@@ -108,6 +119,7 @@ export class CallDescriptor {
       conversation: this.conversation,
       purpose: this.purpose,
       requestId: this.requestId,
+      ...(this.role === null ? {} : { role: this.role }),
       cwd: this.cwd,
       binary: this.binary,
       argv: this.argv,
@@ -380,7 +392,7 @@ export class StoredCompletion {
   }
 }
 
-export class ClaudeCalls {
+export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
   readonly files: HeadlessFiles
   readonly binary: string
   readonly worker: string
@@ -410,6 +422,7 @@ export class ClaudeCalls {
     pollMs: number,
     sleep: (ms: number) => Promise<void>,
   }) {
+    super()
     this.files = ports.files
     this.binary = ports.binary
     this.worker = ports.worker
@@ -473,6 +486,7 @@ export class ClaudeCalls {
         conversation: invocation.conversation,
         purpose: invocation.purpose,
         requestId: invocation.requestId,
+        role: invocation.role,
         cwd: invocation.cwd,
         binary: this.binary,
         argv: [...invocation.argv, CallDescriptor.opening(promptPath)],
@@ -538,6 +552,9 @@ export class ClaudeCalls {
     descriptor: CallDescriptor,
     invocation: CallInvocation,
   ): Promise<void> {
+    if (descriptor.role !== null && descriptor.role !== invocation.role) {
+      throw new PlanAgentNotNamed(`request ${JSON.stringify(invocation.requestId)} was already recorded with a different role`)
+    }
     const promptPath = join(this.files.callDirectory(call), CallDescriptor.PROMPT)
     let prompt: string | null
     try {
@@ -602,6 +619,10 @@ export class ClaudeCalls {
     return Object.freeze(history)
   }
 
+  recover(conversation: string): Promise<readonly RecordedCall[]> {
+    return this.history(conversation)
+  }
+
   owns(call: StartedPlanCall): boolean {
     return this.accepted.has(ClaudeCalls.#callKey(call))
   }
@@ -661,24 +682,13 @@ export class ClaudeCalls {
   }
 
   async #writeOnceOrMatch(path: string, text: string): Promise<void> {
+    let outcome: 'accepted' | 'conflict'
     try {
-      await this.files.writeOnce(path, text)
-      return
+      outcome = await this.files.writeOnceOrMatch(path, text)
     } catch (cause) {
-      if (!ClaudeCalls.#hasCode(cause, 'EEXIST')) {
-        throw new PlanAgentNotLaunched(`${path} could not be written: ${String(cause)}`)
-      }
+      throw new PlanAgentNotLaunched(`${path} could not be published: ${String(cause)}`)
     }
-    let existing: string | null
-    try {
-      existing = await this.files.read(path)
-    } catch (cause) {
-      throw new PlanAgentNotLaunched(`${path} could not be read after immutable publication collided: ${String(cause)}`)
-    }
-    if (existing === null) {
-      throw new PlanAgentNotLaunched(`${path} is absent after immutable publication collided`)
-    }
-    if (existing !== text) {
+    if (outcome === 'conflict') {
       throw new PlanAgentNotNamed(`${path} contains different bytes after immutable publication collided`)
     }
   }
@@ -756,10 +766,6 @@ export class ClaudeCalls {
     delete child[ClaudeConversations.PROMPT_VARIABLE]
     delete child[ClaudeConversations.HOOKS_URL_VARIABLE]
     return child
-  }
-
-  static #hasCode(cause: unknown, code: string): boolean {
-    return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
   }
 
   static #callKey(call: StartedPlanCall): string {

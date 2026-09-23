@@ -3,11 +3,11 @@ import { Breadcrumbs } from 'system-ui/breadcrumbs'
 
 describe('Breadcrumbs', () => {
   it('should render every level and mark the last one as the current page', () => {
-    render(<Breadcrumbs items={[{ label: 'owner/name' }, { label: '#7' }, { label: 'Revisar plan' }]} />)
+    render(<Breadcrumbs items={[{ label: 'owner/name' }, { label: '#7' }, { label: 'Implementación' }]} />)
 
     const trail = screen.getByRole('navigation', { name: 'Ruta de navegación' })
     expect(within(trail).getByText('owner/name')).toBeInTheDocument()
     expect(within(trail).getByText('#7')).toBeInTheDocument()
-    expect(within(trail).getByText('Revisar plan')).toHaveAttribute('aria-current', 'page')
+    expect(within(trail).getByText('Implementación')).toHaveAttribute('aria-current', 'page')
   })
 })

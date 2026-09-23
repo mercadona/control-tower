@@ -2,7 +2,7 @@ import type {
   CompletedPlanCall,
   PlanCallPurpose,
   StartedPlanCall,
-} from '../domain/value-objects/plan-call.ts'
+} from './plan-call.ts'
 
 export class RecordedCall {
   readonly call: StartedPlanCall

@@ -75,6 +75,8 @@ class BornConforming {
     '__tests__/claude-settings.test.js',
     'scripts/plugin-install.js',
     'scripts/ct-install.mjs',
+    'scripts/ct-spec-check.mjs',
+    '__tests__/ct-spec-check-real-process.test.js',
     '__tests__/plugin-install.test.js',
     'scripts/step-announcement.js',
     '__tests__/step-announcement.test.js',

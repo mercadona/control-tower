@@ -1,5 +1,4 @@
 import { PlanAgentNotResumed } from '../../domain/exceptions.ts'
-import type { CallMeasurements } from '../../domain/ports/call-measurements.ts'
 import type { PlanCalls } from '../../domain/ports/plan-calls.ts'
 import type { SliceEscalations } from '../../domain/ports/slice-escalations.ts'
 import type { SliceMessages } from '../../domain/ports/slice-messages.ts'
@@ -22,18 +21,15 @@ export class DeliverHeldMessages {
 
   readonly messages: SliceMessages
   readonly calls: PlanCalls
-  readonly measurements: CallMeasurements
   readonly escalations: SliceEscalations
 
-  constructor({ messages, calls, measurements, escalations }: {
+  constructor({ messages, calls, escalations }: {
     messages: SliceMessages,
     calls: PlanCalls,
-    measurements: CallMeasurements,
     escalations: SliceEscalations,
   }) {
     this.messages = messages
     this.calls = calls
-    this.measurements = measurements
     this.escalations = escalations
   }
 
@@ -47,7 +43,6 @@ export class DeliverHeldMessages {
         `${DeliverHeldMessages.REQUEST_PREFIX}${message.ticket}`,
       )
       const completed = await this.calls.wait(call)
-      await this.measurements.capture(call)
       DeliverHeldMessages.#requireSuccess(completed)
       await this.messages.settle(params.watch, message.ticket, call.id)
       delivered += 1

@@ -11,6 +11,9 @@ import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
+import { MeasuredAgentCalls } from '../../src/infrastructure/measured-agent-calls.ts'
+import { ClaudeRunMeasurements } from '../../src/infrastructure/claude-run-measurements.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
 
 class RealCallMother {
   static readonly CONVERSATION = '11111111-1111-4111-8111-111111111111'
@@ -89,6 +92,15 @@ class RealCallMother {
 
   static call(): StartedPlanCall {
     return new StartedPlanCall({ conversation: RealCallMother.CONVERSATION, id: RealCallMother.CALL })
+  }
+
+  static measured(root: string): MeasuredAgentCalls<CallInvocation, CallDescriptor> {
+    const files = new HeadlessFiles({ root, fs, newId: () => 'measurement-temporary' })
+    return new MeasuredAgentCalls({
+      executor: RealCallMother.calls(root),
+      reader: new ClaudeRunMeasurements({ files }),
+      store: new DiskAgentMeasurements({ files }),
+    })
   }
 
   static launchWorkerAndExit(descriptor: string): Promise<void> {
@@ -225,6 +237,19 @@ describe('ClaudeCalls with real local processes', () => {
     expect(completed.signal).toBeNull()
     expect(await readFile(join(RealCallMother.directory(root), 'stream.ndjson'), 'utf8')).toContain('"subtype":"success"')
     expect(await readFile(join(RealCallMother.directory(root), 'stderr.log'), 'utf8')).toBe('fixture stderr\n')
+    const measurements = join(RealCallMother.directory(root), 'agent-measurements-v1.json')
+    await expect(fs.access(measurements)).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await RealCallMother.measured(root).recover(RealCallMother.CONVERSATION)
+    const first = await readFile(measurements, 'utf8')
+    await RealCallMother.measured(root).completed(RealCallMother.call())
+
+    expect(JSON.parse(first)).toMatchObject({
+      callId: RealCallMother.CALL, provider: 'claude-code',
+      execution: { kind: 'success' }, wallDurationMs: completed.wallDurationMs,
+    })
+    expect(await readFile(measurements, 'utf8')).toBe(first)
+    expect(await fs.readdir(join(root, 'harness', RealCallMother.CONVERSATION, 'calls'))).toEqual([RealCallMother.CALL])
   })
 
   it('the surviving deadline terminates the child process group', async () => {
@@ -245,7 +270,7 @@ describe('ClaudeCalls with real local processes', () => {
 
     await RealCallMother.launchWorkerAndExit(descriptor)
     RealCallMother.groups.add(await RealCallMother.eventuallyReadPid(groupPidPath))
-    const completed = await RealCallMother.calls(root).wait(RealCallMother.call())
+    const completed = await RealCallMother.measured(root).wait(RealCallMother.call())
     const descendantPid = Number(await readFile(descendantPidPath, 'utf8'))
     RealCallMother.groups.add(descendantPid)
     await RealCallMother.eventuallyAbsent(descendantPid)
@@ -253,6 +278,8 @@ describe('ClaudeCalls with real local processes', () => {
     expect(completed.succeeded).toBe(false)
     expect(completed.signal).toBe('SIGTERM')
     expect(completed.wallDurationMs).toBeGreaterThanOrEqual(10_000)
+    expect(JSON.parse(await readFile(join(RealCallMother.directory(root), 'agent-measurements-v1.json'), 'utf8')))
+      .toMatchObject({ signal: 'SIGTERM', wallDurationMs: completed.wallDurationMs })
   })
 
   it('worker entrypoint publishes consumable child-spawn failure', async () => {
@@ -272,7 +299,8 @@ describe('ClaudeCalls with real local processes', () => {
       expect(watch).toBeInstanceOf(PlanWatch)
       const proof = await records.nonLaunch(watch!)
       const call = new StartedPlanCall({ conversation, id: callId })
-      const completed = await RealCallMother.calls(root).completed(call)
+      const completed = await RealCallMother.measured(root).completed(call)
+      await RealCallMother.measured(root).recover(conversation)
       const recovery = await RealCallMother.planCalls(root, records).recoveryFor(watch!)
       expect(proof).toMatchObject({ conversation, callId, source: 'child-spawn' })
       expect(completed).toMatchObject({
@@ -282,6 +310,12 @@ describe('ClaudeCalls with real local processes', () => {
         execution: { kind: 'child-spawn-failed', conversation, callId },
       })
       expect(completed?.succeeded).toBe(false)
+      expect(JSON.parse(await readFile(join(root, 'harness', conversation, 'calls', callId, 'agent-measurements-v1.json'), 'utf8')))
+        .toMatchObject({
+          execution: { kind: 'child-spawn-failed', conversation, callId },
+          tokens: { input: null, output: null, cacheRead: null, cacheCreation: null },
+          cost: { kind: 'unavailable' },
+        })
       expect(recovery.action).toBe('cleanup')
       await expect(fs.access(join(root, 'nonexistent-claude'))).rejects.toMatchObject({ code: 'ENOENT' })
     }

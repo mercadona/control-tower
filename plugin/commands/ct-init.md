@@ -1,12 +1,14 @@
 ---
-description: Bootstrap a repository for the Control Tower loop (.agent/STATE.md + AGENTS.md + slices contract + execution spec template)
+description: Bootstrap a repository for the Control Tower loop (.agent/STATE.md + AGENTS.md + conventions + slices contract)
 ---
 Run the scaffolder over the current repository and confirm what it created:
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/ct-init.sh "$(pwd)"
 ```
 
-It is idempotent: it creates what is missing and does not tread on what is there. It seeds `.agent/STATE.md`, `.agent/conventions.md` (the repository's yardstick), the contract of the slices table (versioned and maintained by `/ct-init`; a fresh repository gets `docs/superpowers/SLICES-CONTRACT.md`, and a repository that already carries the legacy `docs/superpowers/CONTRATO-SLICES.md` keeps that name), `docs/superpowers/specs/_TEMPLATE-execution-spec.md`, two sections in `AGENTS.md` (the loop's one, which links to the contract, and the e2e journey one), the `.gitignore` rules (`.worktrees/`, `.agent/SLICE.md`, `.agent/run-*`, `.claude/worktrees/`, `.claude/settings.local.json`), `.claude/settings.json` (which declares this plugin, pinned at the release that wrote it) and the scope gate (`.github/workflows/ct-scope-gate.yml`, the `.github/ct/scope-check.js` bundle it runs, and the `.github/ct/package.json` that makes node read that ESM bundle as ESM whatever the repository declares).
+It is idempotent: it creates what is missing and does not tread on what is there. It seeds `.agent/STATE.md`, `.agent/conventions.md` (the repository's yardstick), the contract of the slices table (versioned and maintained by `/ct-init`; a fresh repository gets `docs/superpowers/SLICES-CONTRACT.md`, and a repository that already carries the legacy `docs/superpowers/CONTRATO-SLICES.md` keeps that name), two sections in `AGENTS.md` (the loop's one, which links to the contract, and the e2e journey one), the `.gitignore` rules (`.worktrees/`, `.agent/SLICE.md`, `.agent/run-*`, `.claude/worktrees/`, `.claude/settings.local.json`), `.claude/settings.json` (which declares this plugin, pinned at the release that wrote it) and the scope gate (`.github/workflows/ct-scope-gate.yml`, the `.github/ct/scope-check.js` bundle it runs, and the `.github/ct/package.json` that makes node read that ESM bundle as ESM whatever the repository declares).
+
+The execution template stays in the installed plugin. Brainstorming reads it there and reads repository rules through `.agent/conventions.md`. Existing local template copies are preserved, but are no longer the format authority; inspect their local additions before moving any rules into the repository's existing convention documents. Generated specs still belong in `docs/superpowers/specs/`.
 
 | Exit | What it means | What to do |
 |---|---|---|

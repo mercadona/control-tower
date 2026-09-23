@@ -45,6 +45,18 @@ export class HeadlessFiles {
     }
   }
 
+  async writeOnceOrMatch(path: string, text: string): Promise<'accepted' | 'conflict'> {
+    try {
+      await this.writeOnce(path, text)
+      return 'accepted'
+    } catch (cause) {
+      if (!HeadlessFiles.isSystemFailure(cause) || cause.code !== 'EEXIST') throw cause
+    }
+    const existing = await this.read(path)
+    if (existing === null) throw new Error(`${path} is absent after immutable publication collided`)
+    return existing === text ? 'accepted' : 'conflict'
+  }
+
   async list(path: string): Promise<string[]> {
     try {
       return await this.fs.readdir(path)

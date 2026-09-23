@@ -22,7 +22,7 @@ const FAKE_CLAUDE_BIN = join(root, '__tests__', 'fixtures', 'fake-claude-install
 const TEST_ENV = { ...process.env, CT_CLAUDE_BIN: FAKE_CLAUDE_BIN }
 
 const ARTIFACT_IDS = [
-  'state-md', 'conventions-md', 'spec-template', 'gitignore',
+  'state-md', 'conventions-md', 'gitignore',
   'scope-gate-workflow', 'scope-gate-bundle', 'scope-gate-package',
   'claude-settings', 'plugin-install', 'agents-md', 'slices-contract', 'loop-section', 'e2e-howto',
 ]

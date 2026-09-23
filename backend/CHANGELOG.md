@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/mercadona/control-tower/compare/backend-v0.4.1...backend-v0.5.0) (2026-09-23)
+
+
+### Funcionalidades
+
+* a person can get a run out of the judge's third veto ([#517](https://github.com/mercadona/control-tower/issues/517)) ([22559db](https://github.com/mercadona/control-tower/commit/22559dbbea0a41e1dbd18130dd8f083766cf84aa))
+* **backend:** the planning phase answers what the agent is doing, instead of only its id and its branch ([#509](https://github.com/mercadona/control-tower/issues/509)) ([f185e6d](https://github.com/mercadona/control-tower/commit/f185e6db27f6a020a4e1393cb6522cf927d398ee))
+* **ct-step:** the stdout is a structured contract, so a refusal arrives classified ([#498](https://github.com/mercadona/control-tower/issues/498)) ([7ac42db](https://github.com/mercadona/control-tower/commit/7ac42db3ec311e8280b9a0e0da067aeedec8c911))
+* the coordinating session grants the round after the judge's third veto ([#523](https://github.com/mercadona/control-tower/issues/523)) ([3b42dd1](https://github.com/mercadona/control-tower/commit/3b42dd1fa0197648e286da0c2e523136611ed590))
+
+
+### Correcciones
+
+* **backend:** publish completed driver runs with recoverable delivery ([#506](https://github.com/mercadona/control-tower/issues/506)) ([c3fd7b3](https://github.com/mercadona/control-tower/commit/c3fd7b3672eb342ae78861e41bb616ed3f8c2c91))
+* **backend:** recovery asks ct-step again after an announced refusal, instead of reading the journal as the last word ([#505](https://github.com/mercadona/control-tower/issues/505)) ([bdb1dbc](https://github.com/mercadona/control-tower/commit/bdb1dbc477018b58f7654ed73cb58d03f59cb397))
+* **backend:** the headless worker completes a call when its leader closes, instead of holding it until the deadline ([#529](https://github.com/mercadona/control-tower/issues/529)) ([42b601c](https://github.com/mercadona/control-tower/commit/42b601cc65a6f6571b283c583f290d10a0132d28))
+* **plugin:** the cabin's harvest collects a worktree whose tip the merged head contains, and skips the workspace lookup ([#510](https://github.com/mercadona/control-tower/issues/510)) ([c0c037f](https://github.com/mercadona/control-tower/commit/c0c037fe9d55af8c5546d55d821225e75bd607d0))
+* remove the planning comment and require a ticket ([#531](https://github.com/mercadona/control-tower/issues/531)) ([9cfc2ba](https://github.com/mercadona/control-tower/commit/9cfc2ba3a58b708727c7849089acb1488502d09d))
+* the freeze asks for the Alcance line the scope gate reads, and the template writes it ([#508](https://github.com/mercadona/control-tower/issues/508)) ([1b5c17f](https://github.com/mercadona/control-tower/commit/1b5c17f0bd1463c08809ecf63a283efabda47640))
+* the run journal stops blocking on a pending command and on a changed prompt ([#528](https://github.com/mercadona/control-tower/issues/528)) ([e6373a3](https://github.com/mercadona/control-tower/commit/e6373a38420082c97bbf553b1659a03235777036))
+
 ## [0.4.1](https://github.com/mercadona/control-tower/compare/backend-v0.4.0...backend-v0.4.1) (2026-09-21)
 
 
