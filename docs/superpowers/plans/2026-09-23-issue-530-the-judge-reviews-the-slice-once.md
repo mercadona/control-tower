@@ -320,7 +320,7 @@ The commands below measure the slice end to end.
 ```bash
 cd plugin && env -u CT_STATE_DIR npm test   # expected: exit 0 — the whole plugin suite
 cd backend && npm run typecheck   # expected: exit 0 — the backend reads the table
-test "$(grep -c 'judgesEachTask' plugin/scripts/ct-step.mjs)" -ge 1   # expected: exit 0 — ct-step asks the table
+test "$(grep -c "judging: 'final'" plugin/scripts/ct-step.mjs)" -ge 1   # expected: exit 0 — ct-step births every run for the final review
 ```
 
 ## 9. Assumptions
