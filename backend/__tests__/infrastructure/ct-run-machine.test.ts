@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STEPS } from '../../../plugin/scripts/run-machine.js'
 import {
   AnnouncedInput, AnnouncedResponse, INPUT_KINDS, INPUT_ROLES, StepAnnouncement,
@@ -439,6 +439,10 @@ class OracleMother {
     return '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
       + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"judge","discards":0},'
       + '"detail":"run blocked-judge: task 1/3, 0 discard(s)"}\n'
+  }
+
+  static async settle(): Promise<void> {
+    await new Promise((resolve) => { setTimeout(resolve, 50) })
   }
 
   static output(code: number, stdout: string, stderr = ''): ProcessOutput {
@@ -1354,34 +1358,223 @@ describe('CtRunMachine', () => {
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
   })
 
-  it('a pending forked or malformed command chain cannot resume', async () => {
-    const pending = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-pending-')))
-    roots.push(pending.root)
-    await pending.establish()
-    pending.runBytes = null
-    const interrupted = new TypeError('oracle runner interrupted after request publication')
-    pending.answer(OracleMother.nextArgv(), () => { throw interrupted })
-    await expect(pending.machine().open(OracleMother.watch())).rejects.toBe(interrupted)
-    expect(await readFile(pending.operation(OracleMother.TICKETS[0], 'request.json'), 'utf8')).toBe(
-      OracleMother.request(null, OracleMother.nextArgv()),
-    )
-    await expect(readFile(pending.operation(OracleMother.TICKETS[0], 'receipt.json'), 'utf8'))
-      .rejects.toMatchObject({ code: 'ENOENT' })
-    const pendingInspection = await pending.machine().inspect(OracleMother.watch())
-    expect(pendingInspection.fact).toEqual({
-      kind: 'uncertain',
-      detail: `command ${OracleMother.TICKETS[0]} has no receipt and cannot be replayed`,
-      closure: null,
-    })
-    expect(Object.isFrozen(pendingInspection)).toBe(true)
-    expect(Object.isFrozen(pendingInspection.fact)).toBe(true)
-    expect((await pending.machine().open(OracleMother.watch())).work).toEqual({
-      kind: 'refused',
-      detail: `command ${OracleMother.TICKETS[0]} has no receipt and cannot be replayed`,
-      closure: null,
-    })
-    expect(pending.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  it('a command still running in this process reads as active and a second open waits for it', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-running-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    let finish: (output: ProcessOutput) => void = () => undefined
+    const running = new Promise<ProcessOutput>((resolve) => { finish = resolve })
+    fixture.answer(OracleMother.nextArgv(), () => running)
+    const machine = fixture.machine()
 
+    const first = machine.open(OracleMother.watch())
+    await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
+    const inspection = await machine.inspect(OracleMother.watch())
+    const second = machine.open(OracleMother.watch())
+    await OracleMother.settle()
+    fixture.runBytes = OracleMother.RUN_BYTES
+    finish(OracleMother.output(0, OracleMother.controlsAnnouncementJson()))
+
+    expect(inspection.fact).toEqual({
+      kind: 'active',
+      instruction: new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }),
+    })
+    expect(Object.isFrozen(inspection.fact)).toBe(true)
+    expect(await first).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(await second).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('an advance on a command still running waits for it and answers from the journal', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-running-advance-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    fixture.answer(OracleMother.nextArgv(), () => {
+      fixture.runBytes = OracleMother.RUN_BYTES
+      return OracleMother.output(0, OracleMother.controlsAnnouncementJson())
+    })
+    const machine = fixture.machine()
+    const first = await machine.open(OracleMother.watch())
+    let finish: (output: ProcessOutput) => void = () => undefined
+    const running = new Promise<ProcessOutput>((resolve) => { finish = resolve })
+    fixture.answer(OracleMother.controlsArgv(), () => running)
+
+    const driving = machine.advance(OracleMother.watch(), first)
+    await vi.waitFor(() => expect(fixture.asked).toHaveLength(2))
+    const inspection = await machine.inspect(OracleMother.watch())
+    if (inspection.fact.kind !== 'active') throw new Error(`expected active, got ${inspection.fact.kind}`)
+    const waiting = machine.advance(OracleMother.watch(), inspection.fact.instruction)
+    await OracleMother.settle()
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
+    finish(OracleMother.output(0, OracleMother.openTransition()))
+
+    expect(inspection.fact.instruction).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[1] }))
+    expect(await driving).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[2] }))
+    expect(await waiting).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[2] }))
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+    ])
+  })
+
+  it('an advance on a command still running answers the call its receipt announces', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-running-call-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    let finish: (output: ProcessOutput) => void = () => undefined
+    const running = new Promise<ProcessOutput>((resolve) => { finish = resolve })
+    fixture.answer(OracleMother.nextArgv(), () => running)
+    const machine = fixture.machine()
+
+    const driving = machine.open(OracleMother.watch())
+    await vi.waitFor(() => expect(fixture.asked).toHaveLength(1))
+    const inspection = await machine.inspect(OracleMother.watch())
+    if (inspection.fact.kind !== 'active') throw new Error(`expected active, got ${inspection.fact.kind}`)
+    const waiting = machine.advance(OracleMother.watch(), inspection.fact.instruction)
+    await OracleMother.settle()
+    fixture.runBytes = OracleMother.RUN_BYTES
+    finish(OracleMother.output(0, OracleMother.implementAnnouncement()))
+
+    expect(await driving).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }))
+    expect(await waiting).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[0] }))
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a command nobody owns is closed as interrupted and the run continues through ct-step next', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-interrupted-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const announced = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), announced,
+      OracleMother.receipt(OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES),
+    )
+    const orphaned = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(announced, OracleMother.controlsArgv()),
+    )
+    const restarted = fixture.machine()
+
+    const inspection = await restarted.inspect(OracleMother.watch())
+    await expect(readFile(fixture.operation(orphaned, 'receipt.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    fixture.runBytes = '{"step":"implement","task":1}\n'
+    const opened = await restarted.open(OracleMother.watch())
+    const interrupted = await readFile(fixture.operation(orphaned, 'receipt.json'), 'utf8')
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
+    const next = await restarted.advance(OracleMother.watch(), opened)
+
+    expect(inspection.fact).toEqual({
+      kind: 'active',
+      instruction: new RunInstruction({ kind: 'command', ticket: orphaned }),
+    })
+    expect(opened).toEqual(new RunInstruction({ kind: 'command', ticket: orphaned }))
+    expect(JSON.parse(interrupted)).toEqual({
+      version: 1, interrupted: true, afterRun: '{"step":"implement","task":1}\n',
+    })
+    expect(next).toEqual(new RunInstruction({ kind: 'call', ticket: OracleMother.TICKETS[2] }))
+    expect(await readFile(fixture.operation(OracleMother.TICKETS[2], 'request.json'), 'utf8')).toBe(
+      OracleMother.request(orphaned, OracleMother.nextArgv()),
+    )
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it('a runner that throws leaves a command nobody owns, which the next open closes as interrupted', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-thrown-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    fixture.runBytes = null
+    const thrown = new TypeError('oracle runner interrupted after request publication')
+    fixture.answer(OracleMother.nextArgv(), () => { throw thrown })
+    const machine = fixture.machine()
+    await expect(machine.open(OracleMother.watch())).rejects.toBe(thrown)
+
+    const reopened = await machine.open(OracleMother.watch())
+
+    expect(reopened).toEqual(new RunInstruction({ kind: 'command', ticket: OracleMother.TICKETS[0] }))
+    expect(JSON.parse(await readFile(fixture.operation(OracleMother.TICKETS[0], 'receipt.json'), 'utf8')))
+      .toEqual({ version: 1, interrupted: true, afterRun: null })
+    expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
+  })
+
+  it.each([
+    ['interrupted false', { version: 1, interrupted: false, afterRun: null }],
+    ['interrupted with an exit code', { version: 1, interrupted: true, afterRun: null, code: 0 }],
+    ['interrupted without its run bytes', { version: 1, interrupted: true }],
+    ['interrupted with malformed run bytes', { version: 1, interrupted: true, afterRun: 7 }],
+    ['interrupted at another version', { version: 2, interrupted: true, afterRun: null }],
+  ])('an interrupted receipt with %s is refused', async (_name, receipt) => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-interrupted-shape-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const ticket = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(OracleMother.watch(), ticket, `${JSON.stringify(receipt)}\n`)
+
+    await expect(fixture.machine().inspect(OracleMother.watch())).rejects.toBeInstanceOf(RunNotUnderstood)
+    await expect(fixture.machine().open(OracleMother.watch())).rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(fixture.asked).toEqual([])
+  })
+
+  it('an interrupted command carries no dispatch material', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-interrupted-dispatch-')))
+    roots.push(fixture.root)
+    await fixture.establish()
+    const ticket = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), ticket, `${JSON.stringify({ version: 1, interrupted: true, afterRun: null })}\n`,
+    )
+
+    await expect(fixture.machine().dispatch(OracleMother.watch(), ticket))
+      .rejects.toThrow(`dispatch ticket ${ticket} was interrupted`)
+  })
+
+  it('a cyclic, dangling or foreign command chain cannot resume', async () => {
+    const cyclic = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-cyclic-')))
+    roots.push(cyclic.root)
+    await cyclic.establish()
+    await cyclic.journal.begin(OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()))
+    await cyclic.journal.begin(
+      OracleMother.watch(), OracleMother.request(OracleMother.TICKETS[2], OracleMother.nextArgv()),
+    )
+    await cyclic.journal.begin(
+      OracleMother.watch(), OracleMother.request(OracleMother.TICKETS[1], OracleMother.nextArgv()),
+    )
+    await expect(cyclic.machine().open(OracleMother.watch())).rejects.toThrow('the command journal contains a cycle')
+    await expect(cyclic.machine().inspect(OracleMother.watch())).rejects.toThrow('the command journal contains a cycle')
+
+    const dangling = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-dangling-')))
+    roots.push(dangling.root)
+    await dangling.establish()
+    await dangling.journal.begin(OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()))
+    await dangling.journal.begin(
+      OracleMother.watch(), OracleMother.request(OracleMother.TICKETS[3], OracleMother.nextArgv()),
+    )
+    await expect(dangling.machine().open(OracleMother.watch()))
+      .rejects.toThrow(`command ${OracleMother.TICKETS[1]} has a dangling previous ticket`)
+
+    const foreign = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-foreign-')))
+    roots.push(foreign.root)
+    await foreign.establish()
+    await foreign.journal.begin(
+      OracleMother.watch(),
+      OracleMother.request(null, OracleMother.nextArgv()).replace(OracleMother.WORKTREE, '/repo/.worktrees/other'),
+    )
+    await expect(foreign.machine().open(OracleMother.watch()))
+      .rejects.toThrow(`command ${OracleMother.TICKETS[0]} was recorded for another working directory`)
+
+    expect([...cyclic.asked, ...dangling.asked, ...foreign.asked]).toEqual([])
+  })
+
+  it('a forked or malformed command chain cannot resume', async () => {
     const forked = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-forked-')))
     roots.push(forked.root)
     await forked.establish()
