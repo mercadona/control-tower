@@ -116,13 +116,11 @@ describe('seam 1 — brainstorming ends in an execution spec + freeze, not in wr
     expect(s).toContain('at most 15 lines')
   })
 
-  // The execution spec's template already travels with the plugin and
-  // `ct-init` seeds it at a KNOWN path. While the skill said only "the repo's
-  // `_TEMPLATE-execution-spec.md`", with no path, whoever ran step 8 had to
-  // guess where it was — and in a repo where nobody had copied it by hand, it
-  // was nowhere at all.
-  it('it names the concrete path of the template ct-init seeds', () => {
-    expect(skill()).toContain('docs/superpowers/specs/_TEMPLATE-execution-spec.md')
+  it('uses the installed template and validates drafts with the same plugin', () => {
+    expect(skill()).toContain('../../templates/_TEMPLATE-execution-spec.md')
+    expect(skill()).toContain('../../scripts/ct-spec-check.mjs')
+    expect(skill()).toContain('read `.agent/conventions.md` and its listed documents')
+    expect(skill()).not.toContain("from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md`")
   })
 
   it('the old terminal (invoking writing-plans) is no longer there', () => {

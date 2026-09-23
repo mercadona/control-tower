@@ -1930,21 +1930,6 @@ describe('ct-init.sh', () => {
     })
   })
 
-  // -------------------------------------------------------------------------
-  // The execution spec's template. The flow after /ct-init is brainstorming →
-  // design doc → execution spec, and `skills/ct-brainstorming/SKILL.md` (steps 8
-  // and §"After the self-review") orders that spec to be written «from the
-  // repo's `_TEMPLATE-execution-spec.md`». Up to here that template did NOT
-  // travel with the plugin: it lived loose in a private repo, so step 8 was
-  // left with no source in any freshly bootstrapped repo and the spec had to be
-  // written guessing at its sections.
-  //
-  // The destination is `docs/superpowers/specs/` and not the root because it is
-  // the folder the plugin ALREADY declares as the spec's home in code that
-  // runs: LOOP_ARTIFACT_PATTERNS (scripts/scope.js) exempts
-  // `docs/superpowers/specs/**` precisely because «the brainstorming skill
-  // writes the design doc and the execution spec here». The same path
-  // docs/loop/README.md documents.
   // ==========================================================================
   // #93 — the contract comes out of AGENTS.md. What these tests tie down is the
   // SPLIT: what stays in the file that is re-read on every session and what
@@ -2016,13 +2001,12 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it("it seeds the execution spec's template in docs/superpowers/specs/", () => {
+  it('does not copy the plugin-owned execution template into a fresh repository', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const dest = join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md')
-    expect(existsSync(dest)).toBe(true)
-    expect(readFileSync(dest, 'utf8')).toBe(readFileSync(join(root, 'templates', '_TEMPLATE-execution-spec.md'), 'utf8'))
-    expect(out).toMatch(/created .*_TEMPLATE-execution-spec\.md/)
+    expect(existsSync(dest)).toBe(false)
+    expect(out).not.toMatch(/created .*_TEMPLATE-execution-spec\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -2050,10 +2034,8 @@ describe('ct-init.sh', () => {
   //     does not discard it, and that section is copied byte for byte into the
   //     body of every issue of the milestone: the template's instructions ended up
   //     pasted into the N issues.
-  it("the seeded template passes /ct-groom's freeze gates and its table parses with the contract in force", async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    const md = readFileSync(join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md'), 'utf8')
+  it("the installed template passes /ct-groom's freeze gates and its table parses with the contract in force", async () => {
+    const md = readFileSync(join(root, 'templates', '_TEMPLATE-execution-spec.md'), 'utf8')
     const { analyzeSpecFreeze, readEpicContext } = await import('../scripts/groom.js')
     const { analyzeSlicesTable } = await import('../scripts/slices.js')
 
@@ -2074,7 +2056,6 @@ describe('ct-init.sh', () => {
     expect(table.invalidDepRefs).toEqual([])
     expect(table.slices.map((s) => s.deps)).toEqual([[], [1]])
 
-    rmSync(dir, { recursive: true, force: true })
   })
 
   // The third trap of the same family: the template's own D-1 wrapped its
@@ -2083,17 +2064,14 @@ describe('ct-init.sh', () => {
   // of every issue — the B2 warning readSpecSection emits. It is the same
   // defect the freeze gate sees from the other side, and both are fixed by the
   // suffix living on one line.
-  it("the seeded template's frozen decisions project with no provenance marker left behind", async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    const md = readFileSync(join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md'), 'utf8')
+  it("the installed template's frozen decisions project with no provenance marker left behind", async () => {
+    const md = readFileSync(join(root, 'templates', '_TEMPLATE-execution-spec.md'), 'utf8')
     const { readFrozenDecisions } = await import('../scripts/groom.js')
 
     const projected = readFrozenDecisions(md)
 
     expect(projected.warnings).toEqual([])
     expect(projected.content).not.toMatch(/Procedencia/)
-    rmSync(dir, { recursive: true, force: true })
   })
 })
 

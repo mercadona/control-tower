@@ -59,21 +59,21 @@ is written in this repository.
 
 Two lines get added to `.gitignore`, both idempotent: `.worktrees/` (slice worktrees live inside the checkout, and without that line a `git add -A` swallows a whole working tree) and `.agent/SLICE.md` (the state of a dispatched session, which is live and local state, never product — see F22 in `commands/ct-next.md`).
 
-The scaffolder also seeds
-`docs/superpowers/specs/_TEMPLATE-execution-spec.md`, the execution spec
-template — the one the brainstorming skill needs in step 8, and which until now
-did not travel with the plugin. It is idempotent: if it already exists, it is not
-trodden on (it may carry sections of the repository's own). It is **not** added to
-`.gitignore`: it is an artefact of the repository that the skill reads, and it is
-committed. The path is not decorative — it is the one `LOOP_ARTIFACT_PATTERNS`
-(`scripts/scope.js`) exempts from the scope gate precisely because brainstorming
-writes the design doc and the execution spec there. Watch out, when editing it,
-for two things `/ct-groom` itself punishes and that reading does not reveal:
-writing the literal clarification marker (with its bracket) anywhere in the file,
-comments included, brings the groom down with exit 2 (`analyzeSpecFreeze` greps
-the whole file); and any HTML comment **inside** `## Contexto del milestone` travels
-verbatim into the body of every issue of the milestone (`readEpicContext` does not
-discard it).
+The execution template stays in `plugin/templates/_TEMPLATE-execution-spec.md`.
+Brainstorming reads the template from the same installed plugin as its validator,
+and reads the repository's rules through `.agent/conventions.md`. The scaffolder
+no longer creates or reports a `spec-template` artifact. Existing copies at
+`docs/superpowers/specs/_TEMPLATE-execution-spec.md` are left untouched: inspect
+their unique local rules before moving them into existing convention documents.
+They are not the format authority for new specs.
+
+Generated design and execution specs still live in `docs/superpowers/specs/` and
+are committed there; frozen specs are not migrated. Before requesting a freeze,
+brainstorming runs `node <plugin-root>/scripts/ct-spec-check.mjs <spec>`. It is
+read-only, uses gate 1's `analyzeSpecFreeze`, and returns 0 for no findings, 2 for
+findings and 1 for an invalid invocation or unreadable file. Gate 1 still checks
+the current file on the person's click. This is a draft check, not an approval
+or a replacement for the later slices-table validation.
 
 In `.agent/STATE.md`, by contrast, **confine yourself to describing the
 bootstrap**:
@@ -318,7 +318,7 @@ run. Five classes, and what each one means for the status above:
 
 | Class | Artifacts | Policy |
 |---|---|---|
-| User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the execution spec template, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either). It CAN report `refused`: `.claude/settings.json` does, when this run could not even attempt the merge (`node` missing, or the seeder failed) |
+| User-owned | `.agent/STATE.md`, `.agent/conventions.md`, the `AGENTS.md` skeleton, the `.gitignore` rules, `.github/workflows/ct-scope-gate.yml`, `.github/ct/package.json`, `.claude/settings.json` | create-if-absent; never compared, so this class never reports `drifted` (`.claude/settings.json` is merged, but never byte-compared against a golden copy either). It CAN report `refused`: `.claude/settings.json` does, when this run could not even attempt the merge (`node` missing, or the seeder failed) |
 | Generated | `.github/ct/scope-check.js` | byte-compared against the bundle this release ships; a mismatch reports `drifted`, replaced only with `--force`, and the `replaced` field says which happened |
 | Versioned | the slices contract | its own doctrine of version numbers and pristine hashes, unchanged by this table; see "What is contract" above. Also carries `replaced` on every `drifted` report |
 | Exempt by design | the loop section and the e2e-howto section, both inside `AGENTS.md` | never `drifted` — each is a template the repository owner fills in, so a changed body is correct use, not tampering |
