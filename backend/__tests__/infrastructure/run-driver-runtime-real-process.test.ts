@@ -312,13 +312,20 @@ class MachineRuntimeFixture {
   async #reviewReads(): Promise<number> {
     try {
       const lines = (await readFile(join(this.captures, 'gh.jsonl'), 'utf8')).trim().split('\n')
-      return lines.filter(Boolean).map((line) => JSON.parse(line) as string[]).filter((argv) => (
-        argv[0] === 'pr' && argv[1] === 'list' && argv.includes(`feat/${MachineRuntimeFixture.ISSUE}`)
-      )).length
+      return MachineRuntimeFixture.countReviewReads(lines.filter(Boolean).map((line) => JSON.parse(line) as string[]))
     } catch (cause) {
       if (MachineRuntimeFixture.#missing(cause)) return 0
       throw cause
     }
+  }
+
+  static countReviewReads(commands: readonly (readonly string[])[]): number {
+    return commands.filter((argv) => (
+      argv[0] === 'pr' && argv[1] === 'list'
+      && argv[argv.indexOf('--repo') + 1] === MachineRuntimeFixture.REPOSITORY
+      && argv[argv.indexOf('--head') + 1] === `feat/${MachineRuntimeFixture.ISSUE}`
+      && argv[argv.indexOf('--state') + 1] === 'open'
+    )).length
   }
 
   async #journalBytes(started: StartedPlan): Promise<string> {
@@ -775,6 +782,15 @@ class LegacyRuntimeFixture {
 }
 
 describe('run driver production runtime', () => {
+  it('the recovery read census distinguishes the captured harvest query from the review watcher query', () => {
+    const harvest = ['pr', 'list', '--repo', 'acme/widget', '--head', 'feat/41', '--state', 'all', '--json', 'number,state,headRefOid', '--limit', '10']
+    const review = ['pr', 'list', '--repo', 'acme/widget', '--head', 'feat/41', '--state', 'open', '--json', 'number,url', '--limit', '1']
+
+    expect(MachineRuntimeFixture.countReviewReads([harvest])).toBe(0)
+    expect(MachineRuntimeFixture.countReviewReads([review])).toBe(1)
+    expect(MachineRuntimeFixture.countReviewReads([harvest, review])).toBe(1)
+  })
+
   const fixtures: MachineRuntimeFixture[] = []
   const legacyFixtures: LegacyRuntimeFixture[] = []
 
