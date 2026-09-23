@@ -106,7 +106,6 @@ export class RunDispatch {
     command: RunConsumingCommand | null,
     cwd: string,
     pluginRoot: string,
-    sealed: string | null,
   }): Promise<RunDispatchResolution> {
     const material = RunDispatch.#material(asked)
     const paths = Object.freeze(material.inputs.map((input) => input.path))
@@ -127,9 +126,6 @@ export class RunDispatch {
       argv: dispatch.argv,
       response: dispatch.response,
     })}\n`
-    if (asked.sealed !== null && asked.sealed !== seal) {
-      throw new RunNotUnderstood(`dispatch material for ticket ${asked.ticket} conflicts with its immutable seal`)
-    }
     return new RunDispatchResolution(dispatch, seal)
   }
 

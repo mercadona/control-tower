@@ -593,23 +593,50 @@ describe('RunDispatch real process', () => {
     expect(await fallback.material()).toBeNull()
   })
 
-  it('a sealed dispatch refuses changed or missing input material', async () => {
+  it('a changed judge definition goes out under a new versioned seal', async () => {
+    const repository = await DispatchRepository.create()
+    repositories.push(repository)
+    const stdout = await repository.output('judge')
+    const pluginRoot = join(repository.root, 'copied-plugin')
+    for (const file of RoleBytes.filesOf(STEPS.JUDGE)) {
+      await mkdir(dirname(join(pluginRoot, file)), { recursive: true })
+      await writeFile(join(pluginRoot, file), await readFile(join(DispatchRepository.PLUGIN_ROOT, file)))
+    }
+    const judge = join(pluginRoot, 'agents', 'ct-judge.md')
+    const machine = await repository.machine(stdout, pluginRoot)
+    const operation = join(
+      repository.stateRoot, 'harness', DispatchRepository.CONVERSATION, 'run', 'operations', DispatchRepository.TICKET,
+    )
+
+    const first = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+    const sealed = await readFile(join(operation, 'material.json'), 'utf8')
+    await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+    const unchanged = (await readdir(operation)).sort()
+    await writeFile(judge, `${await readFile(judge, 'utf8')}\nA line the judge prompt gained after the first dispatch.\n`)
+    const second = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+    await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
+
+    expect(unchanged).toEqual(['material.json', 'receipt.json', 'request.json'])
+    expect(second.argv).not.toEqual(first.argv)
+    expect((await readdir(operation)).sort()).toEqual(['material-2.json', 'material.json', 'receipt.json', 'request.json'])
+    expect(await readFile(join(operation, 'material.json'), 'utf8')).toBe(sealed)
+    const resealed = await readFile(join(operation, 'material-2.json'), 'utf8')
+    expect(resealed).not.toBe(sealed)
+    expect(JSON.parse(resealed).argv).toEqual(second.argv)
+    expect(await repository.material()).toBe(resealed)
+  })
+
+  it('a dispatch whose input material is missing is refused', async () => {
     const repository = await DispatchRepository.create()
     repositories.push(repository)
     const stdout = await repository.output('implement')
     const machine = await repository.machine(stdout)
-    const dispatch = await machine.dispatch(repository.watch(), DispatchRepository.TICKET)
-    const changed = ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF)
-    expect(dispatch.paths).toContain(changed)
-    const original = await readFile(changed)
+    const missing = ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF)
+    await rm(missing)
 
-    await writeFile(changed, 'changed bytes\n')
     await expect(machine.dispatch(repository.watch(), DispatchRepository.TICKET))
       .rejects.toBeInstanceOf(RunNotUnderstood)
-    await writeFile(changed, original)
-    await rm(changed)
-    await expect(machine.dispatch(repository.watch(), DispatchRepository.TICKET))
-      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await repository.material()).toBeNull()
   })
 
   it('literal producer paths and the declared verdict glob retain their different meanings', async () => {

@@ -1200,22 +1200,49 @@ describe('RunPlanAgents', () => {
     await expect(unexplained.agents.recover(asked)).rejects.toBeInstanceOf(PlanRecoveryConflict)
     expect(unexplained.evidence.calls).toBe(0)
     expect(unexplained.publicationEntered.settled).toBe(false)
+  })
 
-    const pending = await sourceScenario(true)
-    await pending.journal.establish(AgentMother.WATCH, AgentMother.manifest())
-    await pending.journal.begin(AgentMother.WATCH, `${JSON.stringify({
-      version: 1,
-      previous: null,
-      argv: [
-        '/plugin/ct-step.mjs', 'next', '--plan', AgentMother.PLAN, '--issue', '332',
-        '--output-format', 'json',
-      ],
-      cwd: AgentMother.LOCATION.path,
-      planSha256: createHash('sha256').update(AgentMother.PLAN_TEXT).digest('hex'),
-    })}\n`)
-    await expect(pending.agents.recover(asked)).rejects.toBeInstanceOf(PlanRecoveryConflict)
-    expect(pending.evidence.calls).toBe(0)
-    expect(pending.publicationEntered.settled).toBe(false)
+  it('recovery closes a command nobody finished as interrupted and asks ct-step next instead of its verb', async () => {
+    const tested = await sourceScenario(true)
+    await tested.journal.establish(AgentMother.WATCH, AgentMother.manifest())
+    const announced = await tested.journal.begin(AgentMother.WATCH, AgentMother.request(null, AgentMother.nextArgv()))
+    await tested.journal.finish(
+      AgentMother.WATCH,
+      announced,
+      AgentMother.receipt(
+        new ProcessOutput({ code: 0, stdout: AgentMother.controlsAnnouncement(), stderr: '' }),
+        null,
+        AgentMother.RUN_BYTES,
+      ),
+    )
+    const orphaned = await tested.journal.begin(
+      AgentMother.WATCH, AgentMother.request(announced, AgentMother.controlsArgv()),
+    )
+    tested.evidence.run = AgentMother.RUN_BYTES
+
+    await tested.agents.recover({
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+    })
+    await Bounded.wait(tested.oracle.promise)
+    const driving = tested.driver.driving.get(AgentMother.CONVERSATION)
+    expect(driving).toBeDefined()
+    await Bounded.wait(driving as Promise<void>)
+
+    expect(tested.evidence.asked).toEqual([AgentMother.nextArgv()])
+    const entries = await tested.journal.entries(AgentMother.WATCH)
+    expect(entries).toHaveLength(3)
+    const closed = entries.find((entry) => entry.ticket === orphaned)
+    expect(closed?.receipt).toEqual({
+      kind: 'present',
+      text: `${JSON.stringify({ version: 1, interrupted: true, afterRun: AgentMother.RUN_BYTES })}\n`,
+    })
+    expect(entries.map((entry) => JSON.parse(entry.request))).toContainEqual(
+      expect.objectContaining({ previous: orphaned, argv: AgentMother.nextArgv() }),
+    )
+    expect(tested.plannerDone.settled).toBe(false)
+    expect(tested.publicationEntered.settled).toBe(false)
   })
 
   it('completed next recovery consumes its ready command exactly once', async () => {

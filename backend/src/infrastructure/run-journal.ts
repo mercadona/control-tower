@@ -32,6 +32,7 @@ export class RunJournal extends SliceMessages {
   static readonly #REQUEST = 'request.json'
   static readonly #RECEIPT = 'receipt.json'
   static readonly #MATERIAL = 'material.json'
+  static readonly #MATERIAL_VERSION = /^material-([2-9]|[1-9][0-9]+)\.json$/
   static readonly #MESSAGES = 'messages'
   static readonly #MESSAGE = 'message.json'
   static readonly #DELIVERY = 'delivery.json'
@@ -42,12 +43,14 @@ export class RunJournal extends SliceMessages {
   readonly files: HeadlessFiles
   readonly newId: () => string
   readonly now: () => string
+  readonly operating: Map<string, Promise<void>>
 
   constructor(ports: { files: HeadlessFiles, newId: () => string, now: () => string }) {
     super()
     this.files = ports.files
     this.newId = ports.newId
     this.now = ports.now
+    this.operating = new Map()
   }
 
   override async hold(watch: PlanWatch, text: string): Promise<string> {
@@ -154,6 +157,10 @@ export class RunJournal extends SliceMessages {
   }
 
   async entries(watch: PlanWatch): Promise<readonly JournalEntry[]> {
+    return this.#operating(watch, () => this.#entries(watch))
+  }
+
+  async #entries(watch: PlanWatch): Promise<readonly JournalEntry[]> {
     const operations = this.#operationsPath(watch)
     const kind = await this.#kindOf(operations)
     if (kind === 'absent') return Object.freeze([])
@@ -174,28 +181,30 @@ export class RunJournal extends SliceMessages {
 
   async begin(watch: PlanWatch, request: string): Promise<string> {
     const ticket = this.#ticket(this.newId())
-    await this.#publish(join(this.#operationsPath(watch), ticket, RunJournal.#REQUEST), request)
+    await this.#operating(watch, () => this.#publish(join(this.#operationsPath(watch), ticket, RunJournal.#REQUEST), request))
     return ticket
   }
 
   async finish(watch: PlanWatch, ticket: string, receipt: string): Promise<void> {
-    await this.#publish(
-      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#RECEIPT),
-      receipt,
-    )
+    const path = join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#RECEIPT)
+    await this.#operating(watch, () => this.#publish(path, receipt))
   }
 
   async material(watch: PlanWatch, ticket: string): Promise<string | null> {
-    return this.#readOptional(
-      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#MATERIAL),
-    )
+    const directory = join(this.#operationsPath(watch), this.#ticket(ticket))
+    return this.#operating(watch, async () => {
+      const latest = (await this.#materialVersions(directory)).at(-1)
+      return latest === undefined ? null : this.#readRequired(join(directory, RunJournal.#materialName(latest)))
+    })
   }
 
   async seal(watch: PlanWatch, ticket: string, text: string): Promise<void> {
-    await this.#publish(
-      join(this.#operationsPath(watch), this.#ticket(ticket), RunJournal.#MATERIAL),
-      text,
-    )
+    const directory = join(this.#operationsPath(watch), this.#ticket(ticket))
+    await this.#operating(watch, async () => {
+      const latest = (await this.#materialVersions(directory)).at(-1) ?? 0
+      if (latest > 0 && await this.#readRequired(join(directory, RunJournal.#materialName(latest))) === text) return
+      await this.#publish(join(directory, RunJournal.#materialName(latest + 1)), text)
+    })
   }
 
   async publicationRead(watch: PlanWatch, path: readonly string[]): Promise<string | null> {
@@ -214,6 +223,39 @@ export class RunJournal extends SliceMessages {
     return Object.freeze((await this.#list(directory)).sort())
   }
 
+  async #materialVersions(directory: string): Promise<readonly number[]> {
+    const kind = await this.#kindOf(directory)
+    if (kind === 'absent') return Object.freeze([])
+    if (kind !== 'directory') throw new RunNotUnderstood(`${directory} is not an operation directory`)
+    const versions: number[] = []
+    for (const name of await this.#list(directory)) {
+      if (name === RunJournal.#MATERIAL) versions.push(1)
+      const numbered = RunJournal.#MATERIAL_VERSION.exec(name)
+      if (numbered !== null) versions.push(Number(numbered[1]))
+    }
+    versions.sort((left, right) => left - right)
+    if (versions.some((version, index) => version !== index + 1)) {
+      throw new RunNotUnderstood(`${directory} has a gap in its dispatch seals`)
+    }
+    return Object.freeze(versions)
+  }
+
+  static #materialName(version: number): string {
+    return version === 1 ? RunJournal.#MATERIAL : `material-${version}.json`
+  }
+
+  async #operating<T>(watch: PlanWatch, work: () => Promise<T>): Promise<T> {
+    const key = this.#operationsPath(watch)
+    const turn = (this.operating.get(key) ?? Promise.resolve()).then(work)
+    const done = turn.then(() => undefined, () => undefined)
+    this.operating.set(key, done)
+    try {
+      return await turn
+    } finally {
+      if (this.operating.get(key) === done) this.operating.delete(key)
+    }
+  }
+
   async #entryAt(operations: string, ticket: string): Promise<JournalEntry> {
     const directory = join(operations, ticket)
     if (await this.#kindOf(directory) !== 'directory') {
@@ -222,7 +264,8 @@ export class RunJournal extends SliceMessages {
     const names = await this.#list(directory)
     if (names.some((name) => name !== RunJournal.#REQUEST
       && name !== RunJournal.#RECEIPT
-      && name !== RunJournal.#MATERIAL)) {
+      && name !== RunJournal.#MATERIAL
+      && !RunJournal.#MATERIAL_VERSION.test(name))) {
       throw new RunNotUnderstood(`${directory} contains an unexpected journal entry`)
     }
     if (!names.includes(RunJournal.#REQUEST)) {

@@ -185,18 +185,25 @@ class CommandRequest {
 }
 
 class CommandReceipt {
-  readonly output: ProcessOutput
+  readonly output: ProcessOutput | null
   readonly beforeRun: string | null
   readonly afterRun: string | null
 
-  constructor(asked: { output: ProcessOutput, beforeRun: string | null, afterRun: string | null }) {
+  constructor(asked: { output: ProcessOutput | null, beforeRun: string | null, afterRun: string | null }) {
     this.output = asked.output
     this.beforeRun = asked.beforeRun
     this.afterRun = asked.afterRun
     Object.freeze(this)
   }
 
+  static interrupted(afterRun: string | null): CommandReceipt {
+    return new CommandReceipt({ output: null, beforeRun: null, afterRun })
+  }
+
   text(): string {
+    if (this.output === null) {
+      return `${JSON.stringify({ version: 1, interrupted: true, afterRun: this.afterRun })}\n`
+    }
     return `${JSON.stringify({
       version: 1,
       code: this.output.code,
@@ -208,6 +215,9 @@ class CommandReceipt {
   }
 
   static read(text: string): CommandReceipt {
+    if (Object.hasOwn(JsonContract.object(text, 'command receipt'), 'interrupted')) {
+      return CommandReceipt.#readInterrupted(text)
+    }
     const value = new JsonContract(text, 'command receipt', [
       'version', 'code', 'stdout', 'stderr', 'beforeRun', 'afterRun',
     ])
@@ -231,6 +241,17 @@ class CommandReceipt {
       beforeRun,
       afterRun,
     })
+  }
+
+  static #readInterrupted(text: string): CommandReceipt {
+    const value = new JsonContract(text, 'command receipt', ['version', 'interrupted', 'afterRun'])
+    const afterRun = value.field('afterRun')
+    if (value.field('version') !== 1
+      || value.field('interrupted') !== true
+      || !(afterRun === null || typeof afterRun === 'string')) {
+      throw new RunNotUnderstood(`an interrupted command receipt has malformed values: ${text}`)
+    }
+    return CommandReceipt.interrupted(afterRun)
   }
 }
 
@@ -268,15 +289,7 @@ class JsonContract {
   readonly value: object
 
   constructor(text: string, name: string, keys: readonly string[]) {
-    let value: unknown
-    try {
-      value = JSON.parse(text)
-    } catch (cause) {
-      throw new RunNotUnderstood(`${name} is not valid JSON: ${String(cause)}`)
-    }
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      throw new RunNotUnderstood(`${name} is not an object: ${text}`)
-    }
+    const value = JsonContract.object(text, name)
     const actual = Object.keys(value).sort()
     const expected = [...keys].sort()
     if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
@@ -290,6 +303,19 @@ class JsonContract {
     return Object.getOwnPropertyDescriptor(this.value, name)?.value
   }
 
+  static object(text: string, name: string): object {
+    let value: unknown
+    try {
+      value = JSON.parse(text)
+    } catch (cause) {
+      throw new RunNotUnderstood(`${name} is not valid JSON: ${String(cause)}`)
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new RunNotUnderstood(`${name} is not an object: ${text}`)
+    }
+    return value
+  }
+
   static isSha256(value: string): boolean {
     return /^[a-f0-9]{64}$/.test(value)
   }
@@ -301,6 +327,7 @@ class OracleBoundary {
       return OracleResult.refused(`command ${command.ticket} has no receipt and cannot be replayed`)
     }
     const output = command.receipt.output
+    if (output === null) return OracleResult.next()
     let announcement: RunAnnouncement | null
     try {
       announcement = RunAnnouncement.of(output.stdout)
@@ -430,6 +457,8 @@ export class CtRunMachine extends RunMachine {
   readonly ctStep: string
   readonly dispatchCheck: string
   readonly pluginRoot: string
+  readonly executing: Map<string, Promise<void>>
+  executions: number
 
   constructor(ports: {
     journal: RunJournal,
@@ -448,6 +477,8 @@ export class CtRunMachine extends RunMachine {
     this.ctStep = ports.ctStep
     this.dispatchCheck = ports.dispatchCheck
     this.pluginRoot = ports.pluginRoot
+    this.executing = new Map()
+    this.executions = 0
   }
 
   async establishment(watch: PlanWatch): Promise<RunEstablishmentValue> {
@@ -460,7 +491,7 @@ export class CtRunMachine extends RunMachine {
   }
 
   async open(watch: PlanWatch): Promise<RunInstruction> {
-    const state = await this.#state(watch)
+    const state = await this.#settled(watch)
     let manifest = state.manifest
     if (manifest === null) {
       if (state.commands.length > 0 || state.run !== null) {
@@ -477,14 +508,14 @@ export class CtRunMachine extends RunMachine {
     }
     const last = state.commands[state.commands.length - 1]
     const instruction = this.#instruction(last, manifest)
-    if (instruction.work.kind !== 'refused' || instruction.work.closure === null || last.receipt === null) return instruction
+    if (instruction.work.kind !== 'refused' || instruction.work.closure === null) return instruction
     return this.#execute(watch, manifest, last.ticket, this.#nextArgv(manifest))
   }
 
   async advance(watch: PlanWatch, instruction: RunInstruction): Promise<RunInstruction> {
     if (instruction.work.kind !== 'call' && instruction.work.kind !== 'command') return instruction
     const work = instruction.work
-    const state = await this.#state(watch)
+    const state = await this.#settled(watch)
     if (state.manifest === null) throw new RunNotUnderstood('a run instruction has no manifest')
     const from = state.commands.findIndex((command) => command.ticket === work.ticket)
     if (from === -1) throw new RunNotUnderstood(`instruction ticket ${work.ticket} is not in the run journal`)
@@ -492,6 +523,7 @@ export class CtRunMachine extends RunMachine {
     if (projected.work.kind !== work.kind
       || (projected.work.kind !== 'call' && projected.work.kind !== 'command')
       || projected.work.ticket !== work.ticket) {
+      if (work.kind === 'command') return projected
       throw new RunNotUnderstood(`instruction ticket ${work.ticket} does not carry the supplied work`)
     }
     return this.#advanceFrom(watch, state.manifest, state.commands, from)
@@ -545,7 +577,9 @@ export class CtRunMachine extends RunMachine {
     const command = state.commands.find((candidate) => candidate.ticket === ticket)
     if (command === undefined) throw new RunNotUnderstood(`dispatch ticket ${ticket} is not in the run journal`)
     if (command.receipt === null) throw new RunNotUnderstood(`dispatch ticket ${ticket} has no receipt`)
-    if (command.receipt.output.code !== 0) {
+    const output = command.receipt.output
+    if (output === null) throw new RunNotUnderstood(`dispatch ticket ${ticket} was interrupted`)
+    if (output.code !== 0) {
       throw new RunNotUnderstood(`dispatch ticket ${ticket} did not record successful oracle output`)
     }
     const effect = OracleBoundary.read(command, state.manifest).effect
@@ -553,11 +587,10 @@ export class CtRunMachine extends RunMachine {
     if (effect.kind !== 'call') throw new RunNotUnderstood(`ticket ${ticket} does not carry dispatch material`)
     const resolved = await RunDispatch.resolve({
       ticket,
-      stdout: command.receipt.output.stdout,
+      stdout: output.stdout,
       command: effect.command,
       cwd: command.request.cwd,
       pluginRoot: this.pluginRoot,
-      sealed: await this.journal.material(watch, ticket),
     })
     await this.journal.seal(watch, ticket, resolved.seal)
     return resolved.dispatch
@@ -603,6 +636,27 @@ export class CtRunMachine extends RunMachine {
         closure: null,
       })
     }
+    const recording = this.#record(watch, manifest, previous, argv)
+    const done = recording.then(() => undefined, () => undefined)
+    this.executing.set(watch.agent, done)
+    this.executions += 1
+    let command: JournalCommand
+    try {
+      command = await recording
+    } finally {
+      if (this.executing.get(watch.agent) === done) this.executing.delete(watch.agent)
+    }
+    const effect = OracleBoundary.read(command, manifest).effect
+    if (effect.kind !== 'next') return CtRunMachine.#instructionOf(effect)
+    return this.#execute(watch, manifest, command.ticket, this.#nextArgv(manifest))
+  }
+
+  async #record(
+    watch: PlanWatch,
+    manifest: RunManifest,
+    previous: string | null,
+    argv: readonly string[],
+  ): Promise<JournalCommand> {
     const plan = await this.read(join(watch.located.path, manifest.plan))
     if (plan === null) throw new RunNotAdvanced(`the run plan ${manifest.plan} could not be read`)
     const request = new CommandRequest({
@@ -617,13 +671,28 @@ export class CtRunMachine extends RunMachine {
     const afterRun = await this.read(this.#runPath(watch))
     const receipt = new CommandReceipt({ output, beforeRun, afterRun })
     await this.journal.finish(watch, ticket, receipt.text())
-    const command = new JournalCommand({ ticket, request, receipt })
-    const effect = OracleBoundary.read(command, manifest).effect
-    if (effect.kind !== 'next') return CtRunMachine.#instructionOf(effect)
-    return this.#execute(watch, manifest, ticket, this.#nextArgv(manifest))
+    return new JournalCommand({ ticket, request, receipt })
+  }
+
+  async #settled(watch: PlanWatch): Promise<MachineState> {
+    for (;;) {
+      const before = this.executing.get(watch.agent)
+      const executions = this.executions
+      const state = await this.#state(watch)
+      const last = state.commands.at(-1)
+      const pending = last !== undefined && last.receipt === null ? last : null
+      const executing = this.executing.get(watch.agent)
+      if (before !== undefined || executing !== undefined || this.executions !== executions) {
+        await (executing ?? before)
+        continue
+      }
+      if (pending === null || state.manifest === null) return state
+      await this.journal.finish(watch, pending.ticket, CommandReceipt.interrupted(state.run).text())
+    }
   }
 
   #instruction(command: JournalCommand, manifest: RunManifest): RunInstruction {
+    if (command.receipt === null) return new RunInstruction({ kind: 'command', ticket: command.ticket })
     const effect = OracleBoundary.read(command, manifest).effect
     return effect.kind === 'next'
       ? new RunInstruction({ kind: 'command', ticket: command.ticket })

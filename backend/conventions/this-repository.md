@@ -135,13 +135,20 @@ manifest, operation or driver request. Missing admission, planner-only, fix-only
 unknown request ids, mixed ownership and identity or cwd mismatch refuse rather
 than guess. Restart recovery reads the manifest, journal, calls and descriptors
 before live-process knowledge; unowned or ambiguous operations remain inspect
-only and are never replayed automatically.
+only and are never replayed automatically. The one exception is a ct-step
+command with a request and no receipt: while this process runs it, it reads as
+active and a caller waits for it; when no process owns it, the next mutating
+step closes it with an interrupted receipt and asks `ct-step next`, never the
+recorded verb, so the plugin decides from its own state.
 
 The journal is an immutable linked chain, not a backend copy of the plugin's
 transition table. Requests and receipts retain exact oracle argv, cwd, plan hash,
 exit code, stdout, stderr and before/after run bytes. A prepared dispatch is
 sealed from the plugin's printed paths, role files, schema, tools and agent
-definition. Implementer, task judge, advisor, slice judge and `ct-reconciler`
+definition. The seal is a record, not a gate: a dispatch whose material differs
+from the latest seal goes out with the current bytes and publishes the next
+version (`material-2.json`, `material-3.json`, …), so editing a prompt never
+stops a run. Implementer, task judge, advisor, slice judge and `ct-reconciler`
 are supported. E2E and slice-agent reconciliation fallback are refused while the
 plugin supplies no complete role package for them.
 

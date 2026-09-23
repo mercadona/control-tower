@@ -822,8 +822,59 @@ describe('RunPlanRecovery projection', () => {
     expect(tested.transport.spawns).toBe(0)
   })
 
+  it('restart projects a command nobody finished as continuable without closing it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-recovery-pending-'))
+    try {
+      const fixture = await FiniteBridge.build(root)
+      await FiniteBridge.recordWatch(fixture)
+      await fixture.journal.admit(fixture.watch)
+      await fixture.journal.establish(fixture.watch, FiniteBridge.manifest(fixture.watch))
+      const ticket = await fixture.journal.begin(
+        fixture.watch,
+        FiniteBridge.request(fixture.worktree, null, FiniteBridge.initialNext()),
+      )
+      const operation = join(fixture.state, 'harness', fixture.watch.agent, 'run', 'operations', ticket)
+      const restarted = await FiniteBridge.build(root, {
+        ids: [],
+        calls: fixture.calls,
+        run: fixture.run,
+        warnings: fixture.warnings,
+        prepare: false,
+      })
+      const activePlans = new ActivePlans({ sessions: new PlanSessions() })
+      const recovery = new RunPlanRecovery({
+        legacy: new RecoveryLegacy(),
+        records: restarted.records,
+        calls: restarted.planCalls,
+        transport: restarted.transport,
+        machine: restarted.machine,
+        journal: restarted.journal,
+        agents: restarted.agents,
+        delivery: new CompletedRunDelivery(),
+        checkouts: new RecoveryCheckouts(),
+        activePlans,
+        reviews: new RecoveryReviews(),
+        nowMs: () => Date.parse(FiniteBridge.STARTED),
+      })
+
+      expect(await recovery.recover()).toBeNull()
+
+      expect(activePlans.known()).toEqual([
+        expect.objectContaining({
+          phase: 'uncertain',
+          recovery: { action: 'continue', detail: expect.any(String) },
+          plan: expect.objectContaining({ agent: FiniteBridge.CONVERSATION }),
+        }),
+      ])
+      await expect(fs.stat(join(operation, 'receipt.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(fixture.calls.count).toBe(0)
+      expect(restarted.spawns()).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it.each([
-    ['pending command', 'command request has no receipt'],
     ['unexplained run bytes', 'the established run has unexplained plugin activity'],
   ])('%s remains inspect-only', async (_name, detail) => {
     const tested = new ProjectionScenario()

@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RunNotAdvanced, RunNotUnderstood } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -81,6 +81,35 @@ class JournalMother {
         }
       },
     })
+  }
+
+  static withPausedLink(path: string): {
+    fs: typeof fs, reached: Promise<void>, release: () => void, listings: () => number,
+  } {
+    let arrive: () => void = () => undefined
+    let release: () => void = () => undefined
+    let listings = 0
+    const reached = new Promise<void>((resolve) => { arrive = resolve })
+    const released = new Promise<void>((resolve) => { release = resolve })
+    const paused = new Proxy(fs, {
+      get(target, property, receiver) {
+        if (property === 'readdir') {
+          return async (...asked: Parameters<typeof fs.readdir>) => {
+            listings += 1
+            return Reflect.apply(target.readdir, target, asked)
+          }
+        }
+        if (property !== 'link') return Reflect.get(target, property, receiver)
+        return async (...asked: Parameters<typeof fs.link>) => {
+          if (String(asked[1]) === path) {
+            arrive()
+            await released
+          }
+          return Reflect.apply(target.link, target, asked)
+        }
+      },
+    })
+    return { fs: paused, reached, release, listings: () => listings }
   }
 
   static withLinkFailure(path: string, cause: unknown): typeof fs {
@@ -176,6 +205,125 @@ describe('RunJournal', () => {
     }])
     expect(Object.isFrozen(entries[0])).toBe(true)
     expect(Object.isFrozen(entries[0].receipt)).toBe(true)
+  })
+
+  it.each([
+    ['request', 'request.json'],
+    ['receipt', 'receipt.json'],
+  ] as const)('an operation read while its %s is being written waits for the write', async (_name, file) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-concurrent-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    if (file === 'receipt.json') await JournalMother.journal(root).begin(watch, JournalMother.REQUEST)
+    const paused = JournalMother.withPausedLink(join(JournalMother.operation(root), file))
+    const journal = JournalMother.journal(root, () => JournalMother.TICKET, paused.fs)
+
+    const writing = file === 'request.json'
+      ? journal.begin(watch, JournalMother.REQUEST)
+      : journal.finish(watch, JournalMother.TICKET, JournalMother.RECEIPT)
+    await paused.reached
+    const writeTurn = journal.operating.get(JournalMother.operations(root))
+    const listedBefore = paused.listings()
+    const reading = journal.entries(watch)
+    await vi.waitFor(() => expect(
+      paused.listings() > listedBefore || journal.operating.get(JournalMother.operations(root)) !== writeTurn,
+    ).toBe(true))
+    const listedWhileWriting = paused.listings() - listedBefore
+    paused.release()
+    await writing
+
+    expect(writeTurn).toBeDefined()
+    expect(listedWhileWriting).toBe(0)
+
+    expect(await reading).toEqual([{
+      ticket: JournalMother.TICKET,
+      request: JournalMother.REQUEST,
+      receipt: file === 'request.json' ? { kind: 'absent' } : { kind: 'present', text: JournalMother.RECEIPT },
+    }])
+  })
+
+  it('a dispatch seal is published again under the next version only when its text changes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await journal.finish(watch, JournalMother.TICKET, JournalMother.RECEIPT)
+
+    const absent = await journal.material(watch, JournalMother.TICKET)
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'third seal\n')
+
+    expect(absent).toBeNull()
+    expect((await fs.readdir(JournalMother.operation(root))).sort()).toEqual([
+      'material-2.json', 'material-3.json', 'material.json', 'receipt.json', 'request.json',
+    ])
+    expect(await readFile(join(JournalMother.operation(root), 'material.json'), 'utf8')).toBe('first seal\n')
+    expect(await readFile(join(JournalMother.operation(root), 'material-2.json'), 'utf8')).toBe('second seal\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('third seal\n')
+    expect(await journal.entries(watch)).toHaveLength(1)
+  })
+
+  it('dispatch seals past the ninth keep their numeric order', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-order-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+
+    for (let version = 1; version <= 11; version += 1) {
+      await journal.seal(watch, JournalMother.TICKET, `seal ${version}\n`)
+    }
+    const eleventh = await journal.material(watch, JournalMother.TICKET)
+    await journal.seal(watch, JournalMother.TICKET, 'seal 12\n')
+
+    expect(eleventh).toBe('seal 11\n')
+    expect(await readFile(join(JournalMother.operation(root), 'material-12.json'), 'utf8')).toBe('seal 12\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('seal 12\n')
+  })
+
+  it('a dispatch seal returning to an earlier text is published as a new version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-return-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'second seal\n')
+    await journal.seal(watch, JournalMother.TICKET, 'first seal\n')
+
+    expect(await readFile(join(JournalMother.operation(root), 'material-3.json'), 'utf8')).toBe('first seal\n')
+    expect(await journal.material(watch, JournalMother.TICKET)).toBe('first seal\n')
+  })
+
+  it('a dispatch seal history with a gap is not understood', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-gap-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await writeFile(join(JournalMother.operation(root), 'material-2.json'), 'second seal\n', 'utf8')
+
+    await expect(journal.material(watch, JournalMother.TICKET)).rejects.toThrow('has a gap in its dispatch seals')
+    await expect(journal.seal(watch, JournalMother.TICKET, 'third seal\n'))
+      .rejects.toThrow('has a gap in its dispatch seals')
+  })
+
+  it.each([
+    'material-1.json', 'material-02.json', 'material-x.json', 'material-2.json.bak', 'material-.json',
+  ])('an operation holding %s is not understood', async (name) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-run-journal-seal-name-'))
+    roots.push(root)
+    const watch = JournalMother.watch()
+    const journal = JournalMother.journal(root)
+    await journal.begin(watch, JournalMother.REQUEST)
+    await writeFile(join(JournalMother.operation(root), name), 'seal\n', 'utf8')
+
+    await expect(journal.entries(watch)).rejects.toThrow('contains an unexpected journal entry')
   })
 
   it('immutable journal collisions accept only identical bytes', async () => {
