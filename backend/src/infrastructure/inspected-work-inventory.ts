@@ -35,6 +35,7 @@ export class InspectedWorkInventory extends WorkInventory {
         return new TrackedWork(found.watch, {
           phase: 'uncertain', diagnostic: found.diagnostic ?? found.recovery.detail,
           recovery: found.recovery, refusal: found.refusal,
+          execution: found.execution,
         })
     }
   }

@@ -308,6 +308,7 @@ class RuntimeProcess {
     this.#processes = processes
     this.child = processes.spawn(process.execPath, [RuntimeProcess.#ENTRYPOINT], {
       env: { ...process.env, CT_STATE_DIR: undefined, ...environment },
+      detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     this.port = this.#port()
@@ -451,8 +452,8 @@ export class RunDriverMother {
       repository: new RepositoryName(RunDriverMother.REPOSITORY),
       agent: RunDriverMother.CONVERSATION,
     })
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000 })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
     this.machine = new CtRunMachine({
       journal: this.journal,
       node: oracle.runWholeOutput.bind(oracle),
@@ -943,8 +944,8 @@ export class RunDriverMother {
   }
 
   #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000 })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
     return new CtRunMachine({
       journal,
       node: oracle.runWholeOutput.bind(oracle), git: git.runWholeOutput.bind(git),
@@ -996,9 +997,7 @@ export class RunDriverMother {
 
   #publication(files: HeadlessFiles): GhPlanPublication {
     const environment = {
-      ...process.env,
-      CT_STATE_DIR: undefined,
-      CLAUDE_CONFIG_DIR: this.state,
+      ...this.#isolatedStateEnvironment(),
       CT_FIXTURE_CAPTURES: this.captures,
       CT_FIXTURE_PUBLICATION: this.publication,
     }
@@ -1474,7 +1473,7 @@ export class RunDriverMother {
       '--plan', RunDriverMother.PLAN, '--issue', String(RunDriverMother.ISSUE),
     ], {
       cwd: this.checkout,
-      env: { ...process.env, CT_STATE_DIR: undefined, CLAUDE_CONFIG_DIR: this.state },
+      env: this.#isolatedStateEnvironment(),
       encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL',
     })
     if (result.error !== undefined) throw result.error
@@ -1499,6 +1498,10 @@ export class RunDriverMother {
       if (result.status === 0) throw new Error(`unexpected pull-request request was accepted: ${JSON.stringify(argv)}`)
       return result.stderr
     })
+  }
+
+  #isolatedStateEnvironment(): NodeJS.ProcessEnv {
+    return { ...process.env, CT_STATE_DIR: undefined, CLAUDE_CONFIG_DIR: this.state }
   }
 
   #baseSha(): string {

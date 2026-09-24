@@ -72,7 +72,12 @@ export class ReadWorkProgress {
         return new ReadWorkProgressResult(new WorkProgress(watch, { phase: 'implementing', execution }))
       }
       case 'uncertain':
-        return new ReadWorkProgressResult(new WorkProgress(watch, work.condition))
+        return new ReadWorkProgressResult(new WorkProgress(watch, {
+          ...work.condition,
+          execution: work.condition.execution === null
+            ? { kind: 'unavailable', detail: work.condition.diagnostic }
+            : { kind: 'partial', value: work.condition.execution, detail: work.condition.diagnostic },
+        }))
     }
   }
 

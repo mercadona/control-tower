@@ -16,6 +16,16 @@ export class WorkProgressMother {
     return WorkProgressMother.fromActive(WorkProgressMother.active('implementing'), execution)
   }
 
+  static withLocalCompletion(active: ActivePlan): Answer {
+    if (active.phase !== 'uncertain') throw new Error('local-completion scenario requires uncertain work')
+    const answer = JSON.parse(WorkProgressMother.fromActive(active).body)
+    answer.progress.execution = {
+      kind: 'partial', detail: active.diagnostic,
+      value: { pull_request: null, ...JSON.parse(ImplementProgressMother.delivered().body) },
+    }
+    return { status: 200, body: JSON.stringify(answer) }
+  }
+
   static active(phase: 'planning' | 'implementing'): ActivePlan {
     return {
       phase,
@@ -37,7 +47,7 @@ export class WorkProgressMother {
       ? { kind: 'available', value: JSON.parse(answer.body) }
       : { kind: 'unavailable', detail: JSON.parse(answer.body).detail }
     const progress = active.phase === 'uncertain'
-      ? { phase: 'uncertain', diagnostic: active.diagnostic, recovery: active.recovery, refusal: active.refusal ?? null }
+      ? { phase: 'uncertain', diagnostic: active.diagnostic, recovery: active.recovery, refusal: active.refusal ?? null, execution: { kind: 'unavailable', detail: active.diagnostic } }
       : active.phase === 'planning'
       ? { phase: 'planning', plan: { kind: 'available', value: state }, activity: reading(activity) }
       : { phase: 'implementing', execution: execution.status === 200

@@ -42,6 +42,19 @@ published pull request. Polls wait three seconds after the previous response, or
 fifteen seconds for confirmed delivered/review/fixing states. Unmounting aborts the
 request and timer. The old three progress routes and their clients are retired.
 
+If inventory confirmation fails, the selected identity and its last progress stay
+on screen as stale while progress polling is paused. Confirmation returning
+resumes polling without clearing that last reading; it becomes fresh only when a
+new progress answer arrives. Discarding or switching identities clears the view.
+A pending automatic handoff also waits while the selected work is stale, partial
+or unreadable, even if its candidate is fresh. A previously reviewed work leaving
+the confirmed inventory remains a separate, supported handoff case.
+
+Publication uncertainty can carry proven local completion with recovery
+information. The panel says **Implementación terminada; publicación sin confirmar**
+and retains the diagnostic and permitted recovery controls; that reading cannot
+authorize an automatic handoff or imply a verified pull request.
+
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
 collapsed, held by `system-ui/navigation` (`Navigation`) together with the

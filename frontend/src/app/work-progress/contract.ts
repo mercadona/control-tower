@@ -107,12 +107,12 @@ export class WorkProgressContract {
         return { phase: 'implementing', execution: WorkProgressContract.executionReading(wire.execution) }
       }
       case 'uncertain': {
-        const wire = WorkProgressContract.object(value, ['phase', 'diagnostic', 'recovery', 'refusal'])
+        const wire = WorkProgressContract.object(value, ['phase', 'diagnostic', 'recovery', 'refusal', 'execution'])
         const recovery = WorkProgressContract.object(wire.recovery, ['action', 'detail'])
         const actions: readonly RecoveryAction[] = ['observe', 'continue', 'cleanup', 'inspect']
         const action = actions.find((candidate) => candidate === recovery.action)
         if (action === undefined) throw new Error('unknown recovery action')
-        return { phase: 'uncertain', diagnostic: WorkProgressContract.text(wire.diagnostic), recovery: { action, detail: WorkProgressContract.text(recovery.detail) }, refusal: WorkProgressContract.refusal(wire.refusal) }
+        return { phase: 'uncertain', diagnostic: WorkProgressContract.text(wire.diagnostic), recovery: { action, detail: WorkProgressContract.text(recovery.detail) }, refusal: WorkProgressContract.refusal(wire.refusal), execution: WorkProgressContract.executionReading(wire.execution) }
       }
       default:
         throw new Error('unknown work phase')

@@ -38,6 +38,17 @@ describe('work progress boundary', () => {
     })
   })
 
+  it('carries local completion alongside attention without claiming verified publication', () => {
+    const result = new ReadWorkProgressResult(new WorkProgress(BackendWork.watch(), {
+      phase: 'uncertain', diagnostic: 'GitHub unavailable', recovery: { action: 'inspect', detail: 'Inspect publication' }, refusal: null,
+      execution: { kind: 'partial', value: BackendWork.execution().underReview({ step: 'delivered', pullRequest: null }), detail: 'GitHub unavailable' },
+    }))
+    expect(WorkProgressContract.read(WorkProgressResponse.of(result)).progress).toMatchObject({
+      phase: 'uncertain', recovery: { action: 'inspect' }, diagnostic: 'GitHub unavailable',
+      execution: { kind: 'partial', value: { step: 'delivered', pullRequest: null }, detail: 'GitHub unavailable' },
+    })
+  })
+
   it.each([
     ['an unknown field', (body: any) => { body.extra = true }],
     ['an unknown phase', (body: any) => { body.progress.phase = 'invented' }],

@@ -1,5 +1,6 @@
 import type { PlanWatch } from './plan-watch.ts'
 import type { RunClosure } from './run-instruction.ts'
+import type { ImplementationState } from './implementation-state.ts'
 
 export type WorkCondition =
   | { readonly phase: 'planning' }
@@ -9,6 +10,7 @@ export type WorkCondition =
     readonly diagnostic: string,
     readonly recovery: { readonly action: 'observe' | 'continue' | 'cleanup' | 'inspect', readonly detail: string },
     readonly refusal: RunClosure | null,
+    readonly execution: ImplementationState | null,
   }
 
 export class TrackedWork {

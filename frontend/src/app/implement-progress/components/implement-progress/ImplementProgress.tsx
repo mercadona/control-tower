@@ -1,4 +1,4 @@
-import { STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
+import { ImplementationStep, STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
 import type { ImplementProgressRead } from 'app/implement-progress/ImplementProgress.types'
 import { Banner } from 'system-ui/banner'
 import './ImplementProgress.css'
@@ -9,7 +9,8 @@ const CONNECTING_MESSAGE = 'Comprobando el progreso de la implementación…'
 
 type ImplementProgressProps = { progress: ImplementProgressRead }
 
-const ImplementProgress = ({ progress }: ImplementProgressProps) => {
+const ImplementProgress = ({ progress: reading }: ImplementProgressProps) => {
+  const progress: ImplementProgressRead = reading.phase === 'partial' ? { ...reading, phase: 'progress' } : reading
   const taskProgress = progress.phase === 'progress' && progress.task !== null
     ? progress.totalTasks === null
       ? `Tarea ${progress.task}`
@@ -27,7 +28,9 @@ const ImplementProgress = ({ progress }: ImplementProgressProps) => {
       {progress.phase === 'progress' && (
         <div className="implement-progress__hierarchy">
           <p className="implement-progress__stage lg-body-medium" role="status" aria-live="polite">
-            {STEP_LABELS[progress.step]}
+            {reading.phase === 'partial' && progress.step === ImplementationStep.DELIVERED
+              ? 'Implementación terminada; publicación sin confirmar'
+              : STEP_LABELS[progress.step]}
           </p>
           {taskProgress !== null && <p className="implement-progress__task">{taskProgress}</p>}
           {progress.totalTasks !== null && progress.task === null && (

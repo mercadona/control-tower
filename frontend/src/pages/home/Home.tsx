@@ -396,9 +396,13 @@ const Home = () => {
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
   const restoredNeedsRecovery = reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain'
   const restoredIsConfirmed = reconciliation === 'confirmed' || reconciliation === 'not-required'
-  const workRead = useWorkProgress(workflow !== null && restoredIsConfirmed
-    ? { repo: workflow.plan.repo, issue: workflow.plan.issue.number, agent: workflow.plan.agent }
-    : null)
+  const activePlan = uncertainActiveRef.current
+  const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
+  const selectedWork = workflow?.plan ?? uncertainActive?.plan ?? null
+  const canReadWork = restoredIsConfirmed || reconciliation === 'uncertain'
+  const workRead = useWorkProgress(selectedWork !== null
+    ? { repo: selectedWork.repo, issue: selectedWork.issue.number, agent: selectedWork.agent }
+    : null, canReadWork, uncertainActive !== null ? 'uncertain' : workflow?.phase ?? null)
   const workProgress = workRead.kind === 'read' || workRead.kind === 'stale' ? workRead.snapshot.progress : null
   const planIsReady = workProgress?.phase === 'planning' && workProgress.plan.kind === 'available' && workProgress.plan.value === 'ready'
   const executionStarted = workProgress?.phase === 'implementing'
@@ -414,8 +418,6 @@ const Home = () => {
       : !planIsReady
         ? 'El agente está preparando el plan como parte de la implementación. No necesitas aprobarlo.'
         : 'El plan está listo. La implementación continuará automáticamente cuando el backend la registre.'
-  const activePlan = uncertainActiveRef.current
-  const uncertainActive = activePlan?.phase === 'uncertain' ? activePlan : null
 
   const recovery = (
     <>
@@ -499,6 +501,9 @@ const Home = () => {
             )}
             <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
           </div>
+          {workflow === null && uncertainActive !== null && workProgress?.phase === 'uncertain' && workProgress.execution.kind !== 'unavailable' && (
+            <SliceProgress issue={uncertainActive.plan.issue.number} read={workRead} showUncertainty={false} />
+          )}
         </div>
       )}
     </>
@@ -624,11 +629,12 @@ const Home = () => {
                   description={<>El backend ha registrado al agente <code>{workflow.plan.agent}</code>.</>}
                 />
               )}
-              {restoredIsConfirmed && (
+              {(canReadWork || workRead.kind === 'stale') && (
                 <SliceProgress
                   key={`${workflow.plan.repo}:${workflow.plan.issue.number}:implementation`}
                   issue={workflow.plan.issue.number}
                   read={workRead}
+                  showUncertainty={reconciliation !== 'uncertain'}
                   onProgress={(progress) => observeSliceProgress(workflow.plan, progress)}
                 />
               )}
