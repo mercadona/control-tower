@@ -94,6 +94,10 @@ export class PtyLiveSessions extends LiveSessions {
   static readonly INSPECTION_REQUEST_TIMEOUT_MS = 1_500
   static readonly INSPECTION_MAX_BUFFER_BYTES = 4_194_304
   static readonly INSPECTION_PARSE_BATCH_ROWS = 256
+  static readonly PASTE_START = '\x1b[200~'
+  static readonly PASTE_END = '\x1b[201~'
+  static readonly SUBMIT = '\r'
+  static readonly SUBMIT_DELAY_MS = 10
 
   readonly spawn: TerminalSpawn
   readonly newId: () => string
@@ -238,6 +242,13 @@ export class PtyLiveSessions extends LiveSessions {
     } catch {
       throw this.#wentAway(opened)
     }
+  }
+
+  submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
+    this.write({ session, text: `${PtyLiveSessions.PASTE_START}${text}${PtyLiveSessions.PASTE_END}` })
+
+    return this.sleep(PtyLiveSessions.SUBMIT_DELAY_MS)
+      .then(() => this.write({ session, text: PtyLiveSessions.SUBMIT }))
   }
 
   resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {

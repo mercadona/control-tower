@@ -292,7 +292,7 @@ describe('Home and the coordinating session', () => {
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
   })
 
-  it('gate 2 offers no ask while the live conversation is working, and says what to wait for', async () => {
+  it('gate 2 offers neither the ask nor the groom while the live conversation is working, and says what to wait for', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.working())
     fetching.mockImplementation((input: string | URL | Request) => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
@@ -309,7 +309,7 @@ describe('Home and the coordinating session', () => {
     expect(screen.getByText(
       'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.',
     )).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
   })
 
   it('gate 2 offers no ask while a permission prompt that carried no message is on screen', async () => {

@@ -5,7 +5,6 @@ import type { UserStory } from './user-story.ts'
 
 export class PhasePrompt {
   static readonly BRAINSTORMING_SKILL = 'control-tower-loop:ct-brainstorming'
-  static readonly GROOM_SKILL = 'control-tower-loop:ct-groom'
   static readonly FREEZE_IS_NOT_YOURS =
     'You never freeze the spec yourself: the state line and its date are written by gate 1 of the '
     + "cabin, on a person's click. Leave the spec at DRAFT, present the freeze summary and stop."
@@ -73,15 +72,16 @@ export class PhasePrompt {
     root: CheckoutRoot,
   }): PhasePrompt {
     return new PhasePrompt([
-      `Invoke the skill ${PhasePrompt.GROOM_SKILL}.`,
       PhasePrompt.#roleOf({ repository, root }),
-      PhasePrompt.ISSUES_ARE_NOT_YOURS,
-      PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
-      `The milestone is "${milestone}" and its frozen execution spec is ${spec.path}.`,
+      ...PhasePrompt.#slicingReview({ spec, milestone }),
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
+  }
+
+  static groomReview({ spec, milestone }: { spec: EpicSpec, milestone: string }): PhasePrompt {
+    return new PhasePrompt(PhasePrompt.#slicingReview({ spec, milestone }).join('\n'))
   }
 
   oneLine(): string {
@@ -90,6 +90,14 @@ export class PhasePrompt {
 
   static #roleOf({ repository, root }: { repository: RepositoryName, root: CheckoutRoot }): string {
     return `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`
+  }
+
+  static #slicingReview({ spec, milestone }: { spec: EpicSpec, milestone: string }): string[] {
+    return [
+      `Review the slicing of the milestone "${milestone}" with the person: its frozen execution spec is ${spec.path} and the slices are the table of its §9.`,
+      PhasePrompt.ISSUES_ARE_NOT_YOURS,
+      PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+    ]
   }
 
   static #idea(story: UserStory): string {

@@ -9,7 +9,7 @@ import {
   OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
-import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import { LiveSessionNotLive, LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
@@ -48,6 +48,14 @@ class LiveSessionsDouble extends LiveSessions {
 
   write({ session, text }: { session: LiveSession, text: string }): void {
     this.written.push({ id: session.id, text })
+  }
+
+  readonly submitted: Array<{ id: string, text: string }> = []
+  submitFailure: Error | null = null
+
+  async submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
+    this.submitted.push({ id: session.id, text })
+    if (this.submitFailure !== null) throw this.submitFailure
   }
 
   watch({ session, onEnded }: {
@@ -637,9 +645,27 @@ describe('CoordinatingSessions', () => {
     sessions.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
 
     expect(sessions.announce('the held change went out')).toBe(true)
-    expect(liveSessions.written).toEqual([
-      { id: Mother.FIRST_SESSION.id, text: `the held change went out${CoordinatingSessions.SUBMIT}` },
-    ])
+    expect(liveSessions.submitted).toEqual([{ id: Mother.FIRST_SESSION.id, text: 'the held change went out' }])
+    expect(liveSessions.written).toEqual([])
+  })
+
+  it('an_announcement_whose_enter_never_reaches_the_session_is_reported_instead_of_left_unhandled', async () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    liveSessions.submitFailure = new LiveSessionNotLive(Mother.FIRST_SESSION.id)
+    const reported: string[] = []
+    const sessions = new CoordinatingSessions({
+      liveSessions,
+      stderr: (line) => { reported.push(line) },
+      newTarget: () => Mother.FIRST_TARGET,
+    })
+    sessions.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    expect(sessions.announce('the held change went out')).toBe(true)
+    await new Promise((settled) => { setImmediate(settled) })
+
+    expect(reported).toContain(
+      `announcement to session ${Mother.FIRST_SESSION.id} was pasted but not submitted: LiveSessionNotLive: session ${Mother.FIRST_SESSION.id} is no longer live\n`
+    )
   })
 
   it('an_announcement_with_nobody_to_hear_it_is_refused_rather_than_written_into_the_void', () => {

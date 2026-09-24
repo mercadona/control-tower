@@ -6,7 +6,6 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { GroomReviewAdmission, GroomReviewRefusal } from '../../src/domain/ports/groom-review-admission.ts'
 import type { GroomReviewRefusalValue } from '../../src/domain/ports/groom-review-admission.ts'
 
@@ -66,14 +65,13 @@ class LiveSessionsDouble extends LiveSessions {
     this.typed = []
   }
 
-  write({ session, text }: { session: LiveSession, text: string }): void {
+  async submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
     this.typed.push({ session, text })
   }
 }
 
 class Mother {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
-  static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly SESSION = new LiveSession({ id: 'session-9', name: 'brainstorming' })
   static readonly MILESTONE = 'The loop enters through brainstorming'
@@ -87,14 +85,12 @@ class Mother {
   }
 
   static asking(): AskGroomReviewParams {
-    return new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
-    })
+    return new AskGroomReviewParams({ root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET })
   }
 }
 
 describe('AskGroomReview', () => {
-  it('types the groom prompt of the frozen spec into the live session as one line it submits', async () => {
+  it('submits to the live session only the review of the slicing of the frozen spec, on one line', async () => {
     const sessions = new LiveSessionsDouble()
     const ask = new AskGroomReview({
       specs: new EpicSpecsDouble(Mother.spec()), liveSessions: sessions, admission: new AdmissionDouble(),
@@ -103,15 +99,14 @@ describe('AskGroomReview', () => {
     const asked = await ask.execute(Mother.asking())
 
     expect(asked.outcome).toBe(GroomReviewAsk.ASKED)
-    expect(sessions.typed).toHaveLength(1)
-    expect(sessions.typed[0].session).toBe(Mother.SESSION)
-    const typed = sessions.typed[0].text
-    expect(typed.endsWith(AskGroomReview.SUBMIT)).toBe(true)
-    expect(typed.slice(0, -AskGroomReview.SUBMIT.length)).not.toContain('\n')
-    expect(typed).toContain(PhasePrompt.GROOM_SKILL)
-    expect(typed).toContain(Mother.MILESTONE)
-    expect(typed).toContain(Mother.SPEC_PATH)
-    expect(typed).toContain(PhasePrompt.ISSUES_ARE_NOT_YOURS)
+    expect(sessions.typed).toEqual([{
+      session: Mother.SESSION,
+      text: [
+        `Review the slicing of the milestone "${Mother.MILESTONE}" with the person: its frozen execution spec is ${Mother.SPEC_PATH} and the slices are the table of its §9.`,
+        PhasePrompt.ISSUES_ARE_NOT_YOURS,
+        PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+      ].join(' '),
+    }])
   })
 
   it('types nothing when the checkout carries no execution spec', async () => {
@@ -147,7 +142,7 @@ describe('AskGroomReview', () => {
     }
   )
 
-  it('writes in the same synchronous turn as the final admission check', async () => {
+  it('submits in the same synchronous turn as the final admission check', async () => {
     const sessions = new LiveSessionsDouble()
     const admission = new AdmissionDouble()
     admission.refusalFor = (asked) => {
@@ -156,7 +151,7 @@ describe('AskGroomReview', () => {
 
       return null
     }
-    sessions.write = ({ session, text }) => {
+    sessions.submit = async ({ session, text }) => {
       expect(admission.asked).toEqual([{ target: Mother.TARGET, session: Mother.SESSION }])
       expect(admission.refusal).toBe(null)
       sessions.typed.push({ session, text })

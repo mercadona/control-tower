@@ -145,7 +145,7 @@ const ended = () => ({
     `"detail":"${ENDED_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
-const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof ended>) => ({
+const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof completed> | ReturnType<typeof ended>) => ({
   ...answer,
   body: JSON.stringify({
     ...JSON.parse(answer.body),
@@ -158,6 +158,8 @@ const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof ende
 })
 
 const liveCloseFailed = () => closeFailed(working())
+
+const completedCloseFailed = () => closeFailed(completed())
 
 const endedCloseFailed = () => closeFailed(ended())
 
@@ -215,6 +217,7 @@ export const CoordinatingSessionMother = {
   unresumable,
   ended,
   liveCloseFailed,
+  completedCloseFailed,
   endedCloseFailed,
   opened,
   alreadyLive,

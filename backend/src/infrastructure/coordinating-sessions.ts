@@ -194,8 +194,6 @@ export class GateCheckout {
 }
 
 export class CoordinatingSessions implements GroomReviewAdmission {
-  static readonly SUBMIT = '\r'
-
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   readonly records: ConversationRecords
@@ -430,7 +428,9 @@ export class CoordinatingSessions implements GroomReviewAdmission {
     if (held === null || held.session === null) return false
     const session = this.liveSessions.find(held.session.id)
     if (session === null) return false
-    this.liveSessions.write({ session, text: `${line}${CoordinatingSessions.SUBMIT}` })
+    this.liveSessions.submit({ session, text: line }).catch((cause: unknown) => {
+      this.stderr(`announcement to session ${session.id} was pasted but not submitted: ${String(cause)}\n`)
+    })
 
     return true
   }

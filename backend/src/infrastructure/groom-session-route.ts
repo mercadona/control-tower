@@ -107,7 +107,6 @@ export class GroomSessionRoute {
     let asked: GroomReviewAsked
     try {
       asked = await ask.execute(new AskGroomReviewParams({
-        repository: holding.conversation.repository,
         root: holding.conversation.root,
         session: holding.session!,
         target: holding.target,
