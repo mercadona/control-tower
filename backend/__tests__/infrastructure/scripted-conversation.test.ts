@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ToolRunner } from '../src/infrastructure/tool-runner.ts'
-import { Capture, ScriptedConversation } from './scripted-conversation.ts'
-import type { ScriptedRequest } from './scripted-conversation.ts'
+import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+import { Capture, ScriptedConversation } from './fixtures/scripted-conversation.ts'
+import type { ScriptedRequest } from './fixtures/scripted-conversation.ts'
 
 class Locations {
   static readonly HERE = dirname(fileURLToPath(import.meta.url))
-  static readonly BACKEND = join(Locations.HERE, '..')
+  static readonly BACKEND = join(Locations.HERE, '..', '..')
   static readonly WORKTREE = join(Locations.BACKEND, '..')
   static readonly OUTSIDE = '/private/tmp'
 }

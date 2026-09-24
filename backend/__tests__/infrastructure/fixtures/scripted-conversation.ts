@@ -2,8 +2,8 @@ import { EventEmitter } from 'node:events'
 import { readFileSync, writeSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ProcessRunner } from '../src/infrastructure/process-runner.ts'
-import type { LaunchedProcess, LaunchOptions, RunAndWaitOptions, RunOutcome } from '../src/infrastructure/process-runner.ts'
+import { ProcessRunner } from '../../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, LaunchOptions, RunAndWaitOptions, RunOutcome } from '../../../src/infrastructure/process-runner.ts'
 
 export type ScriptedRequest = {
   readonly binary: string,
@@ -19,7 +19,7 @@ export class UnscriptedRequest extends Error {
 }
 
 export class Capture {
-  static readonly #DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), 'captures')
+  static readonly #DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures')
   static readonly #FIELDS = ['command', 'version', 'date', 'exit']
   static readonly #MALFORMED = 'a capture is missing its command, its version or its date'
   static readonly #STDOUT_MARKER = '--- stdout'

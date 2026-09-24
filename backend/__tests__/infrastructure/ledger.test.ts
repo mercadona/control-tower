@@ -77,7 +77,7 @@ class LedgerText {
 
 class Ledger {
   static readonly HERE = dirname(fileURLToPath(import.meta.url))
-  static readonly PATH = join(Ledger.HERE, '..', '..', 'docs', 'superpowers', 'ledgers', '2026-09-24-backend-without-processes.md')
+  static readonly PATH = join(Ledger.HERE, '..', '..', '..', 'docs', 'superpowers', 'ledgers', '2026-09-24-backend-without-processes.md')
 
   static text(): string {
     return readFileSync(Ledger.PATH, 'utf8')

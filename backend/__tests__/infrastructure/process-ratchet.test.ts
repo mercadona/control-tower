@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ProcessRatchet } from './process-ratchet.ts'
+import { ProcessRatchet } from './fixtures/process-ratchet.ts'
 
 class Tests {
   static HERE = dirname(fileURLToPath(import.meta.url))
@@ -49,7 +49,7 @@ class TemporaryTree {
 
 describe('the ratchet over the test files that still launch a process', () => {
   it('the_backend_suite_launches_processes_in_exactly_the_listed_files', () => {
-    expect(ProcessRatchet.spawningUnder(Tests.HERE)).toEqual(ProcessRatchet.LISTED)
+    expect(ProcessRatchet.spawningUnder(join(Tests.HERE, '..'))).toEqual(ProcessRatchet.LISTED)
   })
 
   it('a_spawning_test_file_the_list_does_not_name_fails_the_ratchet', () => {
