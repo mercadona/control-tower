@@ -211,6 +211,7 @@ describe('Compose preparation from repository configuration', () => {
     const result = await env.prepare()
     expect(result.state).toBe('required')
     expect(result.findings).toHaveLength(1)
+    expect(result.findings[0].path).toBe('docker/docker-compose.local.yml')
     expect(result.summary).toContain('app publishes host port 8000')
   })
 
@@ -258,5 +259,13 @@ describe('Compose preparation from repository configuration', () => {
     env.dockerCode = 0
     env.dockerOutput = '{}'
     expect((await env.prepare()).state).toBe('not-checked')
+  })
+
+  it('a port Compose did not print in its long form is never read as unpublished', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: ['9000:9000'] } }
+    const result = await env.prepare()
+    expect(result.state).toBe('not-checked')
+    expect(result.summary).toContain('Compose returned an unreadable port')
   })
 })
