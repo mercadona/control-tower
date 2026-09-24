@@ -8,6 +8,7 @@ import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 type RecordedSpawn = {
@@ -65,7 +66,7 @@ class Governed {
   static readonly HOOKS_URL = 'http://127.0.0.1:4600/session-hooks'
 
   static conversation(id: ConversationId = Governed.ID): CoordinatingConversation {
-    return new CoordinatingConversation({ id, repository: Governed.REPOSITORY, root: Governed.ROOT })
+    return CoordinatingConversationMother.of({ id, repository: Governed.REPOSITORY, root: Governed.ROOT })
   }
 }
 

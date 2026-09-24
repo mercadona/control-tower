@@ -176,6 +176,7 @@ export class GroomSessionRoute {
       opened = await open.execute(new OpenGroomSessionParams({
         repository: holding.conversation.repository,
         root: holding.conversation.root,
+        story: holding.conversation.story,
       }))
     } catch (cause) {
       held.release()

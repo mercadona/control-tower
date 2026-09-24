@@ -8,14 +8,20 @@ import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
 import type { SessionTimelineEvent } from '../../domain/value-objects/session-timeline-event.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 export class OpenGroomSessionParams {
   readonly repository: RepositoryName
   readonly root: CheckoutRoot
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor({ repository, root }: { repository: RepositoryName, root: CheckoutRoot }) {
+  constructor({ repository, root, story }: {
+    repository: RepositoryName, root: CheckoutRoot, story: UserStoryKey | UserStoryUrl,
+  }) {
     this.repository = repository
     this.root = root
+    this.story = story
     Object.freeze(this)
   }
 }
@@ -85,6 +91,7 @@ export class OpenGroomSession {
       id: this.conversations.mint(),
       repository: params.repository,
       root: params.root,
+      story: params.story,
     })
     const prompt = PhasePrompt.groom({
       spec, milestone: spec.title()!, repository: params.repository, root: params.root,

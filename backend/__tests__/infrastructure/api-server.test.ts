@@ -57,7 +57,7 @@ import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -76,7 +76,7 @@ import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
 class OpenSessionSpy extends OpenCoordinatingSession {
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('3c2b7d3f-9a3b-4c9c-8b4f-7a3c2b7d3f9a'),
     repository: new RepositoryName('owner/name'),
     root: new CheckoutRoot('/repo/checkout'),
@@ -375,7 +375,7 @@ class LiveSessionsDouble extends LiveSessions {
 
 class CoordinatingSessionFixture {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
     repository: new RepositoryName('owner/name'),
     root: new CheckoutRoot('/repo/checkout'),

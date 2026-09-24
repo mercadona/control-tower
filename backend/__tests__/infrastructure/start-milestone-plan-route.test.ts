@@ -30,7 +30,7 @@ import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -196,7 +196,7 @@ class Mother {
     sessions.remember(new HeldCoordinatingSession({
       target: '6d13bc52-740f-49f8-b128-15e597674f3a',
       state: CoordinatingSessionState.LIVE,
-      conversation: new CoordinatingConversation({
+      conversation: CoordinatingConversationMother.of({
         id: new ConversationId('22222222-2222-4222-8222-222222222222'),
         repository: Mother.REPOSITORY,
         root: Mother.ROOT,

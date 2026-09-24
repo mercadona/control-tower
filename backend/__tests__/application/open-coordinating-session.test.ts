@@ -258,6 +258,14 @@ describe('OpenCoordinatingSession', () => {
     expect(flow.steps.indexOf('prepare')).toBeLessThan(flow.steps.indexOf('start'))
   })
 
+  it('the conversation is recorded with the story it was opened for', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.records.prepared[0].conversation.story).toBe(Flow.STORY)
+  })
+
   it('answers the timeline the records seeded for the freshly opened conversation', async () => {
     const flow = new Flow()
 

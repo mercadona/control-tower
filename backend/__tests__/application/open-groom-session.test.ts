@@ -14,6 +14,7 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 
 class EpicSpecsDouble extends EpicSpecs {
   answer: EpicSpec | null
@@ -140,7 +141,7 @@ class Flow {
 
   async run() {
     return new OpenGroomSession(this).execute(new OpenGroomSessionParams({
-      repository: Flow.REPOSITORY, root: Flow.ROOT,
+      repository: Flow.REPOSITORY, root: Flow.ROOT, story: CoordinatingConversationMother.STORY,
     }))
   }
 }
@@ -213,5 +214,14 @@ describe('OpenGroomSession', () => {
     expect(started.conversation.repository).toBe(Flow.REPOSITORY)
     expect(started.conversation.id).toBe(ConversationsDouble.ID)
     expect(flow.specs.asked).toEqual([Flow.ROOT])
+  })
+
+  it('the new conversation keeps the story of the conversation it follows', async () => {
+    const flow = Flow.reading(Flow.frozenSpec())
+
+    await flow.run()
+
+    const [recorded] = flow.records.prepared
+    expect(recorded.conversation.story).toBe(CoordinatingConversationMother.STORY)
   })
 })

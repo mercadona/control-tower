@@ -75,6 +75,7 @@ export class OpenCoordinatingSession {
       id: this.conversations.mint(),
       repository,
       root,
+      story: params.story,
     })
     const prompt = PhasePrompt.brainstorming({ story, repository, root })
     const { promptPath, timeline } = await this.records.prepare({ conversation, prompt })

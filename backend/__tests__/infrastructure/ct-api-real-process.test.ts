@@ -223,6 +223,7 @@ class LifecycleFixture {
 class ARecordedConversation {
   static readonly ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
   static readonly REPOSITORY = 'acme/widget'
+  static readonly STORY = 'STAFF-128'
 
   static async withATranscriptUnder(config: string): Promise<{ config: string, checkout: string }> {
     const checkout = await ARecordedConversation.#recordedUnder(config)
@@ -246,6 +247,7 @@ class ARecordedConversation {
       conversation: ARecordedConversation.ID,
       repo: ARecordedConversation.REPOSITORY,
       root: checkout,
+      story: ARecordedConversation.STORY,
     }, null, 2)}\n`)
 
     return checkout
