@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0](https://github.com/mercadona/control-tower/compare/backend-v0.5.0...backend-v0.6.0) (2026-09-24)
+
+
+### Funcionalidades
+
+* **backend:** measure agent calls through a provider-neutral wrapper ([#532](https://github.com/mercadona/control-tower/issues/532)) ([b042146](https://github.com/mercadona/control-tower/commit/b042146707dcc8e319d0991dad845325831cfb85))
+* check Compose isolation before authorizing and dispatching slices ([#542](https://github.com/mercadona/control-tower/issues/542)) ([65718f0](https://github.com/mercadona/control-tower/commit/65718f035ff8c9bd424c272c0ec4c07927b83f72))
+* **plugin:** the task judge reviews the whole slice once, after the last commit ([#533](https://github.com/mercadona/control-tower/issues/533)) ([45bf5e9](https://github.com/mercadona/control-tower/commit/45bf5e91f7a4ec06732fe796da70b41833ff07fd))
+* unify work progress and separate recovery from reads ([#543](https://github.com/mercadona/control-tower/issues/543)) ([8798839](https://github.com/mercadona/control-tower/commit/8798839af8a3a16a8de596527cc1e2ae1dcb41d5))
+
 ## [0.5.0](https://github.com/mercadona/control-tower/compare/backend-v0.4.1...backend-v0.5.0) (2026-09-23)
 
 
