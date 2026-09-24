@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.61.0](https://github.com/mercadona/control-tower/compare/plugin-v0.60.0...plugin-v0.61.0) (2026-09-24)
+
+
+### Funcionalidades
+
+* **plugin:** the task judge reviews the whole slice once, after the last commit ([#533](https://github.com/mercadona/control-tower/issues/533)) ([45bf5e9](https://github.com/mercadona/control-tower/commit/45bf5e91f7a4ec06732fe796da70b41833ff07fd))
+
+
+### Correcciones
+
+* **plugin:** keep execution templates with their validator ([#534](https://github.com/mercadona/control-tower/issues/534)) ([caf5962](https://github.com/mercadona/control-tower/commit/caf5962963f28679be8dc3ba2d0a54ed781512aa))
+
 ## [0.60.0](https://github.com/mercadona/control-tower/compare/plugin-v0.59.0...plugin-v0.60.0) (2026-09-23)
 
 

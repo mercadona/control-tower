@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/mercadona/control-tower/compare/frontend-v0.5.0...frontend-v0.6.0) (2026-09-24)
+
+
+### Funcionalidades
+
+* check Compose isolation before authorizing and dispatching slices ([#542](https://github.com/mercadona/control-tower/issues/542)) ([65718f0](https://github.com/mercadona/control-tower/commit/65718f035ff8c9bd424c272c0ec4c07927b83f72))
+* unify work progress and separate recovery from reads ([#543](https://github.com/mercadona/control-tower/issues/543)) ([8798839](https://github.com/mercadona/control-tower/commit/8798839af8a3a16a8de596527cc1e2ae1dcb41d5))
+
+
+### Correcciones
+
+* **frontend:** fold planning into implementation and retire plan review ([#537](https://github.com/mercadona/control-tower/issues/537)) ([ac60e69](https://github.com/mercadona/control-tower/commit/ac60e69e1d24f317a806ea861630a5743a7719ac))
+
 ## [0.5.0](https://github.com/mercadona/control-tower/compare/frontend-v0.4.0...frontend-v0.5.0) (2026-09-23)
 
 
