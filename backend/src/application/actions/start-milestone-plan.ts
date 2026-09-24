@@ -1,4 +1,3 @@
-import { PlanStarted } from './start-plan.ts'
 import type { CheckRepositoryPreparation } from './check-repository-preparation.ts'
 import {
   PlanAgentNotLaunched, PlanFailure, PlanIssueNotClaimed, WorkspaceNotCleaned,
@@ -16,8 +15,22 @@ import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { PlanIssue } from '../../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { SownWorkspace } from '../../domain/value-objects/sown-workspace.ts'
+import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
 
 type ClaimedIssue = { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }
+
+export class PlanStarted {
+  readonly agent: string
+  readonly watch: PlanWatch
+  readonly baseline: BaselineResult
+
+  constructor({ agent, watch, baseline }: { agent: string, watch: PlanWatch, baseline: BaselineResult }) {
+    this.agent = agent
+    this.watch = watch
+    this.baseline = baseline
+    Object.freeze(this)
+  }
+}
 
 export class SliceNotStarted {
   readonly issue: PlanIssue

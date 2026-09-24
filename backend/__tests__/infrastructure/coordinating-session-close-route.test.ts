@@ -161,7 +161,6 @@ class RunningCloseApi {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: 'ABC-1',
-        repo: CloseMother.CONVERSATION.repository.text,
         path: CloseMother.CONVERSATION.root.text,
       }),
     })
@@ -367,7 +366,6 @@ describe('CoordinatingSessionCloseRoute', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: 'ABC-1',
-          repo: CloseMother.CONVERSATION.repository.text,
           path: CloseMother.CONVERSATION.root.text,
         }),
       })

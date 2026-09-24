@@ -56,7 +56,6 @@ class RunningApi {
     const session = liveSessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       implementHistory: undefined,
       externalTools: undefined,
       listLiveSessions: new ListLiveSessions({ liveSessions }),

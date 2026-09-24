@@ -29,7 +29,7 @@ describe('every file under frontend keeps being born conforming', () => {
   const measured = Yardstick.measuredUnder(FRONTEND)
 
   it('should find its subjects by walking so a new file is covered without anyone listing it', () => {
-    expect(measured).toContain(join('src', 'app', 'start-plan', 'client.ts'))
+    expect(measured).toContain(join('src', 'app', 'coordinating-session', 'client.ts'))
     expect(measured).toContain(join('src', 'pages', 'home', 'Home.tsx'))
     expect(measured).toContain(join('__tests__', 'yardstick.test.ts'))
   })

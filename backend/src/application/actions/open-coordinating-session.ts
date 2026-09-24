@@ -6,7 +6,6 @@ import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { ConversationRecords } from '../../domain/ports/conversation-records.ts'
 import type { Conversations } from '../../domain/ports/conversations.ts'
 import type { LiveSession } from '../../domain/value-objects/live-session.ts'
-import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
 import type { SessionTimelineEvent } from '../../domain/value-objects/session-timeline-event.ts'
 import type { UserStories } from '../../domain/ports/user-stories.ts'
@@ -16,16 +15,13 @@ import type { Workspace } from '../../domain/ports/workspace.ts'
 
 export class OpenCoordinatingSessionParams {
   readonly story: UserStoryKey | UserStoryUrl
-  readonly repository: RepositoryName
   readonly root: CheckoutRoot
 
-  constructor({ story, repository, root }: {
+  constructor({ story, root }: {
     story: UserStoryKey | UserStoryUrl,
-    repository: RepositoryName,
     root: CheckoutRoot,
   }) {
     this.story = story
-    this.repository = repository
     this.root = root
     Object.freeze(this)
   }
@@ -71,16 +67,16 @@ export class OpenCoordinatingSession {
   }
 
   async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
-    const root = await this.workspace.confirmForSession({ root: params.root, repository: params.repository })
-    this.checkouts.remember(new RegisteredCheckout({ repository: params.repository, root }))
+    const { root, repository } = await this.workspace.confirmForSession(params.root)
+    this.checkouts.remember(new RegisteredCheckout({ repository, root }))
     const story = await this.userStories.detail(params.story)
 
     const conversation = new CoordinatingConversation({
       id: this.conversations.mint(),
-      repository: params.repository,
+      repository,
       root,
     })
-    const prompt = PhasePrompt.brainstorming({ story, repository: params.repository, root })
+    const prompt = PhasePrompt.brainstorming({ story, repository, root })
     const { promptPath, timeline } = await this.records.prepare({ conversation, prompt })
     await this.sessionHooks.install(root)
     const session = this.conversations.start({ conversation, promptPath })

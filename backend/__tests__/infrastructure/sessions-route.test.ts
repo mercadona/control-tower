@@ -43,7 +43,6 @@ class RunningApi {
   static async listening(spy: ListLiveSessionsSpy): Promise<number> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       externalTools: undefined,
       listLiveSessions: spy,
       sessions: new PlanSessions(),

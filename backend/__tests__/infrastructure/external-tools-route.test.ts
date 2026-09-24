@@ -77,7 +77,6 @@ class RunningApi {
   static async listening(spy: SurveySpy): Promise<number> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       externalTools: spy,
       sessions: new PlanSessions(),
       activePlans: undefined,

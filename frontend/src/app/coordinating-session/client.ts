@@ -47,9 +47,8 @@ const closureErrorIn = (body: Record<string, unknown>): ClosureError | null =>
     ? { code: body.closureError.code, detail: body.closureError.detail }
     : null
 
-const bodyFor = ({ id, repo, path }: StartPlanSubmission): Record<string, string> => ({
+const bodyFor = ({ id, path }: StartPlanSubmission): Record<string, string> => ({
   id,
-  repo,
   path,
 })
 

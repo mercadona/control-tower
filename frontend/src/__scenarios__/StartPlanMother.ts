@@ -7,11 +7,11 @@ const ISSUE = { number: 7, url: 'https://github.com/owner/name/issues/7' }
 const AGENT = 'workspace:4'
 const BRANCH = 'feat/7'
 const WORKTREE = '/Users/pedro/code/name/.worktrees/7'
-const REQUEST_BODY = '{"id":"ABC-123","repo":"owner/name","path":"/Users/pedro/code/name"}'
+const REQUEST_BODY = '{"id":"ABC-123","path":"/Users/pedro/code/name"}'
 const NON_CANONICAL_ROOT = '/private/var/code/name'
 const NON_CANONICAL_WORKTREE = '/private/var/code/name/.worktrees/7'
 const REQUEST_BODY_ISSUE_URL =
-  '{"id":"https://github.com/owner/name/issues/141","repo":"owner/name","path":"/Users/pedro/code/name"}'
+  '{"id":"https://github.com/owner/name/issues/141","path":"/Users/pedro/code/name"}'
 
 const started = () => ({
   status: 202,
@@ -86,7 +86,7 @@ const malformedPath = () => ({
 
 const notACheckout = () => ({
   status: 400,
-  body: '{"code":"checkout-not-confirmed","detail":"owner/name: /repo holds someone/else"}',
+  body: '{"code":"checkout-not-confirmed","detail":"/repo has no origin naming a GitHub repository"}',
 })
 
 const planNotStarted = () => ({

@@ -43,7 +43,6 @@ const renderForm = ({ isCoordinatingSessionLive = false } = {}) => {
 }
 
 const typeTicket = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText('Ticket'), value)
-const typeRepository = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText(/Repositorio/), value)
 const typePath = (user: ReturnType<typeof userEvent.setup>, value: string) => user.type(screen.getByLabelText(/Ruta local/), value)
 
 describe('StartPlanForm', () => {
@@ -54,7 +53,6 @@ describe('StartPlanForm', () => {
     renderForm({ isCoordinatingSessionLive: true })
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
     expect(submitButton()).toBeDisabled()
@@ -78,12 +76,6 @@ describe('StartPlanForm', () => {
       'Usa una clave como ABC-123 o una URL como https://github.com/owner/name/issues/123',
     )).toBeInTheDocument()
 
-    const repository = screen.getByLabelText(/Repositorio/)
-    await user.click(repository)
-    await user.tab()
-    expect(repository).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Indica un repositorio válido, como owner/name')).toBeInTheDocument()
-
     const path = screen.getByLabelText(/Ruta local/)
     await user.type(path, 'relative/path')
     await user.tab()
@@ -94,45 +86,45 @@ describe('StartPlanForm', () => {
   it('marks a cleared required field invalid after blur without changing its label semantics', async () => {
     const user = userEvent.setup()
     renderForm()
-    const repository = screen.getByLabelText(/Repositorio/)
+    const path = screen.getByLabelText(/Ruta local/)
 
-    await user.type(repository, 'owner/name')
-    await user.clear(repository)
+    await user.type(path, StartPlanMother.PATH)
+    await user.clear(path)
     await user.tab()
 
-    expect(repository).toHaveAccessibleName('Repositorio')
-    expect(repository).toHaveAttribute('aria-invalid', 'true')
+    expect(path).toHaveAccessibleName('Ruta local')
+    expect(path).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('opens the brainstorming with the required ticket', async () => {
+  it('offers no repository field, because the backend derives it from the local path', () => {
+    renderForm()
+
+    expect(screen.queryByLabelText(/Repositorio/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('textbox')).toHaveLength(2)
+  })
+
+  it('opens the brainstorming with only the ticket and the local path', async () => {
     vi.mocked(CoordinatingSessionClient.open).mockResolvedValue(OPENED)
     const user = userEvent.setup()
     const { onOpened } = renderForm()
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
 
     await waitFor(() =>
       expect(CoordinatingSessionClient.open).toHaveBeenCalledWith({
         id: StartPlanMother.TICKET,
-        repo: StartPlanMother.REPO,
         path: StartPlanMother.PATH,
       }),
     )
-    expect(onOpened).toHaveBeenCalledWith(OPENED.opened, {
-      id: StartPlanMother.TICKET,
-      repo: StartPlanMother.REPO,
-      path: StartPlanMother.PATH,
-    })
+    expect(onOpened).toHaveBeenCalledWith(OPENED.opened)
   })
 
   it('cannot open brainstorming without a ticket and offers no description field', async () => {
     const user = userEvent.setup()
     const { onOpened } = renderForm()
 
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
 
@@ -142,7 +134,7 @@ describe('StartPlanForm', () => {
     expect(onOpened).not.toHaveBeenCalled()
   })
 
-  it('opens nothing while the repository or the path is missing', async () => {
+  it('opens nothing while the path is missing', async () => {
     const user = userEvent.setup()
     const { onOpened, onUnreachable } = renderForm()
 
@@ -161,13 +153,11 @@ describe('StartPlanForm', () => {
     renderForm()
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(REFUSAL_ERROR)
     expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
-    expect(screen.getByLabelText(/Repositorio/)).toHaveValue(StartPlanMother.REPO)
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue(StartPlanMother.PATH)
   })
 
@@ -177,16 +167,11 @@ describe('StartPlanForm', () => {
     const { onOpened, onUnreachable } = renderForm()
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await user.click(submitButton())
 
     await waitFor(() =>
-      expect(onUnreachable).toHaveBeenCalledWith({
-        id: StartPlanMother.TICKET,
-        repo: StartPlanMother.REPO,
-        path: StartPlanMother.PATH,
-      }),
+      expect(onUnreachable).toHaveBeenCalled(),
     )
     expect(onOpened).not.toHaveBeenCalled()
   })

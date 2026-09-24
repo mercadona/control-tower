@@ -31,9 +31,7 @@ import { RunCalls } from '../../../src/domain/ports/run-calls.ts'
 import { CheckoutRegistry } from '../../../src/domain/ports/checkout-registry.ts'
 import { PlanAgents } from '../../../src/domain/ports/plan-agents.ts'
 import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
-import { CompletedPlanCall, StartedPlanCall } from '../../../src/domain/value-objects/plan-call.ts'
-import { ActivePlans } from '../../../src/infrastructure/active-plans-route.ts'
-import { CallDescriptor, ClaudeCalls, StoredCompletion, type CallInvocation } from '../../../src/infrastructure/claude-calls.ts'
+import { CallDescriptor, ClaudeCalls, type CallInvocation } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
@@ -41,16 +39,12 @@ import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-c
 import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
 import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
-import { PlanSessions } from '../../../src/infrastructure/plan-sessions.ts'
-import { RecordedPlanRecovery } from '../../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
 import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
-import { RunPlanRecovery } from '../../../src/infrastructure/run-plan-recovery.ts'
 import { DriveRun, DriveRunParams } from '../../../src/application/actions/drive-run.ts'
 import {
   ExecuteRunInstruction, ExecuteRunInstructionParams,
 } from '../../../src/application/actions/execute-run-instruction.ts'
-import { PlanPublication } from '../../../src/domain/ports/plan-publication.ts'
 import { PlanIssue } from '../../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../../src/domain/value-objects/plan-watch.ts'
 import { PlanBriefing } from '../../../src/domain/value-objects/plan-briefing.ts'
@@ -100,15 +94,6 @@ type RoleCrossing = {
   readonly consumer: ModelCapture,
   readonly requestId: string,
 }
-type FixProjection = {
-  readonly phase: string,
-  readonly diagnostic?: string,
-  readonly recovery?: { readonly action: string, readonly detail: string },
-  readonly watching: boolean,
-  readonly calls: number,
-  readonly verbs: number,
-}
-
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
     return new ReadSliceEscalation({ escalations: new QuietEscalations() })
@@ -294,53 +279,6 @@ class FixtureProcesses {
   }
 }
 
-class RuntimeProcess {
-  static readonly #ENTRYPOINT = join(
-    dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src', 'infrastructure', 'ct-api.ts',
-  )
-  readonly child: ChildProcess
-  readonly port: Promise<number>
-  stderr = ''
-
-  readonly #processes: FixtureProcesses
-
-  constructor(environment: NodeJS.ProcessEnv, processes: FixtureProcesses) {
-    this.#processes = processes
-    this.child = processes.spawn(process.execPath, [RuntimeProcess.#ENTRYPOINT], {
-      env: { ...process.env, CT_STATE_DIR: undefined, ...environment },
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    this.port = this.#port()
-  }
-
-  async stop(): Promise<void> {
-    await this.#processes.stop(this.child)
-  }
-
-  async #port(): Promise<number> {
-    let stdout = ''
-    this.child.stderr?.on('data', (chunk) => { this.stderr += String(chunk) })
-    return new Promise<number>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`API did not listen: ${this.stderr}`)), 30_000)
-      const fail = (cause: unknown): void => {
-        clearTimeout(timer)
-        reject(cause)
-      }
-      this.child.stdout?.on('data', (chunk) => {
-        stdout += String(chunk)
-        const end = stdout.indexOf('\n')
-        if (end < 0) return
-        clearTimeout(timer)
-        resolve((JSON.parse(stdout.slice(0, end)) as { port: number }).port)
-      })
-      this.child.once('error', fail)
-      this.child.once('close', (code) => fail(new Error(`API exited ${String(code)}: ${this.stderr}`)))
-    })
-  }
-
-}
-
 class RecoveryReviews extends ReviewWatch {
   started = 0
   stopped = 0
@@ -418,7 +356,6 @@ export class RunDriverMother {
   readonly watch: PlanWatch
   readonly machine: CtRunMachine
   readonly #processes: FixtureProcesses
-  #runtime: RuntimeProcess | null = null
   #disposal: Promise<void> | null = null
   #nextIdentity = 1
 
@@ -507,17 +444,8 @@ export class RunDriverMother {
     return this.#disposal
   }
 
-  holdOwnedProcess(): number {
-    return this.#processes.hold()
-  }
-
-  disposedWith(pid: number): boolean {
-    return !existsSync(this.base) && this.#processes.drained(pid)
-  }
-
   async #dispose(): Promise<void> {
     await this.#processes.drain()
-    this.#runtime = null
     await rm(this.base, { recursive: true, force: true })
   }
 
@@ -631,169 +559,6 @@ export class RunDriverMother {
         }
       }
       instruction = next
-    }
-  }
-
-  async observeWithoutMeasurements(conversation: string): Promise<readonly string[]> {
-    if (this.#runtime === null) throw new Error('the fixture backend is not running')
-    const directory = join(this.state, 'control-tower', 'harness', conversation, 'calls')
-    const names = await readdir(directory)
-    for (const name of names) await rm(join(directory, name, 'agent-measurements-v1.json'))
-    const port = await this.#runtime.port
-    for (let observation = 0; observation < 2; observation += 1) {
-      const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
-      const body = await response.text()
-      if (response.status !== 200) throw new Error(`active-plans answered ${response.status}: ${body}`)
-    }
-    const regenerated: string[] = []
-    for (const name of names) {
-      if ((await readdir(join(directory, name))).includes('agent-measurements-v1.json')) regenerated.push(name)
-    }
-    return regenerated
-  }
-
-  async deliverThroughApi(): Promise<{
-    admission: { conversation: string },
-    conversations: string[],
-    roles: string[],
-    callIds: string[],
-    requests: string[],
-    commonMeasurements: string[],
-    modelCalls: ModelCapture[],
-    attemptSteps: string[],
-    consumingSteps: string[],
-    dispatches: DispatchCapture[],
-    pullRequestRefusals: string[],
-    delivered: string,
-    publication: string,
-  }> {
-    this.#git('switch', '-q', 'main')
-    this.#git('branch', '-D', 'feat/7')
-    await rm(join(this.checkout, '.agent', 'SLICE.md'))
-    this.#git('add', '-u')
-    this.#git('commit', '-q', '-m', 'leave slice state to the production seed')
-    this.#git('push', '-q', 'origin', 'main')
-    await this.#modelExecutable()
-    const pullRequestRefusals = this.#pullRequestRefusals()
-    const runtime = new RuntimeProcess({
-      CT_API_PORT: '0',
-      CLAUDE_CONFIG_DIR: this.state,
-      SHELL: '/bin/sh',
-      PATH: `${this.bin}:${process.env.PATH ?? '/usr/bin:/bin'}`,
-      CT_FIXTURE_CAPTURES: this.captures,
-      CT_FIXTURE_PUBLICATION: this.publication,
-    }, this.#processes)
-    this.#runtime = runtime
-    const port = await runtime.port
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: 'https://github.com/acme/widget/issues/1',
-        repo: RunDriverMother.REPOSITORY,
-        path: this.checkout,
-      }),
-    })
-    const responseText = await response.text()
-    if (response.status !== 202) throw new Error(`start-plan answered ${response.status}: ${responseText}`)
-    const started = JSON.parse(responseText) as { agent: string, worktree: string }
-    const harness = join(this.state, 'control-tower', 'harness', started.agent)
-    const delivered = await RunDriverMother.#until(async () => {
-      try {
-        const operations = await readdir(join(harness, 'run', 'operations'))
-        for (const ticket of operations) {
-          const receipt = JSON.parse(
-            await readFile(join(harness, 'run', 'operations', ticket, 'receipt.json'), 'utf8'),
-          ) as { stdout: string }
-          if (receipt.stdout.includes('"kind":"transition","state":"delivered"')) return receipt.stdout
-        }
-        return null
-      } catch (cause) {
-        if (RunDriverMother.hasCode(cause, 'ENOENT')) return null
-        throw cause
-      }
-    }, () => `runtime did not deliver: ${runtime.stderr}`)
-    const admission = JSON.parse(await readFile(join(harness, 'run', 'admission.json'), 'utf8')) as {
-      conversation: string,
-    }
-    const callIds = (await readdir(join(harness, 'calls'))).sort()
-    const calls = await Promise.all(callIds.map(async (id) => ({
-      id,
-      descriptor: JSON.parse(await readFile(join(harness, 'calls', id, 'call.json'), 'utf8')) as {
-        conversation: string, purpose: string, requestId: string | null, argv: string[],
-      },
-    })))
-    const operationNames = await readdir(join(harness, 'run', 'operations'))
-    const operations = await Promise.all(operationNames.map(async (ticket) => ({
-      ticket,
-      request: JSON.parse(await readFile(join(harness, 'run', 'operations', ticket, 'request.json'), 'utf8')) as {
-        previous: string | null,
-      },
-    })))
-    const order = new Map<string, number>()
-    let previous: string | null = null
-    for (let index = 0; index < operations.length; index += 1) {
-      const operation = operations.find((candidate) => candidate.request.previous === previous)
-      if (operation === undefined) break
-      order.set(operation.ticket, index)
-      previous = operation.ticket
-    }
-    const implementations = calls.filter((call) => call.descriptor.purpose === 'implementation')
-      .sort((left, right) => (
-        (order.get(left.descriptor.requestId?.slice('run:'.length) ?? '') ?? Number.MAX_SAFE_INTEGER)
-        - (order.get(right.descriptor.requestId?.slice('run:'.length) ?? '') ?? Number.MAX_SAFE_INTEGER)
-      ))
-    const roles = implementations.map((call) => {
-      const at = call.descriptor.argv.indexOf('--agent')
-      if (at < 0) return 'implement'
-      if (call.descriptor.argv[at + 1] === 'ct-judge') return 'judge'
-      if (call.descriptor.argv[at + 1] === 'ct-slice-judge') return 'slice-judge'
-      throw new Error(`unexpected model role: ${JSON.stringify(call.descriptor.argv)}`)
-    })
-    const commonMeasurements = await Promise.all(calls.map((call) =>
-      readFile(join(harness, 'calls', call.id, 'agent-measurements-v1.json'), 'utf8'),
-    ))
-    const metrics = await readFile(
-      join(started.worktree, 'docs', 'superpowers', 'metrics', `issue-${RunDriverMother.ISSUE}.jsonl`),
-      'utf8',
-    )
-    const attemptSteps = metrics.trim().split('\n').filter(Boolean).map((line) => (
-      JSON.parse(line) as { step: string }
-    ).step)
-    const verbSteps = new Map([
-      ['report', 'implement'], ['controls', 'controls'], ['verdict', 'judge'], ['reconcile', 'reconcile'],
-      ['global', 'global'], ['slice-verdict', 'slice-judge'],
-    ])
-    const orderedOperations = [...operations].sort((left, right) => (
-      (order.get(left.ticket) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.ticket) ?? Number.MAX_SAFE_INTEGER)
-    ))
-    const consumingSteps = orderedOperations.flatMap((operation) => {
-      const request = JSON.parse(readFileSync(
-        join(harness, 'run', 'operations', operation.ticket, 'request.json'), 'utf8',
-      )) as { argv: string[] }
-      const step = verbSteps.get(request.argv[1])
-      return step === undefined ? [] : [step]
-    })
-    const modelCalls = (await readFile(join(this.captures, 'model.jsonl'), 'utf8')).trim().split('\n')
-      .filter(Boolean).map((line) => RunDriverMother.#modelCapture(line))
-    const dispatches = await Promise.all(implementations.map(async (call) => {
-      const ticket = call.descriptor.requestId?.slice('run:'.length) ?? ''
-      return JSON.parse(await readFile(join(harness, 'run', 'operations', ticket, 'material.json'), 'utf8')) as DispatchCapture
-    }))
-    return {
-      admission,
-      conversations: [...new Set(implementations.map((call) => call.descriptor.conversation))],
-      roles,
-      callIds: implementations.map((call) => call.id),
-      requests: implementations.map((call) => call.descriptor.requestId ?? ''),
-      commonMeasurements,
-      modelCalls,
-      attemptSteps,
-      consumingSteps,
-      dispatches,
-      pullRequestRefusals,
-      delivered,
-      publication: await readFile(this.publication, 'utf8'),
     }
   }
 
@@ -922,25 +687,6 @@ export class RunDriverMother {
       }
     }
     return outcomes
-  }
-
-  async recoverLaterFixes(): Promise<{
-    failed: FixProjection,
-    successful: FixProjection,
-  }> {
-    await this.deliverThroughApi()
-    const runtime = this.#runtime
-    this.#runtime = null
-    if (runtime !== null) await runtime.stop()
-    const sourceState = join(this.state, 'control-tower')
-    const failedState = join(this.base, 'failed-state')
-    const successfulState = join(this.base, 'successful-state')
-    await fs.cp(sourceState, failedState, { recursive: true })
-    await fs.cp(sourceState, successfulState, { recursive: true })
-    return {
-      failed: await this.#recoverFix(failedState, false),
-      successful: await this.#recoverFix(successfulState, true),
-    }
   }
 
   #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
@@ -1134,120 +880,6 @@ export class RunDriverMother {
 
   static #strings(value: unknown): value is string[] {
     return Array.isArray(value) && value.every((item) => typeof item === 'string')
-  }
-
-  async #recoverFix(stateRoot: string, successful: boolean): Promise<FixProjection> {
-    const harnesses = await readdir(join(stateRoot, 'harness'))
-    const conversation = harnesses[0]
-    const dispatch = JSON.parse(await readFile(join(stateRoot, 'harness', conversation, 'dispatch.json'), 'utf8')) as {
-      worktree: string,
-    }
-    const callId = successful
-      ? '77777777-7777-4777-8777-777777777777'
-      : '66666666-6666-4666-8666-666666666666'
-    const call = new StartedPlanCall({ conversation, id: callId })
-    const directory = join(stateRoot, 'harness', conversation, 'calls', callId)
-    await fs.mkdir(directory)
-    const descriptor = new CallDescriptor({
-      conversation, purpose: 'fix', requestId: 'review-1', cwd: dispatch.worktree,
-      binary: 'claude', argv: ['--resume', conversation], startedAt: '2026-09-17T10:00:00.000Z',
-      budgetMs: 7_200_000, killGraceMs: 5_000,
-    })
-    const diagnostic = 'synthetic fix failed after delivery'
-    const completion = new CompletedPlanCall({
-      call, code: 0, signal: null, finishedAt: '2026-09-17T10:01:00.000Z', wallDurationMs: 60_000,
-      execution: successful ? { kind: 'success' } : { kind: 'error', diagnostic },
-      measurement: {
-        cost: { kind: 'reported', totalUsd: 0.5, attribution: 'unverified-resume' },
-        turns: 2, durationMs: 55_000, unavailable: [],
-      },
-    })
-    await Promise.all([
-      writeFile(join(directory, CallDescriptor.FILE), descriptor.text()),
-      writeFile(join(directory, CallDescriptor.PROMPT), 'Labelled synthetic post-delivery fix.\n'),
-      writeFile(join(directory, CallDescriptor.STREAM), ''),
-      writeFile(join(directory, CallDescriptor.STDERR), ''),
-      writeFile(join(directory, CallDescriptor.COMPLETION), StoredCompletion.text(completion)),
-    ])
-    const files = new HeadlessFiles({ root: stateRoot, fs, newId: () => this.#identity() })
-    let calls = 0
-    let verbs = 0
-    const refusingSpawn = new Proxy(spawn, {
-      apply: () => { calls += 1; throw new Error('recovery must not spawn') },
-    })
-    const transport = RunDriverMother.measured(new ClaudeCalls({
-      files, binary: 'claude', worker: 'worker',
-      spawn: refusingSpawn,
-      env: {}, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
-      budgetMs: 7_200_000, killGraceMs: 5_000, acceptanceMs: 10_000, pollMs: 250, sleep: async () => {},
-    }), files)
-    const records = new DiskPlanRecords({
-      files, newId: () => this.#identity(), now: () => '2026-09-17T12:00:00.000Z',
-      exists: async (path) => existsSync(path),
-    })
-    const journal = new RunJournal({
-      files,
-      newId: () => this.#identity(),
-      now: () => { throw new Error('the journal clock is not asked') },
-    })
-    const machine = new CtRunMachine({
-      journal,
-      node: async () => { verbs += 1; throw new Error('recovery must not execute a verb') },
-      git: async () => { throw new Error('recovery must not inspect git') },
-      read: async (path) => readFile(path, 'utf8').catch((cause: unknown) => {
-        if (RunDriverMother.hasCode(cause, 'ENOENT')) return null
-        throw cause
-      }),
-      ctStep: RunDriverMother.#CT_STEP, dispatchCheck: RunDriverMother.#DISPATCH_CHECK,
-      pluginRoot: RunDriverMother.#PLUGIN,
-    })
-    const planCalls = new ClaudePlanCalls({
-      calls: transport, records,
-      brief: new PlanAgentBrief({
-        dispatchCheck: RunDriverMother.#DISPATCH_CHECK,
-        conventions: join(RunDriverMother.#PLUGIN, 'conventions'), ctStep: RunDriverMother.#CT_STEP,
-      }),
-      pluginRoot: RunDriverMother.#PLUGIN, resumable: async () => true, nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'),
-    })
-    const driver = new DriveRun({
-      calls: planCalls, publication: new PlanPublication(), machine, delivery: new CompletedRunDelivery(),
-      step: new ExecuteRunInstruction({ machine, calls: new ClaudeRunCalls({
-        calls: transport, machine, files, pluginRoot: RunDriverMother.#PLUGIN,
-      }) }),
-      messages: new DeliverHeldMessages({
-        messages: journal,
-        calls: planCalls,
-        escalations: new QuietEscalations(),
-      }),
-      escalations: QuietEscalations.reader(),
-    })
-    const agents = new RunPlanAgents({
-      legacy: new PlanAgents(), records, calls: planCalls, transport, driver, machine, journal,
-      delivery: new CompletedRunDelivery(),
-      announcements: new SilentChangeAnnouncements(),
-      newId: () => this.#identity(), nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'), stderr: () => {},
-    })
-    const reviews = new RecoveryReviews()
-    const activePlans = new ActivePlans({ sessions: new PlanSessions() })
-    const legacy = new RecordedPlanRecovery({
-      records, calls: planCalls, ownership: transport, checkouts: new RecoveryCheckouts(), activePlans, reviews,
-    })
-    const recovery = new RunPlanRecovery({
-      legacy, records, calls: planCalls, transport, machine, journal, agents, delivery: new CompletedRunDelivery(),
-      checkouts: new RecoveryCheckouts(), activePlans, reviews,
-      nowMs: () => Date.parse('2026-09-17T12:00:00.000Z'),
-    })
-    const recoveryDiagnostic = await recovery.recover()
-    if (recoveryDiagnostic !== null) throw new Error(recoveryDiagnostic)
-    const projected = activePlans.known()[0] as {
-      phase: string, diagnostic?: string, recovery?: { action: string, detail: string },
-    }
-    return successful
-      ? { phase: projected.phase, watching: reviews.started > 0, calls, verbs }
-      : {
-          phase: projected.phase, diagnostic: projected.diagnostic, recovery: projected.recovery,
-          watching: reviews.started > 0, calls, verbs,
-        }
   }
 
   async #advanceBase(): Promise<void> {
@@ -1480,26 +1112,6 @@ export class RunDriverMother {
     return { code: result.status ?? -1, stdout: result.stdout, stderr: result.stderr }
   }
 
-  #pullRequestRefusals(): string[] {
-    const requests = [
-      ['pr', 'list', '--repo', 'other/widget', '--state', 'all', '--head', 'feat/7', '--json', 'number', '--limit', '1'],
-      ['pr', 'list', '--repo', 'acme/widget', '--state', 'all', '--head', 'feat/8', '--json', 'number', '--limit', '1'],
-      ['pr', 'list', '--repo', 'acme/widget', '--state', 'all', '--head', 'feat/7', '--json', 'number', '--limit', '1', '--web'],
-    ]
-    return requests.map((argv) => {
-      const result = spawnSync(join(this.bin, 'gh'), argv, {
-        env: {
-          ...process.env,
-          CT_FIXTURE_CAPTURES: this.captures,
-          CT_FIXTURE_PUBLICATION: this.publication,
-        },
-        encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL',
-      })
-      if (result.status === 0) throw new Error(`unexpected pull-request request was accepted: ${JSON.stringify(argv)}`)
-      return result.stderr
-    })
-  }
-
   #isolatedStateEnvironment(): NodeJS.ProcessEnv {
     return { ...process.env, CT_STATE_DIR: undefined, CLAUDE_CONFIG_DIR: this.state }
   }
@@ -1540,14 +1152,5 @@ export class RunDriverMother {
     if (instruction.work.kind === 'refused') {
       throw new Error(`the real run refused instead of advancing: ${instruction.work.detail}`)
     }
-  }
-
-  static async #until<T>(read: () => Promise<T | null>, diagnostic: () => string): Promise<T> {
-    for (let attempt = 0; attempt < 1_200; attempt += 1) {
-      const value = await read()
-      if (value !== null) return value
-      await new Promise((resolve) => setTimeout(resolve, 50))
-    }
-    throw new Error(diagnostic())
   }
 }

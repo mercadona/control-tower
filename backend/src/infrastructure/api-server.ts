@@ -32,7 +32,6 @@ import { SliceHeldChangeRoute, SliceMessageRoute } from './slice-message-route.t
 import type { SliceChangeAsked, SliceChangeHeld } from './slice-message-route.ts'
 import { AnotherRoundRoute } from './another-round-route.ts'
 import type { AnotherRoundAsked } from './another-round-route.ts'
-import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { RecoverPlan } from '../application/actions/recover-plan.ts'
 import type { CleanupPlan } from '../application/actions/cleanup-plan.ts'
@@ -112,7 +111,6 @@ type RequestFailure = {
 
 export type ApiCollaborators = {
   port: number,
-  startPlan?: StartPlan | null,
   startMilestonePlan?: StartMilestonePlan | null,
   startsInFlight?: WorkInFlight | null,
   recoverPlan?: RecoverPlan | null,
@@ -185,7 +183,6 @@ class Failures {
 
 export class ApiServer {
   readonly requestedPort: number
-  readonly startPlan: StartPlan | null | undefined
   readonly startMilestonePlan: StartMilestonePlan | null | undefined
   readonly startsInFlight: WorkInFlight
   readonly recoverPlan: RecoverPlan | null | undefined
@@ -228,7 +225,7 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
+    port, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
     sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
@@ -237,7 +234,6 @@ export class ApiServer {
     sliceMessage, sliceHeldChange, anotherRound, sliceEscalation, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
-    this.startPlan = startPlan
     this.startMilestonePlan = startMilestonePlan
     this.startsInFlight = startsInFlight ?? new WorkInFlight()
     this.recoverPlan = recoverPlan
@@ -294,7 +290,6 @@ export class ApiServer {
       JsonBody.demandDeclared,
       JsonBody.reader(),
       StartPlanRoute.handledBy(
-        this.startPlan!,
         new EntrypointPlanSessionRegistry({ sessions: this.sessions!, activePlans: this.activePlans! }),
         {
           milestone: this.startMilestonePlan ?? null,

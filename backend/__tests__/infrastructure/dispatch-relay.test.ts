@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { DispatchRelay, RelayLine } from '../../src/infrastructure/dispatch-relay.ts'
 import { WorkInFlight, Reservation } from '../../src/infrastructure/work-in-flight.ts'
-import { PlanStarted } from '../../src/application/actions/start-plan.ts'
+import { PlanStarted } from '../../src/application/actions/start-milestone-plan.ts'
 import {
   SliceNotStarted, StartMilestonePlanResult,
 } from '../../src/application/actions/start-milestone-plan.ts'

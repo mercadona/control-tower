@@ -139,10 +139,6 @@ const typeTicket = async (user: User, ticket: string) => {
   await user.type(await editable('Ticket'), ticket)
 }
 
-const typeRepository = async (user: User, repository: string) => {
-  await user.type(await editable(/Repositorio/), repository)
-}
-
 const typePath = async (user: User, path: string) => {
   await user.type(await editable(/Ruta local/), path)
 }
@@ -153,7 +149,6 @@ const pressStart = async (user: User) => {
 
 const openBrainstorming = async (user: User) => {
   await typeTicket(user, StartPlanMother.TICKET)
-  await typeRepository(user, StartPlanMother.REPO)
   await typePath(user, StartPlanMother.PATH)
   await pressStart(user)
 }
@@ -202,7 +197,6 @@ export {
   openHome,
   selectSliceDetail,
   typeTicket,
-  typeRepository,
   typePath,
   pressStart,
   openBrainstorming,

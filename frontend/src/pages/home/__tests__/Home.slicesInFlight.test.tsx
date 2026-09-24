@@ -13,7 +13,7 @@ import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { FakeEventSource } from './FakeEventSource'
-import { openHome, pressStart, selectSliceDetail, typePath, typeRepository, typeTicket } from './helpers'
+import { openHome, pressStart, selectSliceDetail, typePath, typeTicket } from './helpers'
 
 type Answer = { status: number; body: string }
 
@@ -250,7 +250,6 @@ describe('Home · the slices in flight', () => {
     await screen.findByRole('heading', { name: 'Slice #7', level: 2 })
 
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await pressStart(user)
 

@@ -1,7 +1,6 @@
 import { FormEvent, useRef, useState } from 'react'
 import { OpenedCoordinatingSession, OpenOutcome } from 'app/coordinating-session/CoordinatingSession.types'
 import { LocalPath } from 'app/start-plan/LocalPath'
-import { RepositoryName } from 'app/start-plan/RepositoryName'
 import { StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 import { TicketKey } from 'app/start-plan/TicketKey'
 import { Banner } from 'system-ui/banner'
@@ -15,11 +14,11 @@ type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>
 
 const MUTATION_BLOCKED_HELP = 'No puedes arrancar otro plan hasta confirmar el estado del backend.'
 const ALREADY_LIVE_HELP = 'Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.'
-const INCOMPLETE_HELP = 'Da un ticket válido, además del repositorio y su ruta local.'
+const INCOMPLETE_HELP = 'Da un ticket válido y la ruta local del repositorio.'
 
 type StartPlanFormProps = {
-  onOpened: (opened: OpenedCoordinatingSession, request: StartPlanRequest) => void
-  onUnreachable: (request: StartPlanRequest) => void
+  onOpened: (opened: OpenedCoordinatingSession) => void
+  onUnreachable: () => void
   onInteraction: () => void
   isLocked: boolean
   isMutationBlocked?: boolean
@@ -33,21 +32,18 @@ const StartPlanForm = ({
   isCoordinatingSessionLive = false, openSession, request,
 }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
-  const [repository, setRepository] = useState('')
   const [path, setPath] = useState('')
   const [isSending, setIsSending] = useState(false)
   const isSendingRef = useRef(false)
   const [refusal, setRefusal] = useState<OpenRefusal | null>(null)
-  const [touched, setTouched] = useState({ ticket: false, repository: false, path: false })
+  const [touched, setTouched] = useState({ ticket: false, path: false })
 
   const hasWellFormedTicket = TicketKey.isWellFormed(ticketKey)
   const ticketError = touched.ticket && !hasWellFormedTicket
-  const repositoryError = touched.repository && !RepositoryName.isWellFormed(repository)
   const pathError = touched.path && !LocalPath.isWellFormed(path)
 
   const canStart =
     hasWellFormedTicket &&
-    RepositoryName.isWellFormed(repository) &&
     LocalPath.isWellFormed(path) &&
     !isSending &&
     !isLocked && !isMutationBlocked && !isCoordinatingSessionLive
@@ -67,10 +63,8 @@ const StartPlanForm = ({
     setRefusal(null)
     const submission: StartPlanSubmission = {
       id: ticketKey,
-      repo: repository,
       path: LocalPath.normalize(path),
     }
-    const submitted: StartPlanRequest = { id: submission.id, repo: submission.repo, path: submission.path }
     let outcome: OpenOutcome
     try {
       outcome = await openSession?.(submission) ?? { kind: 'backend-unreachable' }
@@ -81,10 +75,10 @@ const StartPlanForm = ({
       setIsSending(false)
     }
     if (outcome.kind === 'opened') {
-      onOpened(outcome.opened, submitted)
+      onOpened(outcome.opened)
       return
     }
-    if (outcome.kind === 'backend-unreachable') onUnreachable(submitted)
+    if (outcome.kind === 'backend-unreachable') onUnreachable()
     setRefusal(outcome)
   }
 
@@ -99,10 +93,12 @@ const StartPlanForm = ({
             <dd>{shownTicket}</dd>
           </div>
         )}
-        <div>
-          <dt className="lg-caption1-regular">Repositorio</dt>
-          <dd><code>{request?.repo ?? repository}</code></dd>
-        </div>
+        {request?.repo !== undefined && (
+          <div>
+            <dt className="lg-caption1-regular">Repositorio</dt>
+            <dd><code>{request.repo}</code></dd>
+          </div>
+        )}
         <div>
           <dt className="lg-caption1-regular">Ruta local</dt>
           <dd><code>{request?.path ?? LocalPath.normalize(path)}</code></dd>
@@ -133,19 +129,6 @@ const StartPlanForm = ({
           onChange={(event) => {
             onInteraction()
             setTicketKey(event.target.value)
-          }}
-        />
-      </FormField>
-      <FormField label="Repositorio" required message={repositoryError ? `Indica un repositorio válido, como ${RepositoryName.EXAMPLE}` : `Con la forma ${RepositoryName.EXAMPLE}`} error={repositoryError}>
-        <Input
-          placeholder={RepositoryName.EXAMPLE}
-          value={repository}
-          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
-          autoComplete="off"
-          onBlur={() => setTouched((current) => ({ ...current, repository: true }))}
-          onChange={(event) => {
-            onInteraction()
-            setRepository(event.target.value)
           }}
         />
       </FormField>
