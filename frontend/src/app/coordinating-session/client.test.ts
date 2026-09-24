@@ -87,6 +87,18 @@ describe('CoordinatingSessionClient', () => {
     })
   })
 
+  it('tells in Spanish that a story whose spec is frozen has finished its brainstorming', async () => {
+    answerWith(CoordinatingSessionMother.storySpecFrozen())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'story-spec-frozen',
+      error: 'Este ticket ya tiene su spec congelado, así que su brainstorming ha terminado. Sigue con el groom.',
+    })
+  })
+
   it('closes only after a matching acknowledgement', async () => {
     const posting = vi.fn(async () => new Response(JSON.stringify({
       status: 'closed',

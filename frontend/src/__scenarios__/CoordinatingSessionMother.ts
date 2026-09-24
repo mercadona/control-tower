@@ -188,6 +188,13 @@ const alreadyLive = () => ({
     `"conversation":"${CONVERSATION}","session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
+const storySpecFrozen = () => ({
+  status: 400,
+  body:
+    '{"code":"story-spec-frozen","detail":"STAFF-128 already has its execution spec frozen at ' +
+    'docs/superpowers/specs/STAFF-128-execution.md: its brainstorming is over, continue with the groom"}',
+})
+
 export const CoordinatingSessionMother = {
   CONVERSATION,
   TARGET,
@@ -218,4 +225,5 @@ export const CoordinatingSessionMother = {
   endedCloseFailed,
   opened,
   alreadyLive,
+  storySpecFrozen,
 }

@@ -5,7 +5,7 @@ import { PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse } from './st
 import {
   HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState, OpeningReservation,
 } from './coordinating-sessions.ts'
-import { OpenCoordinatingSessionParams } from '../application/actions/open-coordinating-session.ts'
+import { OpenCoordinatingSessionParams, StorySpecFrozen } from '../application/actions/open-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import type { CoordinatingSessions, OpeningReservationValue, ReservedOpening } from './coordinating-sessions.ts'
@@ -16,6 +16,7 @@ export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
+  STORY_SPEC_FROZEN: 'story-spec-frozen',
 } as const)
 
 export type CoordinatingSessionOutcomeValue = (typeof CoordinatingSessionOutcome)[keyof typeof CoordinatingSessionOutcome]
@@ -133,7 +134,7 @@ export class CoordinatingSessionRoute {
         CoordinatingSessionRoute.#refuseOpening(response, reserved)
         return
       }
-      let opened: CoordinatingSessionOpened
+      let opened: CoordinatingSessionOpened | StorySpecFrozen
       try {
         opened = await open.execute(new OpenCoordinatingSessionParams({
           story: asked.story!,
@@ -143,6 +144,11 @@ export class CoordinatingSessionRoute {
         held.release()
         if (!(cause instanceof PlanFailure)) throw cause
         Answer.refuseAs(response, PlanCollapse.of(cause))
+        return
+      }
+      if (opened instanceof StorySpecFrozen) {
+        held.release()
+        Answer.refuse(response, 400, CoordinatingSessionOutcome.STORY_SPEC_FROZEN, CoordinatingSessionRoute.frozenDetail(opened))
         return
       }
       const sessionTarget = held.mintTarget()
@@ -162,6 +168,10 @@ export class CoordinatingSessionRoute {
         session: { id: opened.session.id, name: opened.session.name },
       })
     }
+  }
+
+  static frozenDetail(frozen: StorySpecFrozen): string {
+    return `${frozen.story.text} already has its execution spec frozen at ${frozen.spec.path}: its brainstorming is over, continue with the groom`
   }
 
   static readonly #OUTCOME_BY_RESERVATION: Projection<CoordinatingSessionOutcomeValue, OpeningReservationValue> =

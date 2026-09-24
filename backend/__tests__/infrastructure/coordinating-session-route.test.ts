@@ -3,11 +3,13 @@ import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
-  OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened,
+  OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened, StorySpecFrozen,
 } from '../../src/application/actions/open-coordinating-session.ts'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
-  CoordinatingOperation,
+  CoordinatingOperation, OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
@@ -25,12 +27,13 @@ import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 
 class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   readonly asked: OpenCoordinatingSessionParams[]
-  readonly answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened>
+  readonly answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened | StorySpecFrozen>
 
-  constructor(answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened>) {
+  constructor(answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened | StorySpecFrozen>) {
     super({
       userStories: new UserStories(),
       workspace: new Workspace(),
@@ -38,6 +41,7 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
       sessionHooks: new SessionHooks(),
       records: new ConversationRecords(),
       checkouts: new CheckoutRegistry(),
+      specs: new EpicSpecs(),
     })
     this.asked = []
     this.answer = answer
@@ -47,11 +51,15 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
     return new OpenCoordinatingSessionSpy(async () => Mother.opened())
   }
 
+  static findingItFrozen(frozen: StorySpecFrozen): OpenCoordinatingSessionSpy {
+    return new OpenCoordinatingSessionSpy(async () => frozen)
+  }
+
   static refusing(cause: Error): OpenCoordinatingSessionSpy {
     return new OpenCoordinatingSessionSpy(async () => { throw cause })
   }
 
-  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
+  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened | StorySpecFrozen> {
     this.asked.push(params)
 
     return this.answer(params)
@@ -320,6 +328,28 @@ describe('CoordinatingSessionRoute', () => {
     })
     expect(next.status).toBe(400)
     expect(open.asked).toHaveLength(2)
+  })
+
+  it('a story whose spec is already frozen is refused with story-spec-frozen and frees the next opening', async () => {
+    const frozen = new StorySpecFrozen({
+      story: new UserStoryKey('STAFF-128'),
+      spec: new EpicSpec({
+        path: 'docs/superpowers/specs/STAFF-128-execution.md',
+        text: `# Frozen epic${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
+      }),
+    })
+    const held = Mother.registry()
+    const port = await RunningApi.listening(OpenCoordinatingSessionSpy.findingItFrozen(frozen), held)
+
+    const refused = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toEqual({
+      code: 'story-spec-frozen',
+      detail: 'STAFF-128 already has its execution spec frozen at docs/superpowers/specs/STAFF-128-execution.md: its brainstorming is over, continue with the groom',
+    })
+    expect(held.held()).toBeNull()
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
 
   it('an opening that broke frees the next one', async () => {

@@ -95,6 +95,7 @@ class OpenSessionSpy extends OpenCoordinatingSession {
       sessionHooks: new SessionHooks(),
       records: new ConversationRecords(),
       checkouts: new CheckoutRegistry(),
+      specs: new EpicSpecs(),
     })
     this.asked = []
     this.roots = []

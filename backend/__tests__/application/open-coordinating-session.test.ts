@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  OpenCoordinatingSession, OpenCoordinatingSessionParams,
+  CoordinatingSessionOpened, OpenCoordinatingSession, OpenCoordinatingSessionParams, StorySpecFrozen,
 } from '../../src/application/actions/open-coordinating-session.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
@@ -167,12 +169,15 @@ class Flow {
   sessionHooks: SessionHooksDouble
   records: ConversationRecordsDouble
   checkouts: CheckoutRegistryDouble
+  specs: EpicSpecsDouble
   steps: string[]
 
-  constructor({ userStories, workspace }: {
+  constructor({ userStories, workspace, spec = null }: {
     userStories?: UserStoriesDouble,
     workspace?: WorkspaceDouble,
+    spec?: EpicSpec | null,
   } = {}) {
+    this.specs = new EpicSpecsDouble(spec, { story: Flow.STORY })
     this.userStories = userStories ?? UserStoriesDouble.reading('the summary of the story', 'as a user I want')
     this.workspace = workspace ?? new WorkspaceDouble(Flow.CANONICAL_ROOT)
     this.conversations = new ConversationsDouble()
@@ -187,10 +192,24 @@ class Flow {
     this.checkouts.steps = this.steps
   }
 
+  static specOfTheStory(state: string): EpicSpec {
+    return new EpicSpec({
+      path: 'docs/superpowers/specs/MO_SHOP-42-execution.md',
+      text: `# The story's epic${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${state}\n`,
+    })
+  }
+
   async run(story: UserStoryKey | UserStoryUrl = Flow.STORY) {
     return new OpenCoordinatingSession(this).execute(new OpenCoordinatingSessionParams({
       story, root: Flow.ROOT,
     }))
+  }
+
+  async opened(): Promise<CoordinatingSessionOpened> {
+    const answered = await this.run()
+    if (!(answered instanceof CoordinatingSessionOpened)) throw new Error(`expected an opened session, got ${JSON.stringify(answered)}`)
+
+    return answered
   }
 }
 
@@ -269,9 +288,37 @@ describe('OpenCoordinatingSession', () => {
   it('answers the timeline the records seeded for the freshly opened conversation', async () => {
     const flow = new Flow()
 
-    const opened = await flow.run()
+    const opened = await flow.opened()
 
     expect(opened.timeline).toBe(ConversationRecordsDouble.TIMELINE)
+  })
+
+  it('a story whose spec is already frozen is refused before anything is asked of the tracker or started', async () => {
+    const frozen = Flow.specOfTheStory(EpicSpec.FROZEN)
+    const flow = new Flow({ spec: frozen })
+
+    const answered = await flow.run()
+
+    expect(answered).toEqual(new StorySpecFrozen({ story: Flow.STORY, spec: frozen }))
+    expect(flow.steps).toEqual(['confirmForSession'])
+    expect(flow.userStories.asked).toEqual([])
+  })
+
+  it('a story whose spec is still a draft opens its brainstorming again, to continue on that draft', async () => {
+    const flow = new Flow({ spec: Flow.specOfTheStory(EpicSpec.DRAFT) })
+
+    const opened = await flow.opened()
+
+    expect(opened.conversation.story).toBe(Flow.STORY)
+    expect(flow.steps).toContain('start')
+  })
+
+  it('the spec is looked for in the checkout the workspace confirmed, under the story being opened', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.specs.asked).toEqual([{ root: Flow.CANONICAL_ROOT, story: Flow.STORY }])
   })
 
   it('tells the coordinating session that the freeze is the cabin button and not a line it writes', async () => {

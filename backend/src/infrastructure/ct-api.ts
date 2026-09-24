@@ -626,6 +626,7 @@ class CtApi {
       newId: randomUUID,
       now: () => new Date().toISOString(),
     })
+    const epicSpecs = new DiskEpicSpecs({ read: Disk.read, write: Disk.write })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
       workspace,
@@ -633,6 +634,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
       checkouts,
+      specs: epicSpecs,
     })
     const recoverCoordinatingSession = new RecoverCoordinatingSession({
       conversations: claudeConversations,
@@ -648,7 +650,6 @@ class CtApi {
       records: conversationRecords,
       liveSessions,
     })
-    const epicSpecs = new DiskEpicSpecs({ read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
       specs: epicSpecs,
       conversations: claudeConversations,
