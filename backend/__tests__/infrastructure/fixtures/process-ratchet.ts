@@ -21,7 +21,6 @@ export class ProcessRatchet {
     'infrastructure/pty-live-sessions-real-process.test.ts',
     'infrastructure/pty-live-sessions.test.ts',
     'infrastructure/recorded-plan-recovery.test.ts',
-    'infrastructure/run-dispatch-real-process.test.ts',
     'infrastructure/run-driver-runtime-real-process.test.ts',
     'infrastructure/run-plan-recovery.test.ts',
     'infrastructure/run-recovery-real-process.test.ts',

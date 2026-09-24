@@ -51,6 +51,21 @@ const TICKET = '22222222-2222-4222-8222-222222222222'
 const ISSUE = 7
 const PLAN = 'docs/superpowers/plans/2026-09-17-issue-7-dispatch.md'
 
+class EnvironmentSnapshot {
+  readonly values: ReadonlyMap<string, string | undefined>
+
+  constructor(names: readonly string[]) {
+    this.values = new Map(names.map((name) => [name, process.env[name]]))
+  }
+
+  restore(): void {
+    for (const [name, value] of this.values) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
 class ProducerOutput {
   static of(stdout: string): AnnouncedDispatch {
     const announced = JSON.parse(stdout) as Readonly<{ dispatch?: AnnouncedDispatch }>
@@ -60,10 +75,23 @@ class ProducerOutput {
     return announced.dispatch
   }
 
+  static responsePath(stdout: string): string {
+    const path = ProducerOutput.of(stdout).response?.path
+    if (typeof path !== 'string') {
+      throw new Error(`the announcement declares no response path: ${JSON.stringify(stdout)}`)
+    }
+    return path
+  }
+
   static pathOf(stdout: string, role: string): string {
     const input = (ProducerOutput.of(stdout).inputs ?? []).find((candidate) => candidate.role === role)
     if (input === undefined) throw new Error(`the announcement declares no ${role} input`)
     return input.path
+  }
+
+  static withConsuming(stdout: string, argv: readonly string[]): string {
+    const announced = JSON.parse(stdout) as Record<string, unknown>
+    return JSON.stringify({ ...announced, consuming: { argv: [...argv] } })
   }
 
   static implementPaths(stdout: string): readonly string[] {
@@ -350,5 +378,119 @@ describe('RunDispatch', () => {
     expect(resealed).not.toBe(sealed)
     expect(JSON.parse(resealed).argv).toEqual(second.argv)
     expect(await fixture.material()).toBe(resealed)
+  })
+
+  it('a dispatch whose input material is missing is refused', async () => {
+    const fixture = await Fixture.create()
+    fixtures.push(fixture)
+    const oracle = fixture.oracle()
+    const stdout = await oracle.announce('implement')
+    const machine = fixture.machine(oracle)
+    await fixture.seed(stdout)
+    const missing = ProducerOutput.pathOf(stdout, INPUT_ROLES.BRIEF)
+    await rm(missing)
+
+    await expect(machine.dispatch(fixture.watch(), TICKET)).rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await fixture.material()).toBeNull()
+  })
+
+  it('literal producer paths and the declared verdict glob retain their different meanings', async () => {
+    const environment = new EnvironmentSnapshot(['TMPDIR'])
+    const parent = await mkdtemp(join(tmpdir(), 'ct-[literal]*?-'))
+    try {
+      process.env.TMPDIR = parent
+      const literalFixture = await Fixture.create()
+      fixtures.push(literalFixture)
+      const literalOracle = literalFixture.oracle()
+      const literalStdout = await literalOracle.announce('implement')
+      const literalMachine = literalFixture.machine(literalOracle)
+      await literalFixture.seed(literalStdout)
+      const dispatch = await literalMachine.dispatch(literalFixture.watch(), TICKET)
+      expect(dispatch.paths.some((path) => path.includes('[literal]*?'))).toBe(true)
+
+      environment.restore()
+      if (environment.values.get('TMPDIR') === undefined) expect('TMPDIR' in process.env).toBe(false)
+      else expect(process.env.TMPDIR).toBe(environment.values.get('TMPDIR'))
+
+      const verdictFixture = await Fixture.create()
+      fixtures.push(verdictFixture)
+      const verdictOracle = verdictFixture.oracle()
+      const produced = await verdictOracle.announce('slice-judge')
+      const relativeGlob = `docs/superpowers/verdicts/issue-${ISSUE}-*.json`
+      const absoluteGlob = join(verdictFixture.checkout, relativeGlob)
+      const verdictMachine = verdictFixture.machine(verdictOracle)
+      await verdictFixture.seed(produced.replace(relativeGlob, absoluteGlob))
+      const globDispatch = await verdictMachine.dispatch(verdictFixture.watch(), TICKET)
+      expect(globDispatch.paths).toContain(absoluteGlob)
+    } finally {
+      environment.restore()
+      await rm(parent, { recursive: true, force: true })
+    }
+    if (environment.values.get('TMPDIR') === undefined) expect('TMPDIR' in process.env).toBe(false)
+    else expect(process.env.TMPDIR).toBe(environment.values.get('TMPDIR'))
+  })
+
+  it('conflicting response announcements and duplicate consuming commands are refused before sealing', async () => {
+    const conflictingFixture = await Fixture.create()
+    fixtures.push(conflictingFixture)
+    const conflictingOracle = conflictingFixture.oracle()
+    const produced = await conflictingOracle.announce('implement')
+    const announced = ProducerOutput.responsePath(produced)
+    const conflictMachine = conflictingFixture.machine(conflictingOracle)
+    await conflictingFixture.seed(produced.replace(announced, `${announced}.other`))
+    await expect(conflictMachine.dispatch(conflictingFixture.watch(), TICKET))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await conflictingFixture.material()).toBeNull()
+
+    const duplicateFixture = await Fixture.create()
+    fixtures.push(duplicateFixture)
+    const duplicateOracle = duplicateFixture.oracle()
+    const duplicateOutput = await duplicateOracle.announce('implement')
+    const conflictingAnnouncement = ProducerOutput.withConsuming(duplicateOutput, [
+      'report', 'wrong-report.json', '--plan', 'docs/superpowers/plans/wrong.md', '--issue', '999',
+    ])
+    const duplicateMachine = duplicateFixture.machine(duplicateOracle)
+    await duplicateFixture.seed(`${conflictingAnnouncement}\n${duplicateOutput}`)
+    await expect(duplicateMachine.dispatch(duplicateFixture.watch(), TICKET))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await duplicateFixture.material()).toBeNull()
+
+    const differentStructuredVerbFixture = await Fixture.create()
+    fixtures.push(differentStructuredVerbFixture)
+    const structuredOracle = differentStructuredVerbFixture.oracle()
+    const structuredOutput = await structuredOracle.announce('implement')
+    const structuredMachine = differentStructuredVerbFixture.machine(structuredOracle)
+    await differentStructuredVerbFixture.seed(ProducerOutput.withConsuming(structuredOutput, [
+      'verdict', ProducerOutput.responsePath(structuredOutput),
+      '--plan', PLAN, '--issue', String(ISSUE),
+    ]))
+    await expect(structuredMachine.dispatch(differentStructuredVerbFixture.watch(), TICKET))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await differentStructuredVerbFixture.material()).toBeNull()
+
+    const differentEditsVerbFixture = await Fixture.create()
+    fixtures.push(differentEditsVerbFixture)
+    const editsOracle = differentEditsVerbFixture.oracle()
+    const editsOutput = await editsOracle.announce('reconcile')
+    const editsMachine = differentEditsVerbFixture.machine(editsOracle)
+    await differentEditsVerbFixture.seed(ProducerOutput.withConsuming(editsOutput, [
+      'report', 'other.json', '--plan', PLAN, '--issue', String(ISSUE),
+    ]))
+    await expect(editsMachine.dispatch(differentEditsVerbFixture.watch(), TICKET))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await differentEditsVerbFixture.material()).toBeNull()
+
+    const mismatchedRubricFixture = await Fixture.create()
+    fixtures.push(mismatchedRubricFixture)
+    const rubricOracle = mismatchedRubricFixture.oracle()
+    const rubricOutput = await rubricOracle.announce('implement')
+    const declaredRubric = ProducerOutput.pathOf(rubricOutput, INPUT_ROLES.RUBRIC)
+    const mismatchedMachine = mismatchedRubricFixture.machine(rubricOracle)
+    await mismatchedRubricFixture.seed(
+      rubricOutput.replace(declaredRubric, join(mismatchedRubricFixture.checkout, 'AGENTS.md')),
+    )
+    await expect(mismatchedMachine.dispatch(mismatchedRubricFixture.watch(), TICKET))
+      .rejects.toBeInstanceOf(RunNotUnderstood)
+    expect(await mismatchedRubricFixture.material()).toBeNull()
   })
 })

@@ -212,10 +212,10 @@ No code — the three cases keep the assertions of their old cases, over the ora
 
 The literal path case sets `TMPDIR` to a directory named `ct-[literal]*?-…`, as today, and
 `InProcessRun` plays no part. Remove `'infrastructure/run-dispatch-real-process.test.ts'` from
-`ProcessRatchet.LISTED`. Append eight ledger rows, in the order of **Tests:**. The case
+`ProcessRatchet.LISTED`. Append seven ledger rows, in the order of **Tests:**. The case
 `real oracle material reaches the dispatch without rewritten bytes` maps to
 `announced oracle material reaches the dispatch without rewritten bytes`. The other six keep
-their names, and the removed case reads `deleted without substitute — decided`.
+their names. The row of the removed case lands in Task 6, see §9.
 
 **TDD:** `it('a dispatch whose input material is missing is refused')` expects `RunNotUnderstood`
 and no material, after the test removes the announced brief.
@@ -227,13 +227,13 @@ Removed on purpose:
 `'fixture setup failures restore absent and present environment values without leaked roots'`.
 It tested the git arrange of the old fixture, and no arrange runs git now.
 
-**Verification:** The old file is gone, off the list, and in the ledger.
+**Verification:** The old file is gone, off the list, and its kept cases are in the ledger.
 
 ```bash
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-dispatch.test.ts __tests__/infrastructure/process-ratchet.test.ts __tests__/infrastructure/ledger.test.ts   # expected: exit 0
 test ! -e backend/__tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — the old file is gone
-test "$(grep -c 'run-dispatch-real-process.test.ts >' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -eq 8   # expected: exit 0 — one row per old case
+test "$(grep -c 'run-dispatch-real-process.test.ts >' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -eq 7   # expected: exit 0 — one row per kept case
 ```
 
 ### Task 3 — the scripted model and the worker in process
@@ -416,7 +416,9 @@ Append four ledger rows. The watcher case maps `through the runtime watcher` to
 `through the review watcher`, and `runtime recovery keeps recorded driver ownership without another launch`
 maps to the name below. The census case of #563,
 `the recovery read census distinguishes the captured harvest query from the review watcher query`,
-reads `deleted without substitute — decided`.
+reads `deleted without substitute — decided`. Append also the row of Task 2's removed
+case, `fixture setup failures restore absent and present environment values without leaked roots`
+of `run-dispatch-real-process.test.ts`, with the same substitute cell.
 
 **TDD:** `it('recovery keeps recorded driver ownership without another launch')` expects
 `workers.launches` at 0 and the journal bytes equal to the bytes before `recover()`.
@@ -431,6 +433,7 @@ that case. Removed on purpose: none.
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-driver-runtime.test.ts __tests__/infrastructure/process-ratchet.test.ts __tests__/infrastructure/ledger.test.ts   # expected: exit 0
 test ! -e backend/__tests__/infrastructure/run-driver-runtime-real-process.test.ts   # expected: exit 0
+test "$(grep -c 'run-dispatch-real-process.test.ts >' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -eq 8   # expected: exit 0 — the dispatch file is whole in the ledger
 ```
 
 ## 8. Global verification
@@ -466,3 +469,7 @@ test "$(grep -c '^| `__tests__/infrastructure/run-' docs/superpowers/ledgers/202
 8. `InProcessWorkers` imports `headless-call-worker.ts`, which imports the border. The ratchet
    follows imports under `__tests__` only, and the worker never calls the border here, because
    its `spawn` and `kill` are doubles. Provenance: repo.
+9. The controls of `ct-step` refuse a task that declares a removed test while a staged file
+   still names it. The ledger row of that test names it, as the ledger demands. So the row of
+   Task 2's removed case lands in Task 6, which removes no test by that name. The controls then
+   measure the test files alone. Provenance: `ct-step controls` of Task 2, attempt 1.
