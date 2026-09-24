@@ -133,13 +133,11 @@ export class CoordinatingSessionRoute {
         CoordinatingSessionRoute.#refuseOpening(response, reserved)
         return
       }
-      const [target] = asked.targets!
       let opened: CoordinatingSessionOpened
       try {
         opened = await open.execute(new OpenCoordinatingSessionParams({
           story: asked.story!,
-          repository: target.repository,
-          root: target.root,
+          root: asked.root!,
         }))
       } catch (cause) {
         held.release()

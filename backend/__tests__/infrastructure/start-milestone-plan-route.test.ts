@@ -5,10 +5,8 @@ import { tmpdir } from 'node:os'
 import { RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
-  SliceNotStarted, StartMilestonePlan, StartMilestonePlanParams, StartMilestonePlanResult,
+  PlanStarted, SliceNotStarted, StartMilestonePlan, StartMilestonePlanParams, StartMilestonePlanResult,
 } from '../../src/application/actions/start-milestone-plan.ts'
-import { PlanStarted, StartPlan, StartPlanResult } from '../../src/application/actions/start-plan.ts'
-import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CoordinatingSessions, CoordinatingSessionState, HeldCoordinatingSession } from '../../src/infrastructure/coordinating-sessions.ts'
@@ -24,12 +22,10 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
-import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
-import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -98,32 +94,8 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
   }
 }
 
-class StartPlanDouble extends StartPlan {
-  readonly asked: StartPlanParams[]
-  readonly answer: () => Promise<StartPlanResult>
-
-  constructor(answer: () => Promise<StartPlanResult>) {
-    super({
-      userStories: new UserStories(),
-      planIssues: new PlanIssues(),
-      workspace: new Workspace(),
-      planAgents: new PlanAgents(),
-      checkouts: new CheckoutRegistry(),
-      records: new PlanRecords(),
-      claims: new DispatchClaims(),
-    })
-    this.asked = []
-    this.answer = answer
-  }
-
-  async execute(params: StartPlanParams): Promise<StartPlanResult> {
-    this.asked.push(params)
-    return await this.answer()
-  }
-}
-
 class ControlledStart {
-  readonly action: StartPlanDouble
+  readonly action: StartMilestonePlanDouble
   readonly started: Promise<void>
   readonly finish: () => void
 
@@ -133,10 +105,10 @@ class ControlledStart {
     let finish: () => void = (): void => {}
     const held = new Promise<void>((resolve) => { finish = resolve })
     this.finish = finish
-    this.action = new StartPlanDouble(async () => {
+    this.action = new StartMilestonePlanDouble(async () => {
       announce()
       await held
-      return new StartPlanResult({ started: [Mother.started()], failed: [] })
+      return Mother.dispatching(Mother.started())
     })
     Object.freeze(this)
   }
@@ -166,13 +138,6 @@ class Mother {
   static readonly AGENT_PREFIX = 'agent-'
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'coordinator' })
   static readonly BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
-  static readonly LOOSE_ANSWER =
-    '{"status":"started","id":null,"repo":"owner/name",' +
-    '"issue":{"number":12,"url":"https://github.com/owner/name/issues/12"},' +
-    '"agent":"11111111-1111-4111-8111-111111111111","branch":"feat/12",' +
-    '"worktree":"/repo/checkout/.worktrees/12","root":"/repo/checkout",' +
-    '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
-
   static plan(issue: number): Record<string, unknown> {
     return {
       id: null,
@@ -246,18 +211,6 @@ class Mother {
     return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
   }
 
-  static closed(): CoordinatingSessions {
-    const sessions = Mother.coordinating()
-    const identity = {
-      conversation: '22222222-2222-4222-8222-222222222222',
-      target: '6d13bc52-740f-49f8-b128-15e597674f3a',
-    }
-    sessions.beginClose(identity)
-    sessions.finishClose(identity)
-
-    return sessions
-  }
-
   static groomed(state: typeof EpicGroomState.GROOMED | typeof EpicGroomState.AUTHORISED): EpicGroomRead {
     return new EpicGroomRead({
       state,
@@ -285,7 +238,6 @@ type RunningApiOptions = Readonly<{
   startMilestonePlan: StartMilestonePlan,
   readEpicGroom: ReadEpicGroom,
   coordinatingSessions?: CoordinatingSessions,
-  startPlan?: StartPlan | null,
   startsInFlight?: WorkInFlight,
   registry?: PlanRegistryFixture,
 }>
@@ -307,7 +259,6 @@ class RunningApi {
     const registry = options.registry ?? new PlanRegistryFixture()
     const server = new ApiServer({
       port: 0,
-      startPlan: options.startPlan ?? null,
       startMilestonePlan: options.startMilestonePlan,
       startsInFlight: options.startsInFlight ?? new WorkInFlight(),
       sessions: registry.sessions,
@@ -386,22 +337,6 @@ describe('StartPlanRoute milestone entrance', () => {
       }],
     })
     expect(registry.sessions.known().map((watch) => watch.issue.number)).toEqual([12, 14])
-  })
-
-  it('a loose issue answers exactly the shape it always answered', async () => {
-    const port = await RunningApi.listening({
-      startMilestonePlan: new StartMilestonePlanDouble(),
-      readEpicGroom: new ReadEpicGroomDouble(),
-      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
-    })
-
-    const response = await RunningApi.post(
-      port,
-      `{"id":"ABC-1","repo":"${Mother.REPOSITORY.text}","path":"${Mother.ROOT.text}"}`,
-    )
-
-    expect(response.status).toBe(202)
-    expect(await response.text()).toBe(Mother.LOOSE_ANSWER)
   })
 
   it('milestone start exposes definite non-launch', async () => {
@@ -569,17 +504,12 @@ describe('StartPlanRoute milestone entrance', () => {
 
   it('concurrent starts in one repository reach only one action', async () => {
     const controlled = new ControlledStart()
-    const milestone = new StartMilestonePlanDouble()
     const port = await RunningApi.listening({
-      startPlan: controlled.action,
-      startMilestonePlan: milestone,
+      startMilestonePlan: controlled.action,
       readEpicGroom: new ReadEpicGroomDouble(),
     })
 
-    const loose = RunningApi.post(
-      port,
-      '{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}',
-    )
+    const first = RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
     await controlled.started
     const collision = await RunningApi.post(port, `{"milestone":"${Mother.MILESTONE}"}`)
 
@@ -589,44 +519,8 @@ describe('StartPlanRoute milestone entrance', () => {
       detail: 'a plan start in owner/name is already in progress',
     })
     expect(controlled.action.asked).toHaveLength(1)
-    expect(milestone.asked).toEqual([])
 
     controlled.finish()
-    expect((await loose).status).toBe(202)
-  })
-})
-
-describe('StartPlanRoute and the closed coordinating checkout', () => {
-  const loosePlan = (path: string): string =>
-    JSON.stringify({ id: 'ABC-1', repo: Mother.REPOSITORY.text, path })
-
-  it('forgets the closed coordinating checkout when the plan starts in another one', async () => {
-    const coordinatingSessions = Mother.closed()
-    const port = await RunningApi.listening({
-      startMilestonePlan: new StartMilestonePlanDouble(),
-      readEpicGroom: new ReadEpicGroomDouble(),
-      coordinatingSessions,
-      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
-    })
-
-    const response = await RunningApi.post(port, loosePlan('/another/checkout'))
-
-    expect(response.status).toBe(202)
-    expect(coordinatingSessions.gateCheckout()).toBe(null)
-  })
-
-  it('keeps the closed coordinating checkout when the plan starts in the same one', async () => {
-    const coordinatingSessions = Mother.closed()
-    const port = await RunningApi.listening({
-      startMilestonePlan: new StartMilestonePlanDouble(),
-      readEpicGroom: new ReadEpicGroomDouble(),
-      coordinatingSessions,
-      startPlan: new StartPlanDouble(async () => new StartPlanResult({ started: [Mother.started()], failed: [] })),
-    })
-
-    const response = await RunningApi.post(port, loosePlan(Mother.ROOT.text))
-
-    expect(response.status).toBe(202)
-    expect(coordinatingSessions.gateCheckout()?.conversation.root.text).toBe(Mother.ROOT.text)
+    expect((await first).status).toBe(202)
   })
 })

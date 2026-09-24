@@ -10,13 +10,13 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the implementation).
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
-the required ticket, repository and local path open a coordinating session,
+the required ticket and local path open a coordinating session — the repository
+is the one the clone's `origin` names, read by the backend —
 current progress arrives over `GET /work-progress/:issue`, polled. It combines
 plan readiness, planning-agent activity and execution progress. The page shows the
 panels of gates 1 and 2, and the live terminals of the sessions the backend
-owns. `POST /start-plan` accepts the
-retained loose request or a milestone-only command. The milestone path selects
-and starts the next eligible slice; after the committed plan is published, the
+owns. `POST /start-plan` accepts only a milestone command: it selects and starts
+the next eligible slice; after the committed plan is published, the
 backend resumes the same headless conversation automatically. `POST
 /implement-plan` is not routed, so the page offers no implementation button.
 Each area has its own directory under `src/app/`, and the endpoint it consumes
@@ -293,7 +293,7 @@ worst move available when nobody can tell what was created.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
   CORS and no preflight.
-- **The client is `fetch`** (`src/app/start-plan/client.ts`,
+- **The client is `fetch`** (`src/app/coordinating-session/client.ts`,
   `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
   `EventSource` remains for the coordinating terminal stream, not work progress.
   The in-house libraries are waiting for CI to have access to the private

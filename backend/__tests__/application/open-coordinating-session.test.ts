@@ -41,8 +41,10 @@ class UserStoriesDouble extends UserStories {
 }
 
 class WorkspaceDouble extends Workspace {
+  static readonly HELD = new RepositoryName('josemerca/ct-loop-sandbox')
+
   confirmedRoot: CheckoutRoot
-  confirmed: { root: CheckoutRoot, repository: RepositoryName }[]
+  confirmed: CheckoutRoot[]
   prepared: number
   steps: string[]
 
@@ -54,17 +56,15 @@ class WorkspaceDouble extends Workspace {
     this.steps = []
   }
 
-  async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
-    this.confirmed.push({ root, repository })
+  async confirm(): Promise<never> {
     this.steps.push('confirm')
-    return this.confirmedRoot
+    throw new Error('OpenCoordinatingSession must never call workspace.confirm')
   }
 
-  async confirmForSession({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }):
-    Promise<CheckoutRoot> {
-    this.confirmed.push({ root, repository })
+  async confirmForSession(root: CheckoutRoot): Promise<{ root: CheckoutRoot, repository: RepositoryName }> {
+    this.confirmed.push(root)
     this.steps.push('confirmForSession')
-    return this.confirmedRoot
+    return { root: this.confirmedRoot, repository: WorkspaceDouble.HELD }
   }
 
   async prepare(): Promise<never> {
@@ -156,7 +156,7 @@ class CheckoutRegistryDouble extends CheckoutRegistry {
 }
 
 class Flow {
-  static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
+  static REPOSITORY = WorkspaceDouble.HELD
   static ROOT = new CheckoutRoot('/repo')
   static CANONICAL_ROOT = new CheckoutRoot('/real/repo')
   static STORY = new UserStoryKey('MO_SHOP-42')
@@ -189,7 +189,7 @@ class Flow {
 
   async run(story: UserStoryKey | UserStoryUrl = Flow.STORY) {
     return new OpenCoordinatingSession(this).execute(new OpenCoordinatingSessionParams({
-      story, repository: Flow.REPOSITORY, root: Flow.ROOT,
+      story, root: Flow.ROOT,
     }))
   }
 }
@@ -318,6 +318,15 @@ describe('OpenCoordinatingSession', () => {
 
     expect(flow.checkouts.remembered).toHaveLength(1)
     expect(flow.checkouts.remembered[0].repository).toBe(Flow.REPOSITORY)
+  })
+
+  it('takes the repository from the checkout the workspace confirmed, since the request names only its path', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.workspace.confirmed).toEqual([Flow.ROOT])
+    expect(flow.conversations.started[0].conversation.repository).toBe(WorkspaceDouble.HELD)
   })
 
   it('registers the root the workspace confirmed and not the one the request named', async () => {

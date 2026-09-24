@@ -4,7 +4,10 @@ export type StartPlanRequest = {
   path: string
 }
 
-export type StartPlanSubmission = StartPlanRequest & { id: string }
+export type StartPlanSubmission = {
+  id: string
+  path: string
+}
 
 export type PlanIssue = {
   number: number
@@ -29,17 +32,3 @@ export type StartedPlan = {
   root?: string
   baseline?: Baseline
 }
-
-export type StartPlanResult = StartedPlan & {
-  status: 'started'
-}
-
-export type StartPlanRefusal = {
-  code: string
-  detail: string
-}
-
-export type StartPlanOutcome =
-  | { kind: 'started'; plan: StartedPlan }
-  | { kind: 'refused'; code: string; error: string }
-  | { kind: 'backend-unreachable' }

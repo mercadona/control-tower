@@ -633,7 +633,6 @@ describe('headless dispatch dry run', () => {
       const activePlans = new ActivePlans({ sessions })
       const server = new ApiServer({
         port: 0,
-        startPlan: null,
         startMilestonePlan: start,
         sessions,
         activePlans,

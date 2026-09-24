@@ -76,7 +76,6 @@ class RunningApi {
   ): Promise<{ port: number, spy: ReadImplementationHistorySpy }> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       implementHistory: spy,
       sessions: new PlanSessions(),
       activePlans: null,

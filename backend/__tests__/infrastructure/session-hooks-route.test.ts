@@ -116,7 +116,6 @@ class RunningApi {
   static async listening(held: CoordinatingSessions): Promise<number> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
       coordinatingSessions: held,
     })

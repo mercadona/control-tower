@@ -15,7 +15,6 @@ import {
   openHome,
   openRestored,
   typePath,
-  typeRepository,
   typeTicket,
 } from './helpers'
 
@@ -193,7 +192,7 @@ describe('Home · restore workflow', () => {
     expect(changes.activeReadCount()).toBe(2)
   })
 
-  it('only allows another repository after backend implementation and resets the old workflow', async () => {
+  it('only allows a new request after backend implementation and resets the old workflow', async () => {
     vi.useFakeTimers()
     storeWorkflow('ready')
     const changes = HeadlessPlanMother.deferredChanges()
@@ -225,18 +224,16 @@ describe('Home · restore workflow', () => {
     expect(oldRead?.[1]?.signal?.aborted).toBe(true)
     expect(localStorage).toHaveLength(0)
     expect(screen.getByLabelText('Ticket')).toHaveValue('')
-    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
 
     fireEvent.change(screen.getByLabelText('Ticket'), { target: { value: StartPlanMother.TICKET } })
-    fireEvent.change(screen.getByLabelText(/Repositorio/), { target: { value: StartPlanMother.ANOTHER_REPO } })
     fireEvent.change(screen.getByLabelText(/Ruta local/), { target: { value: StartPlanMother.PATH } })
     fireEvent.click(screen.getByRole('button', { name: 'Arrancar brainstorming' }))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     const opening = fetching.mock.calls.find(([input, init]) => input === '/coordinating-session' && init !== undefined)
-    expect(opening?.[1]?.body).toContain(StartPlanMother.ANOTHER_REPO)
+    expect(opening?.[1]?.body).toBe(StartPlanMother.REQUEST_BODY)
   })
 
   it('does not readopt the implementing plan it just left when the backend still reports it', async () => {
@@ -852,7 +849,6 @@ describe('Home · restore workflow', () => {
 
     await act(async () => answerRetry(new Response(activePlansAnswer().body, { status: 200 })))
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()

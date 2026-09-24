@@ -10,7 +10,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'malformed-id': 'El ticket no tiene un formato válido.',
   'malformed-repo': 'El repositorio no tiene un formato válido.',
   'malformed-path': 'La ruta local debe ser una ruta absoluta válida.',
-  'checkout-not-confirmed': 'La ruta local no corresponde al repositorio indicado.',
+  'checkout-not-confirmed': 'La ruta local no es un clon de git de un repositorio de GitHub.',
   'plan-agent-not-launched': 'No se pudo arrancar el agente de planificación.',
   'session-closure-not-recorded': 'No se pudo guardar el cierre de la sesión. Puedes volver a intentarlo.',
   'session-closure-not-understood': 'No se pudo interpretar el estado guardado del cierre. Puedes volver a intentarlo.',

@@ -76,51 +76,28 @@ project name and `/app` bind mount before baseline execution. This does not star
 containers, read service env-file contents or verify live mounts. Normal workspace
 preparation cleanup still applies when preparation fails.
 
-Starts a headless plan agent. The original loose request remains available; a
-milestone request instead selects **every** admissible ready issue with the
+Starts headless plan agents for a milestone. The request selects **every**
+admissible ready issue with the
 plugin's ordering, dependency and token rules — there is no cap — claims each of
 them through `dispatch-check`, prepares its worktree and starts planning in a
 newly minted conversation. A slice whose `touches` collide with work that is not
 merged yet waits for that merge, and a slice that fails to start stops none of
 the others.
 
-The loose body names one target: a repository and the path of its local clone. The
-`repo_list` field, which once named several at once, is retired — a body
-carrying it is refused by name rather than parsed.
-
 ```json
 {"milestone":"Headless delivery"}
 ```
 
-The milestone body contains exactly that one field. It uses the repository and
-checkout held by the coordinating session. The held milestone must match and
-gate 2 must already have left the work groomed or authorised.
-
-| Field | Type | Required | Shape |
-|---|---|---|---|
-| `id` | string | yes | a user story key, `ABC-123`, or a GitHub issue url, `https://github.com/owner/name/issues/123` |
-| `repo` | string | yes | `owner/name` |
-| `path` | string | yes | absolute path of the local clone |
-
-All three fields are required. `null` is a malformed value. Additional context
-belongs in the coordinating conversation.
+The body contains exactly that one field. It uses the repository and checkout
+held by the coordinating session. The held milestone must match and gate 2 must
+already have left the work groomed or authorised.
 
 ### 202 Accepted
 
-A loose body answers one plan:
-
-```json
-{"status":"started","id":"ABC-123","repo":"owner/name",
- "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
- "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
- "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
- "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}
-```
-
-A milestone body answers the whole batch: `started` holds one of those objects
-per plan that started — with `id` always `null` — and `failed` names each slice
-that did not, with the issue it was, and the `code` and `detail` that refusal
-would have answered on its own.
+The answer covers the whole batch: `started` holds one object per plan that
+started — with `id` always `null` — and `failed` names each slice that did not,
+with the issue it was, and the `code` and `detail` that refusal would have
+answered on its own.
 
 ```json
 {"status":"started",
@@ -134,15 +111,15 @@ would have answered on its own.
             "detail":"the worktree could not be cut"}]}
 ```
 
-When nothing in the batch started, the milestone request refuses with the first
-failure instead, exactly as it did when it dispatched one slice at a time.
+When nothing in the batch started, the request refuses with the first failure
+instead, exactly as it did when it dispatched one slice at a time.
 
-`agent` is the durable Claude conversation UUID. Every new loose or milestone
-admission writes machine provenance before planning. After a successful
+`agent` is the durable Claude conversation UUID. Every new admission writes
+machine provenance before planning. After a successful
 committed plan is published to the issue, the backend drives the plugin's run
 sequencer in that same conversation. There is no feature flag, toggle,
 environment variable or alternate activation path for new admissions. `root` is
-git's canonical checkout path, which may differ from a loose request's `path`.
+git's canonical checkout path.
 
 The plugin remains the sequencing authority: its real `ct-step next` output
 chooses each call, command, retry, discard, reconciliation and terminal result.
@@ -185,22 +162,6 @@ the request had completed.
 
 ### Refusals
 
-Of the request:
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
-| `unknown-field` | 400 | `detail` names the fields, sorted |
-| `malformed-id` | 400 | `id` is not a story key such as `ABC-123` nor a GitHub issue url such as `https://github.com/owner/name/issues/123` |
-| `nothing-to-plan` | 400 | `id` was not sent |
-| `repo-list-retired` | 400 | the body carried `repo_list`; `detail` says to send `repo` and `path` for one repository instead |
-| `malformed-repo` | 400 | a repo is not `owner/name`; `detail` names which field |
-| `malformed-path` | 400 | a path is not absolute; `detail` names which field |
-| `checkout-not-confirmed` | 400 | a path is not a checkout of its repo; `detail` names both the repo asked for and the one the path holds |
-
-`malformed-repo` and `malformed-path` name their field, so the UI can point at
-the offending input: `repo` or `path`.
-
 From a tool refusing:
 
 | `code` | Meaning |
@@ -221,19 +182,16 @@ From a tool refusing:
 | `workspace-not-read` | git refused when surveying |
 | `workspace-not-understood` | git answered something unreadable |
 
-Milestone requests can also answer `start-milestone-malformed`,
-`start-milestone-no-session`, `start-milestone-mismatch`,
-`start-milestone-not-dispatchable`, or `start-plan-in-progress`. Application
-refusals answer 400 and carry their diagnostic in `detail`.
+The request itself can answer `start-milestone-malformed` (the body is not
+exactly `{"milestone":"name"}`), `start-milestone-no-session`,
+`start-milestone-mismatch`, `start-milestone-not-dispatchable`, or
+`start-plan-in-progress`. Application refusals answer 400 and carry their
+diagnostic in `detail`.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/start-plan \
-  -d '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
-
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/start-plan \
-  -d '{"id":"https://github.com/owner/name/issues/123","repo":"owner/name","path":"/repo/checkout"}'
+  -d '{"milestone":"Headless delivery"}'
 ```
 
 ---
@@ -926,15 +884,17 @@ installs the session hooks and spawns `claude` in the governed checkout. **No
 worktree is cut and no branch is created** — this is the entrance conversation,
 not a plan.
 
-**Request** — the same shape as `POST /start-plan`, read through the very same
-`PlanRequest`, so a body carrying the retired `repo_list` earns the same refusal
-here as it does there.
+**Request** — read through `PlanRequest`.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
 | `id` | string | yes | a user story key, `ABC-123`, or a GitHub issue url |
-| `repo` | string | yes | `owner/name` |
 | `path` | string | yes | absolute path of the local clone |
+
+Both fields are required and nothing else is accepted. The repository is not
+sent: it is the `owner/name` the clone's `origin` remote names, read by the
+backend. A body that still carries `repo`, or the long-retired `repo_list`, is
+refused as `unknown-field`.
 
 The required user story hydrates the conversation: the coordinating session
 starts knowing its summary and description. Additional context and feedback
@@ -949,6 +909,9 @@ are entered directly in that conversation.
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
+`repo` is the repository read from the clone's `origin`, and `root` git's
+canonical checkout path, which may differ from the `path` sent.
+
 `conversation` is the durable conversation id `GET /coordinating-session` and
 `POST /session-hooks` both key on. `target` is the opaque UUID of this held
 incarnation; a replacement receives a different target even in the same
@@ -958,8 +921,7 @@ like any other.
 
 **Refusals**
 
-Shared with `POST /start-plan`, because both read the body through the same
-`PlanRequest`:
+Of the request:
 
 | `code` | Status | Meaning |
 |---|---|---|
@@ -967,13 +929,8 @@ Shared with `POST /start-plan`, because both read the body through the same
 | `unknown-field` | 400 | `detail` names the fields, sorted |
 | `malformed-id` | 400 | `id` is not a story key nor a GitHub issue url |
 | `nothing-to-plan` | 400 | `id` was not sent |
-| `malformed-repo` | 400 | `repo` is not `owner/name` |
 | `malformed-path` | 400 | `path` is not absolute |
-| `checkout-not-confirmed` | 400 | `path` is not a checkout of `repo` |
-| `repo-list-retired` | 400 | the body carried `repo_list`; `detail` says to send `repo` and `path` for one repository instead |
-
-It has no refusal of its own for a listed request any more: the field retired,
-so no listed request can arrive.
+| `checkout-not-confirmed` | 400 | `path` is not a git clone whose `origin` names a GitHub repository |
 
 From opening the conversation, once the body is well-formed:
 
@@ -988,7 +945,7 @@ From opening the conversation, once the body is well-formed:
 | `session-hooks-not-understood` | that settings file exists but is not the JSON object the hooks are merged into |
 
 All seven answer 400 and carry the tool's own message in `detail`, the same
-convention `POST /start-plan`'s ten tool refusals follow.
+convention `POST /start-plan`'s tool refusals follow.
 
 `PlanCollapse` (`backend/src/infrastructure/start-plan-route.ts`) also declares
 `conversation-not-understood`, the code for a conversation record that is on
@@ -1001,7 +958,7 @@ being reported. That gap is open, not this task's to close.
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/coordinating-session \
-  -d '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
+  -d '{"id":"ABC-1","path":"/repo/checkout"}'
 ```
 
 ---
@@ -2031,7 +1988,6 @@ curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/co
 
 | Endpoint | Client | Types |
 |---|---|---|
-| `POST /start-plan` | `frontend/src/app/start-plan/client.ts` | `StartPlan.types.ts` |
 | `GET /work-progress` | `frontend/src/app/work-progress/client.ts` | `WorkProgress.types.ts` |
 | `GET /implement-history` | `frontend/src/app/implement-history/client.ts` | `ImplementHistory.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |

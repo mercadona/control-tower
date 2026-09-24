@@ -222,11 +222,11 @@ class GitDouble {
     return this.workspace().confirm({ root: GitDouble.CHECKOUT, repository: GitDouble.REPOSITORY })
   }
 
-  confirmedForSession(): Promise<CheckoutRoot> {
-    return this.workspace().confirmForSession({ root: GitDouble.CHECKOUT, repository: GitDouble.REPOSITORY })
+  confirmedForSession(): Promise<{ root: CheckoutRoot, repository: RepositoryName }> {
+    return this.workspace().confirmForSession(GitDouble.CHECKOUT)
   }
 
-  refusedTo(asking: Promise<CheckoutRoot>) {
+  refusedTo<T>(asking: Promise<T>) {
     return asking.catch((cause) => cause)
   }
 
@@ -504,7 +504,7 @@ describe('GitWorkspace', () => {
 
     const confirmed = await git.confirmedForSession()
 
-    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(confirmed.root).toBeInstanceOf(CheckoutRoot)
     expect(git.asking('fetch')).toEqual(['-C', GitDouble.ROOT, 'fetch', 'origin', GitDouble.BASE])
     expect(git.asking('merge')).toEqual(['-C', GitDouble.ROOT, 'merge', '--ff-only', `origin/${GitDouble.BASE}`])
   })
@@ -529,7 +529,7 @@ describe('GitWorkspace', () => {
 
     const confirmed = await git.confirmedForSession()
 
-    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(confirmed.root).toBeInstanceOf(CheckoutRoot)
     expect(git.stderr.join('\n')).toContain('could not read from remote repository')
   })
 
@@ -541,7 +541,7 @@ describe('GitWorkspace', () => {
 
     const confirmed = await git.confirmedForSession()
 
-    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(confirmed.root).toBeInstanceOf(CheckoutRoot)
     expect(git.asking('merge')).toBeUndefined()
   })
 
@@ -553,7 +553,7 @@ describe('GitWorkspace', () => {
 
     const confirmed = await git.confirmedForSession()
 
-    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(confirmed.root).toBeInstanceOf(CheckoutRoot)
     expect(git.stderr.join('\n')).toContain('could not read from remote repository')
     expect(git.asking('--abbrev-ref')).toBeUndefined()
   })
@@ -565,8 +565,26 @@ describe('GitWorkspace', () => {
 
     const confirmed = await git.confirmedForSession()
 
-    expect(confirmed).toBeInstanceOf(CheckoutRoot)
+    expect(confirmed.root).toBeInstanceOf(CheckoutRoot)
     expect(git.asking('--symref')).toEqual(['-C', GitDouble.ROOT, 'ls-remote', '--symref', 'origin', 'HEAD'])
+  })
+
+  it('a_session_takes_its_repository_from_the_origin_of_the_checkout_because_nobody_else_names_it', async () => {
+    const git = new GitDouble({ remote: GitDouble.naming('git@github.com:someone/else.git') })
+
+    const confirmed = await git.confirmedForSession()
+
+    expect(confirmed.repository.text).toBe('someone/else')
+    expect(confirmed.root.text).toBe(GitDouble.ROOT)
+  })
+
+  it('a_session_on_a_checkout_whose_origin_names_no_github_repository_is_refused_as_not_confirmed', async () => {
+    const git = new GitDouble({ remote: GitDouble.naming('/some/local/mirror') })
+
+    const refusal = await git.refusedTo(git.confirmedForSession())
+
+    expect(refusal).toBeInstanceOf(CheckoutNotConfirmed)
+    expect(refusal.message).toContain('/some/local/mirror')
   })
 
   it('an_https_remote_names_the_same_repository_as_its_ssh_form_so_neither_checkout_is_refused', async () => {

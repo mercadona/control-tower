@@ -50,7 +50,6 @@ import { WorkInFlight } from './work-in-flight.ts'
 import { GhPublishedSpecs } from './gh-published-specs.ts'
 import { GhEpicIssues } from './gh-epic-issues.ts'
 import { CtGroomEpic } from './ct-groom-epic.ts'
-import { StartPlan } from '../application/actions/start-plan.ts'
 import { StartMilestonePlan, StartMilestonePlanParams } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
 import { DeliverHeldMessages } from '../application/actions/deliver-held-messages.ts'
@@ -314,26 +313,6 @@ class CtApi {
     return new ReferredUserStories({
       jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
       github: new GhUserStories({ gh }),
-    })
-  }
-
-  static #startPlan(
-    workspace: GitWorkspace,
-    planAgents: PlanAgents,
-    planIssues: GhPlanIssues,
-    checkouts: DiskCheckoutRegistry,
-    userStories: UserStories,
-    records: PlanRecords,
-    claims: DispatchClaims,
-  ): StartPlan {
-    return new StartPlan({
-      userStories,
-      planIssues,
-      workspace,
-      planAgents,
-      checkouts,
-      records,
-      claims,
     })
   }
 
@@ -746,7 +725,6 @@ class CtApi {
     const server = new ApiServer({
       preparation,
       port: asked.port,
-      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
