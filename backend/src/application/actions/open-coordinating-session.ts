@@ -29,29 +29,47 @@ export class OpenCoordinatingSessionParams {
   }
 }
 
-export class CoordinatingSessionOpened {
-  readonly conversation: CoordinatingConversation
-  readonly session: LiveSession
-  readonly timeline: readonly SessionTimelineEvent[]
+export const CoordinatingSessionOpening = Object.freeze({
+  OPENED: 'opened',
+  STORY_SPEC_FROZEN: 'story-spec-frozen',
+} as const)
 
-  constructor({ conversation, session, timeline }: {
-    conversation: CoordinatingConversation, session: LiveSession, timeline: readonly SessionTimelineEvent[],
+export type CoordinatingSessionOpeningValue = (typeof CoordinatingSessionOpening)[keyof typeof CoordinatingSessionOpening]
+
+export class CoordinatingSessionOpened {
+  readonly outcome: CoordinatingSessionOpeningValue
+  readonly conversation: CoordinatingConversation | null
+  readonly session: LiveSession | null
+  readonly timeline: readonly SessionTimelineEvent[]
+  readonly frozen: EpicSpec | null
+
+  private constructor({ outcome, conversation, session, timeline, frozen }: {
+    outcome: CoordinatingSessionOpeningValue,
+    conversation: CoordinatingConversation | null,
+    session: LiveSession | null,
+    timeline: readonly SessionTimelineEvent[],
+    frozen: EpicSpec | null,
   }) {
+    this.outcome = outcome
     this.conversation = conversation
     this.session = session
     this.timeline = timeline
+    this.frozen = frozen
     Object.freeze(this)
   }
-}
 
-export class StorySpecFrozen {
-  readonly story: UserStoryKey | UserStoryUrl
-  readonly spec: EpicSpec
+  static opened(
+    conversation: CoordinatingConversation, session: LiveSession, timeline: readonly SessionTimelineEvent[]
+  ): CoordinatingSessionOpened {
+    return new CoordinatingSessionOpened({
+      outcome: CoordinatingSessionOpening.OPENED, conversation, session, timeline, frozen: null,
+    })
+  }
 
-  constructor({ story, spec }: { story: UserStoryKey | UserStoryUrl, spec: EpicSpec }) {
-    this.story = story
-    this.spec = spec
-    Object.freeze(this)
+  static storySpecFrozen(spec: EpicSpec): CoordinatingSessionOpened {
+    return new CoordinatingSessionOpened({
+      outcome: CoordinatingSessionOpening.STORY_SPEC_FROZEN, conversation: null, session: null, timeline: [], frozen: spec,
+    })
   }
 }
 
@@ -82,10 +100,10 @@ export class OpenCoordinatingSession {
     this.checkouts = checkouts
   }
 
-  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened | StorySpecFrozen> {
+  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
     const { root, repository } = await this.workspace.confirmForSession(params.root)
     const spec = await this.specs.of({ root, story: params.story })
-    if (spec !== null && spec.closesItsBrainstorming()) return new StorySpecFrozen({ story: params.story, spec })
+    if (spec !== null && spec.isFrozen()) return CoordinatingSessionOpened.storySpecFrozen(spec)
     this.checkouts.remember(new RegisteredCheckout({ repository, root }))
     const story = await this.userStories.detail(params.story)
 
@@ -100,6 +118,6 @@ export class OpenCoordinatingSession {
     await this.sessionHooks.install(root)
     const session = this.conversations.start({ conversation, promptPath })
 
-    return new CoordinatingSessionOpened({ conversation, session, timeline })
+    return CoordinatingSessionOpened.opened(conversation, session, timeline)
   }
 }

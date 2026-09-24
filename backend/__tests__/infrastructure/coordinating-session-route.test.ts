@@ -3,10 +3,9 @@ import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
-  OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened, StorySpecFrozen,
+  OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened,
 } from '../../src/application/actions/open-coordinating-session.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
   CoordinatingOperation, OpeningReservation,
@@ -31,9 +30,9 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 
 class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   readonly asked: OpenCoordinatingSessionParams[]
-  readonly answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened | StorySpecFrozen>
+  readonly answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened>
 
-  constructor(answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened | StorySpecFrozen>) {
+  constructor(answer: (params: OpenCoordinatingSessionParams) => Promise<CoordinatingSessionOpened>) {
     super({
       userStories: new UserStories(),
       workspace: new Workspace(),
@@ -51,7 +50,7 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
     return new OpenCoordinatingSessionSpy(async () => Mother.opened())
   }
 
-  static findingItFrozen(frozen: StorySpecFrozen): OpenCoordinatingSessionSpy {
+  static findingItFrozen(frozen: CoordinatingSessionOpened): OpenCoordinatingSessionSpy {
     return new OpenCoordinatingSessionSpy(async () => frozen)
   }
 
@@ -59,7 +58,7 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
     return new OpenCoordinatingSessionSpy(async () => { throw cause })
   }
 
-  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened | StorySpecFrozen> {
+  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
     this.asked.push(params)
 
     return this.answer(params)
@@ -96,9 +95,7 @@ class Mother {
   ]
 
   static opened(): CoordinatingSessionOpened {
-    return new CoordinatingSessionOpened({
-      conversation: Mother.CONVERSATION, session: Mother.SESSION, timeline: Mother.TIMELINE,
-    })
+    return CoordinatingSessionOpened.opened(Mother.CONVERSATION, Mother.SESSION, Mother.TIMELINE)
   }
 
   static registry(): CoordinatingSessions {
@@ -331,13 +328,10 @@ describe('CoordinatingSessionRoute', () => {
   })
 
   it('a story whose spec is already frozen is refused with story-spec-frozen and frees the next opening', async () => {
-    const frozen = new StorySpecFrozen({
-      story: new UserStoryKey('STAFF-128'),
-      spec: new EpicSpec({
-        path: 'docs/superpowers/specs/STAFF-128-execution.md',
-        text: `# Frozen epic${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
-      }),
-    })
+    const frozen = CoordinatingSessionOpened.storySpecFrozen(new EpicSpec({
+      path: 'docs/superpowers/specs/ABC-1-execution.md',
+      text: `# Frozen epic${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
+    }))
     const held = Mother.registry()
     const port = await RunningApi.listening(OpenCoordinatingSessionSpy.findingItFrozen(frozen), held)
 
@@ -346,7 +340,7 @@ describe('CoordinatingSessionRoute', () => {
     expect(refused.status).toBe(400)
     expect(await refused.json()).toEqual({
       code: 'story-spec-frozen',
-      detail: 'STAFF-128 already has its execution spec frozen at docs/superpowers/specs/STAFF-128-execution.md: its brainstorming is over, continue with the groom',
+      detail: 'ABC-1 already has its execution spec frozen at docs/superpowers/specs/ABC-1-execution.md: its brainstorming is over, continue with the groom',
     })
     expect(held.held()).toBeNull()
     expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)

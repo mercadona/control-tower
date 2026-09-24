@@ -311,10 +311,24 @@ describe('GhDispatchCandidates', () => {
     expect(gh.calls).toEqual([CandidateMother.listing(['OPEN'])])
   })
 
+  it('every authorised milestone is named once, in the same order on every sweep', async () => {
+    const gh = new GhDouble([GhDouble.output(0, CandidateMother.pages([
+      CandidateMother.issue({ number: 11, order: 1 }),
+      CandidateMother.issue({ number: 20, order: 1, milestone: CandidateMother.OTHER_MILESTONE }),
+      CandidateMother.issue({ number: 12, order: 2 }),
+      CandidateMother.issue({ number: 21, order: 2, milestone: CandidateMother.OTHER_MILESTONE }),
+    ]))])
+
+    await expect(gh.authorised()).resolves.toEqual([CandidateMother.OTHER_MILESTONE.title, CandidateMother.TARGET])
+  })
+
   it('an open table gh could not print is not read, and one it printed badly is not understood', async () => {
-    await expect(new GhDouble([GhDouble.output(1, '', 'open refused')]).authorised())
-      .rejects.toBeInstanceOf(DispatchNotRead)
-    await expect(new GhDouble([GhDouble.output(0, 'not json')]).authorised())
-      .rejects.toBeInstanceOf(DispatchNotUnderstood)
+    const unread = await new GhDouble([GhDouble.output(1, '', 'open refused')]).authorised().catch((cause) => cause)
+    const misunderstood = await new GhDouble([GhDouble.output(0, 'not json')]).authorised().catch((cause) => cause)
+
+    expect(unread).toBeInstanceOf(DispatchNotRead)
+    expect(unread).not.toBeInstanceOf(DispatchNotUnderstood)
+    expect(misunderstood).toBeInstanceOf(DispatchNotUnderstood)
+    expect(misunderstood).not.toBeInstanceOf(DispatchNotRead)
   })
 })

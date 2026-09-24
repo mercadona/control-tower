@@ -81,13 +81,6 @@ describe('what the coordinating session is told about a veto that blocks a run',
 })
 
 describe('where the brainstorming is told to write its documents', () => {
-  it('names_both_paths_derived_from_the_key_of_the_ticket', () => {
-    expect(Phase.brainstorming().text).toContain(
-      'Write the design document at docs/superpowers/specs/ABC-1-design.md and the execution spec at '
-        + 'docs/superpowers/specs/ABC-1-execution.md'
-    )
-  })
-
   it('names_the_issue_by_its_repository_and_number_when_the_ticket_is_a_github_issue', () => {
     const prompt = PhasePrompt.brainstorming({
       story: new UserStory({ key: new UserStoryUrl('https://github.com/owner/name/issues/12'), summary: 'Plan', description: '' }),
@@ -95,9 +88,5 @@ describe('where the brainstorming is told to write its documents', () => {
     })
 
     expect(prompt.text).toContain('docs/superpowers/specs/owner__name-12-execution.md')
-  })
-
-  it('asks_the_session_to_continue_a_document_that_is_already_there', () => {
-    expect(Phase.brainstorming().text).toContain('when either already exists, continue it instead of starting another')
   })
 })

@@ -382,11 +382,7 @@ describe('CoordinatingSessionCloseRoute', () => {
     recoveredClose.executeAnswer = async () => { throw new SessionOwnershipUnverifiable('saved identity incomplete') }
     const recovered = CloseMother.unresumable()
     const open = {
-      execute: vi.fn(async () => new CoordinatingSessionOpened({
-        conversation: CloseMother.CONVERSATION,
-        session: CloseMother.SESSION,
-        timeline: [],
-      })),
+      execute: vi.fn(async () => CoordinatingSessionOpened.opened(CloseMother.CONVERSATION, CloseMother.SESSION, [])),
     } as unknown as OpenCoordinatingSession
     const recoveredPort = await RunningCloseApi.start(recoveredClose, recovered, open)
     const first = await RunningCloseApi.post(recoveredPort)

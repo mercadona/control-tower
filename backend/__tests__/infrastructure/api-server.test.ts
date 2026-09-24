@@ -103,9 +103,7 @@ class OpenSessionSpy extends OpenCoordinatingSession {
   }
 
   static opened(): CoordinatingSessionOpened {
-    return new CoordinatingSessionOpened({
-      conversation: OpenSessionSpy.CONVERSATION, session: OpenSessionSpy.SESSION, timeline: [],
-    })
+    return CoordinatingSessionOpened.opened(OpenSessionSpy.CONVERSATION, OpenSessionSpy.SESSION, [])
   }
 
   static failingWith(cause: Error): OpenSessionSpy {

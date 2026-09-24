@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  CoordinatingSessionOpened, OpenCoordinatingSession, OpenCoordinatingSessionParams, StorySpecFrozen,
+  CoordinatingSessionOpened, CoordinatingSessionOpening, OpenCoordinatingSession, OpenCoordinatingSessionParams,
 } from '../../src/application/actions/open-coordinating-session.ts'
 import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
@@ -209,7 +209,7 @@ class Flow {
 
   async opened(): Promise<CoordinatingSessionOpened> {
     const answered = await this.run()
-    if (!(answered instanceof CoordinatingSessionOpened)) throw new Error(`expected an opened session, got ${JSON.stringify(answered)}`)
+    if (answered.outcome !== CoordinatingSessionOpening.OPENED) throw new Error(`expected an opened session, got ${answered.outcome}`)
 
     return answered
   }
@@ -302,7 +302,7 @@ describe('OpenCoordinatingSession', () => {
 
     const answered = await flow.run()
 
-    expect(answered).toEqual(new StorySpecFrozen({ story: Flow.STORY, spec: frozen }))
+    expect(answered).toEqual(CoordinatingSessionOpened.storySpecFrozen(frozen))
     expect(flow.steps).toEqual(['confirmForSession'])
     expect(flow.userStories.asked).toEqual([])
   })
@@ -312,7 +312,7 @@ describe('OpenCoordinatingSession', () => {
 
     const opened = await flow.opened()
 
-    expect(opened.conversation.story).toBe(Flow.STORY)
+    expect(opened.conversation?.story).toBe(Flow.STORY)
     expect(flow.steps).toContain('start')
   })
 

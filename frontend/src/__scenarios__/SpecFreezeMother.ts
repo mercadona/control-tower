@@ -1,4 +1,4 @@
-const SPEC = 'docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md'
+const SPEC = 'docs/superpowers/specs/STAFF-128-execution.md'
 const TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 const KEY = '3f9c1a2b6d4e8f0c1a9b7d3e5f2c4a6b8d0e2f4a6c8b0d2e4f6a8c0b2d4e6f80'
 const ON = '2026-09-14'

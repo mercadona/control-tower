@@ -47,10 +47,6 @@ export class EpicSpec {
     return EpicSpec.#valueOf(this.text, EpicSpec.STATE_LINE) === EpicSpec.FROZEN
   }
 
-  closesItsBrainstorming(): boolean {
-    return this.isFrozen()
-  }
-
   frozenOn(): string | null {
     if (!this.isFrozen()) return null
     const value = EpicSpec.#valueOf(this.text, EpicSpec.DATE_LINE)
