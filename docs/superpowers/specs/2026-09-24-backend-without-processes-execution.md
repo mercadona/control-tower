@@ -1,8 +1,8 @@
 # The backend suite launches no process — Execution spec
 
 **Handoff origen:** `docs/superpowers/specs/2026-09-24-backend-without-processes-design.md`
-**Fecha de congelación:** —
-**Estado:** DRAFT
+**Fecha de congelación:** 2026-09-24
+**Estado:** CONGELADA
 
 ## Hipótesis del experimento
 
