@@ -5,7 +5,7 @@ import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
-import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
+import { SlicingReviewContract } from '../slicing-review-contract.ts'
 import { GroomReviewAdmission, GroomReviewRefusal } from '../../src/domain/ports/groom-review-admission.ts'
 import type { GroomReviewRefusalValue } from '../../src/domain/ports/groom-review-admission.ts'
 
@@ -102,9 +102,9 @@ describe('AskGroomReview', () => {
     expect(sessions.typed).toEqual([{
       session: Mother.SESSION,
       text: [
-        `Review the slicing of the milestone "${Mother.MILESTONE}" with the person: its frozen execution spec is ${Mother.SPEC_PATH} and the slices are the table of its §9.`,
-        PhasePrompt.ISSUES_ARE_NOT_YOURS,
-        PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+        SlicingReviewContract.review({ milestone: Mother.MILESTONE, spec: Mother.SPEC_PATH }),
+        SlicingReviewContract.ISSUES_ARE_NOT_YOURS,
+        SlicingReviewContract.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       ].join(' '),
     }])
   })

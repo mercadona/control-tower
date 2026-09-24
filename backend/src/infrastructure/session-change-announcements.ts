@@ -20,6 +20,6 @@ export class SessionChangeAnnouncements extends ChangeAnnouncements {
   override async announce({ repository, issue, ticket }: {
     repository: RepositoryName, issue: number, ticket: string,
   }): Promise<void> {
-    this.sessions().announce(SessionChangeAnnouncements.lineFor({ repository, issue, ticket }))
+    await this.sessions().announce(SessionChangeAnnouncements.lineFor({ repository, issue, ticket }))
   }
 }

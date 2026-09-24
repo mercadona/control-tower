@@ -423,14 +423,12 @@ export class CoordinatingSessions implements GroomReviewAdmission {
     return recorded ? AttendResult.recorded() : AttendResult.notRecorded()
   }
 
-  announce(line: string): boolean {
+  async announce(line: string): Promise<boolean> {
     const held = this.#live()
     if (held === null || held.session === null) return false
     const session = this.liveSessions.find(held.session.id)
     if (session === null) return false
-    this.liveSessions.submit({ session, text: line }).catch((cause: unknown) => {
-      this.stderr(`announcement to session ${session.id} was pasted but not submitted: ${String(cause)}\n`)
-    })
+    await this.liveSessions.submit({ session, text: line })
 
     return true
   }

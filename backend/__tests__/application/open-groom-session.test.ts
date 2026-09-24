@@ -12,6 +12,7 @@ import type { CoordinatingConversation } from '../../src/domain/value-objects/co
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
+import { SlicingReviewContract } from '../slicing-review-contract.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
@@ -154,9 +155,9 @@ describe('OpenGroomSession', () => {
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.ROOT.text}: you cut no worktree and you switch no branch.`,
-      `Review the slicing of the milestone "${Flow.MILESTONE}" with the person: its frozen execution spec is ${Flow.SPEC_PATH} and the slices are the table of its §9.`,
-      PhasePrompt.ISSUES_ARE_NOT_YOURS,
-      PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+      SlicingReviewContract.review({ milestone: Flow.MILESTONE, spec: Flow.SPEC_PATH }),
+      SlicingReviewContract.ISSUES_ARE_NOT_YOURS,
+      SlicingReviewContract.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
