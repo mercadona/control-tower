@@ -6,6 +6,32 @@ import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { backendRecovering, openHome } from './helpers'
 
 describe('Home · unified work progress', () => {
+  it('keeps completion for discovered uncertain work visible when the next inventory read fails', async () => {
+    vi.useFakeTimers()
+    const fetching = backendRecovering(HeadlessPlanMother.awaitingContinuation(), WorkProgressMother.withLocalCompletion)
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+
+    fetching.mockRejectedValue(new TypeError('offline'))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.getByText('Mostramos la última lectura. Reintentando la conexión…')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
+
+    fetching.mockResolvedValue(new Response(HeadlessPlanMother.awaitingContinuation().body))
+    await act(async () => vi.advanceTimersByTimeAsync(2001))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.queryByText('Mostramos la última lectura. Reintentando la conexión…')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+    expect(fetching.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
   it.each(['restored', 'discovered'])('shows known local completion with recovery information for %s uncertain work', async (origin) => {
     if (origin === 'restored') {
       const active = WorkProgressMother.active('implementing')

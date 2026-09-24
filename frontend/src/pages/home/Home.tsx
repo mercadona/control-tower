@@ -501,10 +501,10 @@ const Home = () => {
             )}
             <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
           </div>
-          {workflow === null && uncertainActive !== null && workProgress?.phase === 'uncertain' && workProgress.execution.kind !== 'unavailable' && (
-            <SliceProgress issue={uncertainActive.plan.issue.number} read={workRead} showUncertainty={false} />
-          )}
         </div>
+      )}
+      {workflow === null && uncertainActive !== null && workProgress?.phase === 'uncertain' && workProgress.execution.kind !== 'unavailable' && (
+        <SliceProgress issue={uncertainActive.plan.issue.number} read={workRead} showUncertainty={false} />
       )}
     </>
   )

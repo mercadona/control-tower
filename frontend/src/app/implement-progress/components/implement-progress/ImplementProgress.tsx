@@ -9,9 +9,9 @@ const CONNECTING_MESSAGE = 'Comprobando el progreso de la implementación…'
 
 type ImplementProgressProps = { progress: ImplementProgressRead }
 
-const ImplementProgress = ({ progress: reading }: ImplementProgressProps) => {
-  const progress: ImplementProgressRead = reading.phase === 'partial' ? { ...reading, phase: 'progress' } : reading
-  const taskProgress = progress.phase === 'progress' && progress.task !== null
+const ImplementProgress = ({ progress }: ImplementProgressProps) => {
+  const hasProgress = progress.phase === 'progress' || progress.phase === 'partial'
+  const taskProgress = hasProgress && progress.task !== null
     ? progress.totalTasks === null
       ? `Tarea ${progress.task}`
       : `Tarea ${progress.task} de ${progress.totalTasks}`
@@ -25,10 +25,10 @@ const ImplementProgress = ({ progress: reading }: ImplementProgressProps) => {
       {progress.phase === 'waiting' && (
         <p className="implement-progress__state" role="status">{WAITING_MESSAGE}</p>
       )}
-      {progress.phase === 'progress' && (
+      {hasProgress && (
         <div className="implement-progress__hierarchy">
           <p className="implement-progress__stage lg-body-medium" role="status" aria-live="polite">
-            {reading.phase === 'partial' && progress.step === ImplementationStep.DELIVERED
+            {progress.phase === 'partial' && progress.step === ImplementationStep.DELIVERED
               ? 'Implementación terminada; publicación sin confirmar'
               : STEP_LABELS[progress.step]}
           </p>
@@ -49,7 +49,7 @@ const ImplementProgress = ({ progress: reading }: ImplementProgressProps) => {
           )}
         </div>
       )}
-      {progress.phase === 'progress' && progress.pullRequest !== null && (
+      {hasProgress && progress.pullRequest !== null && (
         <p className="implement-progress__facts implement-progress__facts--pr lg-body-medium">
           Pull request abierta: {' '}
           <a href={progress.pullRequest.url} target="_blank" rel="noreferrer">
