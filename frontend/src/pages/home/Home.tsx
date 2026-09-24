@@ -5,6 +5,8 @@ import { CoordinatingSessionStatus } from 'app/coordinating-session/components/c
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
+import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
+import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { WorkDetails } from 'app/work-progress/WorkDetails'
 import { useWorkConclusion } from 'app/work-progress/useWorkConclusion'
@@ -67,6 +69,8 @@ const Home = () => {
   const columnsRef = useRef<HTMLDivElement>(null)
   const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const coordinatingSession = useCoordinatingSession()
+  const specFreezeRead = useSpecFreeze(coordinatingSession.target)
+  const epicGroomRead = useEpicGroom(false, coordinatingSession.target)
   const sessionsColumnCollapse = useSessionsColumnCollapse(coordinatingSession.target)
   const [requestExpanded, setRequestExpanded] = useState(false)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
@@ -693,6 +697,8 @@ const Home = () => {
 
           <GateSequence
             key={coordinatingSession.target ?? NO_COORDINATING_TARGET}
+            specFreezeRead={specFreezeRead}
+            epicGroomRead={epicGroomRead}
             target={coordinatingSession.target}
             liveAsk={coordinatingSession.liveAsk}
             openingBlocked={coordinatingSession.blocksOpening}

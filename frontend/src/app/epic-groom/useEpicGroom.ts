@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { EpicGroomClient } from 'app/epic-groom/client'
 import { EpicGroomOutcome } from 'app/epic-groom/EpicGroom.types'
 
@@ -26,10 +26,15 @@ const isWorthWatching = (outcome: EpicGroomOutcome): boolean =>
 
 const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = null, watchPreparation = false): EpicGroomRead => {
   const [read, setRead] = useState<EpicGroomRead>(CONNECTING)
+  const readTarget = useRef(target)
 
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
+    if (readTarget.current !== target) {
+      readTarget.current = target
+      setRead(CONNECTING)
+    }
 
     const poll = async (): Promise<void> => {
       const outcome = await EpicGroomClient.read()

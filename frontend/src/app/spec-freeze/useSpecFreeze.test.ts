@@ -27,6 +27,22 @@ describe('useSpecFreeze', () => {
     await vi.waitFor(() => expect(result.current).toEqual({ phase: 'read', kind: 'none' }))
   })
 
+  it('forgets the read of the previous coordinating target as soon as it watches another one', async () => {
+    let answer: (response: Response) => void = () => undefined
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(SpecFreezeMother.frozen().body, { status: 200 }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve })))
+    const { result, rerender } = renderHook(({ target }) => useSpecFreeze(target), {
+      initialProps: { target: SpecFreezeMother.TARGET as string | null },
+    })
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'frozen' }))
+
+    rerender({ target: 'another-target' })
+
+    expect(result.current).toEqual({ phase: 'connecting' })
+    answer(new Response(SpecFreezeMother.frozen().body, { status: 200 }))
+  })
+
   it('stops asking once the spec is frozen', async () => {
     const reading = answerWith(SpecFreezeMother.frozen())
     vi.stubGlobal('fetch', reading)

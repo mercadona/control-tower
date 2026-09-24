@@ -20,6 +20,7 @@ const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
+    setRead(CONNECTING)
 
     const poll = async (): Promise<void> => {
       const outcome = await SpecFreezeClient.read()

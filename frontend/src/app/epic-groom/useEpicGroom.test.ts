@@ -29,6 +29,36 @@ describe('useEpicGroom', () => {
     await vi.waitFor(() => expect(result.current).toEqual({ phase: 'read', kind: 'none' }))
   })
 
+  it('forgets the read of the previous coordinating target as soon as it watches another one', async () => {
+    let answer: (response: Response) => void = () => undefined
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve })))
+    const { result, rerender } = renderHook(({ target }) => useEpicGroom(false, target), {
+      initialProps: { target: EpicGroomMother.TARGET as string | null },
+    })
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    rerender({ target: 'another-target' })
+
+    expect(result.current).toEqual({ phase: 'connecting' })
+    answer(responseFor(EpicGroomMother.groomable()))
+  })
+
+  it('keeps the read it has when only what it watches for changes, so the panel does not blank out', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined)))
+    const { result, rerender } = renderHook(({ reviewing }) => useEpicGroom(reviewing, EpicGroomMother.TARGET), {
+      initialProps: { reviewing: false },
+    })
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    rerender({ reviewing: true })
+
+    expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' })
+  })
+
   it('drops a read that names no coordinating target while it watches one', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => responseFor(EpicGroomMother.groomableWithoutSession())))
 
