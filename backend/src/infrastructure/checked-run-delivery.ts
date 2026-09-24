@@ -194,6 +194,14 @@ export class CheckedRunDelivery extends RunDelivery {
     }
   }
 
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    const intent = await this.journal.publicationRead(watch, CheckedRunDelivery.#INTENT)
+    if (intent === null) return null
+    const receipt = await this.journal.publicationRead(watch, CheckedRunDelivery.#RECEIPT)
+    if (receipt === null) return null
+    return this.#validateReceipt(watch, this.#parseIntent(intent, watch), receipt)
+  }
+
   async #provenPull(watch: PlanWatch, intent: DeliveryIntent, receipt: string): Promise<DeliveredPullRequest> {
     const digest = this.#digest(receipt)
     const remembered = this.proven.get(watch.agent)

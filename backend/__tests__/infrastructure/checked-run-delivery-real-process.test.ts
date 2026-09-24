@@ -13,6 +13,7 @@ import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RunDeliveryUncertain } from '../../src/domain/value-objects/run-delivery.ts'
 import { CheckedRunDelivery } from '../../src/infrastructure/checked-run-delivery.ts'
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
@@ -384,6 +385,48 @@ describe('checked run delivery with real git', () => {
     expect(await fixture.rebuild().inspect(fixture.watch)).toEqual({
       kind: 'delivered', pullRequest: { number: 41, url: 'https://github.com/owner/name/pull/41' },
     })
+  })
+
+  it('names the pull request of a delivered slice from its journal once its worktree is harvested, asking nothing of GitHub', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-recorded-pull-'))))
+    roots.push(fixture.home)
+    await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
+    await fixture.rebuild().deliver(fixture.watch)
+    await rm(fixture.worktree, { recursive: true, force: true })
+    const queries = fixture.queries.length
+    const issueReads = fixture.issueReads.length
+
+    expect(await fixture.rebuild().recordedPullRequest(fixture.watch)).toEqual({
+      number: 41, url: 'https://github.com/owner/name/pull/41',
+    })
+    expect(fixture.queries).toHaveLength(queries)
+    expect(fixture.issueReads).toHaveLength(issueReads)
+  })
+
+  it('names no pull request for a slice whose publication never produced a receipt', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-recorded-pull-'))))
+    roots.push(fixture.home)
+    await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
+
+    expect(await fixture.rebuild().recordedPullRequest(fixture.watch)).toBeNull()
+  })
+
+  it('names no pull request for a slice that never started its publication', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-recorded-pull-'))))
+    roots.push(fixture.home)
+
+    expect(await fixture.rebuild().recordedPullRequest(fixture.watch)).toBeNull()
+  })
+
+  it('refuses to name the pull request of a receipt that names another revision', async () => {
+    const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-recorded-pull-'))))
+    roots.push(fixture.home)
+    await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
+    await fixture.rebuild().deliver(fixture.watch)
+    const receipt = JSON.parse(await fs.readFile(fixture.receiptPath, 'utf8'))
+    await fs.writeFile(fixture.receiptPath, JSON.stringify({ ...receipt, sha: 'f'.repeat(40) }))
+
+    await expect(fixture.rebuild().recordedPullRequest(fixture.watch)).rejects.toBeInstanceOf(RunDeliveryUncertain)
   })
 
   it('proves the receipt once and answers later reads without asking GitHub again', async () => {
