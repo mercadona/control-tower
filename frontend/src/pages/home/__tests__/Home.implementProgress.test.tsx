@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome } from './helpers'
@@ -38,13 +39,13 @@ const stubFetchByPath = (byPath: (url: string) => { status: number; body: string
 describe('Home · implement progress', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('should ask for progress with the non-canonical root the plan started with, not the path the user typed', async () => {
+  it('asks for work progress by recorded identity without sending a checkout path', async () => {
     const fetching = stubFetchByPath((url) => {
       if (url === '/active-plans') {
         const plan = activePlanImplementing(StartPlanMother.NON_CANONICAL_ROOT, StartPlanMother.NON_CANONICAL_WORKTREE)
         return { status: 200, body: JSON.stringify({ plans: [plan] }) }
       }
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.notRead()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing(ImplementProgressMother.notRead())
       throw new Error(`unexpected fetch to ${url}`)
     })
 
@@ -53,15 +54,16 @@ describe('Home · implement progress', () => {
     await screen.findByText('Implementación iniciada automáticamente')
     await waitFor(() =>
       expect(fetching).toHaveBeenCalledWith(
-        `/implement-progress/${StartPlanMother.ISSUE.number}?root=${encodeURIComponent(StartPlanMother.NON_CANONICAL_ROOT)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,
+        WorkProgressMother.PATH,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     )
   })
 
-  it('should fall back to the request path when a recovered plan carries no canonical root', async () => {
+  it('a restored plan without a canonical root can still ask for work progress', async () => {
     const fetching = stubFetchByPath((url) => {
       if (url === '/active-plans') return HeadlessPlanMother.implementing()
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.notRead()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing(ImplementProgressMother.notRead())
       throw new Error(`unexpected fetch to ${url}`)
     })
 
@@ -70,7 +72,8 @@ describe('Home · implement progress', () => {
     await screen.findByText('Implementación iniciada automáticamente')
     await waitFor(() =>
       expect(fetching).toHaveBeenCalledWith(
-        `/implement-progress/${StartPlanMother.ISSUE.number}?root=${encodeURIComponent(StartPlanMother.PATH)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,
+        WorkProgressMother.PATH,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     )
   })
@@ -80,7 +83,7 @@ describe('Home · implement progress', () => {
       if (url === '/active-plans') {
         return HeadlessPlanMother.implementing()
       }
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.progress()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing()
       throw new Error(`unexpected fetch to ${url}`)
     })
 
@@ -97,7 +100,7 @@ describe('Home · implement progress', () => {
       if (url === '/active-plans') {
         return HeadlessPlanMother.implementing()
       }
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.inReview()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing(ImplementProgressMother.inReview())
       throw new Error(`unexpected fetch to ${url}`)
     })
 
@@ -112,7 +115,7 @@ describe('Home · implement progress', () => {
       if (url === '/active-plans') {
         return HeadlessPlanMother.implementing()
       }
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.progress()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing()
       throw new Error(`unexpected fetch to ${url}`)
     })
 
@@ -128,12 +131,12 @@ describe('Home · implement progress', () => {
       if (url === '/active-plans') {
         return HeadlessPlanMother.implementing()
       }
-      if (url.startsWith('/implement-progress/')) return ImplementProgressMother.notRead()
+      if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing(ImplementProgressMother.notRead())
       throw new Error(`unexpected fetch to ${url}`)
     })
 
     const { unmount } = openHome()
-    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/'))).toBe(true))
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/work-progress/'))).toBe(true))
     const callsBeforeUnmount = fetching.mock.calls.length
 
     unmount()

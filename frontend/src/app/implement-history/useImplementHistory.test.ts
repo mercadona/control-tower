@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { useImplementHistory } from 'app/implement-history/useImplementHistory'
 
@@ -6,6 +6,26 @@ const answerWith = (answer: { status: number; body: string }) =>
   vi.fn(async () => new Response(answer.body, { status: answer.status }))
 
 describe('useImplementHistory', () => {
+  it('does not query hidden history, refreshes on opening and stops again on collapse', async () => {
+    vi.useFakeTimers()
+    const fetching = answerWith(ImplementHistoryMother.oneTask())
+    vi.stubGlobal('fetch', fetching)
+    const { rerender } = renderHook(({ visible }) => useImplementHistory(
+      ImplementHistoryMother.ISSUE, ImplementHistoryMother.ROOT, ImplementHistoryMother.REPO, visible,
+    ), { initialProps: { visible: false } })
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    expect(fetching).not.toHaveBeenCalled()
+    rerender({ visible: true })
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(fetching).toHaveBeenCalledTimes(1)
+    rerender({ visible: false })
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    expect(fetching).toHaveBeenCalledTimes(1)
+    rerender({ visible: true })
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()

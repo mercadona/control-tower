@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Loopback } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
   HistoryRequestOutcome, HistoryRefusal, HistoryCollapse,
 } from '../../src/infrastructure/implement-history-route.ts'
@@ -70,10 +70,6 @@ class RunningApi {
   ]
 
   static NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
-  static NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
 
   static async listening(
     spy: ReadImplementationHistorySpy = ReadImplementationHistorySpy.answering(RunningApi.ONE_STEP)
@@ -86,7 +82,6 @@ class RunningApi {
       activePlans: null,
       externalTools: null,
       stderr: null,
-      planEvents: RunningApi.NO_EVENTS,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })
     const port = await server.start()

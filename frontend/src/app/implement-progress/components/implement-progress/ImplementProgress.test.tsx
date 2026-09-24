@@ -1,14 +1,18 @@
 import { render, screen } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
-import { useImplementProgress } from 'app/implement-progress/useImplementProgress'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
+import { useWorkProgress } from 'app/work-progress/useWorkProgress'
+import { WorkProgressPresentation } from 'app/work-progress/presentation'
+import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { ImplementProgress } from './ImplementProgress'
 
 const answerWith = (answer: { status: number; body: string }) => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(answer.body, { status: answer.status })))
+  const work = WorkProgressMother.implementing(answer)
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(work.body, { status: work.status })))
 }
 
 const Progress = () => (
-  <ImplementProgress progress={useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO)} />
+  <ImplementProgress progress={WorkProgressPresentation.execution(useWorkProgress({ issue: ImplementProgressMother.ISSUE, repo: ImplementProgressMother.REPO, agent: StartPlanMother.AGENT }))} />
 )
 
 const renderProgress = () => render(<Progress />)
@@ -56,13 +60,12 @@ describe('ImplementProgress', () => {
     expect(screen.queryByText(/^Diagnóstico:/)).toBeNull()
   })
 
-  it('should show a worktree without a run yet as a wait, not an error', async () => {
+  it('keeps an unreadable worktree explicit instead of claiming execution is starting', async () => {
     answerWith(ImplementProgressMother.notRead())
 
     renderProgress()
 
-    expect(await screen.findByText('Esperando a que arranque la implementación…')).toHaveAttribute('role', 'status')
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(await screen.findByRole('alert')).toHaveTextContent(ImplementProgressMother.NOT_READ_DETAIL)
   })
 
   it('should show a real refusal as an error with the backend text', async () => {
@@ -121,12 +124,13 @@ describe('ImplementProgress', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('should show no pull request link when it arrives malformed instead of breaking', async () => {
+  it('does not claim review from an unreadable progress response', async () => {
     answerWith(ImplementProgressMother.inReviewWithMalformedPullRequest())
 
     renderProgress()
 
-    await screen.findByText(/En revisión/)
+    await screen.findByRole('alert')
+    expect(screen.queryByText('En revisión')).toBeNull()
     expect(screen.queryByRole('link')).toBeNull()
   })
 

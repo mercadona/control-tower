@@ -10,6 +10,7 @@ import type { RepositoryName } from '../../domain/value-objects/repository-name.
 import type { PlanRecords } from '../../domain/ports/plan-records.ts'
 import type { RunDelivery } from '../../domain/ports/run-delivery.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
+import { PlanFailure } from '../../domain/exceptions.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -34,9 +35,14 @@ export class ReadImplementationProgressParams {
 
 class ReadImplementationProgressResult {
   readonly state: ImplementationState
+  readonly delivery: { readonly kind: 'verified' } | { readonly kind: 'unavailable', readonly detail: string }
 
-  constructor({ state }: { state: ImplementationState }) {
+  constructor({ state, delivery = { kind: 'verified' } }: {
+    state: ImplementationState,
+    delivery?: { readonly kind: 'verified' } | { readonly kind: 'unavailable', readonly detail: string },
+  }) {
     this.state = state
+    this.delivery = Object.freeze(delivery)
     Object.freeze(this)
   }
 }
@@ -80,7 +86,12 @@ export class ReadImplementationProgress {
       repository: params.repository,
     })
 
-    return new ReadImplementationProgressResult({ state: await this.#reviewed(state, params) })
+    try {
+      return new ReadImplementationProgressResult({ state: await this.#reviewed(state, params) })
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      return new ReadImplementationProgressResult({ state, delivery: { kind: 'unavailable', detail: cause.message } })
+    }
   }
 
   async #reviewed(state: ImplementationState, params: ReadImplementationProgressParams): Promise<ImplementationState> {

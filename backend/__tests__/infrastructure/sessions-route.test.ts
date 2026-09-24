@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { ListLiveSessions, ListLiveSessionsResult } from '../../src/application/queries/list-live-sessions.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -39,21 +39,15 @@ type Answered = { response: Response, spy: ListLiveSessionsSpy }
 
 class RunningApi {
   static readonly PATH = '/sessions'
-  static readonly NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
 
   static async listening(spy: ListLiveSessionsSpy): Promise<number> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementProgress: undefined,
       externalTools: undefined,
       listLiveSessions: spy,
       sessions: new PlanSessions(),
       activePlans: undefined,
-      planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })

@@ -1,11 +1,8 @@
-import { PlanningActivityState } from 'app/planning-progress/PlanningProgress.types'
-import { usePlanningProgress } from 'app/planning-progress/usePlanningProgress'
+import { PlanningActivityState, type PlanningActivity } from 'app/planning-progress/PlanningProgress.types'
+import type { WorkReading } from 'app/work-progress/WorkProgress.types'
 import { Banner } from 'system-ui/banner'
 import './PlanningProgress.css'
 
-const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
-const NOT_WATCHED_MESSAGE = 'Sin seguimiento del agente en este backend'
-const CHECKING_MESSAGE = 'Comprobando lo que hace el agente…'
 const RUNNING_MESSAGE = 'El agente está trabajando'
 const FINISHED_MESSAGE = 'El agente ha terminado'
 
@@ -19,42 +16,34 @@ const formatDuration = (ms: number) => {
 }
 
 type PlanningProgressProps = {
-  issue: number
-  repo: string
+  progress: WorkReading<PlanningActivity>
 }
 
-const PlanningProgress = ({ issue, repo }: PlanningProgressProps) => {
-  const progress = usePlanningProgress(issue, repo)
+const PlanningProgress = ({ progress }: PlanningProgressProps) => {
+  const activity = progress.kind === 'available' ? progress.value : null
 
   return (
     <section className="planning-progress" aria-label="Progreso de la planificación">
-      {(progress.phase === 'connecting' || progress.phase === 'waiting') && (
-        <p className="planning-progress__state" role="status">{CHECKING_MESSAGE}</p>
-      )}
-      {progress.phase === 'activity' && (
+      {activity !== null && (
         <div className="planning-progress__hierarchy">
           <p className="planning-progress__stage lg-body-medium" role="status" aria-live="polite">
-            {progress.state === PlanningActivityState.FINISHED ? FINISHED_MESSAGE : RUNNING_MESSAGE}
+            {activity.state === PlanningActivityState.FINISHED ? FINISHED_MESSAGE : RUNNING_MESSAGE}
           </p>
           <p className="planning-progress__tally">
-            {formatDuration(progress.runningMs)} · {progress.toolCalls} llamadas a herramientas
+            {formatDuration(activity.runningMs)} · {activity.toolCalls} llamadas a herramientas
           </p>
-          {progress.lastTool !== null && (
+          {activity.lastTool !== null && (
             <p className="planning-progress__last-tool">
-              Última herramienta: {progress.lastTool.name}
-              {progress.lastTool.argument !== null && ` — ${progress.lastTool.argument}`}
+              Última herramienta: {activity.lastTool.name}
+              {activity.lastTool.argument !== null && ` — ${activity.lastTool.argument}`}
             </p>
           )}
-          {progress.lastText !== null && (
-            <p className="planning-progress__last-text">Último mensaje: «{progress.lastText}»</p>
+          {activity.lastText !== null && (
+            <p className="planning-progress__last-text">Último mensaje: «{activity.lastText}»</p>
           )}
         </div>
       )}
-      {progress.phase === 'not-watched' && (
-        <p className="planning-progress__state planning-progress__state--muted" role="status">{NOT_WATCHED_MESSAGE}</p>
-      )}
-      {progress.phase === 'failed' && <Banner type="error" role="alert" title={progress.error} />}
-      {progress.phase === 'unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
+      {progress.kind === 'unavailable' && <Banner type="warning" role="alert" title="Actividad del agente no disponible" description={progress.detail} />}
     </section>
   )
 }

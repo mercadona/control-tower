@@ -23,7 +23,7 @@ import { HarvestClock } from './harvest-clock.ts'
 import { DispatchRelay } from './dispatch-relay.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
-import { PlanEvents, PlanSessions } from './plan-events-route.ts'
+import { PlanSessions } from './plan-sessions.ts'
 import { StreamPlanningActivities } from './stream-planning-activities.ts'
 import { ReviewWatch } from './review-watch.ts'
 import { MemoryReviewLog } from './memory-review-log.ts'
@@ -60,9 +60,7 @@ import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { AskGroomReview } from '../application/actions/ask-groom-review.ts'
 import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
-import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
-import { ReadPlanningActivity } from '../application/queries/read-planning-activity.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import { FreezeSpec } from '../application/actions/freeze-spec.ts'
@@ -110,6 +108,9 @@ import { DiskAgentMeasurements } from './disk-agent-measurements.ts'
 import { ClaudeRunCalls } from './claude-run-calls.ts'
 import { RunPlanAgents, RunProvenance } from './run-plan-agents.ts'
 import { RunPlanRecovery } from './run-plan-recovery.ts'
+import { WorkRecoveryClock } from './work-recovery-clock.ts'
+import { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
+import { InspectedWorkInventory } from './inspected-work-inventory.ts'
 import { CheckedRunDelivery } from './checked-run-delivery.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
@@ -248,7 +249,6 @@ class CtApi {
   static readonly #CLOCK_STOPPED = 1
   static readonly #RETRIES = 3
   static readonly #SECONDS_BETWEEN_RETRIES = 2
-  static readonly #SECONDS_BETWEEN_READS = 2
   static readonly #SECONDS_BETWEEN_ASKS = 30
   static readonly #SESSION_TERM_GRACE_MS = 2_000
   static readonly #SESSION_KILL_GRACE_MS = 2_000
@@ -385,23 +385,6 @@ class CtApi {
     })
   }
 
-  static #readPlanProgress(git: LaunchTool): ReadPlanProgress {
-    return new ReadPlanProgress({
-      planProgress: new PlanContractProgress({
-        node: CtApi.#tool(process.execPath),
-        git,
-        dispatchCheck: PluginTree.dispatchCheck(),
-      }),
-    })
-  }
-
-  static #planEvents(readPlanProgress: ReadPlanProgress): PlanEvents {
-    return new PlanEvents({
-      read: (session) => readPlanProgress.execute(new ReadPlanProgressParams(session)),
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_READS),
-    })
-  }
-
   static #pullRequestReviews(
     pullRequests: GhPullRequests,
     planIssues: GhPlanIssues,
@@ -511,10 +494,7 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
     })
     const sessions = new PlanSessions()
-    const readPlanProgress = CtApi.#readPlanProgress(git)
-    const readPlanningActivity = new ReadPlanningActivity({
-      planningActivities: new StreamPlanningActivities({ planCalls, files, nowMs: Date.now }),
-    })
+    const planningActivities = new StreamPlanningActivities({ planCalls, files, nowMs: Date.now })
     const activePlans = new ActivePlans({ sessions })
     const planProgress = new PlanContractProgress({
       node: CtApi.#tool(process.execPath),
@@ -743,6 +723,14 @@ class CtApi {
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),
     })
+    const implementProgress = new ReadImplementationProgress({
+      implementationProgress: runFileProgress,
+      pullRequests,
+      planIssues,
+      records,
+      delivery: runDelivery,
+      isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
+    })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
@@ -753,18 +741,14 @@ class CtApi {
       anotherRound: (asked) => planAgents.anotherRound(asked),
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
-      implementProgress: new ReadImplementationProgress({
-        implementationProgress: runFileProgress,
-        pullRequests,
-        planIssues,
-        records,
-        delivery: runDelivery,
-        isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
+      workProgress: new ReadWorkProgress({
+        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans }),
+        plans: planProgress,
+        activities: planningActivities,
+        implementation: implementProgress,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       sliceEscalation: readSliceEscalation,
-      planEvents: CtApi.#planEvents(readPlanProgress),
-      readPlanningActivity,
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
@@ -772,6 +756,16 @@ class CtApi {
         metricsDelivery: MetricsDelivery.to(asked.harvestTable),
       }),
       recovery,
+      inspection: recovery,
+      maintenance: new WorkRecoveryClock({
+        recovery,
+        intervalMs: 2000,
+        schedule: (run, milliseconds) => {
+          const timer = setTimeout(run, milliseconds)
+          return () => clearTimeout(timer)
+        },
+        report: (diagnostic) => process.stderr.write(`work recovery: ${diagnostic}\n`),
+      }),
       listLiveSessions: new ListLiveSessions({ liveSessions }),
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
@@ -811,7 +805,6 @@ class CtApi {
     CoordinatingSessionRecovery.remember(
       await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
     )
-    await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
     }))

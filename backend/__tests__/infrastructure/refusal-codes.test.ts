@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
-import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
+import { WorkProgressRoute } from '../../src/infrastructure/work-progress-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
-import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
-import { PlanningRequestOutcome, PlanningCollapse } from '../../src/infrastructure/planning-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
 import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
@@ -30,9 +28,6 @@ class RequestVocabularies {
     return [
       ...Object.values(PlanRequestOutcome),
       ...Object.values(MilestonePlanOutcome),
-      ...Object.values(EventsRequestOutcome),
-      ...Object.values(ProgressRequestOutcome),
-      ...Object.values(PlanningRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
       ...Object.values(SessionStreamOutcome),
       ...Object.values(SessionInputOutcome),
@@ -58,7 +53,6 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
-    ProgressRequestOutcome.MALFORMED_ROOT,
     SessionInputOutcome.NOT_LIVE,
     SpecFreezeOutcome.NOT_FROM_THE_PAGE,
     SpecFreezeOutcome.NO_COORDINATING_SESSION,
@@ -67,7 +61,6 @@ class SharedOnPurposeAcrossRequestVocabularies {
     EpicGroomOutcome.SPEC_NOT_FROZEN,
     CoordinatingSessionOutcome.ALREADY_LIVE,
     CoordinatingSessionOutcome.OPENING,
-    PlanningRequestOutcome.NOT_WATCHED,
   ])
 }
 
@@ -93,14 +86,12 @@ class EveryCodeTheApiEmits {
     return [
       ...new Set(RequestVocabularies.codes()),
       ...PlanCollapse.declaredCodes(),
-      ...ProgressCollapse.declaredCodes(),
-      ...PlanningCollapse.declaredCodes(),
+      ...Object.values(WorkProgressRoute.CODES),
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
       ...EscalationCollapse.declaredCodes(),
       ...AnotherRoundCollapse.declaredCodes(),
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
-      ...PlanEvents.declaredCodes(),
     ]
   }
 

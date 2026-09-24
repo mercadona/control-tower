@@ -122,9 +122,10 @@ never a successful delivery claim. Progress shows local completion as publicatio
 pending until checked delivery is proven.
 
 A living process group means the publication is still in flight, so a read calls
-it publishing and never uncertain. No read waits for one: recovery starts the
-publication in the background, answers with it pending, and hands a refused
-publication to a person instead of starting another on the next poll. A proven
+it publishing and never uncertain. No read waits for one or starts one: the
+backend-owned recovery clock starts publication in the background independently
+of browser requests, and hands a refused publication to a person instead of
+starting another on the next tick. Inventory and progress only inspect it. A proven
 receipt answers later reads by itself, and the merged pull request it names still
 reads as delivered once the branch and the issue are closed.
 

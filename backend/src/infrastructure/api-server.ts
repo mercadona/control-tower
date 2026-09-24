@@ -6,10 +6,7 @@ import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
-import { PlanEventsRoute } from './plan-events-route.ts'
-import { PlanningProgressRoute } from './planning-progress-route.ts'
 import { ActivePlanPhase, ActivePlansRoute } from './active-plans-route.ts'
-import { ImplementProgressRoute } from './implement-progress-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
@@ -51,31 +48,22 @@ import type { PublishReslicing } from '../application/actions/publish-reslicing.
 import type { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import type { GroomEpic } from '../application/actions/groom-epic.ts'
 import type { PromoteEpic } from '../application/actions/promote-epic.ts'
-import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
 import type { ResizeSession } from '../application/actions/resize-session.ts'
-import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
-import type { ReadPlanningActivityParams } from '../application/queries/read-planning-activity.ts'
-import type { PlanningActivity } from '../domain/value-objects/planning-activity.ts'
-import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
-import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
+import type { PlanSessions } from './plan-sessions.ts'
+import type { ActivePlans, ActivePlanRecovering, ActivePlanInspecting } from './active-plans-route.ts'
+import type { WorkRecoveryClock } from './work-recovery-clock.ts'
+import { WorkProgressRoute } from './work-progress-route.ts'
+import type { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 
 export const LOOPBACK = '127.0.0.1'
-
-type ImplementationProgressReader = {
-  execute(params: ReadImplementationProgressParams): Promise<{ readonly state: ImplementationState }>,
-}
-
-type PlanningActivityReader = {
-  execute(params: ReadPlanningActivityParams): Promise<{ readonly activity: PlanningActivity }>,
-}
 
 type SliceEscalationReader = {
   execute(params: ReadSliceEscalationParams): Promise<ReadSliceEscalationResult>,
@@ -128,10 +116,7 @@ export type ApiCollaborators = {
   startsInFlight?: WorkInFlight | null,
   recoverPlan?: RecoverPlan | null,
   cleanupPlan?: CleanupPlan | null,
-  implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
-  planEvents?: PlanEvents | null,
-  readPlanningActivity?: PlanningActivityReader | null,
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
@@ -141,6 +126,9 @@ export type ApiCollaborators = {
   typeIntoSession?: TypeIntoSession | null,
   resizeSession?: ResizeSession | null,
   recovery?: ActivePlanRecovering | null,
+  inspection?: ActivePlanInspecting | null,
+  maintenance?: WorkRecoveryClock | null,
+  workProgress?: Pick<ReadWorkProgress, 'execute'> | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
   askGroomReview?: AskGroomReview | null,
@@ -200,10 +188,7 @@ export class ApiServer {
   readonly startsInFlight: WorkInFlight
   readonly recoverPlan: RecoverPlan | null | undefined
   readonly cleanupPlan: CleanupPlan | null | undefined
-  readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
-  readonly planEvents: PlanEvents | null | undefined
-  readonly readPlanningActivity: PlanningActivityReader | null | undefined
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
@@ -213,6 +198,9 @@ export class ApiServer {
   readonly typeIntoSession: TypeIntoSession | null | undefined
   readonly resizeSession: ResizeSession | null | undefined
   readonly recovery: ActivePlanRecovering | null
+  readonly inspection: ActivePlanInspecting | null
+  readonly maintenance: WorkRecoveryClock | null
+  readonly workProgress: Pick<ReadWorkProgress, 'execute'> | null
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
   readonly askGroomReview: AskGroomReview | null | undefined
@@ -237,9 +225,9 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementProgress, implementHistory,
-    planEvents, readPlanningActivity, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
-    watchLiveSession, typeIntoSession, resizeSession, recovery = null,
+    port, startPlan, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
+    sessions, activePlans, externalTools, listLiveSessions, liveSessions,
+    watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
@@ -251,10 +239,7 @@ export class ApiServer {
     this.startsInFlight = startsInFlight ?? new WorkInFlight()
     this.recoverPlan = recoverPlan
     this.cleanupPlan = cleanupPlan
-    this.implementProgress = implementProgress
     this.implementHistory = implementHistory
-    this.planEvents = planEvents
-    this.readPlanningActivity = readPlanningActivity
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
@@ -264,6 +249,9 @@ export class ApiServer {
     this.typeIntoSession = typeIntoSession
     this.resizeSession = resizeSession
     this.recovery = recovery
+    this.inspection = inspection
+    this.maintenance = maintenance
+    this.workProgress = workProgress
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession
     this.askGroomReview = askGroomReview
@@ -294,6 +282,8 @@ export class ApiServer {
     app.set('case sensitive routing', true)
     app.use(Route.collapseTrailingSlashes)
     FrontendPages.mountedOn(app, this.frontendRoot)
+    app.get(WorkProgressRoute.PATH, Browsers.turnAwayForeign, WorkProgressRoute.handledBy(this.workProgress!))
+    app.all(WorkProgressRoute.PATH, WorkProgressRoute.refuseOtherMethods)
     app.post(
       StartPlanRoute.PATH,
       Browsers.turnAwayForeign,
@@ -352,29 +342,11 @@ export class ApiServer {
     )
     app.all(AnotherRoundRoute.PATH, AnotherRoundRoute.refuseOtherMethods)
     app.get(
-      PlanEventsRoute.PATH,
-      Browsers.turnAwayForeign,
-      PlanEventsRoute.handledBy(this.sessions!, this.planEvents!)
-    )
-    app.all(PlanEventsRoute.PATH, PlanEventsRoute.refuseOtherMethods)
-    app.get(
-      PlanningProgressRoute.PATH,
-      Browsers.turnAwayForeign,
-      PlanningProgressRoute.handledBy(this.sessions!, this.readPlanningActivity!)
-    )
-    app.all(PlanningProgressRoute.PATH, PlanningProgressRoute.refuseOtherMethods)
-    app.get(
       ActivePlansRoute.PATH,
       Browsers.turnAwayForeign,
-      ActivePlansRoute.handledBy(this.activePlans!, this.recovery)
+      ActivePlansRoute.handledBy(this.activePlans!, this.inspection)
     )
     app.all(ActivePlansRoute.PATH, ActivePlansRoute.refuseOtherMethods)
-    app.get(
-      ImplementProgressRoute.PATH,
-      Browsers.turnAwayForeign,
-      ImplementProgressRoute.handledBy(this.implementProgress!)
-    )
-    app.all(ImplementProgressRoute.PATH, ImplementProgressRoute.refuseOtherMethods)
     app.get(
       SliceEscalationRoute.PATH,
       Browsers.turnAwayForeign,
@@ -495,6 +467,7 @@ export class ApiServer {
       })
     })
     this.server = server
+    this.maintenance?.start()
 
     return (server.address() as AddressInfo).port
   }
@@ -503,6 +476,7 @@ export class ApiServer {
     if (this.server === null) return
     const server = this.server
     this.server = null
+    await this.maintenance?.stop()
     await new Promise<unknown>((resolve) => {
       server.close(resolve)
       server.closeAllConnections()

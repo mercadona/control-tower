@@ -44,7 +44,7 @@ import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-mac
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
@@ -588,6 +588,54 @@ describe('RunPlanRecovery projection', () => {
 
     expect(await tested.recovery.restoreCalls()).toBe('call registry is unreadable')
     expect(tested.transport.restored).toEqual([])
+  })
+
+  it('an inventory read can forget retired work without losing the maintenance-owned review cleanup', async () => {
+    const watch = RecoveryMother.watch()
+    const tested = new ProjectionScenario([watch])
+    await tested.recovery.recover()
+    expect(tested.reviews.started).toEqual([watch])
+    const stopped = tested.reviews.stopped.length
+    tested.records.found = PlansInFlight.listed([])
+
+    await tested.recovery.inspect()
+    expect(tested.activePlans.known()).toEqual([])
+    expect(tested.reviews.stopped).toHaveLength(stopped)
+    await tested.recovery.recover()
+    expect(tested.reviews.stopped).toHaveLength(stopped + 1)
+  })
+
+  it('conflicting recorded identities are refused before publication or review effects', async () => {
+    const watch = RecoveryMother.watch()
+    const tested = new ProjectionScenario([watch, watch])
+    await expect(tested.recovery.inspect()).rejects.toBeInstanceOf(PlanRecoveryConflict)
+    expect(tested.activePlans.known()).toEqual([])
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.machine.effects.commands).toBe(0)
+  })
+
+  it('inspection reports pending publication without publishing or managing review observers', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new StartupRunDelivery()
+    const tested = new ProjectionScenario([watch], delivery)
+
+    expect(await tested.recovery.inspect()).toBeNull()
+    expect(await tested.recovery.inspect()).toBeNull()
+
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: false })
+    expect(delivery.deliveries).toBe(0)
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.machine.effects.commands).toBe(0)
+    expect(tested.transport.spawns).toBe(0)
+
+    await tested.recovery.recover()
+    expect(delivery.deliveries).toBe(1)
+    await tested.settlePublications()
+    await tested.recovery.inspect()
+    expect(tested.activePlans.known()[0]).toMatchObject({ phase: 'implementing', acceptsChange: true })
+    expect(tested.reviews.started).toEqual([])
+    await tested.recovery.recover()
+    expect(tested.reviews.started).toEqual([watch])
   })
 
   it('continues publication during startup without a GET and starts review only after checked delivery', async () => {

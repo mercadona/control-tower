@@ -6,6 +6,8 @@ import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { PlanningProgressMother } from '__scenarios__/PlanningProgressMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
+import type { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -31,8 +33,7 @@ const backendFallsOver = () => {
   throw new TypeError('Failed to fetch')
 }
 
-const IMPLEMENT_PROGRESS = /^\/implement-progress\/(\d+)/
-const PLANNING_PROGRESS = /^\/planning-progress\/(\d+)/
+const WORK_PROGRESS = /^\/work-progress\/(\d+)/
 const IMPLEMENT_HISTORY = /^\/implement-history\/(\d+)/
 
 const backendWith = ({
@@ -46,19 +47,28 @@ const backendWith = ({
   planningProgress?: (issue: number) => Answer
   history?: (issue: number) => Answer
 }) => {
+  let known: ActivePlan[] = []
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url === '/active-plans') return responseFor(activePlans())
+    if (url === '/active-plans') {
+      const answer = activePlans()
+      if (answer.status === 200) known = JSON.parse(answer.body).plans
+      return responseFor(answer)
+    }
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(NO_SESSIONS)
     if (url === '/coordinating-session' && init === undefined) return responseFor(NO_COORDINATING_SESSION)
     if (url === '/coordinating-session') return responseFor(OPENED_COORDINATING_SESSION)
     if (url === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
     if (url === '/epic-groom') return responseFor(NO_EPIC_GROOM)
-    const asProgress = IMPLEMENT_PROGRESS.exec(url)
-    if (asProgress !== null) return responseFor(progress(Number(asProgress[1])))
-    const asPlanning = PLANNING_PROGRESS.exec(url)
-    if (asPlanning !== null) return responseFor(planningProgress(Number(asPlanning[1])))
+    const asProgress = WORK_PROGRESS.exec(url)
+    if (asProgress !== null) {
+      const issue = Number(asProgress[1])
+      const repo = new URL(url, 'http://localhost').searchParams.get('repo')
+      const active = known.find((entry) => entry.plan.issue.number === issue && entry.plan.repo === repo)
+      if (active === undefined) return new Response('{"code":"work-not-found","detail":"work no longer active"}', { status: 400 })
+      return responseFor(WorkProgressMother.fromActive(active, progress(issue), planningProgress(issue)))
+    }
     const asHistory = IMPLEMENT_HISTORY.exec(url)
     if (asHistory !== null) return responseFor(history(Number(asHistory[1])))
     if (url === '/recover-plan' && init?.method === 'POST') return new Response('{"agent":"conversation-of-8"}', { status: 202 })
@@ -94,7 +104,7 @@ describe('Home · the slices in flight', () => {
     openHome()
 
     expect(await screen.findByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
-    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
+    expect(await screen.findByText('Implementación iniciada automáticamente')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Implementación', level: 1 })).toBeInTheDocument()
   })
 
@@ -123,7 +133,7 @@ describe('Home · the slices in flight', () => {
     expect(fetching.mock.calls.some(([input]) => String(input).includes('/message'))).toBe(false)
   })
 
-  it('two slices in planning each show planning activity and ask /planning-progress for their own issue number', async () => {
+  it('two planning slices each use their own unified progress query', async () => {
     const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlightPlanning(7, 8) })
     openHome()
 
@@ -132,18 +142,18 @@ describe('Home · the slices in flight', () => {
     const second = await panelOf(8)
     expect(await second.findByText('El agente está trabajando')).toBeInTheDocument()
 
-    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/7'))).toBe(true))
-    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/8'))).toBe(true))
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/work-progress/7'))).toBe(true))
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/work-progress/8'))).toBe(true))
     expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/'))).toBe(false)
   })
 
-  it('a slice in implementing still polls implement-progress, not planning-progress', async () => {
+  it('an implementing slice uses the same progress endpoint as a planning slice', async () => {
     const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7) })
     openHome()
 
     await screen.findByRole('heading', { name: 'Slice #7', level: 2 })
 
-    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/implement-progress/7'))).toBe(true))
+    await waitFor(() => expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/work-progress/7'))).toBe(true))
     expect(fetching.mock.calls.some(([input]) => String(input).startsWith('/planning-progress/'))).toBe(false)
   })
 
@@ -210,7 +220,7 @@ describe('Home · the slices in flight', () => {
     expect(within(screen.getByRole('region', { name: 'Slice #8' })).getByRole('alert')).toBeInTheDocument()
 
     answer = HeadlessPlanMother.slicesInFlight(8, 7)
-    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
     await act(async () => vi.advanceTimersByTimeAsync(0))
 
     const settled = within(screen.getByRole('region', { name: 'Slice #8' }))
@@ -257,6 +267,7 @@ describe('Home · the slices in flight', () => {
     backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(...inFlight) })
     openHome()
     await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
     expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
 
     inFlight = [7, 8]
@@ -275,10 +286,11 @@ describe('Home · the slices in flight', () => {
 
     expect(await screen.findByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { name: 'Slice #7', level: 2 })).toHaveLength(1)
-    expect(screen.getByText('Implementación iniciada automáticamente')).toBeInTheDocument()
+    expect(await screen.findByText('Implementación iniciada automáticamente')).toBeInTheDocument()
   })
 
   it('should select another slice with its history and return to the previous slice', async () => {
+    localStorage.setItem('ct.sessions-column-collapsed', 'false')
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     const { fetching } = backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
@@ -324,6 +336,7 @@ describe('Home · the slices in flight', () => {
   })
 
   it('should keep the manual selection and poll only its history on subsequent updates', async () => {
+    localStorage.setItem('ct.sessions-column-collapsed', 'false')
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     const { fetching } = backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
     const { user } = openHome()
@@ -366,6 +379,7 @@ describe('Home · the slices in flight', () => {
   })
 
   it('should advance to the sole running slice when the selected slice enters review directly', async () => {
+    localStorage.setItem('ct.sessions-column-collapsed', 'false')
     vi.useFakeTimers()
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     let selectedProgress = ImplementProgressMother.progress()
@@ -383,11 +397,41 @@ describe('Home · the slices in flight', () => {
 
     expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
     expect(screen.getByText('Implementación iniciada automáticamente').closest('[role="status"]')).toHaveTextContent(HeadlessPlanMother.agentFor(8))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
     expect(fetching).toHaveBeenCalledWith(
       `/implement-history/8?root=${encodeURIComponent(StartPlanMother.PATH)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,
     )
     expect(WorkflowSnapshotStorage.load()?.plan.issue.number).toBe(8)
     expect(within(screen.getByRole('region', { name: 'Slice #7' })).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument()
+  })
+
+  it('retains stale progress for display but waits for a fresh candidate before handing off review', async () => {
+    vi.useFakeTimers()
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    let selected = ImplementProgressMother.progress()
+    let candidateUnavailable = false
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8),
+      progress: (issue) => {
+        if (issue === 8 && candidateUnavailable) throw new TypeError('offline')
+        return issue === 7 ? selected : ImplementProgressMother.progress()
+      },
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(within(screen.getByRole('region', { name: 'Slice #8' })).getByText('Tarea 3 de 7')).toBeVisible()
+    candidateUnavailable = true
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    const candidate = within(screen.getByRole('region', { name: 'Slice #8' }))
+    expect(candidate.getByText('Tarea 3 de 7')).toBeVisible()
+    expect(candidate.getByRole('alert')).toHaveTextContent('Mostramos la última lectura')
+    selected = ImplementProgressMother.inReview()
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#7')).toBeInTheDocument()
+    candidateUnavailable = false
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    expect(within(screen.getByRole('navigation', { name: 'Ruta de navegación' })).getByText('#8')).toBeInTheDocument()
   })
 
   it.each([

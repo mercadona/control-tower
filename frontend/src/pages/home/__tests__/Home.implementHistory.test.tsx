@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome } from './helpers'
@@ -25,7 +26,7 @@ const stubFetchByPath = (byPath: (url: string) => { status: number; body: string
 const planImplementing = async (historyAnswer: () => { status: number; body: string }) => {
   const fetching = stubFetchByPath((url) => {
     if (url === '/active-plans') return HeadlessPlanMother.implementing()
-    if (url.startsWith('/implement-progress/')) return ImplementProgressMother.notRead()
+    if (url.startsWith('/work-progress/')) return WorkProgressMother.implementing(ImplementProgressMother.notRead())
     if (url.startsWith('/implement-history/')) return historyAnswer()
     throw new Error(`unexpected fetch to ${url}`)
   })
@@ -90,7 +91,7 @@ describe('Home · implement history', () => {
   it('should render an error banner with the detail for a refusal other than not-read', async () => {
     await planImplementing(ImplementHistoryMother.refusedMalformedRepo)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(ImplementHistoryMother.MALFORMED_REPO_DETAIL)
+    expect(await within(screen.getByLabelText('Recorrido por tarea')).findByRole('alert')).toHaveTextContent(ImplementHistoryMother.MALFORMED_REPO_DETAIL)
   })
 
   it('should say the backend is unreachable when the shape is not recognised', async () => {

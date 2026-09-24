@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { TextDecoder } from 'node:util'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
   WatchLiveSession, WatchLiveSessionParams, WatchLiveSessionResult,
 } from '../../src/application/queries/watch-live-session.ts'
@@ -128,23 +128,16 @@ class SseFrames {
 }
 
 class RunningApi {
-  static readonly NO_EVENTS = new PlanEvents({
-    read: () => Promise.reject(new Error('this suite never streams plan events')),
-    sleep: () => Promise.resolve(),
-  })
-
   static async listening(liveSessions: LiveSessions, watchLiveSession: WatchLiveSession): Promise<number> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
-      implementProgress: undefined,
       externalTools: undefined,
       listLiveSessions: undefined,
       liveSessions,
       watchLiveSession,
       sessions: new PlanSessions(),
       activePlans: undefined,
-      planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
     })

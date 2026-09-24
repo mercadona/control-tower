@@ -32,6 +32,7 @@ type ImplementHistoryProps = {
   issue: number
   root: string
   repo: string
+  visible?: boolean
 }
 
 const groupByTask = (entries: ImplementationHistoryEntry[]): TaskGroup[] => {
@@ -266,8 +267,8 @@ const TaskJourney = ({ entries }: { entries: ImplementationHistoryEntry[] }) => 
   )
 }
 
-const ImplementHistory = ({ issue, root, repo }: ImplementHistoryProps) => {
-  const history = useImplementHistory(issue, root, repo)
+const ImplementHistory = ({ issue, root, repo, visible = true }: ImplementHistoryProps) => {
+  const history = useImplementHistory(issue, root, repo, visible)
 
   return (
     <section className="implement-history" aria-label={HEADING}>

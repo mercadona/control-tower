@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'

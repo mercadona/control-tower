@@ -7,6 +7,7 @@ import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { Home } from 'pages/home/Home'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -23,24 +24,14 @@ const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_COORDINATING_SESSION = CoordinatingSessionMother.none()
 const NO_SPEC_FREEZE = SpecFreezeMother.none()
 const NO_EPIC_GROOM = EpicGroomMother.none()
-const NO_IMPLEMENTATION_RUN_YET = {
-  status: 400,
-  body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
-}
 const NO_IMPLEMENTATION_HISTORY_YET = {
   status: 400,
   body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
 }
-const NOT_WATCHED_PLANNING_PROGRESS = {
-  status: 400,
-  body: '{"code":"not-watched","detail":"no plan was started for that issue"}',
-}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status, headers: JSON_HEADERS })
 
-const isImplementProgressPath = (input: string | URL | Request) => String(input).startsWith('/implement-progress/')
 const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
-const isPlanningProgressPath = (input: string | URL | Request) => String(input).startsWith('/planning-progress/')
 const isCoordinatingSessionRead = (input: string | URL | Request, init?: RequestInit) =>
   input === '/coordinating-session' && init === undefined
 
@@ -53,9 +44,7 @@ const backendAnswering = (answer: Answer) => {
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
-      if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
-      if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return fetching(input, init)
@@ -65,20 +54,28 @@ const backendAnswering = (answer: Answer) => {
   return fetching
 }
 
-const backendRecovering = (answer: Answer) => {
+const backendRecovering = (answer: Answer, progress: (active: ActivePlan) => Answer = WorkProgressMother.fromActive) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
+  const progressRequests = vi.fn((active: ActivePlan, _init?: RequestInit) => responseFor(progress(active)))
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (input === '/sessions') return responseFor(NO_SESSIONS)
     if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
     if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
-    if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
     if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
     if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
+    if (String(input).startsWith('/work-progress/')) {
+      const url = new URL(String(input), 'http://localhost')
+      const issue = Number(url.pathname.split('/')[2])
+      const plans: ActivePlan[] = JSON.parse(answer.body).plans ?? []
+      const active = plans.find((plan) => plan.plan.issue.number === issue && plan.plan.repo === url.searchParams.get('repo'))
+      if (active === undefined) throw new Error(`no progress fixture for ${String(input)}`)
+      return progressRequests(active, init)
+    }
     return init === undefined ? fetching(input) : fetching(input, init)
   })
 
-  return fetching
+  return Object.assign(fetching, { progressRequests })
 }
 
 const backendPending = () => {
@@ -91,9 +88,7 @@ const backendPending = () => {
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
-      if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
-      if (isPlanningProgressPath(input)) return responseFor(NOT_WATCHED_PLANNING_PROGRESS)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return pending
@@ -179,7 +174,7 @@ const DEFAULT_RESTORED_PLAN: StartedPlan = {
 }
 
 type RestoredWorkflow = {
-  phase: WorkflowSnapshot['phase']
+  phase: WorkflowSnapshot['phase'] | 'ready'
   request?: StartPlanRequest
   plan?: Partial<StartedPlan>
 }
@@ -191,29 +186,12 @@ const activePlanFor = (workflow: WorkflowSnapshot): ActivePlan => ({
 })
 
 const openRestored = ({ phase, request = DEFAULT_RESTORED_REQUEST, plan = {} }: RestoredWorkflow) => {
-  const workflow: WorkflowSnapshot = { phase, request, plan: { ...DEFAULT_RESTORED_PLAN, ...plan } }
+  const workflow: WorkflowSnapshot = { phase: phase === 'ready' ? 'planning' : phase, request, plan: { ...DEFAULT_RESTORED_PLAN, ...plan } }
   WorkflowSnapshotStorage.save(workflow)
   const fetching = backendRecovering({ status: 200, body: JSON.stringify({ plans: [activePlanFor(workflow)] }) })
   const opened = openHome()
 
   return { ...opened, fetching, workflow }
-}
-
-const openedStream = () => waitFor(() => FakeEventSource.last())
-
-const streamFrame = async (data: string) => {
-  const stream = await openedStream()
-  await act(async () => stream.receive(data))
-}
-
-const streamFailure = async (data: string) => {
-  const stream = await openedStream()
-  await act(async () => stream.failWith(data))
-}
-
-const dropStream = async () => {
-  const stream = await openedStream()
-  await act(async () => stream.dropConnection())
 }
 
 export {
@@ -229,7 +207,4 @@ export {
   pressStart,
   openBrainstorming,
   openRestored,
-  streamFrame,
-  streamFailure,
-  dropStream,
 }

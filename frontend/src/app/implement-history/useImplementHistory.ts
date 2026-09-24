@@ -18,12 +18,13 @@ const toHistory = (outcome: ImplementHistoryOutcome, previous: ImplementHistory)
   return { phase: 'unreachable' }
 }
 
-const useImplementHistory = (issue: number, root: string, repo: string): ImplementHistory => {
+const useImplementHistory = (issue: number, root: string, repo: string, visible = true): ImplementHistory => {
   const [history, setHistory] = useState<ImplementHistory>(CONNECTING)
   const historyRef = useRef(history)
   historyRef.current = history
 
   useEffect(() => {
+    if (!visible) return
     setHistory(CONNECTING)
     historyRef.current = CONNECTING
     let cancelled = false
@@ -45,7 +46,7 @@ const useImplementHistory = (issue: number, root: string, repo: string): Impleme
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [issue, root, repo])
+  }, [issue, root, repo, visible])
 
   return history
 }

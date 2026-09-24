@@ -1,9 +1,10 @@
 import type { Request, RequestHandler, Response } from 'express'
 import { Answer } from './http.ts'
-import type { PlanSessions } from './plan-events-route.ts'
+import type { PlanSessions } from './plan-sessions.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
+import { PlanRecoveryConflict } from '../domain/exceptions.ts'
 
 export const ActivePlanPhase = Object.freeze({
   PLANNING: 'planning',
@@ -51,6 +52,7 @@ export type ProjectedActivePlan = {
 }
 
 export type ActivePlanRecovering = { recover: () => Promise<string | null> }
+export type ActivePlanInspecting = { inspect: () => Promise<string | null> }
 
 export class ActivePlans {
   readonly sessions: PlanSessions
@@ -190,9 +192,15 @@ export class ActivePlansRoute {
   static readonly PATH = '/active-plans'
   static readonly METHOD = 'GET'
 
-  static handledBy(activePlans: ActivePlans, recovery: ActivePlanRecovering | null = null): RequestHandler {
+  static handledBy(activePlans: ActivePlans, inspection: ActivePlanInspecting | null = null): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
-      const refusal = recovery === null ? null : await recovery.recover()
+      let refusal: string | null
+      try {
+        refusal = inspection === null ? null : await inspection.inspect()
+      } catch (cause) {
+        if (!(cause instanceof PlanRecoveryConflict)) throw cause
+        refusal = cause.message
+      }
       if (refusal !== null) {
         Answer.refuse(response, 400, ActivePlansOutcome.RECOVERY_INCONCLUSIVE, refusal)
         return

@@ -32,11 +32,12 @@ type ImplementationProgressState = {
   pullRequest: PullRequest | null
 }
 
-type ImplementProgressOutcome =
-  | { kind: 'read'; state: ImplementationProgressState }
-  | { kind: 'not-read' }
-  | { kind: 'refused'; error: string }
-  | { kind: 'backend-unreachable' }
+export type ImplementProgressRead =
+  | { phase: 'connecting' }
+  | { phase: 'waiting' }
+  | ({ phase: 'progress' } & ImplementationProgressState)
+  | { phase: 'failed'; error: string }
+  | { phase: 'unreachable' }
 
 const STEP_LABELS: Record<ImplementationStep, string> = {
   [ImplementationStep.STARTING]: 'Arrancando',
@@ -62,4 +63,4 @@ const STEP_SHORT_LABELS: Partial<Record<ImplementationStep, string>> = {
 }
 
 export { ImplementationStep, STEP_LABELS, STEP_SHORT_LABELS }
-export type { ImplementationProgressState, ImplementProgressOutcome, PullRequest }
+export type { ImplementationProgressState, PullRequest }

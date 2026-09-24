@@ -14,17 +14,14 @@ import type { StartPlanParams } from '../../src/application/actions/start-plan.t
 import { Baseline, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
   PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed,
   WorkspaceNotPrepared,
-  PlanProgressNotRead,
   PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
   PlanIssueNotClaimed, PlanStatusNotRead, PlanStatusNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
-import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
-import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
@@ -147,48 +144,6 @@ class StartPlanSpy extends StartPlan {
       })],
       failed: [],
     })
-  }
-}
-
-type AnsweredProgress = { spy: ProgressSpy, planEvents: PlanEvents }
-
-class ProgressSpy {
-  static readonly UNREADABLE = 'git status could not say whether the plan is committed'
-
-  readonly state: PlanStateValue | null
-  readonly cause: Error | null
-  asked: number
-
-  constructor(state: PlanStateValue | null, cause: Error | null) {
-    this.state = state
-    this.cause = cause
-    this.asked = 0
-  }
-
-  static events(state: PlanStateValue, { sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
-    return ProgressSpy.answering(new ProgressSpy(state, null), sleepMs)
-  }
-
-  static unable({ sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
-    const spy = new ProgressSpy(null, new PlanProgressNotRead(ProgressSpy.UNREADABLE))
-
-    return ProgressSpy.answering(spy, sleepMs)
-  }
-
-  static answering(spy: ProgressSpy, sleepMs: number): AnsweredProgress {
-    return {
-      spy,
-      planEvents: new PlanEvents({
-        read: () => spy.read(),
-        sleep: () => new Promise((resolve) => setTimeout(resolve, sleepMs)),
-      }),
-    }
-  }
-
-  async read(): Promise<{ state: PlanStateValue }> {
-    this.asked += 1
-    if (this.cause !== null) throw this.cause
-    return { state: this.state as PlanStateValue }
   }
 }
 
@@ -333,7 +288,6 @@ class RunningApi {
     return new ApiServer({
       port: 0,
       startPlan: RunningApi.spy,
-      planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
       externalTools: options.externalTools ?? new ExternalToolsSpy(),
@@ -364,25 +318,6 @@ class RunningApi {
 
   static async accepted(port: number): Promise<Response> {
     return RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY)
-  }
-
-  static eventsPath(): string {
-    return `/plan-events/${StartPlanSpy.ISSUE.number}?repo=${encodeURIComponent(RunningApi.REPO)}`
-  }
-
-  static async watching(port: number, headers: Record<string, string> = {}): Promise<Response> {
-    return fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
-      headers: { Origin: `http://127.0.0.1:${port}`, ...headers },
-      signal: AbortSignal.timeout(1000),
-    })
-  }
-
-  static async firstFrame(response: Response): Promise<string> {
-    const reader = response.body!.getReader()
-    const { value } = await reader.read()
-    await reader.cancel()
-
-    return new TextDecoder().decode(value)
   }
 
   static ask(port: number, lines: string): Promise<string> {
@@ -1646,142 +1581,13 @@ describe('ApiServer', () => {
     }
   })
 
-  it('a_verb_the_plan_events_stream_does_not_serve_is_refused_naming_the_one_it_does', async () => {
+  it.each(['plan-events', 'planning-progress', 'implement-progress'])('the retired %s route is absent for reads and writes', async (route) => {
     const port = await RunningApi.listening()
-
-    const response = await fetch(
-      `http://127.0.0.1:${port}/plan-events/7?repo=${encodeURIComponent(RunningApi.REPO)}`,
-      { method: 'POST' },
-    )
-
-    expect(response.status).toBe(405)
-    expect(response.headers.get('Allow')).toBe('GET')
-    expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
-  })
-
-  it('a_plan_events_request_for_an_issue_nobody_started_is_a_400_instead_of_an_open_stream', async () => {
-    const { planEvents } = ProgressSpy.events(PlanState.READY)
-    const port = await RunningApi.listening({ planEvents })
-
-    const response = await fetch(`http://127.0.0.1:${port}/plan-events/404?repo=${encodeURIComponent(RunningApi.REPO)}`)
-
-    expect(response.status).toBe(400)
-    expect(await response.text()).toBe(`{"code":"not-watched","detail":"${EventsRefusal.NOT_WATCHED}"}`)
-  })
-
-  it('an_issue_that_is_not_a_number_is_refused_by_its_own_code_and_not_mistaken_for_a_lookup_of_nan', async () => {
-    const { spy, planEvents } = ProgressSpy.events(PlanState.READY)
-    const port = await RunningApi.listening({ planEvents })
-
-    const response = await fetch(`http://127.0.0.1:${port}/plan-events/abc`)
-
-    expect(response.status).toBe(400)
-    expect(await response.text()).toBe('{"code":"malformed-watched-issue","detail":"the issue to watch is a number such as 42"}')
-    expect(spy.asked).toBe(0)
-  })
-
-  it('a_plan_that_started_is_remembered_so_the_page_can_watch_it_by_the_issue_it_opened', async () => {
-    const { planEvents } = ProgressSpy.events(PlanState.READY, { sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const opened = await RunningApi.watching(port)
-
-    expect(opened.status).toBe(200)
-    expect(await RunningApi.firstFrame(opened)).toBe(PlanEvents.frameFor(PlanState.READY))
-    expect(opened.headers.get('access-control-allow-origin')).toBe(null)
-  })
-
-  it('a_watch_survives_ready_so_the_page_can_come_back_while_the_plan_is_reworked', async () => {
-    const { planEvents } = ProgressSpy.events(PlanState.READY, { sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const opened = await RunningApi.watching(port)
-    await RunningApi.firstFrame(opened)
-    const again = await RunningApi.watching(port)
-
-    expect(again.status).toBe(200)
-    expect(await RunningApi.firstFrame(again)).toBe(PlanEvents.frameFor(PlanState.READY))
-  })
-
-  it('a_subscription_after_a_progress_that_could_not_be_read_still_finds_its_watch_because_a_transient_failure_does_not_forget_the_session', async () => {
-    const { planEvents } = ProgressSpy.unable({ sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const first = await RunningApi.watching(port)
-    await RunningApi.firstFrame(first)
-    const again = await RunningApi.watching(port)
-
-    expect(again.status).toBe(200)
-  })
-
-  it('a_page_that_hangs_up_while_the_plan_is_still_being_written_keeps_its_watch_so_it_can_come_back', async () => {
-    const { planEvents } = ProgressSpy.events(PlanState.WRITING, { sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const controller = new AbortController()
-    const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
-      signal: controller.signal,
-    })
-    await opened.body!.getReader().read()
-    controller.abort()
-    await new Promise((resolve) => setTimeout(resolve, 30))
-
-    const again = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
-      signal: AbortSignal.timeout(50),
-    }).catch((cause) => cause)
-
-    expect(again.status ?? 200).toBe(200)
-  })
-
-  it('the_events_route_turns_away_a_foreign_page_exactly_like_the_one_that_starts_a_plan', async () => {
-    const { spy, planEvents } = ProgressSpy.events(PlanState.READY)
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const response = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
-      headers: { Origin: 'https://evil.example' },
-    })
-
-    expect(response.status).toBe(403)
-    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
-    expect(spy.asked).toBe(0)
-  })
-
-  it('a_progress_nobody_could_read_reaches_the_page_as_an_error_frame_and_the_page_is_the_one_that_disconnects', async () => {
-    const { spy, planEvents } = ProgressSpy.unable({ sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const response = await RunningApi.watching(port)
-    const frame = await RunningApi.firstFrame(response)
-
-    expect(response.status).toBe(200)
-    expect(frame).toBe(`event: error\ndata: {"code":"plan-progress-not-read","detail":"${ProgressSpy.UNREADABLE}"}\n\n`)
-    expect(spy.asked).toBeGreaterThanOrEqual(1)
-  })
-
-  it('closing_the_connection_from_the_client_stops_the_progress_port_from_being_asked_again', async () => {
-    const { spy, planEvents } = ProgressSpy.events(PlanState.WRITING, { sleepMs: 5 })
-    const port = await RunningApi.listening({ planEvents })
-
-    await RunningApi.accepted(port)
-    const controller = new AbortController()
-    const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
-      signal: controller.signal,
-    })
-    await opened.body!.getReader().read()
-    controller.abort()
-
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    const askedRightAfterAbort = spy.asked
-    await new Promise((resolve) => setTimeout(resolve, 30))
-
-    expect(askedRightAfterAbort).toBeGreaterThan(0)
-    expect(spy.asked).toBe(askedRightAfterAbort)
+    for (const method of ['GET', 'POST']) {
+      const response = await fetch(`http://127.0.0.1:${port}/${route}/7?repo=${encodeURIComponent(RunningApi.REPO)}`, { method })
+      expect(response.status).toBe(404)
+      expect(await response.json()).toEqual({ code: 'not-found', detail: 'not found' })
+    }
   })
 
   it('a_started_plan_leaves_no_watch_over_its_issue', async () => {
@@ -1848,9 +1654,10 @@ describe('ApiServer', () => {
     expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
   })
 
-  it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {
-    const recovery = { recover: vi.fn().mockReturnValueOnce('records could not be listed').mockReturnValueOnce(null) }
-    const port = await RunningApi.listening({ recovery })
+  it('active_plans_retries_inconclusive_inspection_without_running_recovery', async () => {
+    const inspection = { inspect: vi.fn().mockReturnValueOnce('records could not be listed').mockReturnValueOnce(null) }
+    const recovery = { recover: vi.fn() }
+    const port = await RunningApi.listening({ inspection, recovery })
 
     const unknown = await fetch(`http://127.0.0.1:${port}/active-plans`)
     const recovered = await fetch(`http://127.0.0.1:${port}/active-plans`)
@@ -1862,13 +1669,14 @@ describe('ApiServer', () => {
     })
     expect(recovered.status).toBe(200)
     expect(await recovered.json()).toEqual({ plans: [] })
-    expect(recovery.recover).toHaveBeenCalledTimes(2)
+    expect(inspection.inspect).toHaveBeenCalledTimes(2)
+    expect(recovery.recover).not.toHaveBeenCalled()
   })
 
   it('the_detail_of_an_inconclusive_recovery_carries_what_the_records_answered_and_not_a_fixed_sentence', async () => {
     const answered = 'the state root could not be read'
     const recovery = RecoveryFixture.refusingWith(answered)
-    const port = await RunningApi.listening({ recovery })
+    const port = await RunningApi.listening({ inspection: recovery })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
 

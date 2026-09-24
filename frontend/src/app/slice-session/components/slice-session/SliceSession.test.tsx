@@ -2,8 +2,12 @@ import { render, screen } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { PlanningProgressMother } from '__scenarios__/PlanningProgressMother'
 import { SliceSessionMother } from '__scenarios__/SliceSessionMother'
-import { SliceSession } from './SliceSession'
-import type { SliceRecovery } from './SliceSession'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
+import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { SliceSession as TrackedSliceSession } from './SliceSession'
+import type { SliceRecovery, SliceSessionProps } from './SliceSession'
+
+const SliceSession = (props: Omit<SliceSessionProps, 'agent'>) => <TrackedSliceSession {...props} agent={StartPlanMother.AGENT} />
 
 type Answer = { status: number; body: string }
 
@@ -13,7 +17,12 @@ const SEND_LABEL = 'Enviar'
 const stubFetch = (progress: Answer) => {
   const fetching = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url.startsWith('/implement-progress/')) return new Response(progress.body, { status: progress.status })
+    if (url.startsWith('/work-progress/')) {
+      const active = WorkProgressMother.active('implementing')
+      active.plan.issue.number = Number(url.split('/')[2].split('?')[0])
+      const answer = WorkProgressMother.fromActive(active, progress)
+      return new Response(answer.body, { status: answer.status })
+    }
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -24,7 +33,10 @@ const stubFetch = (progress: Answer) => {
 const stubPlanningFetch = (progress: Answer) => {
   const fetching = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url.startsWith('/planning-progress/')) return new Response(progress.body, { status: progress.status })
+    if (url.startsWith('/work-progress/')) {
+      const answer = WorkProgressMother.planning('writing', progress)
+      return new Response(answer.body, { status: answer.status })
+    }
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -33,7 +45,7 @@ const stubPlanningFetch = (progress: Answer) => {
 }
 
 const renderSession = (issue = SliceSessionMother.ISSUE) => render(
-  <SliceSession issue={issue} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="implementing" />
+  <SliceSession issue={issue} repo={SliceSessionMother.REPO} />
 )
 
 const vetoed = (over: Partial<SliceRecovery> = {}): SliceRecovery => ({
@@ -98,7 +110,7 @@ describe('SliceSession', () => {
 
   it('a slice that is planning shows planning activity instead of implementation progress', async () => {
     stubPlanningFetch(PlanningProgressMother.running())
-    render(<SliceSession issue={SliceSessionMother.ISSUE} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="planning" />)
+    render(<SliceSession issue={SliceSessionMother.ISSUE} repo={SliceSessionMother.REPO} />)
 
     expect(await screen.findByText('El agente está trabajando')).toBeInTheDocument()
     carriesNoField()
@@ -106,11 +118,11 @@ describe('SliceSession', () => {
 
   it('a slice that is planning asks the backend for planning progress and for nothing else', async () => {
     const fetching = stubPlanningFetch(PlanningProgressMother.running())
-    render(<SliceSession issue={SliceSessionMother.ISSUE} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="planning" />)
+    render(<SliceSession issue={SliceSessionMother.ISSUE} repo={SliceSessionMother.REPO} />)
 
     await screen.findByText('El agente está trabajando')
 
-    expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/planning-progress/'))).toBe(true)
+    expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/work-progress/'))).toBe(true)
   })
 
   it('the panel asks the backend for progress and for nothing else', async () => {
@@ -119,7 +131,7 @@ describe('SliceSession', () => {
 
     await screen.findByText('En revisión')
 
-    expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/implement-progress/'))).toBe(true)
+    expect(fetching.mock.calls.every(([input]) => String(input).startsWith('/work-progress/'))).toBe(true)
   })
 
   it('a slice whose recovery can only be inspected offers the retry and no action', async () => {
@@ -129,9 +141,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={{ diagnostic: 'el proceso ya no responde', action: 'inspect', pending: false, failure: null, onAct, onRetry }}
       />
     )
@@ -153,7 +163,7 @@ describe('SliceSession', () => {
       onRetry: vi.fn(),
     }
     render(
-      <SliceSession issue={SliceSessionMother.ISSUE} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="uncertain" recovery={recovery} />
+      <SliceSession issue={SliceSessionMother.ISSUE} repo={SliceSessionMother.REPO} recovery={recovery} />
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
@@ -164,8 +174,8 @@ describe('SliceSession', () => {
     stubFetch(SliceSessionMother.progress())
     render(
       <>
-        <SliceSession issue={7} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="implementing" />
-        <SliceSession issue={8} root={SliceSessionMother.ROOT} repo={SliceSessionMother.REPO} phase="implementing" />
+        <SliceSession issue={7} repo={SliceSessionMother.REPO} />
+        <SliceSession issue={8} repo={SliceSessionMother.REPO} />
       </>
     )
 
@@ -179,9 +189,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={vetoed()}
       />
     )
@@ -196,9 +204,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={vetoed()}
       />
     )
@@ -212,9 +218,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={vetoed({ refusal: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null } })}
       />
     )
@@ -228,9 +232,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={vetoed({
           refusal: {
             state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
@@ -248,9 +250,7 @@ describe('SliceSession', () => {
     render(
       <SliceSession
         issue={SliceSessionMother.ISSUE}
-        root={SliceSessionMother.ROOT}
         repo={SliceSessionMother.REPO}
-        phase="uncertain"
         recovery={vetoed({ refusal: null })}
       />
     )

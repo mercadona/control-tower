@@ -9,7 +9,6 @@ import {
   ActivePlanPhase,
   type ActivePlans,
   type ActivePlanRecovery,
-  type FoundActivePlan,
 } from './active-plans-route.ts'
 import type { CallInvocation, CallDescriptor } from './claude-calls.ts'
 import type { AgentCalls } from '../domain/ports/agent-calls.ts'
@@ -47,6 +46,7 @@ export class RecordedPlanRecovery {
   readonly checkouts: CheckoutRegistry
   readonly activePlans: ActivePlans
   readonly reviews: ReviewWatch
+  readonly maintained: Map<string, RecoveredPlan>
   recovering: Promise<string | null> | null
 
   constructor(ports: {
@@ -63,11 +63,12 @@ export class RecordedPlanRecovery {
     this.checkouts = ports.checkouts
     this.activePlans = ports.activePlans
     this.reviews = ports.reviews
+    this.maintained = new Map()
     this.recovering = null
   }
 
   async recover(): Promise<string | null> {
-    this.recovering = this.recovering ?? this.#recover()
+    this.recovering = this.recovering ?? this.#read((plans) => this.#resume(plans))
     const recovery = this.recovering
     try {
       return await recovery
@@ -76,7 +77,31 @@ export class RecordedPlanRecovery {
     }
   }
 
-  async #recover(): Promise<string | null> {
+  async inspect(): Promise<string | null> {
+    return this.#read((plans) => {
+      const found = new Set(plans.map((plan) => RecordedPlanRecovery.#keyFor(plan.watch)))
+      for (const watch of this.activePlans.watches()) {
+        if (!found.has(RecordedPlanRecovery.#keyFor(watch))) {
+          this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
+        }
+      }
+      for (const plan of plans) {
+        switch (plan.outcome.phase) {
+          case ActivePlanPhase.PLANNING:
+            this.activePlans.rememberPlanning(plan.watch)
+            break
+          case ActivePlanPhase.IMPLEMENTING:
+            this.activePlans.rememberImplementing(plan.watch, RecordedPlanRecovery.ACCEPTS_CHANGE)
+            break
+          case ActivePlanPhase.UNCERTAIN:
+            this.activePlans.rememberUncertain(plan.watch, plan.outcome.diagnostic, plan.outcome.recovery)
+            break
+        }
+      }
+    })
+  }
+
+  async #read(accept: (plans: readonly RecoveredPlan[]) => void): Promise<string | null> {
     const found = await this.records.inFlight()
     if (!found.wereListed) return found.reason
     const watches = found.watches ?? []
@@ -87,15 +112,17 @@ export class RecordedPlanRecovery {
       return cause instanceof Error ? cause.message : String(cause)
     }
 
-    const previous = new Map<string, FoundActivePlan | null>()
-    for (const watch of watches) previous.set(
-      RecordedPlanRecovery.#keyFor(watch),
-      this.activePlans.find({ issue: watch.issue.number, repository: watch.repository }),
-    )
+    accept(watches.map((watch, index) => this.#project(watch, recoveries[index])))
+    return null
+  }
+
+  #resume(plans: readonly RecoveredPlan[]): void {
+    const watches = plans.map((plan) => plan.watch)
     const foundKeys = new Set(watches.map(RecordedPlanRecovery.#keyFor))
-    for (const watch of this.activePlans.watches()) {
+    for (const watch of [...this.activePlans.watches(), ...[...this.maintained.values()].map((plan) => plan.watch)]) {
       if (foundKeys.has(RecordedPlanRecovery.#keyFor(watch))) continue
       this.reviews.stop({ issue: watch.issue.number, repository: watch.repository })
+      this.maintained.delete(RecordedPlanRecovery.#keyFor(watch))
       this.activePlans.forget({ issue: watch.issue.number, repository: watch.repository })
     }
 
@@ -105,10 +132,14 @@ export class RecordedPlanRecovery {
         repository: watch.repository,
         root: new CheckoutRoot(watch.located.root),
       }))
-      const recovered = this.#project(watch, recoveries[index])
-      this.#remember(recovered, previous.get(RecordedPlanRecovery.#keyFor(watch)) ?? null)
+      const recovered = plans[index]
+      const maintained = this.maintained.get(RecordedPlanRecovery.#keyFor(watch))
+      this.#remember(recovered, maintained === undefined ? null : {
+        phase: maintained.outcome.phase,
+        watch: maintained.watch,
+      })
+      this.maintained.set(RecordedPlanRecovery.#keyFor(watch), recovered)
     }
-    return null
   }
 
   #project(watch: PlanWatch, recovery: PlanRecovery): RecoveredPlan {
@@ -138,7 +169,7 @@ export class RecordedPlanRecovery {
     })
   }
 
-  #remember(recovered: RecoveredPlan, previous: FoundActivePlan | null): void {
+  #remember(recovered: RecoveredPlan, previous: { phase: RecoveredPlanOutcome['phase'], watch: PlanWatch } | null): void {
     switch (recovered.outcome.phase) {
       case ActivePlanPhase.PLANNING:
         this.reviews.stop({ issue: recovered.watch.issue.number, repository: recovered.watch.repository })

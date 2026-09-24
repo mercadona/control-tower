@@ -2,7 +2,8 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
-import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
+import type { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -13,7 +14,6 @@ import {
   backendRecovering,
   openHome,
   openRestored,
-  streamFrame,
   typePath,
   typeRepository,
   typeTicket,
@@ -54,33 +54,36 @@ const NO_SPEC_FREEZE = SpecFreezeMother.none().body
 const NO_EPIC_GROOM = EpicGroomMother.none().body
 
 const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
-  vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
+  let plans: ActivePlan[] = []
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
     if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
     if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(NO_COORDINATING_SESSION))
     if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
     if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
-    if (String(input).startsWith('/implement-progress/')) {
-      return Promise.resolve(new Response('{"code":"implementation-progress-not-read","detail":"not started"}', { status: 400 }))
+    if (String(input).startsWith('/work-progress/')) {
+      const url = new URL(String(input), 'http://localhost')
+      const active = plans.find((plan) => plan.plan.issue.number === Number(url.pathname.split('/')[2]) && plan.plan.repo === url.searchParams.get('repo'))
+      if (active === undefined) throw new Error(`no work fixture for ${String(input)}`)
+      return new Response(WorkProgressMother.fromActive(active).body)
     }
-    if (String(input).startsWith('/planning-progress/')) {
-      return Promise.resolve(new Response('{"code":"not-watched","detail":"no plan was started for that issue"}', { status: 400 }))
-    }
-    return init === undefined ? fetching(input) : fetching(input, init)
+    const response = await (init === undefined ? fetching(input) : fetching(input, init))
+    if (input === '/active-plans' && response.ok) plans = (await response.clone().json()).plans
+    return response
   }))
 
   return fetching
 }
 
-const storeWorkflow = (phase: WorkflowSnapshot['phase']) => {
+const storeWorkflow = (phase: WorkflowSnapshot['phase'] | 'ready') => {
   const active = activePlan()
-  WorkflowSnapshotStorage.save({ phase, request: active.request, plan: active.plan })
+  localStorage.setItem(WORKFLOW_SNAPSHOT_KEY, JSON.stringify({ version: 2, workflow: { phase, request: active.request, plan: active.plan } }))
 }
 
 const startPlanning = async () => {
   const opened = openRestored({ phase: 'planning' })
   await screen.findByRole('status')
-  await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+  await screen.findByText('Escribiendo el plan…')
 
   return opened
 }
@@ -111,6 +114,7 @@ describe('Home · restore workflow', () => {
       if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
       if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
       if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
+      if (String(input).startsWith('/work-progress/')) return Promise.resolve(new Response(WorkProgressMother.planning().body))
       throw new Error(`unexpected fetch to ${String(input)}`)
     })
 
@@ -119,7 +123,7 @@ describe('Home · restore workflow', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
     await act(async () => vi.advanceTimersByTimeAsync(2000))
 
-    expect(screen.getByText('Plan arrancado')).toBeInTheDocument()
+    expect(screen.getByLabelText('Implementación', { selector: 'section' })).toBeInTheDocument()
     expect(fetching).toHaveBeenCalledTimes(2)
   })
 
@@ -201,7 +205,8 @@ describe('Home · restore workflow', () => {
       if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
       if (input === '/spec-freeze') return Promise.resolve(new Response(NO_SPEC_FREEZE))
       if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))
-      if (String(input).startsWith('/implement-progress/') || String(input).startsWith('/implement-history/')) {
+      if (String(input).startsWith('/work-progress/')) return Promise.resolve(new Response(WorkProgressMother.planning().body))
+      if (String(input).startsWith('/implement-history/')) {
         return Promise.resolve(new Response('{}', { status: 400 }))
       }
       throw new Error(`unexpected fetch to ${String(input)}`)
@@ -210,14 +215,14 @@ describe('Home · restore workflow', () => {
     openHome()
     await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
     await act(async () => vi.advanceTimersByTimeAsync(0))
-    expect(FakeEventSource.opened).toHaveLength(1)
-    const oldStream = FakeEventSource.last()
+    const oldRead = fetching.mock.calls.find(([input]) => String(input).startsWith('/work-progress/'))
+    expect(oldRead).toBeDefined()
 
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     await act(async () => changes.answerWith(HeadlessPlanMother.implementing()))
     fireEvent.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
 
-    expect(oldStream.closes).toBe(1)
+    expect(oldRead?.[1]?.signal?.aborted).toBe(true)
     expect(localStorage).toHaveLength(0)
     expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
@@ -254,32 +259,28 @@ describe('Home · restore workflow', () => {
 
   it('should restore planning after the page unmounts without starting the plan twice', async () => {
     const { unmount, fetching } = await startPlanning()
-    const oldStream = FakeEventSource.last()
+    const signal = fetching.progressRequests.mock.calls[0][1]?.signal
 
     unmount()
-    expect(oldStream.closes).toBe(1)
-    backendRecovering(activePlansAnswer(activePlan()))
+    expect(signal?.aborted).toBe(true)
+    const restored = backendRecovering(activePlansAnswer(activePlan()))
     openHome()
 
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
-    expect(FakeEventSource.last()).not.toBe(oldStream)
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
+    expect(restored.progressRequests).toHaveBeenCalledTimes(1)
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
   it('restores a ready plan inside implementation and resumes tracking once confirmed', async () => {
-    const { unmount, fetching } = await startPlanning()
-    await streamFrame(PlanEventsMother.ready())
-
-    unmount()
-    backendRecovering(activePlansAnswer(activePlan()))
+    storeWorkflow('ready')
+    const fetching = backendRecovering(activePlansAnswer(activePlan()), () => WorkProgressMother.planning('ready'))
     openHome()
 
     expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
     expect(screen.getByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    expect(fetching.progressRequests).toHaveBeenCalledTimes(1)
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
@@ -347,8 +348,8 @@ describe('Home · restore workflow', () => {
     openHome()
 
     const progress = await screen.findByLabelText('Progreso del plan')
-    expect(within(progress).getByRole('status')).toHaveTextContent('Plan arrancado')
-    expect(progress).toHaveTextContent(StartPlanMother.REPO)
+    expect(within(progress).getByRole('status')).toHaveTextContent('Escribiendo el plan…')
+    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.REPO)
     expect(fetching).toHaveBeenCalledTimes(1)
     expect(fetching).toHaveBeenCalledWith('/active-plans')
   })
@@ -439,10 +440,10 @@ describe('Home · restore workflow', () => {
     expect(FakeEventSource.opened).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(fetching).toHaveBeenCalledTimes(2)
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    await screen.findByText('Escribiendo el plan…')
   })
 
   it('should block implementation when the backend reports a stored plan as uncertain', async () => {
@@ -456,7 +457,7 @@ describe('Home · restore workflow', () => {
     expect(screen.queryByText('El plan está listo. La implementación continuará automáticamente cuando el backend la registre.')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
-    expect(WorkflowSnapshotStorage.load()?.phase).toBe('ready')
+    expect(WorkflowSnapshotStorage.load()?.phase).toBe('planning')
   })
 
   it('should block an uncertain candidate and recover it on retry', async () => {
@@ -472,9 +473,9 @@ describe('Home · restore workflow', () => {
     expect(FakeEventSource.opened).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
 
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(fetching).toHaveBeenCalledTimes(2)
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    expect(FakeEventSource.opened).toHaveLength(0)
   })
 
   it('uncertain recovery invokes the action without starting another plan', async () => {
@@ -501,7 +502,7 @@ describe('Home · restore workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Recuperar trabajo' }))
 
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
     expect(calls).not.toContain('POST /start-plan')
   })
@@ -542,7 +543,7 @@ describe('Home · restore workflow', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('Plan arrancado')).toBeInTheDocument()
+    expect(screen.getByLabelText('Implementación', { selector: 'section' })).toBeInTheDocument()
     expect(calls).toEqual([
       'GET /active-plans',
       'GET /active-plans',
@@ -692,16 +693,12 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    if (phase === 'ready') {
-      expect(await screen.findByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
-    } else {
-      expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
-    }
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Abrir el plan en GitHub' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Descartar estado' })).toBeEnabled()
     expect(fetching).toHaveBeenCalledTimes(1)
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
+    expect(FakeEventSource.opened).toHaveLength(0)
   })
 
   it('should promote a restored planning workflow when the backend is implementing', async () => {
@@ -742,22 +739,22 @@ describe('Home · restore workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.ANOTHER_REPO)
+    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.ANOTHER_REPO)
     expect(fetching).toHaveBeenCalledTimes(2)
   })
 
-  it('should open one GET and one SSE for restored planning under StrictMode', async () => {
+  it('opens one inventory query and one progress query for restored planning under StrictMode', async () => {
     storeWorkflow('planning')
     const fetching = backendRecovering(activePlansAnswer(activePlan()))
 
     openHome()
 
-    await screen.findByText('Plan arrancado')
+    await screen.findByText('Escribiendo el plan…')
     expect(fetching).toHaveBeenCalledTimes(1)
-    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
-    expect(FakeEventSource.last().closes).toBe(0)
+    expect(fetching.progressRequests).toHaveBeenCalledTimes(1)
+    expect(fetching.progressRequests.mock.calls[0][1]?.signal?.aborted).toBe(false)
   })
 
   it('should ignore delayed recovery after the user edits the form', async () => {
