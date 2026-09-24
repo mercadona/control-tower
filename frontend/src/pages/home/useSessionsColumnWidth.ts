@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { RefObject, useCallback, useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'ct.sessions-column-width'
 const MIN_WIDTH = 360
@@ -38,11 +38,12 @@ const clampWidth = (width: number, max: number): number => Math.min(Math.max(wid
 
 const maxFor = (columnsWidth: number): number => Math.max(MIN_WIDTH, columnsWidth - CONTENT_MIN_WIDTH)
 
-const useSessionsColumnWidth = (columns: HTMLElement | null): SessionsColumnWidth => {
+const useSessionsColumnWidth = (columnsRef: RefObject<HTMLElement | null>): SessionsColumnWidth => {
   const [max, setMax] = useState(MIN_WIDTH)
   const [storedValue, setStoredValue] = useState<number | null>(readStoredWidth)
 
   useEffect(() => {
+    const columns = columnsRef.current
     if (columns === null) return
 
     const updateMax = () => setMax(maxFor(columns.getBoundingClientRect().width))
@@ -56,7 +57,7 @@ const useSessionsColumnWidth = (columns: HTMLElement | null): SessionsColumnWidt
       observer.disconnect()
       window.removeEventListener('resize', updateMax)
     }
-  }, [columns])
+  }, [columnsRef])
 
   const setValue = useCallback((width: number | null) => {
     setStoredValue(width)

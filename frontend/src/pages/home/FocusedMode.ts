@@ -44,8 +44,7 @@ const of = ({ read, opened, planHeld, adoptedUnasked, activePlans, epicGroom }: 
   epicGroom: EpicGroomRead
 }): FocusedModeOf => {
   if (read.phase !== 'read' || read.kind !== 'live' || opened === null) return TODAY
-  const heldByThisStory = planHeld &&
-    (adoptedUnasked === null || epicGroom.phase === 'connecting' || claims(epicGroom, adoptedUnasked))
+  const heldByThisStory = planHeld && (adoptedUnasked === null || claims(epicGroom, adoptedUnasked))
   if (heldByThisStory) return TODAY
   if (activePlans.some((plan) => claims(epicGroom, plan))) return TODAY
 

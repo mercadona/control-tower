@@ -69,8 +69,8 @@ const Home = () => {
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
-  const [columns, setColumns] = useState<HTMLDivElement | null>(null)
-  const sessionsColumnWidth = useSessionsColumnWidth(columns)
+  const columnsRef = useRef<HTMLDivElement>(null)
+  const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const coordinatingSession = useCoordinatingSession()
   const specFreezeRead = useSpecFreeze(coordinatingSession.target)
   const sessionMayBeFocused = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live' &&
@@ -622,7 +622,7 @@ const Home = () => {
       >
         <div
           className={`home__columns${sessionsColumnCollapse.collapsed ? ' home__columns--sessions-collapsed' : ''}`}
-          ref={setColumns}
+          ref={columnsRef}
           style={
             sessionsColumnCollapse.collapsed
               ? ({ '--home-sessions-width': `${SESSIONS_DRAWER_COLLAPSED_WIDTH_PX}px` } as CSSProperties)
