@@ -4,7 +4,7 @@ import type { RepositoryPreparation } from '../domain/value-objects/repository-p
 
 type PreparationSession = {
   gateCheckout(): ({ target: string | null, conversation: PreparationTarget }) | null
-  announce(line: string): boolean
+  announce(line: string): Promise<boolean>
 }
 
 export class SessionPreparationReports extends PreparationReports {
@@ -49,7 +49,7 @@ export class SessionPreparationReports extends PreparationReports {
       + 'Do not change the frozen scope or bypass the check. After the fix merges, ask the person to recheck in the page. '
       + 'A proposed correction or an open pull request is not evidence that preparation passed.'
     try {
-      if (sessions.announce(line)) {
+      if (await sessions.announce(line)) {
         this.#announced.set(topic, key)
         return
       }

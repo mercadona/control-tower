@@ -52,10 +52,12 @@ import { RepositoryName } from '../../../src/domain/value-objects/repository-nam
 import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
 import type { RegisteredCheckout } from '../../../src/domain/value-objects/registered-checkout.ts'
 import { CtRunMachine } from '../../../src/infrastructure/ct-run-machine.ts'
+import type { LaunchedProcess, LaunchOptions, ProcessRunner } from '../../../src/infrastructure/process-runner.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import type { RunDispatch } from '../../../src/infrastructure/run-dispatch.ts'
 import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../../src/infrastructure/process-border.ts'
 import { GhPlanPublication } from '../../../src/infrastructure/gh-plan-publication.ts'
 import { PlanContractProgress } from '../../../src/infrastructure/plan-contract-progress.ts'
 import { Gh } from '../../../src/infrastructure/gh.ts'
@@ -126,6 +128,16 @@ class FixtureProcesses {
         this.#register(child, FixtureProcesses.#detached(argumentsList[2]))
         return child
       },
+    })
+  }
+
+  launch(binary: string, argv: readonly string[], options: LaunchOptions): LaunchedProcess {
+    return this.spawn(binary, [...argv], {
+      cwd: options.cwd,
+      env: options.env,
+      timeout: options.timeout,
+      detached: options.detached,
+      stdio: [...options.stdio],
     })
   }
 
@@ -320,6 +332,7 @@ export class RunDriverMother {
   static readonly #PLUGIN = join(RunDriverMother.#ROOT, 'plugin')
   static readonly #CT_STEP = join(RunDriverMother.#PLUGIN, 'scripts', 'ct-step.mjs')
   static readonly #DISPATCH_CHECK = join(RunDriverMother.#PLUGIN, 'scripts', 'dispatch-check.mjs')
+  static readonly #PROCESSES = new SystemProcesses()
   static readonly #PLAN_TEXT = [
     '# #7 - Finite run driver rehearsal', '',
     '> **Task-scoped subagents execute this plan. They arrive with no context.**', '',
@@ -389,8 +402,8 @@ export class RunDriverMother {
       repository: new RepositoryName(RunDriverMother.REPOSITORY),
       agent: RunDriverMother.CONVERSATION,
     })
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
     this.machine = new CtRunMachine({
       journal: this.journal,
       node: oracle.runWholeOutput.bind(oracle),
@@ -690,8 +703,8 @@ export class RunDriverMother {
   }
 
   #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment() })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
     return new CtRunMachine({
       journal,
       node: oracle.runWholeOutput.bind(oracle), git: git.runWholeOutput.bind(git),
@@ -717,7 +730,7 @@ export class RunDriverMother {
     const transport = RunDriverMother.measured(new ClaudeCalls({
       files: asked.files, binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
-      spawn: this.#processes.spawn, env: {
+      spawn: this.#processes.launch.bind(this.#processes), env: {
         CT_FIXTURE_CAPTURES: this.captures, CT_FIXTURE_SCENARIO: asked.scenario,
         PATH: `${this.bin}:${process.env.PATH ?? '/usr/bin:/bin'}`,
       }, newId: () => this.#identity(), now: () => new Date().toISOString(),
@@ -747,9 +760,15 @@ export class RunDriverMother {
       CT_FIXTURE_CAPTURES: this.captures,
       CT_FIXTURE_PUBLICATION: this.publication,
     }
-    const node = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: environment })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: environment })
-    const ghRunner = new ToolRunner({ bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment })
+    const node = new ToolRunner({
+      bin: process.execPath, budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
+    })
+    const git = new ToolRunner({
+      bin: 'git', budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
+    })
+    const ghRunner = new ToolRunner({
+      bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
+    })
     const gh = new Gh({
       launch: (argv) => ghRunner.run(argv),
       policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
@@ -784,7 +803,7 @@ export class RunDriverMother {
       files: this.files,
       binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
-      spawn: this.#processes.spawn,
+      spawn: this.#processes.launch.bind(this.#processes),
       env: {
         CT_FIXTURE_CAPTURES: this.captures,
         CT_FIXTURE_SCENARIO: scenario,

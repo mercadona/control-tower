@@ -48,6 +48,7 @@ import {
   CoordinatingSessions, CoordinatingSessionState, HeldCoordinatingSession,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { DispatchCheckClaims } from '../../src/infrastructure/dispatch-check-claims.ts'
 import { GhDispatchCandidates } from '../../src/infrastructure/gh-dispatch-candidates.ts'
 import { GhPlanPublication } from '../../src/infrastructure/gh-plan-publication.ts'
@@ -519,7 +520,7 @@ describe('headless dispatch dry run', () => {
         const worker = new AcceptedWorker()
         queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
         return worker
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       env: { PATH: '/usr/bin', CT_PHASE_PROMPT: '/coordinator.md', CT_SESSION_HOOKS_URL: 'http://hooks' },
       newId: () => {
         const next = callIds.shift()
@@ -718,7 +719,7 @@ describe('headless dispatch dry run', () => {
         files: restartedFiles,
         binary: '/usr/local/bin/claude',
         worker: '/backend/headless-call-worker.ts',
-        spawn: (() => { restartSpawns += 1; throw new Error('read-only restart must not spawn') }) as typeof import('node:child_process').spawn,
+        spawn: (() => { restartSpawns += 1; throw new Error('read-only restart must not spawn') }) as ProcessRunner['launch'],
         env: {},
         newId: () => { restartIdentities += 1; throw new Error('read-only restart must not allocate identity') },
         now: () => { throw new Error('read-only restart must preserve recorded time') },
@@ -853,7 +854,7 @@ describe('headless dispatch dry run', () => {
         const worker = new AcceptedWorker()
         queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
         return worker
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       env: {},
       newId: () => Rehearsal.IMPLEMENTATION_CALL,
       now: () => '2026-09-16T09:00:02.000Z',

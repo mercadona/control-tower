@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process'
 import { performance } from 'node:perf_hooks'
 import { LiveSessions, LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import { LiveSession } from '../domain/value-objects/live-session.ts'
@@ -13,23 +12,10 @@ import {
 } from '../domain/exceptions.ts'
 import type { LiveSessionStream } from '../domain/ports/live-sessions.ts'
 import type { ConversationId } from '../domain/value-objects/conversation-id.ts'
-
-export type Terminal = {
-  readonly pid: number,
-  onData(listener: (bytes: string) => void): void,
-  onExit(listener: () => void): void,
-  write(text: string): void,
-  resize(cols: number, rows: number): void,
-}
-
-export type TerminalSpawn = (file: string, argv: string[], options: {
-  name: string, cols: number, rows: number, cwd: string, env: Record<string, string>,
-}) => Terminal
+import type { ProcessTable, Terminal, TerminalSpawn } from './process-table.ts'
 
 type Watcher = { onBytes: (bytes: string) => void, onEnded: () => void }
-type SignalProcess = (pid: number, signal: NodeJS.Signals | 0) => void
 type Sleep = (milliseconds: number) => Promise<void>
-type InspectProcessTable = (signal: AbortSignal) => Promise<string>
 type InspectionGroups = ReadonlyMap<number, ReadonlyMap<number, string>>
 
 type OwnershipContext = {
@@ -94,18 +80,22 @@ export class PtyLiveSessions extends LiveSessions {
   static readonly INSPECTION_REQUEST_TIMEOUT_MS = 1_500
   static readonly INSPECTION_MAX_BUFFER_BYTES = 4_194_304
   static readonly INSPECTION_PARSE_BATCH_ROWS = 256
+  static readonly PASTE_START = '\x1b[200~'
+  static readonly PASTE_END = '\x1b[201~'
+  static readonly SUBMIT = '\r'
+  static readonly SUBMIT_DELAY_MS = 10
 
   readonly spawn: TerminalSpawn
   readonly newId: () => string
   readonly stderr: (line: string) => void
-  readonly signal: SignalProcess
+  readonly signal: ProcessTable['signal']
   readonly sleep: Sleep
   readonly now: () => number
   readonly inspectionNow: () => number
   readonly termGraceMs: number
   readonly killGraceMs: number
   readonly pollMs: number
-  readonly inspectProcessTable: InspectProcessTable
+  readonly inspectProcessTable: ProcessTable['readTable']
   readonly #open: Map<string, OpenTerminal>
   readonly #owned: Map<string, OpenTerminal>
   readonly #confirmed: Map<string, SessionClosure>
@@ -123,14 +113,14 @@ export class PtyLiveSessions extends LiveSessions {
     spawn: TerminalSpawn,
     newId: () => string,
     stderr: (line: string) => void,
-    signal: SignalProcess,
+    signal: ProcessTable['signal'],
     sleep: Sleep,
     now: () => number,
     inspectionNow?: () => number,
     termGraceMs: number,
     killGraceMs: number,
     pollMs: number,
-    inspectProcessTable?: InspectProcessTable,
+    inspectProcessTable: ProcessTable['readTable'],
   }) {
     super()
     this.spawn = spawn
@@ -143,7 +133,7 @@ export class PtyLiveSessions extends LiveSessions {
     this.termGraceMs = termGraceMs
     this.killGraceMs = killGraceMs
     this.pollMs = pollMs
-    this.inspectProcessTable = inspectProcessTable ?? PtyLiveSessions.#inspectProcessTable
+    this.inspectProcessTable = inspectProcessTable
     this.#open = new Map()
     this.#owned = new Map()
     this.#confirmed = new Map()
@@ -238,6 +228,13 @@ export class PtyLiveSessions extends LiveSessions {
     } catch {
       throw this.#wentAway(opened)
     }
+  }
+
+  submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
+    this.write({ session, text: `${PtyLiveSessions.PASTE_START}${text}${PtyLiveSessions.PASTE_END}` })
+
+    return this.sleep(PtyLiveSessions.SUBMIT_DELAY_MS)
+      .then(() => this.write({ session, text: PtyLiveSessions.SUBMIT }))
   }
 
   resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
@@ -863,7 +860,11 @@ export class PtyLiveSessions extends LiveSessions {
     const executionTimer = setTimeout(() => controller.abort(), PtyLiveSessions.INSPECTION_TIMEOUT_MS)
     executionTimer.unref?.()
     Promise.resolve()
-      .then(() => this.inspectProcessTable(controller.signal))
+      .then(() => this.inspectProcessTable({
+        abort: controller.signal,
+        timeoutMs: PtyLiveSessions.INSPECTION_TIMEOUT_MS,
+        maxBufferBytes: PtyLiveSessions.INSPECTION_MAX_BUFFER_BYTES,
+      }))
       .then((stdout) => PtyLiveSessions.#parseProcessTable(stdout, controller.signal))
       .then((groups) => this.#inspectionSucceeded(active, groups))
       .catch((cause) => this.#inspectionFailed(active, cause))
@@ -1045,43 +1046,6 @@ export class PtyLiveSessions extends LiveSessions {
     if (!(failure instanceof Error) || !('code' in failure) || typeof failure.code !== 'string') return undefined
 
     return failure.code
-  }
-
-  static #inspectProcessTable(signal: AbortSignal): Promise<string> {
-    return new Promise((resolve, reject) => {
-      let callbackSettled = false
-      let childClosed = false
-      let failure: Error | null = null
-      let stdout = ''
-      const settle = (): void => {
-        if (!callbackSettled || !childClosed) return
-        if (failure !== null) reject(failure)
-        else resolve(stdout)
-      }
-      let child
-      try {
-        child = execFile('/bin/ps', ['-axo', 'pid=,pgid=,lstart='], {
-          encoding: 'utf8',
-          timeout: PtyLiveSessions.INSPECTION_TIMEOUT_MS,
-          killSignal: 'SIGKILL',
-          maxBuffer: PtyLiveSessions.INSPECTION_MAX_BUFFER_BYTES,
-          env: { ...process.env, LC_ALL: 'C' },
-          signal,
-        }, (error, output) => {
-          failure = error
-          stdout = output
-          callbackSettled = true
-          settle()
-        })
-      } catch (cause) {
-        reject(cause)
-        return
-      }
-      child.once('close', () => {
-        childClosed = true
-        settle()
-      })
-    })
   }
 
   static async #parseProcessTable(stdout: string, signal: AbortSignal): Promise<InspectionGroups> {

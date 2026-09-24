@@ -136,7 +136,6 @@ describe('EpicGroomPanel', () => {
     expect(screen.getByText(
       'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.',
     )).toBeInTheDocument()
-    expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
   })
 
   it('offers no ask while nothing is known about the terminal of the live conversation', async () => {
@@ -302,6 +301,45 @@ describe('EpicGroomPanel', () => {
 
     expect(await screen.findByRole('button', SESSION_BUTTON)).toBeDisabled()
     expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it.each(['working', 'awaiting-permission', 'turn-not-finished'] as const)(
+    'a live session that is %s holds the groom back, because mid-turn it may still be editing the slicing',
+    async (liveAsk) => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+      renderPanel(vi.fn(), { liveAsk })
+
+      expect(await screen.findByRole('button', GROOM_BUTTON)).toBeDisabled()
+    },
+  )
+
+  it('a live session waiting for the person leaves the groom pressable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomable().body)))
+
+    renderPanel(vi.fn(), { liveAsk: 'ready' })
+
+    expect(await screen.findByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it('a session mid-turn holds the automatic groom after merged reslicing until its turn ends', async () => {
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomableAfterReslicing().body))
+      .mockResolvedValue(new Response(EpicGroomMother.groomedByThePress().body))
+    vi.stubGlobal('fetch', fetching)
+    const shown = renderPanel(vi.fn(), { liveAsk: 'working' })
+    await screen.findByText('El nuevo slicing se aprobó al mergear su pull request: las issues se crean sin pulsar nada.')
+    expect(fetching).toHaveBeenCalledTimes(1)
+
+    shown.rerender(<EpicGroomPanel
+      target={EpicGroomMother.TARGET}
+      liveAsk="ready"
+      openingBlocked={false}
+      operationBusy={false}
+      openSession={async (key, target) => EpicGroomClient.openSession(key, target)}
+    />)
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledWith('/epic-groom', expect.objectContaining({ method: 'POST' })))
   })
 
   it('operation busy disables every gate action', async () => {

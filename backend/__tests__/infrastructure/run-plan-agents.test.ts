@@ -40,6 +40,7 @@ import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastru
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { ChangeAnnouncements } from '../../src/domain/ports/change-announcements.ts'
@@ -674,7 +675,7 @@ describe('RunPlanAgents', () => {
       files,
       binary: '/usr/local/bin/claude',
       worker: '/backend/headless-call-worker.ts',
-      spawn: (() => { spawns += 1; throw new Error('provenance must not spawn') }) as typeof import('node:child_process').spawn,
+      spawn: (() => { spawns += 1; throw new Error('provenance must not spawn') }) as ProcessRunner['launch'],
       env: {},
       newId: () => { throw new Error('provenance must not allocate call identity') },
       now: () => AgentMother.STARTED,

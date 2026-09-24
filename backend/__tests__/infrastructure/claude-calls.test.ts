@@ -10,6 +10,7 @@ import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { HeadlessCallWorker } from '../../src/infrastructure/headless-call-worker.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
 class FakeChild extends ChildProcess {
   constructor(pid: number) {
@@ -94,7 +95,7 @@ class CallMother {
     return Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), over)
   }
 
-  static calls(root: string, spawn: typeof import('node:child_process').spawn, over: {
+  static calls(root: string, spawn: ProcessRunner['launch'], over: {
     files?: HeadlessFiles,
     now?: () => string,
     sleep?: (ms: number) => Promise<void>,
@@ -220,7 +221,7 @@ class CallMother {
   }): HeadlessCallWorker {
     return new HeadlessCallWorker({
       files: CallMother.files(root),
-      spawn: (() => child) as typeof import('node:child_process').spawn,
+      spawn: (() => child) as ProcessRunner['launch'],
       kill: (_pid, signal) => {
         if (signal === 0) {
           if (!asked.present()) throw Object.assign(new Error('missing'), { code: 'ESRCH' })
@@ -281,7 +282,7 @@ describe('ClaudeCalls', () => {
     const calls = CallMother.calls(root, (() => {
       spawns += 1
       throw new Error('descriptor reads must not spawn')
-    }) as typeof import('node:child_process').spawn, { files })
+    }) as ProcessRunner['launch'], { files })
 
     const legacy = await calls.descriptorOf(CallMother.call())
     expect(legacy.requestId).toBe(`implementation:${CallMother.CALL}`)
@@ -332,7 +333,7 @@ describe('ClaudeCalls', () => {
     roots.push(missingRoot)
     await expect(CallMother.calls(
       missingRoot,
-      (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+      (() => { throw new Error('must not spawn') }) as ProcessRunner['launch'],
     ).descriptorOf(CallMother.call())).rejects.toBeInstanceOf(PlanAgentNotLaunched)
 
     const ioRoot = await mkdtemp(join(tmpdir(), 'ct-claude-descriptor-io-'))
@@ -341,7 +342,7 @@ describe('ClaudeCalls', () => {
     const ioFiles = CallMother.files(ioRoot, { read: async () => { throw ioFailure } })
     await expect(CallMother.calls(
       ioRoot,
-      (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+      (() => { throw new Error('must not spawn') }) as ProcessRunner['launch'],
       { files: ioFiles },
     ).descriptorOf(CallMother.call())).rejects.toMatchObject({
       constructor: PlanAgentNotLaunched,
@@ -363,7 +364,7 @@ describe('ClaudeCalls', () => {
       await writeFile(path, descriptor.replaceAll(ioRoot, root), 'utf8')
       await expect(CallMother.calls(
         root,
-        (() => { throw new Error('must not spawn') }) as typeof import('node:child_process').spawn,
+        (() => { throw new Error('must not spawn') }) as ProcessRunner['launch'],
       ).descriptorOf(CallMother.call())).rejects.toBeInstanceOf(PlanAgentNotNamed)
     }
   })
@@ -381,7 +382,7 @@ describe('ClaudeCalls', () => {
       expect(binary).toBe(process.execPath)
       queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
       return worker
-    }) as unknown as typeof import('node:child_process').spawn
+    }) as unknown as ProcessRunner['launch']
     const calls = CallMother.calls(root, spawn)
 
     const started = await calls.start(CallMother.invocation())
@@ -430,7 +431,7 @@ describe('ClaudeCalls', () => {
     const calls = CallMother.calls(root, (() => {
       launches += 1
       return new FakeChild(902)
-    }) as typeof import('node:child_process').spawn, { files })
+    }) as ProcessRunner['launch'], { files })
 
     const failed = calls.start(CallMother.invocation())
     await expect(failed).rejects.toBeInstanceOf(PlanAgentNotLaunched)
@@ -442,7 +443,7 @@ describe('ClaudeCalls', () => {
   it('spawn and acceptance failures preserve records', async () => {
     const spawnRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(spawnRoot)
-    const spawnFailure = CallMother.calls(spawnRoot, (() => { throw new Error('worker refused') }) as typeof import('node:child_process').spawn)
+    const spawnFailure = CallMother.calls(spawnRoot, (() => { throw new Error('worker refused') }) as ProcessRunner['launch'])
     const refused = spawnFailure.start(CallMother.invocation())
     await expect(refused).rejects.toBeInstanceOf(PlanAgentNotLaunched)
     await expect(refused).rejects.toBeInstanceOf(PlanAgentNeverLaunched)
@@ -461,7 +462,7 @@ describe('ClaudeCalls', () => {
     const retry = CallMother.calls(spawnRoot, (() => {
       retryLaunches += 1
       return new FakeChild(908)
-    }) as typeof import('node:child_process').spawn).start(CallMother.invocation())
+    }) as ProcessRunner['launch']).start(CallMother.invocation())
     await expect(retry).rejects.toBeInstanceOf(PlanAgentNotLaunched)
     await expect(retry).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
     await expect(retry).rejects.toThrow('unfinished call')
@@ -470,7 +471,7 @@ describe('ClaudeCalls', () => {
     const timeoutRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(timeoutRoot)
     const timeoutDirectory = join(timeoutRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
-    const waiting = CallMother.calls(timeoutRoot, (() => new FakeChild(909)) as typeof import('node:child_process').spawn)
+    const waiting = CallMother.calls(timeoutRoot, (() => new FakeChild(909)) as ProcessRunner['launch'])
     const unacknowledged = waiting.start(CallMother.invocation())
     await expect(unacknowledged).rejects.toBeInstanceOf(PlanAgentNotLaunched)
     await expect(unacknowledged).rejects.not.toBeInstanceOf(PlanAgentNotNamed)
@@ -488,7 +489,7 @@ describe('ClaudeCalls', () => {
   it('acceptance loss never authorizes cleanup', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(918)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(918)) as ProcessRunner['launch'])
 
     await expect(calls.start(CallMother.invocation())).rejects.toThrow('did not accept call')
 
@@ -503,7 +504,7 @@ describe('ClaudeCalls', () => {
     const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
     const worker = new HeadlessCallWorker({
       files: CallMother.files(root),
-      spawn: (() => { throw Object.assign(new Error('child refused'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
+      spawn: (() => { throw Object.assign(new Error('child refused'), { code: 'ENOENT' }) }) as ProcessRunner['launch'],
       kill: () => {},
       now: clock.now,
       schedule: clock.schedule,
@@ -552,7 +553,7 @@ describe('ClaudeCalls', () => {
     let spawns = 0
     const worker = new HeadlessCallWorker({
       files: CallMother.files(root),
-      spawn: (() => { spawns += 1; return new FakeChild(921) }) as typeof import('node:child_process').spawn,
+      spawn: (() => { spawns += 1; return new FakeChild(921) }) as ProcessRunner['launch'],
       kill: () => {},
       now: () => CallMother.STARTED_AT,
       schedule: () => ({ cancel: () => {} }),
@@ -580,7 +581,7 @@ describe('ClaudeCalls', () => {
           child.closed(-2, null)
         })
         return child
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       kill: () => {},
       now: clock.now,
       schedule: clock.schedule,
@@ -619,7 +620,7 @@ describe('ClaudeCalls', () => {
     }
     const worker = new HeadlessCallWorker({
       files,
-      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
+      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as ProcessRunner['launch'],
       kill: () => {},
       now: () => CallMother.STARTED_AT,
       schedule: () => ({ cancel: () => {} }),
@@ -649,7 +650,7 @@ describe('ClaudeCalls', () => {
     }
     const worker = new HeadlessCallWorker({
       files,
-      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as typeof import('node:child_process').spawn,
+      spawn: (() => { throw Object.assign(new Error('binary absent'), { code: 'ENOENT' }) }) as ProcessRunner['launch'],
       kill: () => {},
       now: () => CallMother.STARTED_AT,
       schedule: () => ({ cancel: () => {} }),
@@ -679,7 +680,7 @@ describe('ClaudeCalls', () => {
           child.failed(Object.assign(new Error('post-spawn failure'), { code: 'EIO' }))
         })
         return child
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       kill: () => {},
       now: () => CallMother.STARTED_AT,
       schedule: () => ({ cancel: () => {} }),
@@ -703,7 +704,7 @@ describe('ClaudeCalls', () => {
     roots.push(root)
     const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(903)) as typeof import('node:child_process').spawn, {
+    const calls = CallMother.calls(root, (() => new FakeChild(903)) as ProcessRunner['launch'], {
       now: clock.now,
       sleep: async (ms) => { clock.nowMs += ms },
     })
@@ -731,7 +732,7 @@ describe('ClaudeCalls', () => {
     child.closed(0, null)
     await CallMother.completion(join(descriptor, '..', 'completion.json'))
 
-    const completed = await CallMother.calls(root, (() => child) as typeof import('node:child_process').spawn)
+    const completed = await CallMother.calls(root, (() => child) as ProcessRunner['launch'])
       .completed(new StartedPlanCall({ conversation: CallMother.CONVERSATION, id: CallMother.CALL }))
 
     expect(completed?.measurement.cost).toEqual({
@@ -759,7 +760,7 @@ describe('ClaudeCalls', () => {
         unavailable: [],
       },
     })}\n`, 'utf8')
-    const calls = CallMother.calls(root, (() => new FakeChild(905)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(905)) as ProcessRunner['launch'])
 
     const completion = calls.completed(CallMother.call())
     await expect(completion).rejects.toBeInstanceOf(PlanAgentNotNamed)
@@ -772,7 +773,7 @@ describe('ClaudeCalls', () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(906)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(906)) as ProcessRunner['launch'])
     const call = CallMother.call()
     expect(await calls.completed(call)).toBeNull()
 
@@ -788,7 +789,7 @@ describe('ClaudeCalls', () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(911)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(911)) as ProcessRunner['launch'])
     const path = CallMother.completionPath(root)
     const cases = [
       CallMother.successfulCompletion({ code: 0, signal: 'SIGKILL' }),
@@ -809,7 +810,7 @@ describe('ClaudeCalls', () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(912)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(912)) as ProcessRunner['launch'])
     const path = CallMother.completionPath(root)
     const invalid = [
       CallMother.successfulCompletion({ code: 1 }),
@@ -832,7 +833,7 @@ describe('ClaudeCalls', () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(913)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(913)) as ProcessRunner['launch'])
     const path = CallMother.completionPath(root)
     const cases = [
       { text: CallMother.errorCompletion({ code: 0, signal: null }), execution: { kind: 'error', diagnostic: 'Claude reported error_max_turns' } },
@@ -854,7 +855,7 @@ describe('ClaudeCalls', () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(root)
     await CallMother.prepared(root)
-    const calls = CallMother.calls(root, (() => new FakeChild(914)) as typeof import('node:child_process').spawn)
+    const calls = CallMother.calls(root, (() => new FakeChild(914)) as ProcessRunner['launch'])
     await writeFile(CallMother.completionPath(root), CallMother.successfulCompletion({
       measurement: CallMother.unavailableMeasurement(),
     }), 'utf8')
@@ -870,7 +871,7 @@ describe('ClaudeCalls', () => {
     const spawn = (() => {
       launches += 1
       return new FakeChild(915)
-    }) as typeof import('node:child_process').spawn
+    }) as ProcessRunner['launch']
     const foreign = '33333333-3333-4333-8333-333333333333'
     for (const descriptor of [
       '{bad',
@@ -955,7 +956,7 @@ describe('ClaudeCalls', () => {
     const calls = CallMother.calls(root, (() => {
       launches += 1
       return new FakeChild(916)
-    }) as typeof import('node:child_process').spawn, { files })
+    }) as ProcessRunner['launch'], { files })
     const invalid = [
       ['--session-id', CallMother.CONVERSATION, '--resume', CallMother.CONVERSATION],
       ['-p'],
@@ -978,7 +979,7 @@ describe('ClaudeCalls', () => {
     const spawn = (() => {
       launches += 1
       return new FakeChild(917)
-    }) as typeof import('node:child_process').spawn
+    }) as ProcessRunner['launch']
     const partialRoot = await mkdtemp(join(tmpdir(), 'ct-claude-calls-'))
     roots.push(partialRoot)
     const partialDirectory = join(partialRoot, 'harness', CallMother.CONVERSATION, 'calls', CallMother.CALL)
@@ -1107,7 +1108,7 @@ describe('ClaudeCalls', () => {
     }
     const worker = new HeadlessCallWorker({
       files,
-      spawn: (() => child) as typeof import('node:child_process').spawn,
+      spawn: (() => child) as ProcessRunner['launch'],
       kill: (_pid, signal) => {
         if (signal === 0) return
         signals.push(signal)
@@ -1135,7 +1136,7 @@ describe('ClaudeCalls', () => {
     const clock = new ManualClock(Date.parse(CallMother.STARTED_AT))
     const worker = new HeadlessCallWorker({
       files: CallMother.files(root),
-      spawn: (() => child) as typeof import('node:child_process').spawn,
+      spawn: (() => child) as ProcessRunner['launch'],
       kill: (_pid, signal) => {
         if (signal !== 0) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
       },

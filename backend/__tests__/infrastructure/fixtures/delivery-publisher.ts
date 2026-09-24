@@ -11,6 +11,9 @@ import { Gh } from '../../../src/infrastructure/gh.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import { ProcessOutput, ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../../src/infrastructure/process-border.ts'
+
+const processes = new SystemProcesses()
 
 type HarnessConfig = {
   readonly root: string,
@@ -48,9 +51,9 @@ const machine = new DeliveredMachine({
   dispatchCheck: config.dispatchCheck,
   pluginRoot: '/plugin',
 })
-const gitRunner = new ToolRunner({ bin: 'git', budgetMs: 30_000 })
-const ghRunner = new ToolRunner({ bin: config.fakeGh, budgetMs: 30_000, env: process.env })
-const nodeRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: process.env })
+const gitRunner = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes, signal: processes.signal.bind(processes) })
+const ghRunner = new ToolRunner({ bin: config.fakeGh, budgetMs: 30_000, env: process.env, processes, signal: processes.signal.bind(processes) })
+const nodeRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: process.env, processes, signal: processes.signal.bind(processes) })
 const gh = new Gh({
   launch: (argv) => ghRunner.runWholeOutput(argv),
   policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
@@ -69,6 +72,7 @@ const delivery = new CheckedRunDelivery({
   dispatchCheck: config.dispatchCheck,
   newId: randomUUID,
   now: () => new Date().toISOString(),
+  signal: processes.signal.bind(processes),
 })
 
 try {

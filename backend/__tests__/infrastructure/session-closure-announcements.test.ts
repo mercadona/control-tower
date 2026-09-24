@@ -11,7 +11,7 @@ class SessionsDouble {
     this.heard = heard
   }
 
-  announce(line: string): boolean {
+  async announce(line: string): Promise<boolean> {
     this.announced.push(line)
 
     return this.heard

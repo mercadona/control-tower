@@ -20,6 +20,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
 class Deferred<T> {
   readonly promise: Promise<T>
@@ -451,7 +452,7 @@ describe('HeadlessPlanAgents', () => {
       files: new HeadlessFiles({ root, fs, newId: () => `temporary-${launches}` }),
       binary: 'claude',
       worker: 'worker.ts',
-      spawn: (() => { launches += 1; return new AcceptedChild() }) as typeof import('node:child_process').spawn,
+      spawn: (() => { launches += 1; return new AcceptedChild() }) as ProcessRunner['launch'],
       env: {},
       newId: () => HeadlessMother.CALL.id,
       now: () => '2026-09-16T10:00:00.000Z',
@@ -479,7 +480,7 @@ describe('HeadlessPlanAgents', () => {
       files: new HeadlessFiles({ root, fs, newId: () => `temporary-${id}-${launches}` }),
       binary: 'claude',
       worker: 'worker.ts',
-      spawn: (() => { launches += 1; return new AcceptedChild() }) as typeof import('node:child_process').spawn,
+      spawn: (() => { launches += 1; return new AcceptedChild() }) as ProcessRunner['launch'],
       env: {},
       newId: () => `${id++}1111111-1111-4111-8111-111111111111`,
       now: () => '2026-09-16T10:00:00.000Z',

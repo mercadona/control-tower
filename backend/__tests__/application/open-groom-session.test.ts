@@ -12,6 +12,7 @@ import type { CoordinatingConversation } from '../../src/domain/value-objects/co
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
+import { SlicingReviewContract } from '../slicing-review-contract.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
@@ -131,18 +132,17 @@ class Flow {
 }
 
 describe('OpenGroomSession', () => {
-  it('the groom conversation is told to invoke the groom skill, that the issues are not its to create and that a re-slicing is published for it', async () => {
+  it('the groom conversation is told to review the slicing of the frozen spec, that the issues are not its to create and that a re-slicing is published for it', async () => {
     const flow = Flow.reading(Flow.frozenSpec())
 
     await flow.run()
 
     const [recorded] = flow.records.prepared
     expect(recorded.prompt.text).toBe([
-      'Invoke the skill control-tower-loop:ct-groom.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.ROOT.text}: you cut no worktree and you switch no branch.`,
-      PhasePrompt.ISSUES_ARE_NOT_YOURS,
-      PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
-      `The milestone is "${Flow.MILESTONE}" and its frozen execution spec is ${Flow.SPEC_PATH}.`,
+      SlicingReviewContract.review({ milestone: Flow.MILESTONE, spec: Flow.SPEC_PATH }),
+      SlicingReviewContract.ISSUES_ARE_NOT_YOURS,
+      SlicingReviewContract.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,

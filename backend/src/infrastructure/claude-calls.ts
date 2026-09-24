@@ -13,6 +13,7 @@ import { PlanNonLaunch, type PlanNonLaunchSource } from '../domain/value-objects
 import { ClaudeConversations } from './claude-conversations.ts'
 import type { HeadlessFiles } from './headless-files.ts'
 import { RecordedCall } from '../domain/value-objects/recorded-call.ts'
+import type { LaunchedProcess, ProcessRunner } from './process-runner.ts'
 
 type JsonRecord = Record<string, unknown>
 type CallMode = 'initial' | 'resume'
@@ -396,7 +397,7 @@ export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
   readonly files: HeadlessFiles
   readonly binary: string
   readonly worker: string
-  readonly spawn: typeof import('node:child_process').spawn
+  readonly spawn: ProcessRunner['launch']
   readonly env: NodeJS.ProcessEnv
   readonly newId: () => string
   readonly now: () => string
@@ -412,7 +413,7 @@ export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
     files: HeadlessFiles,
     binary: string,
     worker: string,
-    spawn: typeof import('node:child_process').spawn,
+    spawn: ProcessRunner['launch'],
     env: NodeJS.ProcessEnv,
     newId: () => string,
     now: () => string,
@@ -694,7 +695,7 @@ export class ClaudeCalls extends AgentCalls<CallInvocation, CallDescriptor> {
   }
 
   #launch(descriptorPath: string, call: StartedPlanCall): Promise<void> {
-    let worker: import('node:child_process').ChildProcess
+    let worker: LaunchedProcess
     try {
       worker = this.spawn(process.execPath, [this.worker, descriptorPath], {
         detached: true,

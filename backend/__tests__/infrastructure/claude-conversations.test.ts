@@ -4,7 +4,7 @@ import { ClaudeConversations } from '../../src/infrastructure/claude-conversatio
 import { Invocation } from '../../src/infrastructure/invocation.ts'
 import { ConversationNotStarted } from '../../src/domain/exceptions.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import type { Terminal, TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'

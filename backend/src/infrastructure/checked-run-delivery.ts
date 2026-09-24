@@ -9,6 +9,7 @@ import {
   RunDeliveryFailure, RunDeliveryUncertain, type DeliveredPullRequest, type RunDeliveryInspection,
 } from '../domain/value-objects/run-delivery.ts'
 import type { ProcessOutput, RunOptions } from './tool-runner.ts'
+import type { ProcessTable } from './process-table.ts'
 import type { Gh } from './gh.ts'
 import type { CtRunMachine } from './ct-run-machine.ts'
 import type { RunJournal } from './run-journal.ts'
@@ -90,7 +91,7 @@ export class CheckedRunDelivery extends RunDelivery {
   readonly dispatchCheck: string
   readonly newId: () => string
   readonly now: () => string
-  readonly alive: (pid: number) => boolean
+  readonly signal: ProcessTable['signal']
   readonly delivering = new Map<string, Promise<void>>()
   readonly proven = new Map<string, { readonly receipt: string, readonly pullRequest: DeliveredPullRequest }>()
 
@@ -104,7 +105,7 @@ export class CheckedRunDelivery extends RunDelivery {
     dispatchCheck: string,
     newId: () => string,
     now: () => string,
-    alive?: (pid: number) => boolean,
+    signal: ProcessTable['signal'],
   }) {
     super()
     this.journal = ports.journal
@@ -116,7 +117,7 @@ export class CheckedRunDelivery extends RunDelivery {
     this.dispatchCheck = ports.dispatchCheck
     this.newId = ports.newId
     this.now = ports.now
-    this.alive = ports.alive ?? CheckedRunDelivery.#alive
+    this.signal = ports.signal
   }
 
   override async deliver(watch: PlanWatch): Promise<void> {
@@ -665,7 +666,7 @@ export class CheckedRunDelivery extends RunDelivery {
     const ownerText = await this.journal.publicationRead(watch, [operation, name, 'owner.json'])
     if (ownerText === null) throw new RunDeliveryUncertain(`${operation} child ownership is unknown`)
     const owner = this.#owner(ownerText, operation, request)
-    return { ownerText, owner, running: this.alive(-owner.processGroup) }
+    return { ownerText, owner, running: this.#alive(-owner.processGroup) }
   }
 
   async #recordOwner(
@@ -945,9 +946,9 @@ export class CheckedRunDelivery extends RunDelivery {
       && typeof value.nameWithOwner === 'string'
   }
 
-  static #alive(pid: number): boolean {
+  #alive(pid: number): boolean {
     try {
-      process.kill(pid, 0)
+      this.signal(pid, 0)
       return true
     } catch (failure) {
       return failure !== null && typeof failure === 'object' && 'code' in failure && failure.code === 'EPERM'

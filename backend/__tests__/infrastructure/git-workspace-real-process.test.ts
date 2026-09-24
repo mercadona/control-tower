@@ -22,6 +22,9 @@ import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { ProcessOutput, ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+
+const processes = new SystemProcesses()
 
 describe('GitWorkspace real cleanup', () => {
   const roots: string[] = []
@@ -126,7 +129,7 @@ describe('GitWorkspace real cleanup', () => {
         now: () => startedAt,
         exists: async (path) => fs.stat(path).then(() => true, () => false),
       })
-      const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000 })
+      const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes, signal: processes.signal.bind(processes) })
       const action = (): CleanupPlan => {
         const workspace = new GitWorkspace({
           preparation: PreparationMother.check(),
@@ -337,7 +340,7 @@ describe('GitWorkspace real cleanup', () => {
       }),
       stderr: () => {},
     })
-    const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000 })
+    const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes, signal: processes.signal.bind(processes) })
     const workspace = new GitWorkspace({
       preparation: PreparationMother.check(),
       run: runner.run.bind(runner),

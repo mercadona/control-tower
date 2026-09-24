@@ -122,18 +122,18 @@ describe('Home and gate 2', () => {
     implementing.unmount()
   })
 
-  it('a mounted live coordinator blocks the groom session entrance without blocking current-work groom', async () => {
+  it('a mounted live coordinator mid-turn blocks both the groom session entrance and the groom', async () => {
     const fetching = stubBackend(NO_ACTIVE_PLANS)
     openHome()
     const session = await screen.findByRole('button', { name: REVIEW_THE_SLICING }, A_LOADED_SUITE)
 
     expect(session).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(0)
   })
 
   it.each([
-    ['live groom', CoordinatingSessionMother.liveCloseFailed, EpicGroomMother.groomable, 'Ejecutar el groom'],
+    ['live groom', CoordinatingSessionMother.completedCloseFailed, EpicGroomMother.groomable, 'Ejecutar el groom'],
     ['recovered-ended groom', CoordinatingSessionMother.endedCloseFailed, EpicGroomMother.groomable, 'Ejecutar el groom'],
     ['live promotion', CoordinatingSessionMother.liveCloseFailed, EpicGroomMother.groomed, 'Autorizar el trabajo'],
     ['recovered-ended promotion', CoordinatingSessionMother.endedCloseFailed, EpicGroomMother.groomed, 'Autorizar el trabajo'],
@@ -149,7 +149,7 @@ describe('Home and gate 2', () => {
     openHome()
 
     expect(await screen.findByRole('button', { name: action }, A_LOADED_SUITE)).toBeEnabled()
-    if (action === 'Ejecutar el groom') {
+    if (failed === CoordinatingSessionMother.endedCloseFailed && action === 'Ejecutar el groom') {
       expect(screen.getByRole('button', { name: REVIEW_THE_SLICING })).toBeDisabled()
     }
     expect(screen.getByLabelText('Ticket')).toBeDisabled()

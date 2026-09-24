@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -33,7 +32,7 @@ class CallsDouble extends ClaudeCalls {
       files: new HeadlessFiles({ root: '/state', fs, newId: () => 'temporary-record' }),
       binary: 'claude',
       worker: 'worker.ts',
-      spawn,
+      spawn: () => { throw new Error('a plan calls double never spawns') },
       env: {},
       newId: () => PlanCallMother.CALL.id,
       now: () => '2026-09-16T10:00:00.000Z',
@@ -308,7 +307,7 @@ describe('ClaudePlanCalls', () => {
           files,
           binary: 'claude',
           worker: 'worker.ts',
-          spawn: (() => { throw new Error('partial recovery must not spawn') }) as typeof spawn,
+          spawn: () => { throw new Error('partial recovery must not spawn') },
           env: {},
           newId: () => { throw new Error('partial recovery must not allocate identity') },
           now: () => { throw new Error('partial recovery must not ask current time') },
@@ -378,7 +377,7 @@ describe('ClaudePlanCalls', () => {
           files,
           binary: 'claude',
           worker: 'worker.ts',
-          spawn: (() => { throw new Error('deadline recovery must not spawn') }) as typeof spawn,
+          spawn: () => { throw new Error('deadline recovery must not spawn') },
           env: {},
           newId: () => { throw new Error('deadline recovery must not allocate identity') },
           now: () => { throw new Error('deadline recovery must retain recorded time') },
