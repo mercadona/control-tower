@@ -4,7 +4,6 @@ import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { spawn as spawnChild } from 'node:child_process'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -462,7 +461,7 @@ class CtApi {
       files,
       binary: ClaudeConversations.BIN,
       worker: fileURLToPath(new URL('./headless-call-worker.ts', import.meta.url)),
-      spawn: spawnChild,
+      spawn: CtApi.#PROCESSES.launch,
       env: CtApi.#headlessEnvironment(environment),
       newId: randomUUID,
       now: () => new Date().toISOString(),

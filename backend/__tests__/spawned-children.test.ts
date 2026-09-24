@@ -68,6 +68,10 @@ describe('no long-lived child of this backend is born holding a terminal', () =>
       expect(entry.reason.length).toBeGreaterThan(0)
     }
   })
+
+  it('the_border_is_the_only_module_of_src_that_imports_a_spawning_library', () => {
+    expect(Backend.importers()).toEqual([join('infrastructure', 'process-border.ts')])
+  })
 })
 
 describe('the guard really fires, so it cannot pass by finding nothing', () => {

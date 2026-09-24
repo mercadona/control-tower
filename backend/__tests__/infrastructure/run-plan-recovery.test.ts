@@ -43,6 +43,7 @@ import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measu
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
@@ -144,7 +145,7 @@ class RecoveryTransport extends ClaudeCalls {
       files: new HeadlessFiles({ root: '/unused', fs, newId: () => 'unused' }),
       binary: 'unused',
       worker: 'unused',
-      spawn: (() => { this.spawns += 1; throw new Error('recovery must not spawn') }) as typeof import('node:child_process').spawn,
+      spawn: (() => { this.spawns += 1; throw new Error('recovery must not spawn') }) as ProcessRunner['launch'],
       env: {},
       newId: () => 'unused',
       now: () => RecoveryMother.STARTED,
@@ -1722,7 +1723,7 @@ class FiniteBridge {
         const child = new AcceptedWorker()
         queueMicrotask(() => child.emit('message', { kind: 'accepted' }))
         return child
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       env: {},
       newId: () => { throw new Error('recovery must not create a model call') },
       now: () => FiniteBridge.STARTED,

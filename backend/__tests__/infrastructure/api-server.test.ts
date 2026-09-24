@@ -1,6 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { PreparationMother } from '../preparation-mother.ts'
-import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
@@ -192,7 +191,7 @@ class RecoveryCalls extends ClaudeCalls {
       files: new HeadlessFiles({ root: '/state', fs, newId: () => 'unused' }),
       binary: 'claude',
       worker: 'worker',
-      spawn,
+      spawn: () => { throw new Error('a recovery double never spawns') },
       env: {},
       newId: () => { throw new Error('a recovery double never mints a call') },
       now: () => { throw new Error('a recovery double never asks for the current time') },

@@ -58,6 +58,7 @@ import { RepositoryName } from '../../../src/domain/value-objects/repository-nam
 import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
 import type { RegisteredCheckout } from '../../../src/domain/value-objects/registered-checkout.ts'
 import { CtRunMachine } from '../../../src/infrastructure/ct-run-machine.ts'
+import type { LaunchedProcess, LaunchOptions, ProcessRunner } from '../../../src/infrastructure/process-runner.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import type { RunDispatch } from '../../../src/infrastructure/run-dispatch.ts'
@@ -142,6 +143,16 @@ class FixtureProcesses {
         this.#register(child, FixtureProcesses.#detached(argumentsList[2]))
         return child
       },
+    })
+  }
+
+  launch(binary: string, argv: readonly string[], options: LaunchOptions): LaunchedProcess {
+    return this.spawn(binary, [...argv], {
+      cwd: options.cwd,
+      env: options.env,
+      timeout: options.timeout,
+      detached: options.detached,
+      stdio: [...options.stdio],
     })
   }
 
@@ -972,7 +983,7 @@ export class RunDriverMother {
     const transport = RunDriverMother.measured(new ClaudeCalls({
       files: asked.files, binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
-      spawn: this.#processes.spawn, env: {
+      spawn: this.#processes.launch.bind(this.#processes), env: {
         CT_FIXTURE_CAPTURES: this.captures, CT_FIXTURE_SCENARIO: asked.scenario,
         PATH: `${this.bin}:${process.env.PATH ?? '/usr/bin:/bin'}`,
       }, newId: () => this.#identity(), now: () => new Date().toISOString(),
@@ -1047,7 +1058,7 @@ export class RunDriverMother {
       files: this.files,
       binary: join(this.bin, 'claude'),
       worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
-      spawn: this.#processes.spawn,
+      spawn: this.#processes.launch.bind(this.#processes),
       env: {
         CT_FIXTURE_CAPTURES: this.captures,
         CT_FIXTURE_SCENARIO: scenario,
@@ -1181,9 +1192,7 @@ export class RunDriverMother {
     const files = new HeadlessFiles({ root: stateRoot, fs, newId: () => this.#identity() })
     let calls = 0
     let verbs = 0
-    const refusingSpawn = new Proxy(spawn, {
-      apply: () => { calls += 1; throw new Error('recovery must not spawn') },
-    })
+    const refusingSpawn: ProcessRunner['launch'] = () => { calls += 1; throw new Error('recovery must not spawn') }
     const transport = RunDriverMother.measured(new ClaudeCalls({
       files, binary: 'claude', worker: 'worker',
       spawn: refusingSpawn,

@@ -30,6 +30,7 @@ import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
 type Role = RunDispatch['role']
 type Response = RunDispatch['response']
@@ -236,7 +237,7 @@ class ScriptedClaude {
     const worker = new AcceptedWorker()
     queueMicrotask(() => worker.emit('message', { kind: 'accepted' }))
     return worker
-  }) as typeof import('node:child_process').spawn
+  }) as ProcessRunner['launch']
 
   async completePending(): Promise<void> {
     const pending = this.pending.shift()
