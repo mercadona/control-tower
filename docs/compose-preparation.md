@@ -32,7 +32,7 @@ definitions.
 In the worktree, GNU Make resolves the existing `DOCKER_COMMAND` through `make
 -qp`. Exit 1 is the normal question-mode answer for an out-of-date target, not a
 failed lookup. The checker parses that expanded command into arguments and asks
-Compose for its configuration. It does not execute a shell recipe or start a
+Compose for its configuration. The query itself does not execute a shell recipe or start a
 service. Only the direct `docker compose` prefix with file/project-name options
 used by these repositories is supported; unresolved commands are not checked.
 
@@ -54,6 +54,23 @@ name and mount this worktree at `/app`. If the command ignores the override or
 still points at a sibling checkout, the agent does not start. This measures the
 configuration, not the live mount table. Local credential files are neither copied
 nor filled in by this feature.
+
+## Django preparation before the initial tests
+
+When Make declares all three existing targets `env-start`, `collectstatic` and
+`compilemessages`, the preparer runs them in that order, in the slice worktree,
+after the project name and mount checks pass. The adapter uses the targets Make
+reported; it does not add scripts or configuration to the governed repository.
+Repositories without this complete target set retain configuration-only preparation.
+
+This is the preparation that Playground #996 missed: its fresh worktree had no
+`staticfiles/`, so the HTTP tests failed although the new command's tests passed.
+The initial baseline and the agent now wait for the preparation commands to
+finish. A failing command names its target, exit code and diagnostic in the
+existing preparation report, stops the remaining commands and prevents readiness.
+The calls use the existing baseline time budget rather than the shorter metadata
+query budget. Task controls and global verification still execute the commands
+their plan declares; Django setup is no longer something each plan must remember.
 
 ## A refusal and the way back
 

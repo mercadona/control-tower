@@ -18,6 +18,8 @@ class HarvestDouble {
 
   static COLLECTED_LINE =
     `collected #7: cmux workspace closed, worktree ${HarvestDouble.WORKTREE} deleted, branch feat/7 deleted\n`
+  static NOTHING_LEFT_LINE =
+    'nothing left for #7: in /repo/checkout neither the worktree .worktrees/7 nor the branch feat/7 is left\n'
   static WAITING_LINE = 'waiting on #7 (open): the PR #71 is still open — nothing has been touched\n'
   static KEPT_LINE =
     `kept #7: the worktree ${HarvestDouble.WORKTREE} has uncommitted changes — nothing has been deleted\n`
@@ -118,8 +120,16 @@ class HarvestDouble {
     return new HarvestDouble({ code: 1, stderr: HarvestDouble.BLEW_UP_TRACE })
   }
 
+  static nothingLeft() {
+    return new HarvestDouble({ code: 0, stdout: HarvestDouble.NOTHING_LEFT_LINE })
+  }
+
   static exiting(code: number) {
-    return new HarvestDouble({ code, stdout: HarvestDouble.WAITING_LINE, stderr: HarvestDouble.USAGE_LINE })
+    return new HarvestDouble({
+      code,
+      stdout: code === DispatchCheckHarvest.COLLECTED ? HarvestDouble.COLLECTED_LINE : HarvestDouble.WAITING_LINE,
+      stderr: HarvestDouble.USAGE_LINE,
+    })
   }
 }
 
@@ -153,6 +163,16 @@ class PluginContract {
 
   static codesDyingInSource(block: string): number[] {
     return PluginContract.#ascending([...block.matchAll(PluginContract.#DIED)].map((found) => Number(found[1])))
+  }
+
+  static linesItSucceedsWith(): string[] {
+    const table = PluginContract.#collectBlock().match(PluginContract.#TABLE)
+    if (table === null) throw new Error(`the collect block no longer projects its outcomes with a table`)
+
+    return table[1].split('\n')
+      .filter((row) => /code: 0\b/.test(row) && !row.includes('CollectionOutcome.WOULD_COLLECT'))
+      .map((row) => row.match(/line: \([^)]*\) => `([^$`]*)\$\{issue\}([^$`]*)/))
+      .map((found) => (found === null ? 'unreadable' : `${found[1]}7${found[2]}`))
   }
 
   static codesTheCollectBlockCanExitWith() {
@@ -191,6 +211,21 @@ describe('DispatchCheckHarvest', () => {
 
   it('a_slice_whose_residue_the_plugin_removed_comes_back_collected', async () => {
     expect(await HarvestDouble.collected().asked()).toBe(HarvestOutcome.COLLECTED)
+  })
+
+  it('a_slice_whose_worktree_and_branch_were_already_gone_comes_back_nothing_left_and_not_collected', async () => {
+    expect(await HarvestDouble.nothingLeft().asked()).toBe(HarvestOutcome.NOTHING_LEFT)
+  })
+
+  it('a_success_that_names_neither_a_collection_nor_nothing_left_is_not_understood_instead_of_passing_for_a_merge', async () => {
+    const refusal = await new HarvestDouble({ code: 0, stdout: 'collected #8: worktree deleted\n' }).refusal()
+
+    expect(refusal).toBeInstanceOf(HarvestNotUnderstood)
+    expect(refusal.message).toContain('collected #8: worktree deleted')
+  })
+
+  it('the_two_successes_the_plugin_projects_begin_with_the_words_this_adapter_tells_them_apart_by', () => {
+    expect(PluginContract.linesItSucceedsWith().sort()).toEqual(['collected #7: ', 'nothing left for #7: in '])
   })
 
   it('a_slice_whose_pull_request_has_not_landed_comes_back_waiting', async () => {

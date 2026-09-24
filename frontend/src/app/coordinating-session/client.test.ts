@@ -4,7 +4,6 @@ import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 
 const submission = () => ({
   id: StartPlanMother.TICKET,
-  repo: StartPlanMother.REPO,
   path: StartPlanMother.PATH,
 })
 
@@ -51,7 +50,7 @@ describe('CoordinatingSessionClient', () => {
     })
   })
 
-  it('sends the idea when it opens the brainstorming', async () => {
+  it('sends exactly the ticket and the local path when it opens the brainstorming', async () => {
     const posting = vi.fn(async () => new Response(CoordinatingSessionMother.opened().body, { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
@@ -62,6 +61,8 @@ describe('CoordinatingSessionClient', () => {
       headers: { 'Content-Type': 'application/json' },
       body: StartPlanMother.REQUEST_BODY,
     })
+    const [, init] = posting.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toStrictEqual({ id: StartPlanMother.TICKET, path: StartPlanMother.PATH })
     expect(outcome).toEqual({
       kind: 'opened',
       opened: {

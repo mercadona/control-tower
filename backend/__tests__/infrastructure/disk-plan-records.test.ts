@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
+import { HarvestNotRecorded, PlanAgentNotLaunched, PlanAgentNotNamed } from '../../src/domain/exceptions.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -54,6 +54,33 @@ class PlanRecordMother {
       + '  "branch": "feat/332",\n'
       + '  "startedAt": "2026-09-14T09:00:00.000Z"\n'
       + '}\n'
+  }
+
+  static readonly HARVESTED_REPOSITORY = new RepositoryName('mercadona/control-tower-plugin')
+  static readonly HARVESTED_AT = '2026-09-24T09:30:00.000Z'
+  static readonly HARVESTED_LOCATION = new WorkspaceLocation({
+    root: '/checkout', path: '/checkout/removed-worktree', branch: 'feat/332',
+  })
+
+  static harvestReceipt(): string {
+    return `{\n  "version": 1,\n  "at": "${PlanRecordMother.HARVESTED_AT}"\n}\n`
+  }
+
+  static async seedHarvested(root: string, receipt: string | null = null): Promise<string> {
+    const conversation = join(root, 'harness', PlanRecordMother.SECOND_AGENT)
+    await mkdir(conversation, { recursive: true })
+    await writeFile(join(conversation, 'dispatch.json'), PlanRecordMother.harvestedDescriptor(), 'utf8')
+    if (receipt !== null) await writeFile(join(conversation, DiskPlanRecords.HARVEST_RECEIPT), receipt, 'utf8')
+    return join(conversation, DiskPlanRecords.HARVEST_RECEIPT)
+  }
+
+  static harvestedRecords(root: string, files?: HeadlessFiles): DiskPlanRecords {
+    return new DiskPlanRecords({
+      files: files ?? new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
+      newId: () => PlanRecordMother.FIRST_AGENT,
+      now: () => PlanRecordMother.HARVESTED_AT,
+      exists: async () => false,
+    })
   }
 
   static completion(kind: 'error' | 'success'): string {
@@ -630,5 +657,138 @@ describe('DiskPlanRecords', () => {
 
     expect(await records.recorded(watch.agent)).toEqual(watch)
     await expect(records.prepare(briefing)).rejects.toBeInstanceOf(PlanAgentNotLaunched)
+  })
+
+  it('a collected harvest is recorded beside the dispatch of the slice it harvested', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const receipt = await PlanRecordMother.seedHarvested(root)
+
+    await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
+    })
+
+    expect(await readFile(receipt, 'utf8')).toBe(PlanRecordMother.harvestReceipt())
+  })
+
+  it('a harvest of a slice nobody dispatched writes nothing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const receipt = await PlanRecordMother.seedHarvested(root)
+
+    await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 333, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
+    })
+
+    await expect(readFile(receipt, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it.each([
+    ['another checkout', new WorkspaceLocation({ root: '/other/checkout', path: '/checkout/removed-worktree', branch: 'feat/332' })],
+    ['another worktree', new WorkspaceLocation({ root: '/checkout', path: '/checkout/.worktrees/332', branch: 'feat/332' })],
+  ])('a harvest collected from %s than the recorded one writes nothing into that record', async (_case, located) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const receipt = await PlanRecordMother.seedHarvested(root)
+
+    await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located,
+    })
+
+    await expect(readFile(receipt, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('a harvest the disk refuses to record is told as not recorded, naming where and why', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const receipt = await PlanRecordMother.seedHarvested(root)
+    const files = Object.assign(new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }), {
+      writeOnce: async () => { throw Object.assign(new Error('disk full'), { code: 'ENOSPC' }) },
+    })
+
+    const refusal = await PlanRecordMother.harvestedRecords(root, files).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
+    }).catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(HarvestNotRecorded)
+    expect(refusal.message).toBe(`${receipt} could not be written: Error: disk full`)
+  })
+
+  it.each([
+    ['a record it cannot read', async (root: string) => {
+      await mkdir(join(root, 'harness', PlanRecordMother.FIRST_AGENT), { recursive: true })
+      await writeFile(join(root, 'harness', PlanRecordMother.FIRST_AGENT, 'dispatch.json'), 'not a dispatch', 'utf8')
+    }],
+    ['a folder that names no conversation', async (root: string) => {
+      await mkdir(join(root, 'harness', 'not-a-conversation'), { recursive: true })
+    }],
+  ])('a harvest among %s is told as not recorded instead of escaping as another family', async (_case, damage) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    await PlanRecordMother.seedHarvested(root)
+    await damage(root)
+
+    const refusal = await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
+    }).catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(HarvestNotRecorded)
+    expect(refusal.message).toContain('the harvest of mercadona/control-tower-plugin#332 could not be recorded')
+  })
+
+  it('a harvested slice is found with the moment it was harvested although it is no longer in flight', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    await PlanRecordMother.seedHarvested(root, PlanRecordMother.harvestReceipt())
+    const records = PlanRecordMother.harvestedRecords(root)
+
+    const harvested = await records.harvested({ issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY })
+
+    expect(await records.find({ issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY })).toBeNull()
+
+    expect(harvested?.harvestedAt).toBe(PlanRecordMother.HARVESTED_AT)
+    expect(harvested?.watch).toMatchObject({
+      agent: PlanRecordMother.SECOND_AGENT,
+      issue: { number: 332 },
+      located: { root: '/checkout', path: '/checkout/removed-worktree', branch: 'feat/332' },
+    })
+  })
+
+  it('a recorded slice with no harvest receipt is not harvested', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    await PlanRecordMother.seedHarvested(root)
+
+    expect(await PlanRecordMother.harvestedRecords(root).harvested({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+    })).toBeNull()
+  })
+
+  it('a slice nobody recorded is not harvested', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    await PlanRecordMother.seedHarvested(root, PlanRecordMother.harvestReceipt())
+
+    expect(await PlanRecordMother.harvestedRecords(root).harvested({
+      issue: 333, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+    })).toBeNull()
+  })
+
+  it.each([
+    ['another version', '{\n  "version": 2,\n  "at": "2026-09-24T09:30:00.000Z"\n}\n'],
+    ['a moment that is not a timestamp', '{\n  "version": 1,\n  "at": "yesterday"\n}\n'],
+    ['a field it does not know', '{\n  "version": 1,\n  "at": "2026-09-24T09:30:00.000Z",\n  "by": "hand"\n}\n'],
+    ['text that is not JSON', 'harvested'],
+  ])('a harvest receipt carrying %s is refused instead of passing for a harvest', async (_case, receipt) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const path = await PlanRecordMother.seedHarvested(root, receipt)
+
+    const refusal = await PlanRecordMother.harvestedRecords(root).harvested({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+    }).catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toContain(`${path} cannot be read as a harvest receipt`)
   })
 })

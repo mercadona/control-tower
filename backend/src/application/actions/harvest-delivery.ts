@@ -1,4 +1,6 @@
 import type { Harvest } from '../../domain/ports/harvest.ts'
+import type { PlanRecords } from '../../domain/ports/plan-records.ts'
+import { HarvestOutcome } from '../../domain/value-objects/harvest-outcome.ts'
 import type { HarvestOutcomeValue } from '../../domain/value-objects/harvest-outcome.ts'
 import type { PreparedWorkspace } from '../../domain/value-objects/prepared-workspace.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
@@ -25,18 +27,24 @@ export class HarvestDeliveryResult {
 
 export class HarvestDelivery {
   readonly harvest: Harvest
+  readonly records: PlanRecords
 
-  constructor({ harvest }: { harvest: Harvest }) {
+  constructor({ harvest, records }: { harvest: Harvest, records: PlanRecords }) {
     this.harvest = harvest
+    this.records = records
   }
 
   async execute(params: HarvestDeliveryParams): Promise<HarvestDeliveryResult> {
-    return new HarvestDeliveryResult({
-      outcome: await this.harvest.collect({
-        issueNumber: params.prepared.issueNumber,
-        repository: params.repository,
-        root: params.prepared.located.root,
-      }),
+    const outcome = await this.harvest.collect({
+      issueNumber: params.prepared.issueNumber,
+      repository: params.repository,
+      root: params.prepared.located.root,
     })
+    if (outcome === HarvestOutcome.COLLECTED) {
+      await this.records.recordHarvest({
+        issue: params.prepared.issueNumber, repository: params.repository, located: params.prepared.located,
+      })
+    }
+    return new HarvestDeliveryResult({ outcome })
   }
 }

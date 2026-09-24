@@ -2,9 +2,73 @@ import { act, screen, within } from '@testing-library/react'
 import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { PlanningProgressMother } from '__scenarios__/PlanningProgressMother'
+import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { backendRecovering, openHome } from './helpers'
 
 describe('Home · unified work progress', () => {
+  it('keeps completion for discovered uncertain work visible when the next inventory read fails', async () => {
+    vi.useFakeTimers()
+    const fetching = backendRecovering(HeadlessPlanMother.awaitingContinuation(), WorkProgressMother.withLocalCompletion)
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+
+    fetching.mockRejectedValue(new TypeError('offline'))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.getByText('Mostramos la última lectura. Reintentando la conexión…')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Recuperar trabajo' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
+
+    fetching.mockResolvedValue(new Response(HeadlessPlanMother.awaitingContinuation().body))
+    await act(async () => vi.advanceTimersByTimeAsync(2001))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.queryByText('Mostramos la última lectura. Reintentando la conexión…')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Recuperar trabajo' })).toBeEnabled()
+    expect(fetching.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it.each(['restored', 'discovered'])('shows known local completion with recovery information for %s uncertain work', async (origin) => {
+    if (origin === 'restored') {
+      const active = WorkProgressMother.active('implementing')
+      WorkflowSnapshotStorage.save({ phase: 'implementing', request: active.request, plan: active.plan })
+    }
+    backendRecovering(HeadlessPlanMother.uncertain(), WorkProgressMother.withLocalCompletion)
+    openHome()
+
+    expect(await screen.findByText('Implementación terminada; publicación sin confirmar')).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('Recovery action inspect requires operator attention')
+    expect(screen.getByRole('button', { name: 'Reintentar recuperación' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
+    expect(screen.queryByText('En revisión')).toBeNull()
+    expect(screen.queryByText('Entregado')).toBeNull()
+  })
+
+  it('keeps selected progress visibly stale when inventory becomes unavailable and confirms it again on recovery', async () => {
+    vi.useFakeTimers()
+    const fetching = backendRecovering(HeadlessPlanMother.implementing())
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Tarea 3 de 7')).toBeVisible()
+
+    fetching.mockRejectedValue(new TypeError('offline'))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.getByText('Tarea 3 de 7')).toBeVisible()
+    expect(screen.getByText('Mostramos la última lectura. Reintentando la conexión…')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).toBeNull()
+
+    fetching.mockResolvedValue(new Response(HeadlessPlanMother.implementing().body))
+    await act(async () => vi.advanceTimersByTimeAsync(2001))
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByText('Tarea 3 de 7')).toBeVisible()
+    expect(screen.queryByText('Mostramos la última lectura. Reintentando la conexión…')).toBeNull()
+  })
+
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()

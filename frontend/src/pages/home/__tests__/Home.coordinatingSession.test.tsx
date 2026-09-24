@@ -282,7 +282,6 @@ describe('Home and the coordinating session', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
     fireEvent.change(screen.getByLabelText('Ticket'), { target: { value: 'ABC-123' } })
-    fireEvent.change(screen.getByLabelText(/Repositorio/), { target: { value: 'owner/name' } })
     fireEvent.change(screen.getByLabelText(/Ruta local/), { target: { value: '/repo' } })
 
     await act(async () => vi.advanceTimersByTimeAsync(2000))
@@ -290,7 +289,6 @@ describe('Home and the coordinating session', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' })))
 
     expect(screen.getByLabelText('Ticket')).toHaveValue('ABC-123')
-    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('owner/name')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
   })
 

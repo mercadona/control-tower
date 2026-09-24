@@ -8,6 +8,7 @@ class SourceMother {
   static readonly REVISION = 'a'.repeat(40)
   static readonly TARGET = { root: new CheckoutRoot('/repo'), repository: new RepositoryName('owner/repo') }
   static readonly WORKTREE = '/repo/.worktrees/10'
+  static readonly WORKTREE_PROJECT = 'ct-a5701da2332bb91a'
 
   static catalogMakefile(): string {
     return [
@@ -18,6 +19,14 @@ class SourceMother {
       'DOCKER_COMMAND := $(DOCKER_COMMAND) -f $(DOCKER_COMPOSE_OVERRIDE_FILE)',
       'endif',
     ].join('\n')
+  }
+
+  static fixedHostPort(port: number): Record<string, unknown> {
+    return { mode: 'ingress', target: port, published: String(port), protocol: 'tcp' }
+  }
+
+  static containerOnlyPort(port: number): Record<string, unknown> {
+    return { mode: 'ingress', target: port, protocol: 'tcp' }
   }
 
   static oldPlaygroundMakefile(): string {
@@ -36,6 +45,10 @@ class Environment {
   makeOutput: string | null = null
   mountSource: string | null = null
   canonicalPath: string | null = null
+  extraServices: Record<string, unknown> = {}
+  targets = ''
+  readonly preparationAnswers = new Map<string, ProcessOutput>()
+  readonly effects: string[] = []
   readonly gitCalls: string[][] = []
   readonly makeCalls: string[][] = []
   readonly dockerCalls: string[][] = []
@@ -60,18 +73,26 @@ class Environment {
 
   async make(argv: string[]): Promise<ProcessOutput> {
     this.makeCalls.push(argv)
+    const target = argv.at(-1)!
+    this.effects.push(target)
+    if (target !== '-qp') {
+      const answer = this.preparationAnswers.get(target)
+      if (answer === undefined) throw new Error(`unexpected make target ${target}`)
+      return answer
+    }
     return new ProcessOutput({ code: this.makeCode, stderr: '', stdout: this.makeOutput ??
-      `DOCKER_COMMAND := docker compose -f "${argv[1]}/docker/docker-compose.yml" -f "${argv[1]}/docker/docker-compose.local.yml"\n` })
+      `DOCKER_COMMAND := docker compose -f "${argv[1]}/docker/docker-compose.yml" -f "${argv[1]}/docker/docker-compose.local.yml"\n${this.targets}` })
   }
 
   async docker(argv: string[], cwd: string): Promise<ProcessOutput> {
     this.dockerCalls.push(argv)
+    this.effects.push('config')
     const override = this.files.get(argv[argv.lastIndexOf('-f') + 1])
     const name = override?.match(/^name: (.+)$/m)?.[1] ?? 'playground'
     const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: {
       volumes: [{ type: 'bind', source: this.mountSource ?? cwd, target: '/app' }],
-      ports: override === undefined ? [{ published: '8000', target: 8000 }] : [],
-    } } })
+      ports: override?.includes('ports: !reset []') ? [] : [SourceMother.fixedHostPort(8000)],
+    }, ...this.extraServices } })
     return new ProcessOutput({ code: this.dockerCode, stdout, stderr: '' })
   }
 
@@ -95,9 +116,66 @@ class Environment {
   prepare() {
     return this.adapter().prepare({ ...SourceMother.TARGET, path: SourceMother.WORKTREE })
   }
+
+  static django(): Environment {
+    const env = new Environment()
+    env.targets = 'compilemessages:\ncollectstatic:\nenv-start:\n'
+    for (const target of ['env-start', 'collectstatic', 'compilemessages']) {
+      env.preparationAnswers.set(target, new ProcessOutput({ code: 0, stdout: 'done', stderr: '' }))
+    }
+    return env
+  }
 }
 
 describe('Compose preparation from repository configuration', () => {
+  it('keeps both output channels of a failed preparation for the operator', async () => {
+    const env = Environment.django()
+    env.preparationAnswers.set('collectstatic', new ProcessOutput({ code: 2, stdout: 'asset configuration is missing\n', stderr: 'make: Error 1\n' }))
+    const result = await env.prepare()
+    expect(result.summary).toContain('asset configuration is missing')
+    expect(result.summary).toContain('make: Error 1')
+  })
+
+  it('does not start Django when the resolved configuration points at another checkout', async () => {
+    const env = Environment.django()
+    env.mountSource = '/sibling'
+    expect((await env.prepare()).state).toBe('required')
+    expect(env.makeCalls).toEqual([['-C', SourceMother.WORKTREE, '--no-print-directory', '-qp']])
+  })
+
+  it.each(['env-start:\n', 'collectstatic:\ncompilemessages:\n'])('does not invent a missing Django preparation target from %j', async (targets) => {
+    const env = Environment.django()
+    env.targets = targets
+    expect((await env.prepare()).state).toBe('compatible')
+    expect(env.makeCalls).toEqual([['-C', SourceMother.WORKTREE, '--no-print-directory', '-qp']])
+  })
+
+  it.each([
+    ['env-start', 2, ['env-start']],
+    ['collectstatic', 1, ['env-start', 'collectstatic']],
+    ['compilemessages', 2, ['env-start', 'collectstatic', 'compilemessages']],
+  ] as const)('a failed %s prevents readiness and stops the remaining preparation commands', async (target, code, executed) => {
+    const env = Environment.django()
+    env.preparationAnswers.set(target, new ProcessOutput({ code, stdout: '', stderr: 'fixture preparation failed' }))
+    const result = await env.prepare()
+    expect(result.state).toBe('not-checked')
+    expect(result.permitsDispatch()).toBe(false)
+    expect(result.summary).toContain(`make ${target} exited with code ${code}`)
+    expect(result.summary).toContain('fixture preparation failed')
+    expect(env.makeCalls.slice(1).map((argv) => argv.at(-1))).toEqual(executed)
+  })
+
+  it('starts Django and builds its assets after checking isolation and before declaring the worktree ready', async () => {
+    const env = Environment.django()
+    expect((await env.prepare()).state).toBe('compatible')
+    expect(env.effects).toEqual(['config', '-qp', 'config', 'env-start', 'collectstatic', 'compilemessages'])
+    expect(env.makeCalls.slice(1)).toEqual([
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'env-start'],
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'collectstatic'],
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'compilemessages'],
+    ])
+  })
+
   it('accepts the canonical worktree path returned by Git when Make resolves a directory alias', async () => {
     const env = new Environment()
     env.canonicalPath = '/private/repo/.worktrees/10'
@@ -195,6 +273,30 @@ describe('Compose preparation from repository configuration', () => {
     expect(result.summary).toContain('does not select this worktree project')
   })
 
+  it('reports a fixed host port kept by an existing override that selects this worktree project', async () => {
+    const env = new Environment()
+    env.files.set(`${SourceMother.WORKTREE}/docker/docker-compose.local.yml`, `name: ${SourceMother.WORKTREE_PROJECT}\n`)
+    const result = await env.prepare()
+    expect(result.state).toBe('required')
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings[0].path).toBe('docker/docker-compose.local.yml')
+    expect(result.summary).toContain('app publishes host port 8000')
+  })
+
+  it('reports a fixed host port that comes from a Compose file other than the base', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: [SourceMother.fixedHostPort(9000)] } }
+    const result = await env.prepare()
+    expect(result.state).toBe('required')
+    expect(result.summary).toContain('worker publishes host port 9000')
+  })
+
+  it('accepts a container port without a host port, which Compose 5.5.1 prints with no published key', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: [SourceMother.containerOnlyPort(9000)] } }
+    expect((await env.prepare()).state).toBe('compatible')
+  })
+
   it('reports the Playground failure when /app points to a sibling checkout', async () => {
     const env = new Environment()
     env.mountSource = '/sibling'
@@ -225,5 +327,13 @@ describe('Compose preparation from repository configuration', () => {
     env.dockerCode = 0
     env.dockerOutput = '{}'
     expect((await env.prepare()).state).toBe('not-checked')
+  })
+
+  it('a port Compose did not print in its long form is never read as unpublished', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: ['9000:9000'] } }
+    const result = await env.prepare()
+    expect(result.state).toBe('not-checked')
+    expect(result.summary).toContain('Compose returned an unreadable port')
   })
 })

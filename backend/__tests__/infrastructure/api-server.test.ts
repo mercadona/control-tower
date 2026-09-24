@@ -9,15 +9,18 @@ import { gzipSync } from 'node:zlib'
 import { RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
-import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
-import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
-import { Baseline, BaselineResult } from '../../../plugin/scripts/baseline.js'
+import {
+  CoordinatingSessionOpened, OpenCoordinatingSession, OpenCoordinatingSessionParams,
+} from '../../src/application/actions/open-coordinating-session.ts'
+import { Conversations } from '../../src/domain/ports/conversations.ts'
+import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
+import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
+import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
-  PlanAgentNeverLaunched, PlanAgentNotLaunched, PlanAgentNotNamed, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed,
-  WorkspaceNotPrepared,
+  PlanAgentNotLaunched, PlanAgentNotNamed, UserStoryNotRead,
   PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
   PlanIssueNotClaimed, PlanStatusNotRead, PlanStatusNotUnderstood,
 } from '../../src/domain/exceptions.ts'
@@ -29,7 +32,6 @@ import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-rec
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
-import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
@@ -72,79 +74,62 @@ import { PlanIssueStatus, type PlanIssueStatusValue } from '../../src/domain/val
 import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
-class StartPlanSpy extends StartPlan {
-  static readonly AGENT = 'workspace:4'
-  static readonly BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
-  static readonly ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
-  static readonly LOCATED = new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' })
-  static readonly WATCH = new PlanWatch({
-    story: new UserStoryKey('ABC-123'),
-    issue: StartPlanSpy.ISSUE,
-    located: StartPlanSpy.LOCATED,
+class OpenSessionSpy extends OpenCoordinatingSession {
+  static readonly CONVERSATION = new CoordinatingConversation({
+    id: new ConversationId('3c2b7d3f-9a3b-4c9c-8b4f-7a3c2b7d3f9a'),
     repository: new RepositoryName('owner/name'),
-    agent: StartPlanSpy.AGENT,
+    root: new CheckoutRoot('/repo/checkout'),
   })
+  static readonly SESSION = new LiveSession({ id: 'session-7', name: 'brainstorming' })
 
-  readonly asked: (string | null)[]
-  readonly repositories: string[]
+  readonly asked: string[]
   readonly roots: string[]
-  readonly failing: boolean
+  #answer: () => Promise<CoordinatingSessionOpened>
 
-  constructor({ failing = false }: { failing?: boolean } = {}) {
+  constructor(answer: () => Promise<CoordinatingSessionOpened> = async () => OpenSessionSpy.opened()) {
     super({
       userStories: new UserStories(),
-      planIssues: new PlanIssues(),
       workspace: new Workspace(),
-      planAgents: new PlanAgents(),
+      conversations: new Conversations(),
+      sessionHooks: new SessionHooks(),
+      records: new ConversationRecords(),
       checkouts: new CheckoutRegistry(),
-      records: new PlanRecords(),
-      claims: new DispatchClaims(),
     })
     this.asked = []
-    this.repositories = []
     this.roots = []
-    this.failing = failing
+    this.#answer = answer
   }
 
-  static failingWith(cause: Error): StartPlanSpy {
-    const spy = new StartPlanSpy()
-    spy.execute = async () => {
-      throw cause
-    }
-
-    return spy
-  }
-
-  static buggy(): StartPlanSpy {
-    const spy = new StartPlanSpy()
-    spy.execute = async () => {
-      throw new TypeError('a bug of ours')
-    }
-
-    return spy
-  }
-
-  async execute(params: StartPlanParams): Promise<StartPlanResult> {
-    this.asked.push(params.story === null ? null : params.story.text)
-    const [target] = params.targets
-    this.repositories.push(target.repository.text)
-    this.roots.push(target.root.text)
-    if (this.failing) throw new PlanAgentNotLaunched('cmux is not reachable')
-    return new StartPlanResult({
-      started: [new PlanStarted({
-        agent: StartPlanSpy.AGENT,
-        baseline: StartPlanSpy.BASELINE,
-        watch: new PlanWatch({
-          story: params.story,
-          issue: StartPlanSpy.ISSUE,
-          located: StartPlanSpy.LOCATED,
-          repository: target.repository,
-          agent: StartPlanSpy.AGENT,
-        }),
-      })],
-      failed: [],
+  static opened(): CoordinatingSessionOpened {
+    return new CoordinatingSessionOpened({
+      conversation: OpenSessionSpy.CONVERSATION, session: OpenSessionSpy.SESSION, timeline: [],
     })
   }
+
+  static failingWith(cause: Error): OpenSessionSpy {
+    return new OpenSessionSpy(async () => { throw cause })
+  }
+
+  static buggy(): OpenSessionSpy {
+    return OpenSessionSpy.failingWith(new TypeError('a bug of ours'))
+  }
+
+  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
+    this.asked.push(params.story.text)
+    this.roots.push(params.root.text)
+
+    return await this.#answer()
+  }
+}
+
+class ActivePlanMother {
+  static readonly WATCH = new PlanWatch({
+    story: new UserStoryKey('ABC-123'),
+    issue: new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' }),
+    located: new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' }),
+    repository: new RepositoryName('owner/name'),
+    agent: 'workspace:4',
+  })
 }
 
 class ExternalToolsSpy extends SurveyExternalTools {
@@ -271,23 +256,24 @@ class FrontendFixture {
 class RunningApi {
   static readonly STORY = 'ABC-123'
   static readonly REPO = 'owner/name'
-  static readonly ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
+  static readonly OPENING = '/coordinating-session'
+  static readonly ACCEPTED_BODY = `{"id":"ABC-123","path":"/repo/checkout"}`
   static readonly REVIEW_BODY = `{"issue":7,"repo":"owner/name","changes":"parte la tarea 2"}`
-  static readonly ANSWER =
-    '{"status":"started","id":"ABC-123","repo":"owner/name",' +
-    '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
-    '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
-    '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
-  static spy: StartPlanSpy = new StartPlanSpy()
+  static spy: OpenSessionSpy = new OpenSessionSpy()
 
   static server(options: Partial<ApiCollaborators> = {}): ApiServer {
-    RunningApi.spy = new StartPlanSpy()
+    RunningApi.spy = options.openCoordinatingSession instanceof OpenSessionSpy
+      ? options.openCoordinatingSession
+      : new OpenSessionSpy()
     const sessions = options.sessions ?? new PlanSessions()
     const activePlans = options.activePlans ?? new ActivePlans({ sessions })
 
     return new ApiServer({
       port: 0,
-      startPlan: RunningApi.spy,
+      openCoordinatingSession: RunningApi.spy,
+      coordinatingSessions: new CoordinatingSessions({
+        liveSessions: new LiveSessionsDouble(OpenSessionSpy.SESSION), stderr: () => undefined,
+      }),
       sessions,
       activePlans,
       externalTools: options.externalTools ?? new ExternalToolsSpy(),
@@ -312,12 +298,12 @@ class RunningApi {
     })
   }
 
-  static async startPlan(port: number, body: string, headers: Record<string, string> = {}): Promise<Response> {
-    return RunningApi.post(port, '/start-plan', body, headers)
+  static async open(port: number, body: string, headers: Record<string, string> = {}): Promise<Response> {
+    return RunningApi.post(port, RunningApi.OPENING, body, headers)
   }
 
   static async accepted(port: number): Promise<Response> {
-    return RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY)
+    return RunningApi.open(port, RunningApi.ACCEPTED_BODY)
   }
 
   static ask(port: number, lines: string): Promise<string> {
@@ -342,7 +328,7 @@ class RunningApi {
     return new Promise((resolve) => {
       const socket = connect(port, '127.0.0.1', () => {
         socket.write(
-          'POST /start-plan HTTP/1.1\r\nHost: 127.0.0.1\r\n' +
+          'POST /coordinating-session HTTP/1.1\r\nHost: 127.0.0.1\r\n' +
             'Content-Type: application/json\r\nContent-Length: 5000\r\n\r\n{"id":"'
         )
         socket.destroy()
@@ -440,148 +426,8 @@ describe('ApiServer', () => {
     }
   })
 
-  it('start_plan_accepts_and_answers_with_the_agent_it_launched_rather_than_waiting_for_it', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await RunningApi.accepted(port)
-
-    expect(response.status).toBe(202)
-    expect(response.headers.get('content-type')).toBe('application/json')
-    expect(await response.text()).toBe(RunningApi.ANSWER)
-  })
-
-  it('an_agent_that_cannot_be_launched_is_reported_as_such_instead_of_a_generic_failure', async () => {
-    RunningApi.spy = new StartPlanSpy({ failing: true })
-    const server = RunningApi.server({ startPlan: RunningApi.spy })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.accepted(port)
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).toBe(
-        '{"code":"plan-agent-not-launched","detail":"cmux is not reachable"}'
-      )
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('loose start exposes definite non-launch', async () => {
-    const proof = new PlanNonLaunch({
-      conversation: '11111111-1111-4111-8111-111111111111',
-      callId: null,
-      source: 'before-worker',
-      diagnostic: 'headless worker spawn was refused',
-      observedAt: '2026-09-16T10:00:00.000Z',
-    })
-    const spy = new StartPlanSpy()
-    spy.execute = async () => new StartPlanResult({
-      started: [],
-      failed: [new PlanNotStarted({
-        repository: new RepositoryName(RunningApi.REPO),
-        cause: new PlanAgentNeverLaunched(proof),
-      })],
-    })
-    const server = RunningApi.server({ startPlan: spy })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.accepted(port)
-
-      expect(response.status).toBe(400)
-      expect(await response.json()).toEqual({
-        code: 'plan-agent-never-launched',
-        detail: 'headless worker spawn was refused',
-      })
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('a_story_an_issue_or_a_worktree_the_tool_refuses_are_all_answered_as_a_400_naming_the_specific_code', async () => {
-    const causes = [
-      { cause: new UserStoryNotRead('acli is not authenticated'), code: 'user-story-not-read' },
-      { cause: new PlanIssueNotCreated('label not found'), code: 'plan-issue-not-created' },
-    ]
-
-    for (const { cause, code } of causes) {
-      const server = RunningApi.server({ startPlan: StartPlanSpy.failingWith(cause) })
-      const port = await server.start()
-
-      try {
-        const response = await RunningApi.accepted(port)
-
-        expect(response.status).toBe(400)
-        expect(await response.text()).toBe(`{"code":"${code}","detail":"${cause.message}"}`)
-      } finally {
-        await server.stop()
-      }
-    }
-  })
-
-  it('a_plan_issue_that_could_not_be_created_after_the_preflight_is_answered_by_its_own_code', async () => {
-    const spy = new StartPlanSpy()
-    spy.execute = async () => new StartPlanResult({
-      started: [],
-      failed: [new PlanNotStarted({
-        repository: new RepositoryName(RunningApi.REPO),
-        cause: new PlanIssueNotCreated('label not found'),
-      })],
-    })
-    const server = RunningApi.server({ startPlan: spy })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.accepted(port)
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).toBe('{"code":"plan-issue-not-created","detail":"label not found"}')
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('a_workspace_that_cannot_be_prepared_after_the_preflight_is_answered_by_its_own_code', async () => {
-    const spy = new StartPlanSpy()
-    spy.execute = async () => new StartPlanResult({
-      started: [],
-      failed: [new PlanNotStarted({
-        repository: new RepositoryName(RunningApi.REPO),
-        cause: new WorkspaceNotPrepared('branch is taken'),
-      })],
-    })
-    const server = RunningApi.server({ startPlan: spy })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.accepted(port)
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).toBe('{"code":"workspace-not-prepared","detail":"branch is taken"}')
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('a_tool_that_answered_something_unreadable_is_a_400_too_but_with_a_code_of_its_own', async () => {
-    const server = RunningApi.server({
-      startPlan: StartPlanSpy.failingWith(new PlanIssueNotNamed('gh printed "done"')),
-    })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.accepted(port)
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).toBe('{"code":"plan-issue-not-named","detail":"gh printed \\"done\\""}')
-    } finally {
-      await server.stop()
-    }
-  })
-
   it('a_failure_that_is_not_a_refusal_to_start_is_not_dressed_up_as_one', async () => {
-    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const server = RunningApi.server({ openCoordinatingSession: OpenSessionSpy.buggy() })
     const port = await server.start()
     const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
@@ -1062,7 +908,7 @@ describe('ApiServer', () => {
   })
 
   it('a_bug_of_ours_leaves_a_trace_on_the_error_channel_instead_of_vanishing_behind_that_400', async () => {
-    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const server = RunningApi.server({ openCoordinatingSession: OpenSessionSpy.buggy() })
     const port = await server.start()
     const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
@@ -1070,7 +916,7 @@ describe('ApiServer', () => {
       await RunningApi.accepted(port)
 
       const said = complaining.mock.calls.map(([line]) => line).join('')
-      expect(said).toContain('request to /start-plan failed')
+      expect(said).toContain('request to /coordinating-session failed')
       expect(said).toContain('a bug of ours')
     } finally {
       complaining.mockRestore()
@@ -1078,58 +924,32 @@ describe('ApiServer', () => {
     }
   })
 
-  it('the_id_that_reaches_the_agent_is_the_one_the_body_carried_and_not_a_default', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await RunningApi.post(port, '/start-plan', '{"id":"MO_SHOP-42","repo":"owner/name","path":"/repo/checkout"}')
-
-    expect(RunningApi.spy.asked).toEqual(['MO_SHOP-42'])
-    expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', 'MO_SHOP-42'))
-  })
-
-  it('an_id_that_is_a_github_issue_url_reaches_the_agent_as_that_same_url', async () => {
-    const port = await RunningApi.listening()
-    const url = 'https://github.com/mercadona/control-tower/issues/141'
-
-    const response = await RunningApi.post(
-      port, '/start-plan', `{"id":${JSON.stringify(url)},"repo":"owner/name","path":"/repo/checkout"}`
-    )
-
-    expect(RunningApi.spy.asked).toEqual([url])
-    expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', url))
-  })
-
-  it('the_root_the_answer_carries_is_the_checkout_and_not_the_worktree', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await RunningApi.accepted(port)
-    const body = JSON.parse(await response.text())
-
-    expect(body.root).not.toBe(body.worktree)
-    expect(body.worktree).toMatch(new RegExp(`^${body.root}`))
-  })
-
   it('a_refused_request_never_starts_a_process', async () => {
     const port = await RunningApi.listening()
 
-    await RunningApi.startPlan(port, '{"id":"nope","repo":"owner/name"}')
+    await RunningApi.open(port, '{"id":"nope","path":"/repo/checkout"}')
 
     expect(RunningApi.spy.asked).toEqual([])
   })
 
   it('trailing_slashes_do_not_change_the_route_however_many_of_them_are_written', async () => {
-    const port = await RunningApi.listening()
+    const port = await RunningApi.listening({
+      openCoordinatingSession: OpenSessionSpy.failingWith(new UserStoryNotRead('acli is not authenticated')),
+    })
 
-    const one = await RunningApi.post(port, '/start-plan/', RunningApi.ACCEPTED_BODY)
-    const two = await RunningApi.post(port, '/start-plan//', RunningApi.ACCEPTED_BODY)
+    const one = await RunningApi.post(port, `${RunningApi.OPENING}/`, RunningApi.ACCEPTED_BODY)
+    const two = await RunningApi.post(port, `${RunningApi.OPENING}//`, RunningApi.ACCEPTED_BODY)
 
-    expect([one.status, two.status]).toEqual([202, 202])
+    expect(await Promise.all([one.json(), two.json()])).toEqual(Array(2).fill({
+      code: 'user-story-not-read', detail: 'acli is not authenticated',
+    }))
+    expect(RunningApi.spy.asked).toEqual(['ABC-123', 'ABC-123'])
   })
 
   it('a_query_string_does_not_hide_the_route_because_routing_reads_the_path_and_not_the_raw_url', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.post(port, '/start-plan?from=ui', RunningApi.ACCEPTED_BODY)
+    const response = await RunningApi.post(port, `${RunningApi.OPENING}?from=ui`, RunningApi.ACCEPTED_BODY)
 
     expect(response.status).toBe(202)
   })
@@ -1171,7 +991,7 @@ describe('ApiServer', () => {
   it('a_request_from_a_foreign_page_is_refused_because_any_site_can_post_to_localhost', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+    const response = await RunningApi.open(port, RunningApi.ACCEPTED_BODY, {
       Origin: 'https://evil.example',
     })
 
@@ -1183,7 +1003,7 @@ describe('ApiServer', () => {
   it('a_request_from_the_page_this_server_hosts_is_accepted_because_that_page_is_the_frontend', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+    const response = await RunningApi.open(port, RunningApi.ACCEPTED_BODY, {
       Origin: `http://127.0.0.1:${port}`,
     })
 
@@ -1196,7 +1016,7 @@ describe('ApiServer', () => {
     const said = await RunningApi.ask(
       port,
       RunningApi.asking(
-        '/start-plan',
+        RunningApi.OPENING,
         [`Origin: http://localhost:${port}`, 'Content-Type: application/json'],
         RunningApi.ACCEPTED_BODY,
         `localhost:${port}`
@@ -1212,7 +1032,7 @@ describe('ApiServer', () => {
     const said = await RunningApi.ask(
       port,
       RunningApi.asking(
-        '/start-plan',
+        RunningApi.OPENING,
         [`Origin: http://rebound.example:${port}`, 'Content-Type: application/json'],
         RunningApi.ACCEPTED_BODY,
         `rebound.example:${port}`
@@ -1226,7 +1046,7 @@ describe('ApiServer', () => {
   it('an_origin_on_another_port_of_loopback_is_foreign_because_another_local_server_is_another_site', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+    const response = await RunningApi.open(port, RunningApi.ACCEPTED_BODY, {
       Origin: `http://127.0.0.1:${port + 1}`,
     })
 
@@ -1264,7 +1084,7 @@ describe('ApiServer', () => {
   it('a_body_not_declared_as_json_is_refused_so_a_page_cannot_reach_this_without_a_preflight', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+    const response = await RunningApi.open(port, RunningApi.ACCEPTED_BODY, {
       'Content-Type': 'text/plain',
     })
 
@@ -1274,7 +1094,7 @@ describe('ApiServer', () => {
   it('a_charset_on_the_content_type_is_still_json_because_clients_add_one_unasked', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+    const response = await RunningApi.open(port, RunningApi.ACCEPTED_BODY, {
       'Content-Type': 'application/json; charset=utf-8',
     })
 
@@ -1284,7 +1104,7 @@ describe('ApiServer', () => {
   it('a_body_that_is_not_json_is_refused_instead_of_starting_a_plan_for_nothing', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, 'ABC-123')
+    const response = await RunningApi.open(port, 'ABC-123')
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe('{"code":"body-not-a-json-object","detail":"body must be a JSON object"}')
@@ -1294,7 +1114,7 @@ describe('ApiServer', () => {
     const port = await RunningApi.listening()
 
     const refused = await Promise.all(
-      ['"ABC-123"', '[{"id":"ABC-123"}]', 'null', '123'].map((body) => RunningApi.startPlan(port, body))
+      ['"ABC-123"', '[{"id":"ABC-123"}]', 'null', '123'].map((body) => RunningApi.open(port, body))
     )
 
     expect(await Promise.all(refused.map((response) => response.text()))).toEqual(
@@ -1305,7 +1125,7 @@ describe('ApiServer', () => {
   it('a_body_without_a_ticket_is_refused', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, '{}')
+    const response = await RunningApi.open(port, '{}')
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe(
@@ -1316,9 +1136,9 @@ describe('ApiServer', () => {
   it('rejects_the_removed_description_before_starting_any_work', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(
+    const response = await RunningApi.open(
       port,
-      '{"user_comment":"Plan the health endpoint","repo":"owner/name","path":"/repo/checkout"}'
+      '{"user_comment":"Plan the health endpoint","path":"/repo/checkout"}'
     )
 
     expect(response.status).toBe(400)
@@ -1339,7 +1159,7 @@ describe('ApiServer', () => {
         '{"id":"ABC"}',
         '{"id":"ABC-123 rm -rf"}',
         '{"id":"ABC-123\\n"}',
-      ].map((body) => RunningApi.startPlan(port, body))
+      ].map((body) => RunningApi.open(port, body))
     )
 
     expect(refused.map((response) => response.status)).toEqual(Array(8).fill(400))
@@ -1348,24 +1168,16 @@ describe('ApiServer', () => {
   it('an_unknown_field_is_refused_because_it_means_the_other_side_changed_shape', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}","repo":"owner/name","priority":"high"}`)
+    const response = await RunningApi.open(port, `{"id":"${RunningApi.STORY}","path":"/repo/checkout","priority":"high"}`)
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe('{"code":"unknown-field","detail":"unknown field: priority"}')
   })
 
-  it('the_repository_the_body_names_is_the_one_the_use_case_is_asked_to_open_the_issue_in', async () => {
-    const port = await RunningApi.listening()
-
-    await RunningApi.post(port, '/start-plan', '{"id":"ABC-123","repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}')
-
-    expect(RunningApi.spy.repositories).toEqual(['josemerca/ct-loop-sandbox'])
-  })
-
   it('the_path_the_body_names_is_the_root_the_use_case_is_asked_to_cut_the_worktree_in', async () => {
     const port = await RunningApi.listening()
 
-    await RunningApi.post(port, '/start-plan', '{"id":"ABC-123","repo":"owner/name","path":"/Users/someone/repos/name"}')
+    await RunningApi.open(port, '{"id":"ABC-123","path":"/Users/someone/repos/name"}')
 
     expect(RunningApi.spy.roots).toEqual(['/Users/someone/repos/name'])
   })
@@ -1373,7 +1185,7 @@ describe('ApiServer', () => {
   it('a_body_with_no_path_is_refused_because_the_worktree_has_to_be_cut_somewhere', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}","repo":"${RunningApi.REPO}"}`)
+    const response = await RunningApi.open(port, `{"id":"${RunningApi.STORY}"}`)
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe(
@@ -1386,11 +1198,11 @@ describe('ApiServer', () => {
 
     const refused = await Promise.all(
       [
-        '{"id":"ABC-123","repo":"owner/name","path":"repos/name"}',
-        '{"id":"ABC-123","repo":"owner/name","path":"~/repos/name"}',
-        '{"id":"ABC-123","repo":"owner/name","path":""}',
-        '{"id":"ABC-123","repo":"owner/name","path":123}',
-      ].map((body) => RunningApi.startPlan(port, body))
+        '{"id":"ABC-123","path":"repos/name"}',
+        '{"id":"ABC-123","path":"~/repos/name"}',
+        '{"id":"ABC-123","path":""}',
+        '{"id":"ABC-123","path":123}',
+      ].map((body) => RunningApi.open(port, body))
     )
 
     expect(refused.map((response) => response.status)).toEqual([400, 400, 400, 400])
@@ -1400,7 +1212,7 @@ describe('ApiServer', () => {
   it('a_trailing_slash_reaches_the_use_case_because_git_absorbs_it_when_it_canonicalises_the_root', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, '{"id":"ABC-123","repo":"owner/name","path":"/repos/name/"}')
+    const response = await RunningApi.open(port, '{"id":"ABC-123","path":"/repos/name/"}')
 
     expect(response.status).toBe(202)
     expect(RunningApi.spy.roots).toEqual(['/repos/name/'])
@@ -1409,65 +1221,19 @@ describe('ApiServer', () => {
   it('a_path_with_a_semicolon_in_a_segment_is_still_well_formed_because_nothing_ever_reaches_a_shell', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(
+    const response = await RunningApi.open(
       port,
-      '{"id":"ABC-123","repo":"owner/name","path":"/repos/name; rm -rf ~"}'
+      '{"id":"ABC-123","path":"/repos/name; rm -rf ~"}'
     )
 
     expect(response.status).toBe(202)
     expect(RunningApi.spy.roots).toEqual(['/repos/name; rm -rf ~'])
   })
 
-  it('a_body_with_no_repo_is_refused_because_an_issue_has_to_be_opened_somewhere', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}"}`)
-
-    expect(response.status).toBe(400)
-    expect(await response.text()).toBe('{"code":"malformed-repo","detail":"repo must be a repository such as owner/name"}')
-  })
-
-  it('a_body_carrying_the_retired_repo_list_field_is_refused_with_what_to_send_instead', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await RunningApi.startPlan(
-      port,
-      '{"id":"ABC-123","repo_list":[' +
-        '{"repo":"owner/name","path":"/repo/checkout"},' +
-        '{"repo":"owner/other","path":"/repo/other-checkout"}' +
-        ']}'
-    )
-
-    expect(response.status).toBe(400)
-    expect(await response.text()).toBe(
-      '{"code":"repo-list-retired","detail":"repo_list is retired: send repo and path for one repository instead"}'
-    )
-    expect(RunningApi.spy.repositories).toEqual([])
-  })
-
-  it('a_repo_that_is_not_shaped_like_one_is_refused_before_it_ever_becomes_an_argument_of_gh', async () => {
-    const port = await RunningApi.listening()
-
-    const refused = await Promise.all(
-      [
-        '{"id":"ABC-123","repo":"name"}',
-        '{"id":"ABC-123","repo":"owner/name/extra"}',
-        '{"id":"ABC-123","repo":"-o/name"}',
-        '{"id":"ABC-123","repo":"owner/../../etc"}',
-        '{"id":"ABC-123","repo":"owner/name rm -rf"}',
-        '{"id":"ABC-123","repo":""}',
-        '{"id":"ABC-123","repo":123}',
-      ].map((body) => RunningApi.startPlan(port, body))
-    )
-
-    expect(refused.map((response) => response.status)).toEqual(Array(7).fill(400))
-    expect(RunningApi.spy.asked).toEqual([])
-  })
-
   it('a_body_over_the_cap_is_refused_instead_of_being_buffered_whole', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.startPlan(port, `{"id":"${'A'.repeat(9000)}","repo":"owner/name"}`)
+    const response = await RunningApi.open(port, `{"id":"${'A'.repeat(9000)}","path":"/repo/checkout"}`)
 
     expect(response.status).toBe(413)
   })
@@ -1475,7 +1241,7 @@ describe('ApiServer', () => {
   it('the_route_is_one_exact_name_and_not_the_thousand_aliases_a_case_blind_router_answers_to', async () => {
     const port = await RunningApi.listening()
 
-    const response = await RunningApi.post(port, '/START-PLAN', `{"id":"${RunningApi.STORY}"}`)
+    const response = await RunningApi.post(port, '/COORDINATING-SESSION', RunningApi.ACCEPTED_BODY)
 
     expect(response.status).toBe(404)
     expect(RunningApi.spy.asked).toEqual([])
@@ -1484,10 +1250,10 @@ describe('ApiServer', () => {
   it('a_compressed_body_is_not_a_shape_this_api_agreed_to_accept_and_never_reaches_the_domain_inflated', async () => {
     const port = await RunningApi.listening()
 
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
+    const response = await fetch(`http://127.0.0.1:${port}${RunningApi.OPENING}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
-      body: gzipSync(Buffer.from(`{"id":"${RunningApi.STORY}"}`)),
+      body: gzipSync(Buffer.from(RunningApi.ACCEPTED_BODY)),
     })
 
     expect(response.status).toBe(400)
@@ -1498,7 +1264,7 @@ describe('ApiServer', () => {
     const port = await RunningApi.listening()
     const squeezed = gzipSync(Buffer.from(`{"id":"${'A'.repeat(20000)}"}`))
 
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
+    const response = await fetch(`http://127.0.0.1:${port}${RunningApi.OPENING}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
       body: squeezed,
@@ -1511,20 +1277,20 @@ describe('ApiServer', () => {
   it('a_body_that_arrives_with_no_length_is_judged_by_the_domain_instead_of_blamed_on_its_media_type', async () => {
     const port = await RunningApi.listening()
 
-    const said = await RunningApi.ask(port, RunningApi.asking('/start-plan', ['Content-Type: application/json']))
+    const said = await RunningApi.ask(port, RunningApi.asking(RunningApi.OPENING, ['Content-Type: application/json']))
 
     expect(said).toContain('400')
   })
 
   it('the_trace_of_a_failure_names_the_url_the_client_asked_for_and_not_the_one_routing_rewrote', async () => {
-    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const server = RunningApi.server({ openCoordinatingSession: OpenSessionSpy.buggy() })
     const port = await server.start()
     const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
 
     try {
-      await RunningApi.post(port, '/start-plan//', RunningApi.ACCEPTED_BODY)
+      await RunningApi.post(port, `${RunningApi.OPENING}//`, RunningApi.ACCEPTED_BODY)
 
-      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('request to /start-plan// failed')
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain(`request to ${RunningApi.OPENING}// failed`)
     } finally {
       complaining.mockRestore()
       await server.stop()
@@ -1533,11 +1299,9 @@ describe('ApiServer', () => {
 
   it('a_path_that_climbs_out_and_back_in_is_not_the_route_however_a_client_writes_it', async () => {
     const port = await RunningApi.listening()
-    const body = `{"id":"${RunningApi.STORY}"}`
-
     const climbed = await RunningApi.ask(
       port,
-      RunningApi.asking('/foo/../start-plan', ['Content-Type: application/json'], body)
+      RunningApi.asking(`/foo/..${RunningApi.OPENING}`, ['Content-Type: application/json'], RunningApi.ACCEPTED_BODY)
     )
 
     expect(climbed).toContain('404')
@@ -1553,7 +1317,7 @@ describe('ApiServer', () => {
   })
 
   it('stop_closes_the_socket_so_a_later_request_cannot_reach_a_server_believed_dead', async () => {
-    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    const server = RunningApi.server()
     const port = await server.start()
 
     await server.stop()
@@ -1562,7 +1326,7 @@ describe('ApiServer', () => {
   })
 
   it('an_error_after_a_successful_listen_is_not_swallowed_by_the_promise_that_already_resolved', async () => {
-    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    const server = RunningApi.server()
     await server.start()
 
     try {
@@ -1573,7 +1337,7 @@ describe('ApiServer', () => {
   })
 
   it('starting_twice_is_refused_instead_of_leaking_the_first_server_out_of_reach', async () => {
-    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    const server = RunningApi.server()
     await server.start()
 
     try {
@@ -1592,20 +1356,11 @@ describe('ApiServer', () => {
     }
   })
 
-  it('a_started_plan_leaves_no_watch_over_its_issue', async () => {
+  it('active_plans_returns_the_exact_live_plan_the_sessions_watch', async () => {
     const sessions = new PlanSessions()
+    sessions.remember(ActivePlanMother.WATCH)
     const port = await RunningApi.listening({ sessions })
 
-    const response = await RunningApi.accepted(port)
-
-    expect(response.status).toBe(202)
-    expect(sessions.known()).toEqual([StartPlanSpy.WATCH])
-  })
-
-  it('active_plans_returns_the_exact_live_plan_started_by_the_ordinary_route', async () => {
-    const port = await RunningApi.listening()
-
-    await RunningApi.accepted(port)
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
 
     expect(response.status).toBe(200)

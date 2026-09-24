@@ -916,21 +916,6 @@ describe('EpicGroomRoute', () => {
     expect(read.asked.map((asked) => asked.root.text)).toEqual([Mother.ROOT.text])
   })
 
-  it('a read of the closed checkout is dropped once a plan starts in another one', async () => {
-    const held = Mother.closed()
-    const read = ReadEpicGroomSpy.hanging()
-    const port = await RunningApi.listening(held, read, GroomEpicSpy.neverAsked(), Keys.minted())
-
-    const pending = RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
-    await read.started
-    held.planStartedIn(new CheckoutRoot('/another-repo'))
-    read.answerTheHangingOne()
-    const response = await pending
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: 'none' })
-  })
-
   it('the groom is refused on the closed checkout, which offers no target to carry', async () => {
     const held = Mother.closed()
     const groom = GroomEpicSpy.neverAsked()

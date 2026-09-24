@@ -1,4 +1,5 @@
 import { PlanRecoveryConflict } from '../domain/exceptions.ts'
+import { ImplementationState, ImplementationStep } from '../domain/value-objects/implementation-state.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { CheckoutRegistry } from '../domain/ports/checkout-registry.ts'
 import type { PlanCalls } from '../domain/ports/plan-calls.ts'
@@ -36,6 +37,7 @@ type PlanOutcome =
     readonly diagnostic: string,
     readonly recovery: ActivePlanRecovery,
     readonly refusal: RunClosure | null,
+    readonly execution: ImplementationState | null,
   }
 
 type WatchProvenance =
@@ -214,7 +216,7 @@ export class RunPlanRecovery {
           this.activePlans.rememberImplementing(plan.watch, false)
           break
         case ActivePlanPhase.UNCERTAIN:
-          this.activePlans.rememberUncertain(plan.watch, plan.outcome.diagnostic, plan.outcome.recovery, plan.outcome.refusal)
+          this.activePlans.rememberUncertain(plan.watch, plan.outcome.diagnostic, plan.outcome.recovery, plan.outcome.refusal, plan.outcome.execution)
           break
       }
     }
@@ -366,12 +368,15 @@ export class RunPlanRecovery {
     if (publication.kind === 'delivered') {
       return new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: true, acceptsChange: true })
     }
-    if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic)
+    const execution = ImplementationState.of({
+      step: ImplementationStep.DELIVERED, task: null, totalTasks: null, name: null, attempt: null, discards: null,
+    })
+    if (publication.kind === 'uncertain') return this.#inspect(watch, publication.diagnostic, null, execution)
     const started = this.publications.get(key)
     if (started === undefined) {
       return this.#publishing(watch)
     }
-    return started.failure === null ? this.#publishing(watch) : this.#continuable(watch, started.failure)
+    return started.failure === null ? this.#publishing(watch) : this.#continuable(watch, started.failure, execution)
   }
 
   #publishing(watch: PlanWatch): RecoveredRunPlan {
@@ -416,12 +421,13 @@ export class RunPlanRecovery {
     return requestId === `run:${inspection.fact.instruction.work.ticket}`
   }
 
-  #continuable(watch: PlanWatch, detail: string): RecoveredRunPlan {
+  #continuable(watch: PlanWatch, detail: string, execution: ImplementationState | null = null): RecoveredRunPlan {
     return new RecoveredRunPlan(watch, {
       phase: ActivePlanPhase.UNCERTAIN,
       diagnostic: detail,
       recovery: Object.freeze({ action: 'continue', detail }),
       refusal: null,
+      execution,
     })
   }
 
@@ -433,12 +439,13 @@ export class RunPlanRecovery {
       : new RecoveredRunPlan(watch, { phase: ActivePlanPhase.IMPLEMENTING, review: false, acceptsChange })
   }
 
-  #inspect(watch: PlanWatch, detail: string, refusal: RunClosure | null = null): RecoveredRunPlan {
+  #inspect(watch: PlanWatch, detail: string, refusal: RunClosure | null = null, execution: ImplementationState | null = null): RecoveredRunPlan {
     return new RecoveredRunPlan(watch, {
       phase: ActivePlanPhase.UNCERTAIN,
       diagnostic: detail,
       recovery: Object.freeze({ action: 'inspect', detail }),
       refusal,
+      execution,
     })
   }
 
@@ -448,6 +455,7 @@ export class RunPlanRecovery {
       diagnostic,
       recovery: Object.freeze({ action: recovery.action, detail: recovery.detail }),
       refusal: null,
+      execution: null,
     })
   }
 
@@ -477,6 +485,7 @@ export class RunPlanRecovery {
           recovered.outcome.diagnostic,
           recovered.outcome.recovery,
           recovered.outcome.refusal,
+          recovered.outcome.execution,
         )
         return
       case ActivePlanPhase.IMPLEMENTING:

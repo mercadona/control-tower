@@ -13,7 +13,6 @@ import {
   openRestored,
   pressStart,
   typePath,
-  typeRepository,
   typeTicket,
 } from './helpers'
 
@@ -92,18 +91,17 @@ describe('Home · opens the brainstorming', () => {
 
     await screen.findByRole('alert')
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
-    expect(screen.getByLabelText(/Repositorio/)).toBeEnabled()
     expect(screen.getByLabelText(/Ruta local/)).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
-  it('should translate the refusal when the path is not a checkout of the repository', async () => {
+  it('should translate the refusal when the path is not a git clone of a GitHub repository', async () => {
     backendAnswering(StartPlanMother.notACheckout())
     const { user } = openHome()
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('La ruta local no corresponde al repositorio indicado.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('La ruta local no es un clon de git de un repositorio de GitHub.')
   })
 
   it('should say the backend is unreachable when the network fails', async () => {
@@ -135,7 +133,6 @@ describe('Home · opens the brainstorming', () => {
   it('should keep the start button disabled until the ticket key is well formed', async () => {
     backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
@@ -163,7 +160,6 @@ describe('Home · opens the brainstorming', () => {
     const { user } = openHome()
 
     await typeTicket(user, StartPlanMother.ISSUE_URL)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
     await pressStart(user)
 
@@ -172,25 +168,10 @@ describe('Home · opens the brainstorming', () => {
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY_ISSUE_URL)
   })
 
-  it('should keep the start button disabled until the repository is well formed', async () => {
-    backendAnswering(CoordinatingSessionMother.opened())
-    const { user } = openHome()
-    await typeTicket(user, StartPlanMother.TICKET)
-    await typePath(user, StartPlanMother.PATH)
-
-    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
-    await typeRepository(user, 'name')
-    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
-    await user.clear(screen.getByLabelText(/Repositorio/))
-    await typeRepository(user, 'owner/name')
-    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
-  })
-
   it('should keep the start button disabled until the local path is well formed', async () => {
     backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
 
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await typePath(user, '   ')
@@ -204,7 +185,6 @@ describe('Home · opens the brainstorming', () => {
     const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, `  ${StartPlanMother.PATH}  `)
 
     await pressStart(user)
@@ -218,7 +198,6 @@ describe('Home · opens the brainstorming', () => {
     const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, `${StartPlanMother.PATH}/`)
 
     await pressStart(user)
@@ -232,7 +211,6 @@ describe('Home · opens the brainstorming', () => {
     backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
 
     await typePath(user, '/Users/pedro//code')
 
@@ -269,7 +247,6 @@ describe('Home · opens the brainstorming', () => {
     const backend = backendPending()
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
     await user.dblClick(screen.getByRole('button', { name: 'Arrancar brainstorming' }))
@@ -282,7 +259,6 @@ describe('Home · opens the brainstorming', () => {
   it('should keep the start button disabled without a ticket', async () => {
     backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
-    await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()

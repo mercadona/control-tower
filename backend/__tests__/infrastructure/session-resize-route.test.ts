@@ -58,7 +58,6 @@ class RunningApi {
   static async listening(liveSessions: LiveSessions, resizeSession: ResizeSession): Promise<number> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       externalTools: undefined,
       listLiveSessions: undefined,
       liveSessions,

@@ -1,7 +1,7 @@
 import { ImplementationStep, type ImplementationProgressState } from 'app/implement-progress/ImplementProgress.types'
 import type { PlanningActivity } from 'app/planning-progress/PlanningProgress.types'
 import type { PlanRefusal, RecoveryAction } from 'app/active-plans/ActivePlan.types'
-import type { WorkProgress, WorkReading, WorkSnapshot, WorkExecutionReading } from './WorkProgress.types'
+import type { DeliveredPullRequest, WorkProgress, WorkReading, WorkSnapshot, WorkExecutionReading } from './WorkProgress.types'
 
 export class WorkProgressContract {
   static object(value: unknown, keys: readonly string[]): Record<string, unknown> {
@@ -46,16 +46,18 @@ export class WorkProgressContract {
     const wire = WorkProgressContract.object(value, ['step', 'task', 'total_tasks', 'name', 'attempt', 'discards', 'pull_request'])
     const step = Object.values(ImplementationStep).find((candidate) => candidate === wire.step)
     if (step === undefined) throw new Error('unknown execution step')
-    let pullRequest = null
-    if (wire.pull_request !== null) {
-      const pull = WorkProgressContract.object(wire.pull_request, ['number', 'url'])
-      pullRequest = { number: WorkProgressContract.count(pull.number), url: WorkProgressContract.text(pull.url) }
-    }
+    const pullRequest = WorkProgressContract.pullRequest(wire.pull_request)
     return {
       step, task: WorkProgressContract.nullableCount(wire.task), totalTasks: WorkProgressContract.nullableCount(wire.total_tasks),
       name: WorkProgressContract.nullableText(wire.name), attempt: WorkProgressContract.nullableCount(wire.attempt),
       discards: WorkProgressContract.nullableCount(wire.discards), pullRequest,
     }
+  }
+
+  static pullRequest(value: unknown): DeliveredPullRequest | null {
+    if (value === null) return null
+    const pull = WorkProgressContract.object(value, ['number', 'url'])
+    return { number: WorkProgressContract.count(pull.number), url: WorkProgressContract.text(pull.url) }
   }
 
   static executionReading(value: unknown): WorkExecutionReading {
@@ -107,12 +109,16 @@ export class WorkProgressContract {
         return { phase: 'implementing', execution: WorkProgressContract.executionReading(wire.execution) }
       }
       case 'uncertain': {
-        const wire = WorkProgressContract.object(value, ['phase', 'diagnostic', 'recovery', 'refusal'])
+        const wire = WorkProgressContract.object(value, ['phase', 'diagnostic', 'recovery', 'refusal', 'execution'])
         const recovery = WorkProgressContract.object(wire.recovery, ['action', 'detail'])
         const actions: readonly RecoveryAction[] = ['observe', 'continue', 'cleanup', 'inspect']
         const action = actions.find((candidate) => candidate === recovery.action)
         if (action === undefined) throw new Error('unknown recovery action')
-        return { phase: 'uncertain', diagnostic: WorkProgressContract.text(wire.diagnostic), recovery: { action, detail: WorkProgressContract.text(recovery.detail) }, refusal: WorkProgressContract.refusal(wire.refusal) }
+        return { phase: 'uncertain', diagnostic: WorkProgressContract.text(wire.diagnostic), recovery: { action, detail: WorkProgressContract.text(recovery.detail) }, refusal: WorkProgressContract.refusal(wire.refusal), execution: WorkProgressContract.executionReading(wire.execution) }
+      }
+      case 'finished': {
+        const wire = WorkProgressContract.object(value, ['phase', 'harvested_at', 'pull_request'])
+        return { phase: 'finished', harvestedAt: WorkProgressContract.text(wire.harvested_at), pullRequest: WorkProgressContract.pullRequest(wire.pull_request) }
       }
       default:
         throw new Error('unknown work phase')

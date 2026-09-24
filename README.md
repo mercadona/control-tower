@@ -391,8 +391,7 @@ the groom then presses itself.
 **Implementación, including planning.** Once work is authorized, the backend
 dispatches the slices that dependencies and shared-file constraints allow to run
 together. `POST /start-plan` is the explicit dispatch entrance: a milestone
-request selects eligible existing issues; the retained single-ticket request
-creates a plan issue. Each dispatched slice gets its own worktree and agent
+request selects eligible existing issues. Each dispatched slice gets its own worktree and agent
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.
 
@@ -475,7 +474,7 @@ response and refusal contracts.
 | `GET /epic-groom` | Read the proposed issue creation, publication prerequisites and current groom/authorization state |
 | `POST /epic-groom` | Create the milestone and its issues from the published specification |
 | `POST /epic-promotion` | Perform the person's authorization action by promoting eligible issues to `status:ready` |
-| `POST /start-plan` | Dispatch authorized milestone work, or start the retained single-ticket planning path |
+| `POST /start-plan` | Dispatch authorized milestone work |
 
 The `epic-*` path names are existing contracts; they operate on the milestone.
 Freeze, groom and authorization controls enforce their own admission rules. A

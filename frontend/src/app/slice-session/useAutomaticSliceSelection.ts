@@ -14,6 +14,10 @@ interface AutomaticSliceSelectionOptions {
 
 const identityOf = (plan: StartedPlan) => `${plan.repo}:${plan.issue.number}:${plan.agent}`
 
+const sharesCheckout = (workflow: WorkflowSnapshot, active: ActivePlan) =>
+  active.plan.repo === workflow.plan.repo &&
+  (active.plan.root ?? active.request.path) === (workflow.plan.root ?? workflow.request.path)
+
 const isDeliveredOrInReview = (progress: ImplementProgressRead | undefined) =>
   progress?.phase === 'progress' && (
     progress.step === ImplementationStep.DELIVERED || progress.step === ImplementationStep.IN_REVIEW
@@ -56,10 +60,11 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
     }
 
     if (!enabled || pendingRef.current !== identity) return
+    const selectedStillActive = plans.some((active) => identityOf(active.plan) === identity)
+    if (selectedStillActive && selectedProgress?.phase !== 'progress') return
     const candidates = plans.filter((active) =>
       identityOf(active.plan) !== identity &&
-      active.plan.repo === workflow.plan.repo &&
-      (active.plan.root ?? active.request.path) === (workflow.plan.root ?? workflow.request.path) &&
+      sharesCheckout(workflow, active) &&
       !(active.phase === 'implementing' && isDeliveredOrInReview(readings[identityOf(active.plan)])),
     )
     if (candidates.length !== 1) return
@@ -73,4 +78,4 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
   return observe
 }
 
-export { useAutomaticSliceSelection }
+export { sharesCheckout, useAutomaticSliceSelection }

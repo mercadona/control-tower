@@ -87,32 +87,35 @@ export class ReadImplementationProgress {
     })
 
     try {
-      return new ReadImplementationProgressResult({ state: await this.#reviewed(state, params) })
+      return await this.#reviewed(state, params)
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
       return new ReadImplementationProgressResult({ state, delivery: { kind: 'unavailable', detail: cause.message } })
     }
   }
 
-  async #reviewed(state: ImplementationState, params: ReadImplementationProgressParams): Promise<ImplementationState> {
-    if (state.step !== ImplementationStep.DELIVERED) return state
+  async #reviewed(state: ImplementationState, params: ReadImplementationProgressParams): Promise<ReadImplementationProgressResult> {
+    if (state.step !== ImplementationStep.DELIVERED) return new ReadImplementationProgressResult({ state })
     const watch = await this.records.find({ issue: params.issue, repository: params.repository })
     if (watch !== null && await this.isDriver(watch)) {
       const delivery = await this.delivery.inspect(watch)
+      if (delivery.kind === 'uncertain') {
+        return new ReadImplementationProgressResult({ state, delivery: { kind: 'unavailable', detail: delivery.diagnostic } })
+      }
       if (delivery.kind !== 'delivered') {
-        return state.underReview({
+        return new ReadImplementationProgressResult({ state: state.underReview({
           step: ImplementationStep.PUBLISHING,
           pullRequest: delivery.kind === 'absent' ? null : delivery.pullRequest,
-        })
+        }) })
       }
-      return this.#deliveryReviewed(state, delivery.pullRequest, params)
+      return new ReadImplementationProgressResult({ state: await this.#deliveryReviewed(state, delivery.pullRequest, params) })
     }
     const pullRequest = await this.pullRequests.openOf({
       issueNumber: params.issue, repository: params.repository,
     })
-    if (pullRequest === null) return state
+    if (pullRequest === null) return new ReadImplementationProgressResult({ state })
 
-    return this.#deliveryReviewed(state, pullRequest, params)
+    return new ReadImplementationProgressResult({ state: await this.#deliveryReviewed(state, pullRequest, params) })
   }
 
   async #deliveryReviewed(

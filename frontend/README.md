@@ -10,13 +10,13 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 (the implementation).
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
-the required ticket, repository and local path open a coordinating session,
+the required ticket and local path open a coordinating session — the repository
+is the one the clone's `origin` names, read by the backend —
 current progress arrives over `GET /work-progress/:issue`, polled. It combines
 plan readiness, planning-agent activity and execution progress. The page shows the
 panels of gates 1 and 2, and the live terminals of the sessions the backend
-owns. `POST /start-plan` accepts the
-retained loose request or a milestone-only command. The milestone path selects
-and starts the next eligible slice; after the committed plan is published, the
+owns. `POST /start-plan` accepts only a milestone command: it selects and starts
+the next eligible slice; after the committed plan is published, the
 backend resumes the same headless conversation automatically. `POST
 /implement-plan` is not routed, so the page offers no implementation button.
 Each area has its own directory under `src/app/`, and the endpoint it consumes
@@ -41,6 +41,19 @@ delivery check preserves local execution as a partial reading without claiming a
 published pull request. Polls wait three seconds after the previous response, or
 fifteen seconds for confirmed delivered/review/fixing states. Unmounting aborts the
 request and timer. The old three progress routes and their clients are retired.
+
+If inventory confirmation fails, the selected identity and its last progress stay
+on screen as stale while progress polling is paused. Confirmation returning
+resumes polling without clearing that last reading; it becomes fresh only when a
+new progress answer arrives. Discarding or switching identities clears the view.
+A pending automatic handoff also waits while the selected work is stale, partial
+or unreadable, even if its candidate is fresh. A previously reviewed work leaving
+the confirmed inventory remains a separate, supported handoff case.
+
+Publication uncertainty can carry proven local completion with recovery
+information. The panel says **Implementación terminada; publicación sin confirmar**
+and retains the diagnostic and permitted recovery controls; that reading cannot
+authorize an automatic handoff or imply a verified pull request.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
@@ -171,6 +184,19 @@ in-review slice does not trigger one. Returning to fixes cancels the pending han
 `useAutomaticSliceSelection.ts` consumes the cards' existing progress reads
 rather than starting another polling loop.
 
+When the saved workflow leaves active plans, the page asks `/work-progress` what
+became of it (`useWorkConclusion`) instead of assuming it was lost. The backend
+decides: `finished` — its harvest is recorded — renders an informative
+**Slice #N entregado**, naming the slices still running in the same repository
+and checkout (or saying none are), linking the pull request when the backend
+names one, and offering **Cerrar** to clear the saved workflow. `work-not-found`
+keeps the warning, whose copy no longer names cmux. Until the first of those
+answers arrives the page says it is still checking and warns nobody; after it, a
+read that fails keeps the last answer on screen. The question is repeated every
+three seconds and stops once the answer is `finished`, so a warning read in the
+instant before the harvest is recorded turns into the announcement on the next
+poll, and a slice the backend reports in flight again withdraws the warning.
+
 The mutation owns the active-plan read barrier from the click until its fresh
 GET completes. It first drains a GET that predates the click; timer and manual
 polls that wake while POST is pending start no read. After an accepted or
@@ -280,7 +306,7 @@ worst move available when nobody can tell what was created.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
   CORS and no preflight.
-- **The client is `fetch`** (`src/app/start-plan/client.ts`,
+- **The client is `fetch`** (`src/app/coordinating-session/client.ts`,
   `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
   `EventSource` remains for the coordinating terminal stream, not work progress.
   The in-house libraries are waiting for CI to have access to the private

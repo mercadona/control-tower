@@ -1,15 +1,12 @@
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
-import { StartPlanParams } from '../application/actions/start-plan.ts'
 import { StartMilestonePlanParams } from '../application/actions/start-milestone-plan.ts'
 import { EpicGroomState, ReadEpicGroomParams } from '../application/queries/read-epic-groom.ts'
 import { Reservation, WorkInFlight } from './work-in-flight.ts'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
-import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
-import { PlanTarget } from '../domain/value-objects/plan-target.ts'
 import {
   PlanFailure,
   RepositoryPreparationRequired,
@@ -30,11 +27,11 @@ import {
   EpicIssuesNotRead, EpicIssuesNotUnderstood, EpicIssueNotPromoted,
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
-import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
-import type { SliceNotStarted, StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
+import type { PlanStarted, SliceNotStarted, StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export const PlanRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',
@@ -42,8 +39,6 @@ export const PlanRequestOutcome = Object.freeze({
   UNKNOWN_FIELD: 'unknown-field',
   MALFORMED_ID: 'malformed-id',
   NOTHING_TO_PLAN: 'nothing-to-plan',
-  REPO_LIST_RETIRED: 'repo-list-retired',
-  MALFORMED_REPO: 'malformed-repo',
   MALFORMED_PATH: 'malformed-path',
 } as const)
 
@@ -69,13 +64,6 @@ export type MilestonePlanOutcomeValue = (typeof MilestonePlanOutcome)[keyof type
 
 export class MalformedMilestonePlan extends Error {}
 
-const PlanEntrance = Object.freeze({
-  LOOSE: 'loose',
-  MILESTONE: 'milestone',
-} as const)
-
-type PlanEntranceValue = (typeof PlanEntrance)[keyof typeof PlanEntrance]
-
 export class MilestonePlanRequest {
   static readonly FIELD = 'milestone'
   readonly milestone: string
@@ -83,17 +71,6 @@ export class MilestonePlanRequest {
   private constructor(milestone: string) {
     this.milestone = milestone
     Object.freeze(this)
-  }
-
-  static entranceOf(raw: string): PlanEntranceValue {
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      return MilestonePlanRequest.#isJsonObject(parsed) && Object.hasOwn(parsed, MilestonePlanRequest.FIELD)
-        ? PlanEntrance.MILESTONE
-        : PlanEntrance.LOOSE
-    } catch {
-      return PlanEntrance.LOOSE
-    }
   }
 
   static from(raw: string): MilestonePlanRequest {
@@ -161,51 +138,46 @@ type MilestoneStartCollaborators = Readonly<{
 
 export class PlanRequest {
   static readonly ID_FIELD = 'id'
-  static readonly REPO_FIELD = 'repo'
   static readonly PATH_FIELD = 'path'
-  static readonly RETIRED_REPO_LIST_FIELD = 'repo_list'
 
   static readonly KNOWN_FIELDS: readonly string[] = Object.freeze([
-    PlanRequest.ID_FIELD, PlanRequest.REPO_FIELD, PlanRequest.PATH_FIELD,
+    PlanRequest.ID_FIELD, PlanRequest.PATH_FIELD,
   ])
 
   readonly outcome: PlanRequestOutcomeValue
   readonly story: UserStoryKey | UserStoryUrl | null
-  readonly targets: readonly PlanTarget[] | null
+  readonly root: CheckoutRoot | null
   readonly fields: readonly string[]
   readonly named: string | null
 
-  constructor({ outcome, story, targets, fields, named = null }: {
+  constructor({ outcome, story, root, fields, named = null }: {
     outcome: PlanRequestOutcomeValue,
     story: UserStoryKey | UserStoryUrl | null,
-    targets: readonly PlanTarget[] | null,
+    root: CheckoutRoot | null,
     fields: readonly string[],
     named?: string | null,
   }) {
     this.outcome = outcome
     this.story = story
-    this.targets = targets === null ? null : Object.freeze([...targets])
+    this.root = root
     this.fields = Object.freeze([...fields])
     this.named = named
     Object.freeze(this)
   }
 
-  static accepted(
-    story: UserStoryKey | UserStoryUrl,
-    targets: readonly PlanTarget[]
-  ): PlanRequest {
-    return new PlanRequest({ outcome: PlanRequestOutcome.ACCEPTED, story, targets, fields: [] })
+  static accepted(story: UserStoryKey | UserStoryUrl, root: CheckoutRoot): PlanRequest {
+    return new PlanRequest({ outcome: PlanRequestOutcome.ACCEPTED, story, root, fields: [] })
   }
 
   static refused(outcome: PlanRequestOutcomeValue, named: string | null = null): PlanRequest {
     return new PlanRequest({
-      outcome, story: null, targets: null, fields: [], named,
+      outcome, story: null, root: null, fields: [], named,
     })
   }
 
   static withUnknownFields(fields: readonly string[]): PlanRequest {
     return new PlanRequest({
-      outcome: PlanRequestOutcome.UNKNOWN_FIELD, story: null, targets: null, fields,
+      outcome: PlanRequestOutcome.UNKNOWN_FIELD, story: null, root: null, fields,
     })
   }
 
@@ -218,9 +190,6 @@ export class PlanRequest {
     }
     if (!PlanRequest.#isJsonObject(parsed)) {
       return PlanRequest.refused(PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT)
-    }
-    if (Object.hasOwn(parsed, PlanRequest.RETIRED_REPO_LIST_FIELD)) {
-      return PlanRequest.refused(PlanRequestOutcome.REPO_LIST_RETIRED)
     }
     const unknown = Object.keys(parsed).filter((field) => !PlanRequest.KNOWN_FIELDS.includes(field))
     if (unknown.length > 0) {
@@ -236,17 +205,11 @@ export class PlanRequest {
     }
     const story = UserStoryReference.of(given)
 
-    const asked = parsed[PlanRequest.REPO_FIELD]
-    if (!RepositoryName.isWellFormed(asked)) {
-      return PlanRequest.refused(PlanRequestOutcome.MALFORMED_REPO, PlanRequest.REPO_FIELD)
-    }
     const where = parsed[PlanRequest.PATH_FIELD]
     if (!CheckoutRoot.isWellFormed(where)) {
       return PlanRequest.refused(PlanRequestOutcome.MALFORMED_PATH, PlanRequest.PATH_FIELD)
     }
-    return PlanRequest.accepted(story, [
-      new PlanTarget({ repository: new RepositoryName(asked), root: new CheckoutRoot(where) }),
-    ])
+    return PlanRequest.accepted(story, new CheckoutRoot(where))
   }
 
   static #isJsonObject(parsed: unknown): parsed is Record<string, unknown> {
@@ -274,17 +237,6 @@ export class PlanRefusal {
       status: 400,
       code: PlanRequestOutcome.NOTHING_TO_PLAN,
       detail: `${PlanRequest.ID_FIELD} is required to say what to plan`,
-    })],
-    [PlanRequestOutcome.REPO_LIST_RETIRED, () => new Refusal({
-      status: 400,
-      code: PlanRequestOutcome.REPO_LIST_RETIRED,
-      detail: `${PlanRequest.RETIRED_REPO_LIST_FIELD} is retired: send ${PlanRequest.REPO_FIELD} and `
-        + `${PlanRequest.PATH_FIELD} for one repository instead`,
-    })],
-    [PlanRequestOutcome.MALFORMED_REPO, (asked) => new Refusal({
-      status: 400,
-      code: PlanRequestOutcome.MALFORMED_REPO,
-      detail: `${asked.named} must be a repository such as ${RepositoryName.EXAMPLE}`,
     })],
     [PlanRequestOutcome.MALFORMED_PATH, (asked) => new Refusal({
       status: 400,
@@ -382,9 +334,9 @@ export class PlanCollapse {
 export class StartPlanRoute {
   static readonly PATH = '/start-plan'
   static readonly METHOD = 'POST'
+  static readonly REPO_FIELD = 'repo'
 
   static handledBy(
-    startPlan: StartPlan,
     sessions: PlanSessionRegistry,
     collaborators: MilestoneStartCollaborators = Object.freeze({
       milestone: null, coordinating: null, groom: null, inFlight: null,
@@ -392,23 +344,7 @@ export class StartPlanRoute {
   ): (request: Request, response: Response) => Promise<void> {
     const inFlight = collaborators.inFlight ?? new WorkInFlight()
     return async (request, response) => {
-      const raw = JsonBody.textOf(request)
-      switch (MilestonePlanRequest.entranceOf(raw)) {
-        case PlanEntrance.MILESTONE:
-          await StartPlanRoute.#acceptMilestone(sessions, response, raw, collaborators, inFlight)
-          return
-        case PlanEntrance.LOOSE:
-          break
-      }
-      const asked = PlanRequest.from(raw)
-      if (asked.outcome !== PlanRequestOutcome.ACCEPTED) {
-        Answer.refuseAs(response, PlanRefusal.of(asked))
-        return
-      }
-      const repository = asked.targets![0].repository.text
-      await StartPlanRoute.#withReservation(repository, inFlight, response, async () => {
-        await StartPlanRoute.#accept(startPlan, sessions, response, asked, collaborators.coordinating)
-      })
+      await StartPlanRoute.#acceptMilestone(sessions, response, JsonBody.textOf(request), collaborators, inFlight)
     }
   }
 
@@ -476,7 +412,8 @@ export class StartPlanRoute {
           response,
           asked,
           startMilestone,
-          new PlanTarget({ repository, root: holding.conversation.root }),
+          repository,
+          holding.conversation.root,
         )
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause
@@ -490,12 +427,13 @@ export class StartPlanRoute {
     response: Response,
     asked: MilestonePlanRequest,
     start: StartMilestonePlan,
-    target: PlanTarget,
+    repository: RepositoryName,
+    root: CheckoutRoot,
   ): Promise<void> {
     try {
       const dispatched = await start.execute(new StartMilestonePlanParams({
-        repository: target.repository,
-        root: target.root,
+        repository,
+        root,
         milestone: asked.milestone,
       }))
       for (const started of dispatched.started) sessions.remember(started.watch)
@@ -519,7 +457,7 @@ export class StartPlanRoute {
 
     return {
       issue: { number: slice.issue.number, url: slice.issue.url },
-      [PlanRequest.REPO_FIELD]: slice.repository.text,
+      [StartPlanRoute.REPO_FIELD]: slice.repository.text,
       code: refusal.code,
       detail: refusal.detail,
     }
@@ -550,37 +488,10 @@ export class StartPlanRoute {
     Answer.refuseAs(response, MilestonePlanRefusal.of(new RefusedMilestonePlan({ outcome: code, detail })))
   }
 
-  static async #accept(
-    startPlan: StartPlan,
-    sessions: PlanSessionRegistry,
-    response: Response,
-    asked: PlanRequest,
-    coordinating: CoordinatingSessions | null = null,
-  ): Promise<void> {
-    let result: StartPlanResult
-    try {
-      result = await startPlan.execute(
-        new StartPlanParams({ story: asked.story!, targets: asked.targets! })
-      )
-    } catch (cause) {
-      if (!(cause instanceof PlanFailure)) throw cause
-      Answer.refuseAs(response, PlanCollapse.of(cause))
-      return
-    }
-    if (result.failed.length > 0) {
-      Answer.refuseAs(response, PlanCollapse.of(result.failed[0].cause))
-      return
-    }
-    const [started] = result.started
-    sessions.remember(started.watch)
-    coordinating?.planStartedIn(asked.targets![0].root)
-    Answer.send(response, 202, { status: 'started', ...StartPlanRoute.#startedAnswer(started) })
-  }
-
   static #startedAnswer(started: PlanStarted): Record<string, unknown> {
     return {
       [PlanRequest.ID_FIELD]: started.watch.storyText(),
-      [PlanRequest.REPO_FIELD]: started.watch.repository.text,
+      [StartPlanRoute.REPO_FIELD]: started.watch.repository.text,
       issue: { number: started.watch.issue.number, url: started.watch.issue.url },
       agent: started.agent,
       branch: started.watch.located.branch,

@@ -1,6 +1,6 @@
 import { RunDelivery } from '../src/domain/ports/run-delivery.ts'
 import type { PlanWatch } from '../src/domain/value-objects/plan-watch.ts'
-import type { RunDeliveryInspection } from '../src/domain/value-objects/run-delivery.ts'
+import type { DeliveredPullRequest, RunDeliveryInspection } from '../src/domain/value-objects/run-delivery.ts'
 
 export class CompletedRunDelivery extends RunDelivery {
   readonly delivered: PlanWatch[] = []
@@ -15,5 +15,9 @@ export class CompletedRunDelivery extends RunDelivery {
 
   override async inspect(): Promise<RunDeliveryInspection> {
     return this.inspection
+  }
+
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    throw new Error(`nobody scripted the recorded pull request of ${watch.agent}`)
   }
 }

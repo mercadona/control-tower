@@ -29,14 +29,6 @@ describe('PlanRefusal', () => {
     expect(refusal.code).toBe(PlanRequestOutcome.UNKNOWN_FIELD)
     expect(refusal.detail).toBe('unknown field: b, a')
   })
-
-  it('the_refusal_of_the_retired_repo_list_field_names_what_to_send_instead_of_it', () => {
-    const retired = PlanRefusal.of(PlanRequest.refused(PlanRequestOutcome.REPO_LIST_RETIRED))
-
-    expect(retired.status).toBe(400)
-    expect(retired.code).toBe('repo-list-retired')
-    expect(retired.detail).toBe('repo_list is retired: send repo and path for one repository instead')
-  })
 })
 
 describe('PlanCollapse', () => {

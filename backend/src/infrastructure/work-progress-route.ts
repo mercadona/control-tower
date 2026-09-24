@@ -3,6 +3,7 @@ import { ReadWorkProgressParams, type ReadWorkProgress, type ReadWorkProgressRes
 import { WorkNotFound, WorkNotRead, WorkNotUnderstood, WorkProgressFailure } from '../domain/exceptions.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { WorkProgressDetail, WorkReading } from '../domain/value-objects/work-progress.ts'
+import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import { Answer, Refusal } from './http.ts'
 
 export class WorkProgressResponse {
@@ -40,20 +41,30 @@ export class WorkProgressResponse {
       case 'implementing':
         return {
           phase: 'implementing',
-          execution: WorkProgressResponse.#reading(detail.execution, (state) => ({
-            step: state.step, task: state.task, total_tasks: state.totalTasks,
-            name: state.name, attempt: state.attempt, discards: state.discards, pull_request: state.pullRequest,
-          })),
+          execution: WorkProgressResponse.#reading(detail.execution, WorkProgressResponse.#execution),
         }
       case 'uncertain':
         return {
           phase: 'uncertain', diagnostic: detail.diagnostic,
+          execution: WorkProgressResponse.#reading(detail.execution, WorkProgressResponse.#execution),
           recovery: { action: detail.recovery.action, detail: detail.recovery.detail },
           refusal: detail.refusal === null ? null : {
             state: detail.refusal.state, outcome: detail.refusal.outcome, exit: detail.refusal.exit,
             task: detail.refusal.task, findings: detail.refusal.findings, verdict: detail.refusal.verdict,
           },
         }
+      case 'finished':
+        return {
+          phase: 'finished', harvested_at: detail.harvestedAt,
+          pull_request: detail.pullRequest === null ? null : { number: detail.pullRequest.number, url: detail.pullRequest.url },
+        }
+    }
+  }
+
+  static #execution(state: ImplementationState): object {
+    return {
+      step: state.step, task: state.task, total_tasks: state.totalTasks,
+      name: state.name, attempt: state.attempt, discards: state.discards, pull_request: state.pullRequest,
     }
   }
 }

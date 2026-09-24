@@ -4,13 +4,9 @@ import type { ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
-import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
-import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
-import { ActualHeadlessRuntime, Entrypoint, TheActivePlans, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
-import type { Refusal, StartedPlan } from './fixtures/ct-api-process.ts'
+import { Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
 
 type Failure = { code: string, detail: string }
 type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
@@ -19,28 +15,8 @@ type DeliveredMetrics = { enabled: boolean, variable: string, destination: strin
 
 type SurveyedTools = { ready: boolean, tools: ToolRow[], metricsDelivery: DeliveredMetrics }
 
-class HostCheckout {
-  static readonly #HERE = dirname(fileURLToPath(import.meta.url))
-  static readonly #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
-
-  static path(): string {
-    return HostCheckout.#HERE
-  }
-
-  static repository(): string {
-    const url = execFileSync('git', ['-C', HostCheckout.#HERE, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
-    const named = url.match(HostCheckout.#NAMED)
-    if (named === null) {
-      throw new Error(`the origin of this checkout is ${JSON.stringify(url)}, and no owner/name can be read out of it`)
-    }
-
-    return named[1] as string
-  }
-}
-
 class ACheckoutReachableByTwoPaths {
   static readonly ISSUE = 33
-  static readonly REPOSITORY = 'acme/widget'
   static readonly TITLE = `ct-plan-acme__widget-issue-${ACheckoutReachableByTwoPaths.ISSUE}`
 
   static #git(cwd: string, ...argv: string[]): void {
@@ -117,7 +93,6 @@ class AClaudeThatStaysOpen {
 }
 
 class LifecycleFixture {
-  static readonly REPOSITORY = 'acme/widget'
   static readonly READY = 'FAKE_CLAUDE_READY'
   static readonly INPUT = 'typed-through-the-api'
   static readonly #roots: string[] = []
@@ -289,13 +264,12 @@ class TheCoordinatingSessionEndpoint {
     ].join('\n') + '\n', { mode: 0o755 })
   }
 
-  static open(port: number, repository: string, checkout: string): Promise<Response> {
+  static open(port: number, checkout: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: TheCoordinatingSessionEndpoint.TICKET,
-        repo: repository,
         path: checkout,
       }),
     })
@@ -427,9 +401,7 @@ describe('ct-api entrypoint', () => {
     const environment = fixture.environment()
     const firstPort = await Entrypoint.listening(environment)
 
-    const opened = await TheCoordinatingSessionEndpoint.open(
-      firstPort, LifecycleFixture.REPOSITORY, fixture.checkout
-    )
+    const opened = await TheCoordinatingSessionEndpoint.open(firstPort, fixture.checkout)
     expect(opened.status).toBe(202)
     const first = await opened.json() as {
       conversation: string, target: string, session: { id: string },
@@ -467,9 +439,7 @@ describe('ct-api entrypoint', () => {
     expect(unrelated.exitCode).toBeNull()
     expect(() => process.kill(unrelated.pid!, 0)).not.toThrow()
 
-    const sameBackendReplacement = await TheCoordinatingSessionEndpoint.open(
-      firstPort, LifecycleFixture.REPOSITORY, fixture.checkout
-    )
+    const sameBackendReplacement = await TheCoordinatingSessionEndpoint.open(firstPort, fixture.checkout)
     expect(sameBackendReplacement.status).toBe(202)
     const second = await sameBackendReplacement.json() as {
       conversation: string, target: string, session: { id: string },
@@ -487,9 +457,7 @@ describe('ct-api entrypoint', () => {
     }).toEqual({ status: 'none', operation: 'idle' })
     expect(await fixture.launchCount()).toBe(2)
 
-    const replacementAfterRestart = await TheCoordinatingSessionEndpoint.open(
-      restartedPort, LifecycleFixture.REPOSITORY, fixture.checkout
-    )
+    const replacementAfterRestart = await TheCoordinatingSessionEndpoint.open(restartedPort, fixture.checkout)
     expect(replacementAfterRestart.status).toBe(202)
     const third = await replacementAfterRestart.json() as { conversation: string, target: string, session: { id: string } }
     expect(third.conversation).not.toBe(second.conversation)
@@ -539,8 +507,8 @@ describe('ct-api entrypoint', () => {
     })
 
     const answered = await Promise.all([
-      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
-      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
+      TheCoordinatingSessionEndpoint.open(port, checkout.physical),
+      TheCoordinatingSessionEndpoint.open(port, checkout.physical),
     ])
 
     expect(answered.map((response) => response.status).sort()).toEqual([202, 409])
@@ -634,35 +602,6 @@ describe('ct-api entrypoint', () => {
     })
   }, 600_000)
 
-  it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
-
-    const response = await Entrypoint.startPlan(
-      port,
-      `{"id":"ZZZ-999999","repo":${JSON.stringify(HostCheckout.repository())},"path":${JSON.stringify(HostCheckout.path())}}`
-    )
-
-    expect(response.status).toBe(400)
-    const body = await response.json() as Failure
-    expect(body.code).toBe('user-story-not-read')
-    expect(body.detail).toMatch(/^acli jira failed: /)
-  })
-
-  it('a_whole_request_reaches_gh_so_a_typo_in_the_url_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
-
-    const response = await Entrypoint.startPlan(
-      port,
-      `{"id":"https://github.com/mercadona/control-tower/issues/999999999",` +
-        `"repo":${JSON.stringify(HostCheckout.repository())},"path":${JSON.stringify(HostCheckout.path())}}`
-    )
-
-    expect(response.status).toBe(400)
-    const body = await response.json() as Failure
-    expect(body.code).toBe('user-story-not-read')
-    expect(body.detail).toMatch(/^gh issue view failed: /)
-  })
-
   it('the_running_api_does_not_read_an_arbitrary_checkout_as_recorded_work', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
     const root = await RunFileFixture.inATemporaryRoot()
@@ -738,37 +677,6 @@ describe('ct-api entrypoint', () => {
     expect(response.status).toBe(404)
     expect((await response.json() as Failure).code).toBe('not-found')
   })
-
-  it('both entrances use recorded calls, the chain taking the milestone one by itself, and the runtime constructs no go or window client', async () => {
-    const runtime = await ActualHeadlessRuntime.prepared({ spec: EpicSpec.FROZEN })
-    try {
-      const started = await Entrypoint.started(runtime.environment())
-      await TheCoordinatingSession.recoveredBy(started.port)
-      await runtime.launches(ActualHeadlessRuntime.LAUNCHED_BY_THE_CHAIN)
-      const looseResponse = await Entrypoint.startPlan(started.port, JSON.stringify({
-        id: 'https://github.com/acme/widget/issues/1', repo: ActualHeadlessRuntime.REPOSITORY, path: runtime.root,
-      }))
-      const looseText = await looseResponse.text()
-      expect(looseResponse.status, looseText).toBe(202)
-      const loose = JSON.parse(looseText) as StartedPlan
-      const launches = await runtime.launches(ActualHeadlessRuntime.LAUNCHED_BY_BOTH_ENTRANCES)
-      const active = await TheActivePlans.listedBy(started.port)
-      expect(active.status, `${active.text}\n${started.saidLater()}`).toBe(200)
-      expect(launches).toHaveLength(ActualHeadlessRuntime.LAUNCHED_BY_BOTH_ENTRANCES)
-      expect(ActualHeadlessRuntime.ISSUE_BODY_UNITS).toBeGreaterThan(ToolRunner.PIPE_BUFFER_BYTES)
-      const looseLaunch = runtime.launchFor(loose, launches)
-      runtime.launchFor(active.planFor(ActualHeadlessRuntime.SLICE_ISSUE), launches)
-      const sessionAt = looseLaunch.captured.argv.indexOf('--session-id')
-      const mutatedArgv = [...looseLaunch.captured.argv]
-      mutatedArgv[sessionAt + 1] = ActualHeadlessRuntime.WRONG_AGENT
-      const mutated = { ...looseLaunch, captured: { ...looseLaunch.captured, argv: mutatedArgv } }
-      expect(() => runtime.launchFor(loose, launches.map((launch) => launch === looseLaunch ? mutated : launch)))
-        .toThrow(/launch identity differs/)
-    } finally {
-      await Entrypoint.killAll()
-      await runtime.remove()
-    }
-  }, 60_000)
 
   it('the runtime switch retains the retired implementation endpoint as not found', async () => {
     const state = await mkdtemp(join(tmpdir(), 'ct-api-retired-implementation-'))

@@ -52,7 +52,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
   static readonly CODES: readonly string[] = Object.freeze([
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
-    PlanRequestOutcome.MALFORMED_REPO,
+    SliceMessageOutcome.MALFORMED_REPO,
     SessionInputOutcome.NOT_LIVE,
     SpecFreezeOutcome.NOT_FROM_THE_PAGE,
     SpecFreezeOutcome.NO_COORDINATING_SESSION,

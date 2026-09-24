@@ -14,7 +14,8 @@ export type WorkExecutionReading = WorkReading<ImplementationState>
 export type WorkProgressDetail =
   | { readonly phase: 'planning', readonly plan: WorkReading<PlanStateValue>, readonly activity: WorkReading<PlanningActivity> }
   | { readonly phase: 'implementing', readonly execution: WorkExecutionReading }
-  | Extract<WorkCondition, { phase: 'uncertain' }>
+  | (Omit<Extract<WorkCondition, { phase: 'uncertain' }>, 'execution'> & { readonly execution: WorkExecutionReading })
+  | Extract<WorkCondition, { phase: 'finished' }>
 
 export class WorkProgress {
   readonly watch: PlanWatch

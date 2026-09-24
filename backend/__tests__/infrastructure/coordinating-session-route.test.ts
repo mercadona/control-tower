@@ -81,7 +81,7 @@ class Mother {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 
   static readonly OPENING_REQUEST =
-    '{"id":"ABC-1","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+    '{"id":"ABC-1","path":"/repo"}'
 
   static readonly TIMELINE = [
     new SessionTimelineEvent({ id: 'event-1', kind: TimelineEventKind.OPENED, at: '2026-09-15T10:00:00.000Z', detail: null }),
@@ -166,7 +166,6 @@ class RunningApi {
   static async listening(open: OpenCoordinatingSession, held: CoordinatingSessions): Promise<number> {
     const server = new ApiServer({
       port: 0,
-      startPlan: null,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,
       openCoordinatingSession: open,
       coordinatingSessions: held,
@@ -349,21 +348,32 @@ describe('CoordinatingSessionRoute', () => {
     expect(held.held()?.state).toBe('live')
   })
 
-  it('refuses the retired repository list field through the same door start-plan reads', async () => {
+  it('refuses a repository named in the body because the checkout path already says which one it is', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
     const held = Mother.registry()
 
     const response = await RunningApi.post(
       open, held,
-      '{"id":"ABC-1","repo_list":[{"repo":"josemerca/ct-loop-sandbox","path":"/repo"}]}'
+      '{"id":"ABC-1","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
     )
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: 'repo-list-retired',
-      detail: 'repo_list is retired: send repo and path for one repository instead',
+      code: 'unknown-field',
+      detail: 'unknown field: repo',
     })
     expect(open.asked).toEqual([])
+  })
+
+  it('asks the use case to open the session on the path the body names and nothing else', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.registry()
+
+    await RunningApi.post(open, held, Mother.OPENING_REQUEST)
+
+    expect(open.asked).toHaveLength(1)
+    expect(open.asked[0].root.text).toBe(Mother.ROOT.text)
+    expect(open.asked[0].story.text).toBe('ABC-1')
   })
 
   it('refuses a body with nothing to plan without asking the use case', async () => {

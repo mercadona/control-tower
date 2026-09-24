@@ -127,6 +127,8 @@ export class HarvestNotRead extends HarvestFailure {}
 
 export class HarvestNotUnderstood extends HarvestFailure {}
 
+export class HarvestNotRecorded extends HarvestFailure {}
+
 export class PullRequestFailure extends PlanFailure {}
 
 export class PullRequestNotRead extends PullRequestFailure {}

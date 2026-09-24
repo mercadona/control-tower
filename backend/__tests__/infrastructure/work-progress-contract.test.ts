@@ -38,6 +38,48 @@ describe('work progress boundary', () => {
     })
   })
 
+  it('carries local completion alongside attention without claiming verified publication', () => {
+    const result = new ReadWorkProgressResult(new WorkProgress(BackendWork.watch(), {
+      phase: 'uncertain', diagnostic: 'GitHub unavailable', recovery: { action: 'inspect', detail: 'Inspect publication' }, refusal: null,
+      execution: { kind: 'partial', value: BackendWork.execution().underReview({ step: 'delivered', pullRequest: null }), detail: 'GitHub unavailable' },
+    }))
+    expect(WorkProgressContract.read(WorkProgressResponse.of(result)).progress).toMatchObject({
+      phase: 'uncertain', recovery: { action: 'inspect' }, diagnostic: 'GitHub unavailable',
+      execution: { kind: 'partial', value: { step: 'delivered', pullRequest: null }, detail: 'GitHub unavailable' },
+    })
+  })
+
+  it('reads the real backend finished projection with its pull request', () => {
+    const result = new ReadWorkProgressResult(new WorkProgress(BackendWork.watch(), {
+      phase: 'finished', harvestedAt: BackendWork.HARVESTED_AT, pullRequest: BackendWork.pullRequest(),
+    }))
+    expect(WorkProgressContract.read(WorkProgressResponse.of(result)).progress).toEqual({
+      phase: 'finished', harvestedAt: '2026-09-24T09:30:00.000Z',
+      pullRequest: { number: 998, url: 'https://github.com/owner/name/pull/998' },
+    })
+  })
+
+  it('reads the real backend finished projection of a slice delivered outside the backend', () => {
+    const result = new ReadWorkProgressResult(new WorkProgress(BackendWork.watch(), {
+      phase: 'finished', harvestedAt: BackendWork.HARVESTED_AT, pullRequest: null,
+    }))
+    expect(WorkProgressContract.read(WorkProgressResponse.of(result)).progress).toEqual({
+      phase: 'finished', harvestedAt: '2026-09-24T09:30:00.000Z', pullRequest: null,
+    })
+  })
+
+  it.each([
+    ['a finished answer with no harvest moment', (body: any) => { delete body.progress.harvested_at }],
+    ['a finished answer with an unknown field', (body: any) => { body.progress.merged = true }],
+    ['a finished answer whose pull request has no number', (body: any) => { delete body.progress.pull_request.number }],
+  ])('rejects %s instead of announcing a delivery it cannot read', (_name, corrupt) => {
+    const body = JSON.parse(JSON.stringify(WorkProgressResponse.of(new ReadWorkProgressResult(new WorkProgress(BackendWork.watch(), {
+      phase: 'finished', harvestedAt: BackendWork.HARVESTED_AT, pullRequest: BackendWork.pullRequest(),
+    })))))
+    corrupt(body)
+    expect(() => WorkProgressContract.read(body)).toThrow()
+  })
+
   it.each([
     ['an unknown field', (body: any) => { body.extra = true }],
     ['an unknown phase', (body: any) => { body.progress.phase = 'invented' }],

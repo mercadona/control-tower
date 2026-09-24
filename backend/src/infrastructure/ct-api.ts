@@ -48,7 +48,6 @@ import { WorkInFlight } from './work-in-flight.ts'
 import { GhPublishedSpecs } from './gh-published-specs.ts'
 import { GhEpicIssues } from './gh-epic-issues.ts'
 import { CtGroomEpic } from './ct-groom-epic.ts'
-import { StartPlan } from '../application/actions/start-plan.ts'
 import { StartMilestonePlan, StartMilestonePlanParams } from '../application/actions/start-milestone-plan.ts'
 import { ContinuePlan } from '../application/actions/continue-plan.ts'
 import { DeliverHeldMessages } from '../application/actions/deliver-held-messages.ts'
@@ -317,26 +316,6 @@ class CtApi {
     })
   }
 
-  static #startPlan(
-    workspace: GitWorkspace,
-    planAgents: PlanAgents,
-    planIssues: GhPlanIssues,
-    checkouts: DiskCheckoutRegistry,
-    userStories: UserStories,
-    records: PlanRecords,
-    claims: DispatchClaims,
-  ): StartPlan {
-    return new StartPlan({
-      userStories,
-      planIssues,
-      workspace,
-      planAgents,
-      checkouts,
-      records,
-      claims,
-    })
-  }
-
   static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
     const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
     const clients = Object.fromEntries(
@@ -349,9 +328,10 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, environment, harvestTable, relay }: {
+  static #harvestClock({ workspace, checkouts, records, environment, harvestTable, relay }: {
     workspace: GitWorkspace,
     checkouts: DiskCheckoutRegistry,
+    records: DiskPlanRecords,
     environment: NodeJS.ProcessEnv,
     harvestTable: string | null,
     relay: DispatchRelay,
@@ -368,6 +348,7 @@ class CtApi {
         dispatchCheck: PluginTree.dispatchCheck(),
         harvestTable,
       }),
+      records,
     })
 
     return new HarvestClock({
@@ -428,7 +409,7 @@ class CtApi {
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES) })
     const preparation = new CheckRepositoryPreparation({
-      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
+      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make', { budgetMs: CtApi.#BASELINE_TIMEOUT_MS }), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
       reports: new SessionPreparationReports({
         sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
       }),
@@ -757,7 +738,6 @@ class CtApi {
     const server = new ApiServer({
       preparation,
       port: asked.port,
-      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
@@ -766,7 +746,7 @@ class CtApi {
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       workProgress: new ReadWorkProgress({
-        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans }),
+        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery }),
         plans: planProgress,
         activities: planningActivities,
         implementation: implementProgress,
@@ -830,7 +810,7 @@ class CtApi {
       await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
     )
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
-      workspace, checkouts, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
+      workspace, checkouts, records, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
     }))
   }
 }

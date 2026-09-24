@@ -296,14 +296,21 @@ export class GitWorkspace extends Workspace {
     return await this.#canonicalRootOf(root.text, repository.text)
   }
 
-  async confirmForSession({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
-    const confirmed = await this.confirm({ root, repository })
+  async confirmForSession(root: CheckoutRoot): Promise<{ root: CheckoutRoot, repository: RepositoryName }> {
+    let repository
+    try {
+      repository = await this.#repositoryOfRoot(root.text)
+    } catch (failure) {
+      throw new CheckoutNotConfirmed(`a repository: ${(failure as Error).message}`)
+    }
+    const confirmed = await this.#canonicalRootOf(root.text, repository.text)
     const base = await this.#defaultBranchNobodyHadToName(confirmed.text)
-    if (base === null) return confirmed
-    await this.#requireOnDefaultBranch(confirmed.text, base)
-    await this.#fastForwardToWhateverTheRemoteIsKnownToHold(confirmed.text, base)
+    if (base !== null) {
+      await this.#requireOnDefaultBranch(confirmed.text, base)
+      await this.#fastForwardToWhateverTheRemoteIsKnownToHold(confirmed.text, base)
+    }
 
-    return confirmed
+    return { root: confirmed, repository }
   }
 
   async #defaultBranchNobodyHadToName(root: string): Promise<string | null> {

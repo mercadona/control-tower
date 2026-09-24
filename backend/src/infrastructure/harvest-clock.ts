@@ -1,6 +1,6 @@
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { Projection } from './projection.ts'
-import { HarvestNotRead, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.ts'
+import { HarvestNotRead, HarvestNotRecorded, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.ts'
 import type { HarvestFailure } from '../domain/exceptions.ts'
 import type { HarvestOutcomeValue } from '../domain/value-objects/harvest-outcome.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
@@ -29,6 +29,8 @@ export class SweepLine {
   static #BY_OUTCOME = new Projection<(prepared: PreparedWorkspace) => string | null, HarvestOutcomeValue>('harvest outcome sweep line', [
     [HarvestOutcome.WAITING, () => SweepLine.SILENT],
     [HarvestOutcome.COLLECTED, (prepared: PreparedWorkspace) => `harvest #${prepared.issueNumber}: collected\n`],
+    [HarvestOutcome.NOTHING_LEFT, (prepared: PreparedWorkspace) =>
+      `harvest #${prepared.issueNumber}: nothing left to collect, its worktree and branch were already gone, so no harvest is recorded\n`],
     [HarvestOutcome.KEPT, (prepared: PreparedWorkspace) =>
       `harvest #${prepared.issueNumber}: kept, the plugin refused to delete because the disk disagrees with the merged pull request; look at ${prepared.located.path}\n`],
     [HarvestOutcome.PARTIAL, (prepared: PreparedWorkspace) =>
@@ -40,6 +42,8 @@ export class SweepLine {
       `harvest #${prepared.issueNumber}: nothing was touched, the next sweep retries: ${failure.message}\n`],
     [HarvestNotUnderstood, (prepared: PreparedWorkspace, failure: HarvestFailure) =>
       `harvest #${prepared.issueNumber}: FAILED and retrying will not fix it: ${failure.message}\n`],
+    [HarvestNotRecorded, (prepared: PreparedWorkspace, failure: HarvestFailure) =>
+      `harvest #${prepared.issueNumber}: collected, but its receipt could not be written: ${failure.message}\n`],
   ])
 
   static declaredOutcomes(): HarvestOutcomeValue[] {
