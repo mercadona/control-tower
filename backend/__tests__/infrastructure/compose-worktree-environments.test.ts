@@ -8,6 +8,7 @@ class SourceMother {
   static readonly REVISION = 'a'.repeat(40)
   static readonly TARGET = { root: new CheckoutRoot('/repo'), repository: new RepositoryName('owner/repo') }
   static readonly WORKTREE = '/repo/.worktrees/10'
+  static readonly WORKTREE_PROJECT = 'ct-a5701da2332bb91a'
 
   static catalogMakefile(): string {
     return [
@@ -18,6 +19,14 @@ class SourceMother {
       'DOCKER_COMMAND := $(DOCKER_COMMAND) -f $(DOCKER_COMPOSE_OVERRIDE_FILE)',
       'endif',
     ].join('\n')
+  }
+
+  static fixedHostPort(port: number): Record<string, unknown> {
+    return { mode: 'ingress', target: port, published: String(port), protocol: 'tcp' }
+  }
+
+  static containerOnlyPort(port: number): Record<string, unknown> {
+    return { mode: 'ingress', target: port, protocol: 'tcp' }
   }
 
   static oldPlaygroundMakefile(): string {
@@ -71,7 +80,7 @@ class Environment {
     const name = override?.match(/^name: (.+)$/m)?.[1] ?? 'playground'
     const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: {
       volumes: [{ type: 'bind', source: this.mountSource ?? cwd, target: '/app' }],
-      ports: override?.includes('ports: !reset []') ? [] : [{ published: '8000', target: 8000 }],
+      ports: override?.includes('ports: !reset []') ? [] : [SourceMother.fixedHostPort(8000)],
     }, ...this.extraServices } })
     return new ProcessOutput({ code: this.dockerCode, stdout, stderr: '' })
   }
@@ -198,9 +207,7 @@ describe('Compose preparation from repository configuration', () => {
 
   it('reports a fixed host port kept by an existing override that selects this worktree project', async () => {
     const env = new Environment()
-    await env.prepare()
-    const path = `${SourceMother.WORKTREE}/docker/docker-compose.local.yml`
-    env.files.set(path, `${env.files.get(path)?.split('\n')[0]}\n`)
+    env.files.set(`${SourceMother.WORKTREE}/docker/docker-compose.local.yml`, `name: ${SourceMother.WORKTREE_PROJECT}\n`)
     const result = await env.prepare()
     expect(result.state).toBe('required')
     expect(result.findings).toHaveLength(1)
@@ -209,15 +216,15 @@ describe('Compose preparation from repository configuration', () => {
 
   it('reports a fixed host port that comes from a Compose file other than the base', async () => {
     const env = new Environment()
-    env.extraServices = { worker: { ports: [{ published: '9000', target: 9000 }] } }
+    env.extraServices = { worker: { ports: [SourceMother.fixedHostPort(9000)] } }
     const result = await env.prepare()
     expect(result.state).toBe('required')
     expect(result.summary).toContain('worker publishes host port 9000')
   })
 
-  it('accepts a container port that publishes no fixed host port', async () => {
+  it('accepts a container port without a host port, which Compose 5.5.1 prints with no published key', async () => {
     const env = new Environment()
-    env.extraServices = { worker: { ports: [{ target: 9000 }] } }
+    env.extraServices = { worker: { ports: [SourceMother.containerOnlyPort(9000)] } }
     expect((await env.prepare()).state).toBe('compatible')
   })
 

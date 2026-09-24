@@ -101,7 +101,7 @@ export class ComposeWorktreeEnvironments extends WorktreeEnvironments {
         if (!ComposeWorktreeEnvironments.#record(service)) throw new ConfigurationNotChecked('Compose returned an unreadable service')
         for (const port of Array.isArray(service.ports) ? service.ports : []) {
           if (!ComposeWorktreeEnvironments.#record(port)) throw new ConfigurationNotChecked('Compose returned an unreadable port')
-          if (port.published === undefined || port.published === '') continue
+          if (port.published === undefined) continue
           findings.push(new PreparationFinding({ path: override,
             reason: `Service ${serviceName} publishes host port ${String(port.published)}, which another worktree can also claim.`,
             correction: `Reset its ports in ${override} (ports: !reset []) or publish no fixed host port.`,
