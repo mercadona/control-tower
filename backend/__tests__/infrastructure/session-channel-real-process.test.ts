@@ -9,7 +9,8 @@ import type { IPty } from 'node-pty'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import type { TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+import type { TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { ListLiveSessions } from '../../src/application/queries/list-live-sessions.ts'
 import { WatchLiveSession } from '../../src/application/queries/watch-live-session.ts'
 import { TypeIntoSession } from '../../src/application/actions/type-into-session.ts'
@@ -40,6 +41,7 @@ class RealTerminals {
 
 class RunningApi {
   static readonly #NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
+  static readonly #PROCESSES = new SystemProcesses()
 
   static async openedOn(realTerminals: RealTerminals): Promise<{ port: number, session: LiveSession }> {
     const liveSessions = new PtyLiveSessions({
@@ -52,6 +54,7 @@ class RunningApi {
       termGraceMs: 2_000,
       killGraceMs: 2_000,
       pollMs: 25,
+      inspectProcessTable: RunningApi.#PROCESSES.readTable.bind(RunningApi.#PROCESSES),
     })
     const session = liveSessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const server = new ApiServer({

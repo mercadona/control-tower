@@ -129,7 +129,7 @@ describe('GitWorkspace real cleanup', () => {
         now: () => startedAt,
         exists: async (path) => fs.stat(path).then(() => true, () => false),
       })
-      const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes })
+      const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes, signal: processes.signal.bind(processes) })
       const action = (): CleanupPlan => {
         const workspace = new GitWorkspace({
           preparation: PreparationMother.check(),
@@ -340,7 +340,7 @@ describe('GitWorkspace real cleanup', () => {
       }),
       stderr: () => {},
     })
-    const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes })
+    const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes, signal: processes.signal.bind(processes) })
     const workspace = new GitWorkspace({
       preparation: PreparationMother.check(),
       run: runner.run.bind(runner),

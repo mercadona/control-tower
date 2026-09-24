@@ -38,7 +38,7 @@ export class SpawnedChildren {
     },
     {
       file: join('infrastructure', 'process-border.ts'),
-      calls: ['execFile', 'launch', 'runAndWait', 'spawn'],
+      calls: ['execFile', 'execFile', 'launch', 'openTerminal', 'runAndWait', 'spawn'],
       reason: SpawnedChildren.THE_BORDER,
     },
     {
@@ -47,8 +47,13 @@ export class SpawnedChildren {
       reason: SpawnedChildren.DECLARES_ONLY,
     },
     {
+      file: join('infrastructure', 'process-table.ts'),
+      calls: ['openTerminal'],
+      reason: SpawnedChildren.DECLARES_ONLY,
+    },
+    {
       file: join('infrastructure', 'pty-live-sessions.ts'),
-      calls: ['spawn', 'execFile'],
+      calls: ['spawn'],
       reason: SpawnedChildren.OWNS_THE_MASTER,
     },
     {

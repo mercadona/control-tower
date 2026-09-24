@@ -2,6 +2,7 @@ import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { ProcessRunner, RunFailure } from './process-runner.ts'
+import type { ProcessTable } from './process-table.ts'
 
 export class ProcessOutput {
   readonly code: number
@@ -39,14 +40,16 @@ export class ToolRunner {
   readonly budgetMs: number
   readonly env: NodeJS.ProcessEnv | undefined
   readonly processes: ProcessRunner
+  readonly signal: ProcessTable['signal']
 
-  constructor({ bin, budgetMs, env, processes }: {
-    bin: string, budgetMs: number, env?: NodeJS.ProcessEnv, processes: ProcessRunner,
+  constructor({ bin, budgetMs, env, processes, signal }: {
+    bin: string, budgetMs: number, env?: NodeJS.ProcessEnv, processes: ProcessRunner, signal: ProcessTable['signal'],
   }) {
     this.bin = bin
     this.budgetMs = budgetMs
     this.env = env
     this.processes = processes
+    this.signal = signal
   }
 
   async run(argv: string[], { cwd }: RunOptions = {}): Promise<ProcessOutput> {
@@ -101,7 +104,7 @@ export class ToolRunner {
         void onSpawn(ownership).catch((failure: unknown) => {
           if (ownership.processGroup === undefined) child.kill('SIGTERM')
           else {
-            try { process.kill(-ownership.processGroup, 'SIGTERM') } catch {}
+            try { this.signal(-ownership.processGroup, 'SIGTERM') } catch {}
           }
           finish({ code: ToolRunner.#UNKNOWN_EXIT, stderr: `process ownership could not be recorded: ${String(failure)}` })
         })

@@ -453,8 +453,8 @@ export class RunDriverMother {
       repository: new RepositoryName(RunDriverMother.REPOSITORY),
       agent: RunDriverMother.CONVERSATION,
     })
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
     this.machine = new CtRunMachine({
       journal: this.journal,
       node: oracle.runWholeOutput.bind(oracle),
@@ -945,8 +945,8 @@ export class RunDriverMother {
   }
 
   #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
     return new CtRunMachine({
       journal,
       node: oracle.runWholeOutput.bind(oracle), git: git.runWholeOutput.bind(git),
@@ -1005,13 +1005,13 @@ export class RunDriverMother {
       CT_FIXTURE_PUBLICATION: this.publication,
     }
     const node = new ToolRunner({
-      bin: process.execPath, budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+      bin: process.execPath, budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
     })
     const git = new ToolRunner({
-      bin: 'git', budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+      bin: 'git', budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
     })
     const ghRunner = new ToolRunner({
-      bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+      bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
     })
     const gh = new Gh({
       launch: (argv) => ghRunner.run(argv),

@@ -36,7 +36,7 @@ describe('a tool that prints more than a pipe holds and then exits', () => {
   })
 
   it('loses everything past the pipe buffer when its output is read through a pipe', async () => {
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes, signal: processes.signal.bind(processes) })
 
     const said = await runner.run([PrintsThenExits.script()])
 
@@ -45,7 +45,7 @@ describe('a tool that prints more than a pipe holds and then exits', () => {
   })
 
   it('keeps every byte when its output is collected whole, and still tells its exit code and its stderr', async () => {
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes, signal: processes.signal.bind(processes) })
 
     const said = await runner.runWholeOutput([PrintsThenExits.script()])
 

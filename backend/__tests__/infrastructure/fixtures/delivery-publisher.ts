@@ -51,9 +51,9 @@ const machine = new DeliveredMachine({
   dispatchCheck: config.dispatchCheck,
   pluginRoot: '/plugin',
 })
-const gitRunner = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes })
-const ghRunner = new ToolRunner({ bin: config.fakeGh, budgetMs: 30_000, env: process.env, processes })
-const nodeRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: process.env, processes })
+const gitRunner = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes, signal: processes.signal.bind(processes) })
+const ghRunner = new ToolRunner({ bin: config.fakeGh, budgetMs: 30_000, env: process.env, processes, signal: processes.signal.bind(processes) })
+const nodeRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: process.env, processes, signal: processes.signal.bind(processes) })
 const gh = new Gh({
   launch: (argv) => ghRunner.runWholeOutput(argv),
   policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
@@ -72,6 +72,7 @@ const delivery = new CheckedRunDelivery({
   dispatchCheck: config.dispatchCheck,
   newId: randomUUID,
   now: () => new Date().toISOString(),
+  signal: processes.signal.bind(processes),
 })
 
 try {

@@ -9,7 +9,6 @@ import { setTimeout as after } from 'node:timers/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawn } from 'node-pty'
 import { ApiServer, LOOPBACK } from './api-server.ts'
 import { PtyLiveSessions } from './pty-live-sessions.ts'
 import { AcliUserStories } from './acli-user-stories.ts'
@@ -273,7 +272,7 @@ class CtApi {
     bin: string,
     { budgetMs = CtApi.#PROCESS_TIMEOUT_MS, env }: { budgetMs?: number, env?: NodeJS.ProcessEnv } = {}
   ): LaunchTool {
-    const runner = new ToolRunner({ bin, budgetMs, env, processes: CtApi.#PROCESSES })
+    const runner = new ToolRunner({ bin, budgetMs, env, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES) })
     return (argv, options) => runner.run(argv, options)
   }
 
@@ -284,7 +283,7 @@ class CtApi {
   }
 
   static #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
-    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES })
+    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES) })
     return new Tool({
       launch: (argv: string[]) => argv.includes('--paginate')
         ? runner.runWholeOutput(argv)
@@ -428,7 +427,7 @@ class CtApi {
     CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
-    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES })
+    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES) })
     const preparation = new CheckRepositoryPreparation({
       environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
       reports: new SessionPreparationReports({
@@ -531,10 +530,10 @@ class CtApi {
     })
     const journal = new RunJournal({ files, newId: randomUUID, now: () => new Date().toISOString() })
     const oracleRunner = new ToolRunner({
-      bin: process.execPath, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+      bin: process.execPath, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
     const runGitRunner = new ToolRunner({
-      bin: GitWorkspace.BIN, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+      bin: GitWorkspace.BIN, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
     const machine = new CtRunMachine({
       journal,
@@ -546,7 +545,7 @@ class CtApi {
       pluginRoot: PluginTree.root(),
     })
     const releaseRunner = new ToolRunner({
-      bin: process.execPath, budgetMs: CtApi.#HARVEST_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+      bin: process.execPath, budgetMs: CtApi.#HARVEST_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
     const runDelivery = new CheckedRunDelivery({
       journal,
@@ -558,6 +557,7 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
       newId: randomUUID,
       now: () => new Date().toISOString(),
+      signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
     const runCalls = new ClaudeRunCalls({
       calls,
@@ -627,8 +627,10 @@ class CtApi {
       nowMs: Date.now,
     })
     const liveSessions = new PtyLiveSessions({
-      spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
-      signal: (pid, signal) => process.kill(pid, signal),
+      spawn: CtApi.#PROCESSES.openTerminal.bind(CtApi.#PROCESSES),
+      newId: randomUUID, stderr: (line) => process.stderr.write(line),
+      signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
+      inspectProcessTable: CtApi.#PROCESSES.readTable.bind(CtApi.#PROCESSES),
       sleep: (milliseconds) => after(milliseconds),
       now: Date.now,
       termGraceMs: CtApi.#SESSION_TERM_GRACE_MS,
@@ -707,7 +709,7 @@ class CtApi {
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
     const groomRunner = new ToolRunner({
-      bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+      bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
     const epicGroom = new CtGroomEpic({
       node: (argv, options) => groomRunner.run(argv, options),

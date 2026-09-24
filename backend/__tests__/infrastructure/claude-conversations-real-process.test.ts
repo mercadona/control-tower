@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeConversations } from '../../src/infrastructure/claude-conversations.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import type { Terminal, TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
@@ -52,6 +52,7 @@ class TheOpeningCommand {
         termGraceMs: 1,
         killGraceMs: 1,
         pollMs: 1,
+        inspectProcessTable: async () => ' 4101  4101 Thu Sep 17 22:29:08 2026\n',
       }),
       shell: '/bin/sh',
       env: {},
