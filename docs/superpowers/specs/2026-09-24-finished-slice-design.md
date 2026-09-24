@@ -64,8 +64,9 @@ harvest removes a worktree only when its pull request is `MERGED`
 
 ## Section 1 — the harvest receipt (backend)
 
-- **When.** Only when `HarvestClock` gets `collected` from
-  `dispatch-check --collect`. With `kept`, `partial`, `waiting` or a failure
+- **When.** Only when the harvest answers `collected` from
+  `dispatch-check --collect`: `HarvestDelivery`, the use case the sweep invokes,
+  records it. With `kept`, `partial`, `waiting` or a failure
   nothing is written.
 - **Where.** `harness/<conversation>/harvest.json`, next to `dispatch.json`. The
   conversation is the record of `harness/` whose repository and issue number
@@ -74,13 +75,15 @@ harvest removes a worktree only when its pull request is `MERGED`
   dispatch — gets no receipt, and its harvest behaves as today.
 - **What.** `{"version": 1, "at": "<ISO timestamp>"}`. The pull request is not
   copied: it comes from the delivery receipt when there is one.
-- **When writing fails.** The worktree is already gone and nothing can be
-  harvested again. The clock prints
+- **When writing fails** — or when a damaged record in `harness/` keeps the
+  slice's record from being found — the worktree is already gone and nothing
+  can be harvested again. The failure is `HarvestNotRecorded`, the clock prints
   `harvest #N: collected, but its receipt could not be written: <cause>`, and the
-  slice reads as lost. No retry.
-- **Shape.** `HarvestReceipt` is a value object. Writing and finding receipts is
-  a domain port implemented on disk beside `DiskPlanRecords`. `HarvestClock`
-  receives the port by injection, as it already receives `harvest` and `relay`.
+  slice reads as lost. No retry, and the sweep carries on.
+- **Shape.** `PlanRecords`, the port over `harness/`, grows `recordHarvest` and
+  `harvested`; `DiskPlanRecords` implements both. `harvested` answers the value
+  object `HarvestedWork` (the record's watch and the moment of its harvest).
+  `HarvestDelivery` receives the port by injection.
 
 ## Section 2 — `/work-progress` answers `finished` (backend)
 
