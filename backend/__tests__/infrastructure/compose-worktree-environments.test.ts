@@ -46,6 +46,9 @@ class Environment {
   mountSource: string | null = null
   canonicalPath: string | null = null
   extraServices: Record<string, unknown> = {}
+  targets = ''
+  readonly preparationAnswers = new Map<string, ProcessOutput>()
+  readonly effects: string[] = []
   readonly gitCalls: string[][] = []
   readonly makeCalls: string[][] = []
   readonly dockerCalls: string[][] = []
@@ -70,12 +73,20 @@ class Environment {
 
   async make(argv: string[]): Promise<ProcessOutput> {
     this.makeCalls.push(argv)
+    const target = argv.at(-1)!
+    this.effects.push(target)
+    if (target !== '-qp') {
+      const answer = this.preparationAnswers.get(target)
+      if (answer === undefined) throw new Error(`unexpected make target ${target}`)
+      return answer
+    }
     return new ProcessOutput({ code: this.makeCode, stderr: '', stdout: this.makeOutput ??
-      `DOCKER_COMMAND := docker compose -f "${argv[1]}/docker/docker-compose.yml" -f "${argv[1]}/docker/docker-compose.local.yml"\n` })
+      `DOCKER_COMMAND := docker compose -f "${argv[1]}/docker/docker-compose.yml" -f "${argv[1]}/docker/docker-compose.local.yml"\n${this.targets}` })
   }
 
   async docker(argv: string[], cwd: string): Promise<ProcessOutput> {
     this.dockerCalls.push(argv)
+    this.effects.push('config')
     const override = this.files.get(argv[argv.lastIndexOf('-f') + 1])
     const name = override?.match(/^name: (.+)$/m)?.[1] ?? 'playground'
     const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: {
@@ -105,9 +116,66 @@ class Environment {
   prepare() {
     return this.adapter().prepare({ ...SourceMother.TARGET, path: SourceMother.WORKTREE })
   }
+
+  static django(): Environment {
+    const env = new Environment()
+    env.targets = 'compilemessages:\ncollectstatic:\nenv-start:\n'
+    for (const target of ['env-start', 'collectstatic', 'compilemessages']) {
+      env.preparationAnswers.set(target, new ProcessOutput({ code: 0, stdout: 'done', stderr: '' }))
+    }
+    return env
+  }
 }
 
 describe('Compose preparation from repository configuration', () => {
+  it('keeps both output channels of a failed preparation for the operator', async () => {
+    const env = Environment.django()
+    env.preparationAnswers.set('collectstatic', new ProcessOutput({ code: 2, stdout: 'asset configuration is missing\n', stderr: 'make: Error 1\n' }))
+    const result = await env.prepare()
+    expect(result.summary).toContain('asset configuration is missing')
+    expect(result.summary).toContain('make: Error 1')
+  })
+
+  it('does not start Django when the resolved configuration points at another checkout', async () => {
+    const env = Environment.django()
+    env.mountSource = '/sibling'
+    expect((await env.prepare()).state).toBe('required')
+    expect(env.makeCalls).toEqual([['-C', SourceMother.WORKTREE, '--no-print-directory', '-qp']])
+  })
+
+  it.each(['env-start:\n', 'collectstatic:\ncompilemessages:\n'])('does not invent a missing Django preparation target from %j', async (targets) => {
+    const env = Environment.django()
+    env.targets = targets
+    expect((await env.prepare()).state).toBe('compatible')
+    expect(env.makeCalls).toEqual([['-C', SourceMother.WORKTREE, '--no-print-directory', '-qp']])
+  })
+
+  it.each([
+    ['env-start', 2, ['env-start']],
+    ['collectstatic', 1, ['env-start', 'collectstatic']],
+    ['compilemessages', 2, ['env-start', 'collectstatic', 'compilemessages']],
+  ] as const)('a failed %s prevents readiness and stops the remaining preparation commands', async (target, code, executed) => {
+    const env = Environment.django()
+    env.preparationAnswers.set(target, new ProcessOutput({ code, stdout: '', stderr: 'fixture preparation failed' }))
+    const result = await env.prepare()
+    expect(result.state).toBe('not-checked')
+    expect(result.permitsDispatch()).toBe(false)
+    expect(result.summary).toContain(`make ${target} exited with code ${code}`)
+    expect(result.summary).toContain('fixture preparation failed')
+    expect(env.makeCalls.slice(1).map((argv) => argv.at(-1))).toEqual(executed)
+  })
+
+  it('starts Django and builds its assets after checking isolation and before declaring the worktree ready', async () => {
+    const env = Environment.django()
+    expect((await env.prepare()).state).toBe('compatible')
+    expect(env.effects).toEqual(['config', '-qp', 'config', 'env-start', 'collectstatic', 'compilemessages'])
+    expect(env.makeCalls.slice(1)).toEqual([
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'env-start'],
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'collectstatic'],
+      ['-C', SourceMother.WORKTREE, '--no-print-directory', 'compilemessages'],
+    ])
+  })
+
   it('accepts the canonical worktree path returned by Git when Make resolves a directory alias', async () => {
     const env = new Environment()
     env.canonicalPath = '/private/repo/.worktrees/10'
