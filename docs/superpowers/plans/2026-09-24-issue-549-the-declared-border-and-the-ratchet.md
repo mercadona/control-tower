@@ -437,7 +437,7 @@ specifier that ends with `BORDER` counts too. A relative specifier to a module u
 ```bash
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/process-ratchet.test.ts __tests__/yardstick.test.ts   # expected: exit 0
-test "$(grep -c 'real-process.test.ts' backend/__tests__/process-ratchet.ts)" -ge 17   # expected: exit 0 — every marked file is listed
+test "$(grep -c 'real-process.test.ts' backend/__tests__/process-ratchet.ts)" -ge "$(find backend/__tests__ -name '*-real-process.test.ts' | wc -l)"   # expected: exit 0 — every marked file is listed
 ```
 
 ### Task 6 — the ledger of deleted test cases, and the test that reads it
