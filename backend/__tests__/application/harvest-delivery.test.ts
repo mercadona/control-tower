@@ -1,13 +1,30 @@
 import { describe, it, expect } from 'vitest'
 import { HarvestDelivery, HarvestDeliveryParams } from '../../src/application/actions/harvest-delivery.ts'
 import { Harvest } from '../../src/domain/ports/harvest.ts'
+import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { HarvestOutcome, type HarvestOutcomeValue } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import { HarvestNotRead } from '../../src/domain/exceptions.ts'
+import { HarvestNotRead, HarvestNotRecorded } from '../../src/domain/exceptions.ts'
 
 type HarvestSubject = Parameters<Harvest['collect']>[0]
+type HarvestRecorded = Parameters<PlanRecords['recordHarvest']>[0]
+
+class PlanRecordsDouble extends PlanRecords {
+  readonly harvests: HarvestRecorded[] = []
+  readonly refusal: Error | null
+
+  constructor(refusal: Error | null = null) {
+    super()
+    this.refusal = refusal
+  }
+
+  async recordHarvest(asked: HarvestRecorded): Promise<void> {
+    this.harvests.push(asked)
+    if (this.refusal !== null) throw this.refusal
+  }
+}
 
 class HarvestDouble extends Harvest {
   static ROOT = '/repo/checkout'
@@ -21,11 +38,13 @@ class HarvestDouble extends Harvest {
 
   readonly answer: HarvestOutcomeValue | Error
   readonly asked: HarvestSubject[]
+  readonly records: PlanRecordsDouble
 
-  constructor(answer: HarvestOutcomeValue | Error) {
+  constructor(answer: HarvestOutcomeValue | Error, records = new PlanRecordsDouble()) {
     super()
     this.answer = answer
     this.asked = []
+    this.records = records
   }
 
   static answering(outcome: HarvestOutcomeValue) {
@@ -36,6 +55,10 @@ class HarvestDouble extends Harvest {
     return new HarvestDouble(new HarvestNotRead(said))
   }
 
+  static collectedButNotRecorded(said: string) {
+    return new HarvestDouble(HarvestOutcome.COLLECTED, new PlanRecordsDouble(new HarvestNotRecorded(said)))
+  }
+
   async collect(subject: HarvestSubject): Promise<HarvestOutcomeValue> {
     this.asked.push(subject)
     if (this.answer instanceof Error) throw this.answer
@@ -44,7 +67,7 @@ class HarvestDouble extends Harvest {
   }
 
   harvested(prepared = HarvestDouble.PREPARED) {
-    return new HarvestDelivery({ harvest: this })
+    return new HarvestDelivery({ harvest: this, records: this.records })
       .execute(new HarvestDeliveryParams({ prepared, repository: HarvestDouble.REPOSITORY }))
   }
 
@@ -107,4 +130,37 @@ describe('HarvestDelivery', () => {
     expect(refusal.message).toBe('dispatch-check could not reach gh')
   })
 
+  it('a_collected_slice_is_recorded_as_harvested_under_the_issue_and_repository_the_plugin_collected', async () => {
+    const harvest = HarvestDouble.answering(HarvestOutcome.COLLECTED)
+
+    await harvest.harvested()
+
+    expect(harvest.records.harvests).toEqual([{ issue: 42, repository: HarvestDouble.REPOSITORY }])
+  })
+
+  it.each<HarvestOutcomeValue>([HarvestOutcome.WAITING, HarvestOutcome.KEPT, HarvestOutcome.PARTIAL])(
+    'a_slice_the_plugin_answered_%s_for_is_not_recorded_as_harvested_because_its_worktree_may_still_stand',
+    async (outcome) => {
+      const harvest = HarvestDouble.answering(outcome)
+
+      await harvest.harvested()
+
+      expect(harvest.records.harvests).toEqual([])
+    },
+  )
+
+  it('a_harvest_that_could_not_be_read_records_nothing', async () => {
+    const harvest = HarvestDouble.unable('dispatch-check could not reach gh')
+
+    await harvest.refusal()
+
+    expect(harvest.records.harvests).toEqual([])
+  })
+
+  it('a_collected_slice_whose_harvest_could_not_be_recorded_travels_out_typed', async () => {
+    const refusal = await HarvestDouble.collectedButNotRecorded('harness/x/harvest.json could not be written').refusal()
+
+    expect(refusal).toBeInstanceOf(HarvestNotRecorded)
+    expect(refusal.message).toBe('harness/x/harvest.json could not be written')
+  })
 })

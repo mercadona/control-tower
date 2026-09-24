@@ -349,9 +349,10 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, environment, harvestTable, relay }: {
+  static #harvestClock({ workspace, checkouts, records, environment, harvestTable, relay }: {
     workspace: GitWorkspace,
     checkouts: DiskCheckoutRegistry,
+    records: DiskPlanRecords,
     environment: NodeJS.ProcessEnv,
     harvestTable: string | null,
     relay: DispatchRelay,
@@ -368,6 +369,7 @@ class CtApi {
         dispatchCheck: PluginTree.dispatchCheck(),
         harvestTable,
       }),
+      records,
     })
 
     return new HarvestClock({
@@ -819,7 +821,7 @@ class CtApi {
       await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
     )
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
-      workspace, checkouts, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
+      workspace, checkouts, records, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
     }))
   }
 }

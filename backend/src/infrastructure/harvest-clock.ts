@@ -1,6 +1,6 @@
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { Projection } from './projection.ts'
-import { HarvestNotRead, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.ts'
+import { HarvestNotRead, HarvestNotRecorded, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.ts'
 import type { HarvestFailure } from '../domain/exceptions.ts'
 import type { HarvestOutcomeValue } from '../domain/value-objects/harvest-outcome.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
@@ -40,6 +40,8 @@ export class SweepLine {
       `harvest #${prepared.issueNumber}: nothing was touched, the next sweep retries: ${failure.message}\n`],
     [HarvestNotUnderstood, (prepared: PreparedWorkspace, failure: HarvestFailure) =>
       `harvest #${prepared.issueNumber}: FAILED and retrying will not fix it: ${failure.message}\n`],
+    [HarvestNotRecorded, (prepared: PreparedWorkspace, failure: HarvestFailure) =>
+      `harvest #${prepared.issueNumber}: collected, but its receipt could not be written: ${failure.message}\n`],
   ])
 
   static declaredOutcomes(): HarvestOutcomeValue[] {

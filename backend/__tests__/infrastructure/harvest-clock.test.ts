@@ -9,7 +9,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import {
-  HarvestFailure, HarvestNotRead, HarvestNotUnderstood, WorkspaceNotRead,
+  HarvestFailure, HarvestNotRead, HarvestNotRecorded, HarvestNotUnderstood, WorkspaceNotRead,
 } from '../../src/domain/exceptions.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
 import type { HarvestOutcomeValue } from '../../src/domain/value-objects/harvest-outcome.ts'
@@ -241,6 +241,18 @@ describe('HarvestClock', () => {
 
     expect(swept.written).toEqual([
       'harvest #1: FAILED and retrying will not fix it: dispatch-check --collect refused the invocation\n',
+      'harvest #2: collected\n',
+    ])
+  })
+
+  it('a_collected_slice_whose_harvest_could_not_be_recorded_says_so_and_the_next_workspace_is_still_collected', async () => {
+    const swept = await Sweeping.answering([
+      [1, new HarvestNotRecorded('/state/harness/x/harvest.json could not be written: Error: disk full')],
+      [2, HarvestOutcome.COLLECTED],
+    ]).run()
+
+    expect(swept.written).toEqual([
+      'harvest #1: collected, but its receipt could not be written: /state/harness/x/harvest.json could not be written: Error: disk full\n',
       'harvest #2: collected\n',
     ])
   })
