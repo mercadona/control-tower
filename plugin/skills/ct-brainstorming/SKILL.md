@@ -26,11 +26,13 @@ You MUST create a task for each of these items and complete them in order:
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit. It becomes the `Handoff origen:` of the execution spec — after the freeze it is history, nobody edits it.
+6. **Write design doc** — save to `docs/superpowers/specs/<story>-design.md` and commit. It becomes the `Handoff origen:` of the execution spec — after the freeze it is history, nobody edits it.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **Write the execution spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md` from this plugin's `../../templates/_TEMPLATE-execution-spec.md`, state DRAFT. Every frozen decision carries its provenance and the freeze refuses while one keeps quiet: `hablada` / `deducida` / `propuesta` / `historia <id>` / `prd <name>` / `prototipo <version>` (see below)
+8. **Write the execution spec** — `docs/superpowers/specs/<story>-execution.md` from this plugin's `../../templates/_TEMPLATE-execution-spec.md`, state DRAFT. Every frozen decision carries its provenance and the freeze refuses while one keeps quiet: `hablada` / `deducida` / `propuesta` / `historia <id>` / `prd <name>` / `prototipo <version>` (see below)
 9. **Validate the draft** — run this plugin's `../../scripts/ct-spec-check.mjs` against the written file and resolve its findings before presenting it as ready.
 10. **Request the freeze (congelación)** — present the 15-line summary and STOP. The user's OK mutates `DRAFT → CONGELADA`. Without it there is no groom.
+
+`<story>` is the ticket the phase prompt names: its key (`STAFF-128`), or `<owner>__<repo>-<number>` for a GitHub issue. The phase prompt gives both paths exactly; write them as given, with no date and no topic, because gate 1 finds the spec by the story alone. When a file already exists at either path, continue it instead of starting another. If no phase prompt named a ticket, ask the person for it before writing either file.
 
 ## Process Flow
 
@@ -111,8 +113,8 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
-  - (User preferences for spec location override this default)
+- Write the validated design (spec) to `docs/superpowers/specs/<story>-design.md`
+  - (The path is fixed: gate 1 reads it by the story, so no preference moves it)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
 
@@ -127,7 +129,7 @@ After writing the spec document, look at it with fresh eyes:
 Fix any issues inline. No need to re-review — just fix and move on.
 
 **Execution Spec:**
-After the self-review passes, write the execution spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md`, created from `../../templates/_TEMPLATE-execution-spec.md` relative to this skill's base directory, state `DRAFT`. Resolve the template and checker from this same installed plugin, not from the working directory or another installed copy. The design document is its `Handoff origen:`. Create the destination directory if necessary.
+After the self-review passes, write the execution spec: `docs/superpowers/specs/<story>-execution.md`, created from `../../templates/_TEMPLATE-execution-spec.md` relative to this skill's base directory, state `DRAFT`. Resolve the template and checker from this same installed plugin, not from the working directory or another installed copy. The design document is its `Handoff origen:`. Create the destination directory if necessary.
 
 An old `docs/superpowers/specs/_TEMPLATE-execution-spec.md` in the repository is not the format authority. Read it for local additions if it exists, preserve the file, and ask where any unique repository rules belong in the existing convention documents. Do not carry obsolete format instructions into new specs. Existing frozen specs stay unchanged.
 
@@ -136,7 +138,7 @@ An old `docs/superpowers/specs/_TEMPLATE-execution-spec.md` in the repository is
 - `[NEEDS CLARIFICATION]` markers are admitted in DRAFT; freezing with one pending is invalid (groom will refuse the spec).
 
 **Draft validation:**
-Run `node "<this skill's base directory>/../../scripts/ct-spec-check.mjs" "docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md"` after writing or revising the draft. It reads the file without changing it and runs the freeze analyzer used by gate 1. Exit 0 means that analysis has no findings; exit 2 prints findings to fix, and exit 1 means the file could not be checked. Resolve mechanical omissions within the agreed scope; ask the person about missing decisions. If validation cannot pass, report the blocker rather than saying the spec is ready. Validation does not freeze, approve, commit or groom anything; gate 1 still checks the current bytes on the person's click.
+Run `node "<this skill's base directory>/../../scripts/ct-spec-check.mjs" "docs/superpowers/specs/<story>-execution.md"` after writing or revising the draft. It reads the file without changing it and runs the freeze analyzer used by gate 1. Exit 0 means that analysis has no findings; exit 2 prints findings to fix, and exit 1 means the file could not be checked. Resolve mechanical omissions within the agreed scope; ask the person about missing decisions. If validation cannot pass, report the blocker rather than saying the spec is ready. Validation does not freeze, approve, commit or groom anything; gate 1 still checks the current bytes on the person's click.
 
 **The Freeze Gate (congelación):**
 This replaces any full-document review — the user does not read the spec; they read a summary that fits on one screen. Present, in the conversation, **at most 15 lines**:

@@ -34,7 +34,8 @@ writing-skills.
 ## The rewritten seams (F31 §5 and F-jjponz) — do NOT step on them in cherry-picks
 
 1. **brainstorming**: the terminal state is NO longer invoking writing-plans — it
-   is writing the execution spec (`docs/superpowers/specs/*-execution.md`, DRAFT,
+   is writing the execution spec (`docs/superpowers/specs/<story>-execution.md`,
+   named after the ticket with no date so gate 1 finds it by the story, DRAFT,
    provenance per decision) and asking for the freeze (15 lines). The design doc
    is kept as `Handoff origen:`.
 2. **subagent-driven-development**: the "no plan" branch NO longer sends you to
