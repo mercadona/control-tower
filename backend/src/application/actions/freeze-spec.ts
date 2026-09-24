@@ -1,5 +1,4 @@
 import { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
-import { EpicSpecNotUnderstood } from '../../domain/exceptions.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
@@ -8,6 +7,7 @@ import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { FreezeFinding } from '../../domain/value-objects/freeze-finding.ts'
 import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
 import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
+import { StoryDocuments } from '../../domain/value-objects/story-documents.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -81,12 +81,7 @@ export class FreezeSpec {
     const onThatBranch = FreezeSpec.#notFreezable(spec)
     if (onThatBranch !== null) return onThatBranch
 
-    const design = spec.design()
-    if (design === null) {
-      throw new EpicSpecNotUnderstood(
-        `${spec.path} does not name its design document under ${EpicSpec.HANDOFF_LINE}, so gate 1 cannot publish half the epic`
-      )
-    }
+    const design = new StoryDocuments(params.story).design
     const paths = [design, spec.path]
     if (await this.#delivered({ params, spec, branch })) {
       return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })

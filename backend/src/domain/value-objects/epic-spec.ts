@@ -3,14 +3,12 @@ import { FreezeFinding, FreezeFindingCode, type FreezeFindingCodeValue } from '.
 
 export class EpicSpec {
   static readonly TITLE_SUFFIX = ' — Execution spec'
-  static readonly HANDOFF_LINE = '**Handoff origen:**'
   static readonly DATE_LINE = '**Fecha de congelación:**'
   static readonly STATE_LINE = '**Estado:**'
   static readonly DRAFT = 'DRAFT'
   static readonly FROZEN = 'CONGELADA'
   static readonly #UNSET_DATE = '—'
   static readonly #MILESTONE_BRANCH_PREFIX = 'milestone/'
-  static readonly #DESIGN_QUOTED = /`([^`]+)`/
   static readonly #MARKDOWN = /\.md$/
   static readonly #HEADING = '# '
 
@@ -43,13 +41,6 @@ export class EpicSpec {
     const file = this.path.split('/').at(-1)!
 
     return `${EpicSpec.#MILESTONE_BRANCH_PREFIX}${file.replace(EpicSpec.#MARKDOWN, '')}`
-  }
-
-  design(): string | null {
-    const value = EpicSpec.#valueOf(this.text, EpicSpec.HANDOFF_LINE)
-    if (value === null) return null
-    const quoted = value.match(EpicSpec.#DESIGN_QUOTED)
-    return quoted === null ? null : quoted[1]
   }
 
   isFrozen(): boolean {

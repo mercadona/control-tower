@@ -7,7 +7,7 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { FreezeFinding, FreezeFindingCode } from '../../src/domain/value-objects/freeze-finding.ts'
-import { EpicSpecNotUnderstood, EpicBranchNotPublished } from '../../src/domain/exceptions.ts'
+import { EpicBranchNotPublished } from '../../src/domain/exceptions.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -149,15 +149,15 @@ class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly BRANCH = 'epic/329-freeze'
-  static readonly MILESTONE_BRANCH = 'milestone/2026-01-01-test-execution'
+  static readonly MILESTONE_BRANCH = 'milestone/STAFF-128-execution'
   static readonly TODAY = () => new Date(2026, 8, 14)
   static readonly ON = '2026-09-14'
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 12, url: 'https://github.com/owner/name/pull/12',
   })
-  static readonly PATH = 'docs/superpowers/specs/2026-01-01-test-execution.md'
-  static readonly DESIGN_PATH = 'docs/superpowers/specs/2026-01-01-test-design.md'
-  static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
+  static readonly PATH = 'docs/superpowers/specs/STAFF-128-execution.md'
+  static readonly DESIGN_PATH = 'docs/superpowers/specs/STAFF-128-design.md'
+  static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/STAFF-128-design.md`'
   static readonly TITLE_LINE = '# Test epic — Execution spec'
   static readonly BET_LINE = '**The bet:** shipping this halves the time to freeze a spec.'
   static readonly CONTEXT = ['## Contexto del milestone', '', '- **Alcance:** `src/**`', '']
@@ -503,12 +503,12 @@ describe('FreezeSpec', () => {
     ])
   })
 
-  it('a spec that names no design document raises instead of publishing half the epic', async () => {
+  it('the design document published beside the spec is the one its story names, whatever the handoff line says', async () => {
     const flow = Flow.freezing(Mother.draftWithNoDesign())
 
-    await expect(flow.run()).rejects.toThrow(EpicSpecNotUnderstood)
-    expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.commitAsked).toEqual([])
-    expect(flow.pullRequests.openAsked).toEqual([])
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.FROZEN)
+    expect(flow.branch.commitAsked.map((asked) => asked.paths)).toEqual([[Mother.DESIGN_PATH, Mother.PATH]])
   })
 })
