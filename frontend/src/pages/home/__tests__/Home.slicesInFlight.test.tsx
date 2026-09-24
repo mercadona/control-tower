@@ -41,11 +41,13 @@ const backendWith = ({
   progress = () => ImplementProgressMother.inReview(),
   planningProgress = () => PlanningProgressMother.running(),
   history = () => ImplementHistoryMother.empty(),
+  concluded = () => null,
 }: {
   activePlans: () => Answer
   progress?: (issue: number) => Answer
   planningProgress?: (issue: number) => Answer
   history?: (issue: number) => Answer
+  concluded?: (issue: number) => Answer | null
 }) => {
   let known: ActivePlan[] = []
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -66,7 +68,7 @@ const backendWith = ({
       const issue = Number(asProgress[1])
       const repo = new URL(url, 'http://localhost').searchParams.get('repo')
       const active = known.find((entry) => entry.plan.issue.number === issue && entry.plan.repo === repo)
-      if (active === undefined) return new Response('{"code":"work-not-found","detail":"work no longer active"}', { status: 400 })
+      if (active === undefined) return responseFor(concluded(issue) ?? WorkProgressMother.notFound())
       return responseFor(WorkProgressMother.fromActive(active, progress(issue), planningProgress(issue)))
     }
     const asHistory = IMPLEMENT_HISTORY.exec(url)
@@ -79,6 +81,9 @@ const backendWith = ({
 
   return { fetching }
 }
+
+const finishedSlice = (issue: number, pullRequest: { number: number; url: string } | null = WorkProgressMother.PULL_REQUEST) =>
+  WorkProgressMother.finished({ issue, agent: HeadlessPlanMother.agentFor(issue), pullRequest })
 
 const panelOf = async (issue: number) => within(await screen.findByRole('region', { name: `Slice #${issue}` }))
 
@@ -745,6 +750,8 @@ describe('Home · the slices in flight', () => {
     openHome()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
+    expect(screen.getByRole('alert')).toHaveTextContent('El backend ya no tiene constancia de este plan. Descarta el estado para volver a empezar.')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('cmux')
     expect(screen.getByRole('heading', { name: 'Slice #7', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Slice #9' })).toBeNull()
@@ -794,5 +801,90 @@ describe('Home · the slices in flight', () => {
 
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
+  })
+
+  it('should announce the delivered slice and the one still running in its checkout instead of warning', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlight(8),
+      concluded: (issue) => issue === 7 ? finishedSlice(7) : null,
+    })
+    openHome()
+
+    const announcement = await screen.findByRole('status', { name: 'Slice #7 entregado' })
+    expect(announcement).toHaveTextContent('En marcha: #8.')
+    expect(screen.getByRole('link', { name: '#998' })).toHaveAttribute('href', WorkProgressMother.PULL_REQUEST.url)
+    expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Slice #8', level: 2 })).toBeInTheDocument()
+  })
+
+  it('should announce the last delivered slice and clear it when closed', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    backendWith({
+      activePlans: () => HeadlessPlanMother.empty(),
+      concluded: (issue) => issue === 7 ? finishedSlice(7, null) : null,
+    })
+    const { user } = openHome()
+
+    const announcement = await screen.findByRole('status', { name: 'Slice #7 entregado' })
+    expect(announcement).toHaveTextContent('No hay más slices en marcha en este repositorio.')
+    expect(screen.getByText('El slice seleccionado ha terminado.')).toBeInTheDocument()
+    expect(screen.queryAllByRole('link').filter((link) => link.getAttribute('href')?.includes('/pull/'))).toEqual([])
+
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }))
+
+    expect(WorkflowSnapshotStorage.load()).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Solicitud', level: 1 })).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Slice #7 entregado' })).toBeNull()
+  })
+
+  it('should name every slice still running in its checkout and none of another checkout', async () => {
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    backendWith({
+      activePlans: () => HeadlessPlanMother.slicesInFlightWithOneElsewhere('/elsewhere/clone', 10, 8, 9),
+      concluded: (issue) => issue === 7 ? finishedSlice(7) : null,
+    })
+    openHome()
+
+    expect(await screen.findByRole('status', { name: 'Slice #7 entregado' })).toHaveTextContent('En marcha: #8, #9.')
+  })
+
+  it('should turn the warning into the announcement once the backend records the harvest', async () => {
+    vi.useFakeTimers()
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    let harvested = false
+    backendWith({
+      activePlans: () => HeadlessPlanMother.empty(),
+      concluded: (issue) => issue === 7 && harvested ? finishedSlice(7) : null,
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
+
+    harvested = true
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+
+    expect(screen.getByRole('status', { name: 'Slice #7 entregado' })).toBeInTheDocument()
+    expect(screen.queryByText('El plan guardado ya no está activo')).toBeNull()
+  })
+
+  it('should not announce a delivery the backend reports for another conversation of the same issue', async () => {
+    vi.useFakeTimers()
+    WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
+    const { fetching } = backendWith({
+      activePlans: () => HeadlessPlanMother.empty(),
+      concluded: (issue) => issue === 7 ? WorkProgressMother.finished({ issue: 7, agent: 'another-conversation' }) : null,
+    })
+    const asked = () => fetching.mock.calls.filter(([input]) => String(input).startsWith('/work-progress/7?')).length
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+
+    expect(asked()).toBe(2)
+    expect(screen.getByText('Comprobando que el plan sigue activo')).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: 'Slice #7 entregado' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

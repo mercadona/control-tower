@@ -184,6 +184,18 @@ in-review slice does not trigger one. Returning to fixes cancels the pending han
 `useAutomaticSliceSelection.ts` consumes the cards' existing progress reads
 rather than starting another polling loop.
 
+When the saved workflow leaves active plans, the page asks `/work-progress` what
+became of it (`useWorkConclusion`) instead of assuming it was lost. The backend
+decides: `finished` — its harvest is recorded — renders an informative
+**Slice #N entregado**, naming the slices still running in the same repository
+and checkout (or saying none are), linking the pull request when the backend
+names one, and offering **Cerrar** to clear the saved workflow. `work-not-found`
+keeps the warning, whose copy no longer names cmux. Until either answer arrives,
+or while the backend cannot be reached, the page says it is still checking and
+warns nobody; the question is repeated every three seconds and stops once the
+answer is `finished`, so a warning read in the instant before the harvest is
+recorded turns into the announcement on the next poll.
+
 The mutation owns the active-plan read barrier from the click until its fresh
 GET completes. It first drains a GET that predates the click; timer and manual
 polls that wake while POST is pending start no read. After an accepted or

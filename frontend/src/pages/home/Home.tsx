@@ -7,10 +7,11 @@ import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { WorkDetails } from 'app/work-progress/WorkDetails'
+import { useWorkConclusion } from 'app/work-progress/useWorkConclusion'
 import { useWorkProgress } from 'app/work-progress/useWorkProgress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { SliceSession, SliceProgress, type SliceRecovery } from 'app/slice-session/components/slice-session'
-import { useAutomaticSliceSelection } from 'app/slice-session/useAutomaticSliceSelection'
+import { sharesCheckout, useAutomaticSliceSelection } from 'app/slice-session/useAutomaticSliceSelection'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -404,6 +405,12 @@ const Home = () => {
     ? { repo: selectedWork.repo, issue: selectedWork.issue.number, agent: selectedWork.agent }
     : null, canReadWork, uncertainActive !== null ? 'uncertain' : workflow?.phase ?? null)
   const workProgress = workRead.kind === 'read' || workRead.kind === 'stale' ? workRead.snapshot.progress : null
+  const savedWorkflowIsGone = workflow !== null && reconciliation === 'stale' && uncertainRequest === null
+  const conclusion = useWorkConclusion(savedWorkflowIsGone
+    ? { repo: workflow.plan.repo, issue: workflow.plan.issue.number, agent: workflow.plan.agent }
+    : null)
+  const savedWorkflowFinished = savedWorkflowIsGone && conclusion.kind === 'finished' ? conclusion : null
+  const successors = workflow === null ? [] : slicesInFlight.filter((active) => sharesCheckout(workflow, active))
   const planIsReady = workProgress?.phase === 'planning' && workProgress.plan.kind === 'available' && workProgress.plan.value === 'ready'
   const executionStarted = workProgress?.phase === 'implementing'
   const showRestoredDiscard = restoredRef.current && workflow?.phase !== 'implementing' && !restoredNeedsRecovery
@@ -411,7 +418,9 @@ const Home = () => {
   const currentStage: WorkflowStageName = workflow === null ? 'request' : 'implementation'
   const requestStatus: WorkflowStepStatus = workflow === null ? 'active' : 'completed'
   const implementationStatus: WorkflowStepStatus = workflow === null ? 'pending' : 'active'
-  const implementationDescription = !restoredIsConfirmed
+  const implementationDescription = savedWorkflowFinished !== null
+    ? 'El slice seleccionado ha terminado.'
+    : !restoredIsConfirmed
     ? 'Estamos comprobando el estado del plan guardado.'
     : executionStarted
       ? 'Seguimos la implementación. Aquí verás el progreso que comunica el backend.'
@@ -429,14 +438,41 @@ const Home = () => {
           )}
         </div>
       )}
-      {reconciliation === 'stale' && (
+      {savedWorkflowFinished !== null && workflow !== null && (
+        <div className="home__recovery">
+          <Banner
+            type="informative"
+            aria-label={`Slice #${workflow.plan.issue.number} entregado`}
+            title={`Slice #${workflow.plan.issue.number} entregado`}
+            description={successors.length > 0
+              ? `En marcha: ${successors.map((successor) => `#${successor.plan.issue.number}`).join(', ')}.`
+              : 'No hay más slices en marcha en este repositorio.'}
+          />
+          {savedWorkflowFinished.pullRequest !== null && (
+            <p className="lg-body-medium">
+              Pull request: {' '}
+              <a href={savedWorkflowFinished.pullRequest.url} target="_blank" rel="noreferrer">
+                #{savedWorkflowFinished.pullRequest.number}
+              </a>
+            </p>
+          )}
+          <Button variant="secondary" onClick={discardStaleWorkflow}>Cerrar</Button>
+        </div>
+      )}
+      {savedWorkflowIsGone && conclusion.kind === 'checking' && (
+        <div className="home__recovery">
+          <Banner type="informative" title="Comprobando que el plan sigue activo" />
+          <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>
+        </div>
+      )}
+      {reconciliation === 'stale' && (uncertainRequest !== null || conclusion.kind === 'not-found') && (
         <div className="home__recovery">
           <Banner
             type="warning"
             role="alert"
             title={uncertainRequest === null ? 'El plan guardado ya no está activo' : 'El trabajo incierto ya no figura como activo'}
             description={uncertainRequest === null
-              ? 'El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva.'
+              ? 'El backend ya no tiene constancia de este plan. Descarta el estado para volver a empezar.'
               : 'El backend ya no informa de este trabajo. Descarta el estado para crear una solicitud nueva.'}
           />
           <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>

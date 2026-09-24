@@ -64,7 +64,7 @@ const withReadyTools = <T extends (input: string | URL | Request, init?: Request
     if (String(input).startsWith('/work-progress/')) {
       const url = new URL(String(input), 'http://localhost')
       const active = plans.find((plan) => plan.plan.issue.number === Number(url.pathname.split('/')[2]) && plan.plan.repo === url.searchParams.get('repo'))
-      if (active === undefined) throw new Error(`no work fixture for ${String(input)}`)
+      if (active === undefined) return new Response(WorkProgressMother.notFound().body, { status: WorkProgressMother.notFound().status })
       return new Response(WorkProgressMother.fromActive(active).body)
     }
     const response = await (init === undefined ? fetching(input) : fetching(input, init))
@@ -370,7 +370,7 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('backend o cmux ya no tiene este plan activo')
+    expect(await screen.findByRole('alert')).toHaveTextContent('El backend ya no tiene constancia de este plan')
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     expect(fetching).toHaveBeenCalledTimes(1)

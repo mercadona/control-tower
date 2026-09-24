@@ -69,7 +69,7 @@ const backendRecovering = (answer: Answer, progress: (active: ActivePlan) => Ans
       const issue = Number(url.pathname.split('/')[2])
       const plans: ActivePlan[] = JSON.parse(answer.body).plans ?? []
       const active = plans.find((plan) => plan.plan.issue.number === issue && plan.plan.repo === url.searchParams.get('repo'))
-      if (active === undefined) throw new Error(`no progress fixture for ${String(input)}`)
+      if (active === undefined) return responseFor(WorkProgressMother.notFound())
       return progressRequests(active, init)
     }
     return init === undefined ? fetching(input) : fetching(input, init)
