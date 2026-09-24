@@ -80,7 +80,7 @@ class ScriptedStderr extends EventEmitter {
   setEncoding(_encoding: string): void {}
 }
 
-class ScriptedProcess extends EventEmitter implements LaunchedProcess {
+export class ScriptedProcess extends EventEmitter implements LaunchedProcess {
   static #nextPid = 1
 
   readonly pid: number
