@@ -4,6 +4,7 @@ import type { PlanSessions } from './plan-sessions.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
+import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import { PlanRecoveryConflict } from '../domain/exceptions.ts'
 
 export const ActivePlanPhase = Object.freeze({
@@ -32,6 +33,7 @@ export type FoundActivePlan =
     diagnostic: string | null,
     recovery: ActivePlanRecovery,
     refusal: RunClosure | null,
+    execution: ImplementationState | null,
   }
 
 export type ProjectedActivePlan = {
@@ -88,6 +90,7 @@ export class ActivePlans {
     diagnostic: string | null,
     recovery: ActivePlanRecovery,
     refusal: RunClosure | null = null,
+    execution: ImplementationState | null = null,
   ): void {
     const key = ActivePlans.#keyFor(watch)
     this.implementing.delete(key)
@@ -98,6 +101,7 @@ export class ActivePlans {
       diagnostic,
       recovery: Object.freeze({ ...recovery }),
       refusal,
+      execution,
     })
   }
 

@@ -72,8 +72,8 @@ describe('ReadWorkProgress', () => {
 
   it('uncertain work carries its recorded recovery without trying to execute or reinterpret it', async () => {
     const tested = new WorkScenario()
-    tested.condition = { phase: 'uncertain', diagnostic: 'unowned call', recovery: { action: 'inspect', detail: 'inspect evidence' }, refusal: null }
-    expect((await tested.read()).progress.detail).toEqual(tested.condition)
+    tested.condition = { phase: 'uncertain', diagnostic: 'unowned call', recovery: { action: 'inspect', detail: 'inspect evidence' }, refusal: null, execution: null }
+    expect((await tested.read()).progress.detail).toEqual({ ...tested.condition, execution: { kind: 'unavailable', detail: 'unowned call' } })
     expect(tested.executionRequests).toEqual([])
     expect(tested.planReads).toBe(0)
   })

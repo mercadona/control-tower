@@ -159,6 +159,18 @@ class Flow {
 }
 
 describe('ReadImplementationProgress', () => {
+  it('a returned uncertain publication retains local completion and its diagnostic as an incomplete delivery reading', async () => {
+    const delivery = new CompletedRunDelivery()
+    delivery.inspection = { kind: 'uncertain', pullRequest: null, diagnostic: 'GitHub unavailable' }
+    const flow = new Flow({ records: new DriverRecords(), delivery, driver: true })
+
+    const result = await flow.read()
+
+    expect(result.state.step).toBe(ImplementationStep.DELIVERED)
+    expect(result.delivery).toEqual({ kind: 'unavailable', detail: 'GitHub unavailable' })
+    expect(delivery.delivered).toEqual([])
+  })
+
   it('a driver run completed only locally is shown as publishing, with an existing PR if known', async () => {
     const delivery = new CompletedRunDelivery()
     delivery.inspection = {

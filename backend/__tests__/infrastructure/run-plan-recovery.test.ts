@@ -55,6 +55,10 @@ import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
 import { RunJournal, type JournalEntry } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents, SilentChangeAnnouncements, RunProvenance, type RunProvenanceValue } from '../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../src/infrastructure/run-plan-recovery.ts'
+import { InspectedWorkInventory } from '../../src/infrastructure/inspected-work-inventory.ts'
+import { ReadWorkProgress, ReadWorkProgressParams } from '../../src/application/queries/read-work-progress.ts'
+import { PlanProgress } from '../../src/domain/ports/plan-progress.ts'
+import { PlanningActivities } from '../../src/domain/ports/planning-activity.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
@@ -561,6 +565,33 @@ class ProjectionScenario {
 }
 
 describe('RunPlanRecovery projection', () => {
+  it('publication uncertainty preserves proven local delivery through inventory and the unified query without publishing', async () => {
+    const watch = RecoveryMother.watch()
+    const delivery = new CompletedRunDelivery()
+    delivery.inspection = { kind: 'uncertain', pullRequest: null, diagnostic: 'GitHub unavailable' }
+    const tested = new ProjectionScenario([watch], delivery)
+    const query = new ReadWorkProgress({
+      inventory: new InspectedWorkInventory({ inspection: tested.recovery, plans: tested.activePlans }),
+      plans: new PlanProgress(), activities: new PlanningActivities(),
+      implementation: { execute: async () => { throw new Error('known local completion must not depend on another remote read') } },
+    })
+
+    const result = await query.execute(new ReadWorkProgressParams(watch.issue.number, watch.repository))
+
+    expect(result.progress.detail).toMatchObject({
+      phase: 'uncertain', diagnostic: 'GitHub unavailable',
+      recovery: { action: 'inspect', detail: 'GitHub unavailable' },
+      execution: { kind: 'partial', value: { step: 'delivered', pullRequest: null }, detail: 'GitHub unavailable' },
+    })
+    await tested.recovery.recover()
+    expect(tested.activePlans.find({ issue: watch.issue.number, repository: watch.repository })).toMatchObject({
+      phase: 'uncertain', execution: { step: 'delivered' }, recovery: { action: 'inspect' },
+    })
+    expect(delivery.delivered).toEqual([])
+    expect(tested.reviews.started).toEqual([])
+    expect(tested.machine.effects.commands).toBe(0)
+  })
+
   it('startup restores recorded calls while subsequent plan observations leave measurements alone', async () => {
     const tested = new ProjectionScenario()
 

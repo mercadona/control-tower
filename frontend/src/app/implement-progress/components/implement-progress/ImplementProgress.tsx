@@ -1,4 +1,4 @@
-import { STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
+import { ImplementationStep, STEP_LABELS } from 'app/implement-progress/ImplementProgress.types'
 import type { ImplementProgressRead } from 'app/implement-progress/ImplementProgress.types'
 import { Banner } from 'system-ui/banner'
 import './ImplementProgress.css'
@@ -10,7 +10,8 @@ const CONNECTING_MESSAGE = 'Comprobando el progreso de la implementación…'
 type ImplementProgressProps = { progress: ImplementProgressRead }
 
 const ImplementProgress = ({ progress }: ImplementProgressProps) => {
-  const taskProgress = progress.phase === 'progress' && progress.task !== null
+  const hasProgress = progress.phase === 'progress' || progress.phase === 'partial'
+  const taskProgress = hasProgress && progress.task !== null
     ? progress.totalTasks === null
       ? `Tarea ${progress.task}`
       : `Tarea ${progress.task} de ${progress.totalTasks}`
@@ -24,10 +25,12 @@ const ImplementProgress = ({ progress }: ImplementProgressProps) => {
       {progress.phase === 'waiting' && (
         <p className="implement-progress__state" role="status">{WAITING_MESSAGE}</p>
       )}
-      {progress.phase === 'progress' && (
+      {hasProgress && (
         <div className="implement-progress__hierarchy">
           <p className="implement-progress__stage lg-body-medium" role="status" aria-live="polite">
-            {STEP_LABELS[progress.step]}
+            {progress.phase === 'partial' && progress.step === ImplementationStep.DELIVERED
+              ? 'Implementación terminada; publicación sin confirmar'
+              : STEP_LABELS[progress.step]}
           </p>
           {taskProgress !== null && <p className="implement-progress__task">{taskProgress}</p>}
           {progress.totalTasks !== null && progress.task === null && (
@@ -46,7 +49,7 @@ const ImplementProgress = ({ progress }: ImplementProgressProps) => {
           )}
         </div>
       )}
-      {progress.phase === 'progress' && progress.pullRequest !== null && (
+      {hasProgress && progress.pullRequest !== null && (
         <p className="implement-progress__facts implement-progress__facts--pr lg-body-medium">
           Pull request abierta: {' '}
           <a href={progress.pullRequest.url} target="_blank" rel="noreferrer">

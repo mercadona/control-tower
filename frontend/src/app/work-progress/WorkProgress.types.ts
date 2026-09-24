@@ -12,7 +12,7 @@ export type WorkExecutionReading = WorkReading<ImplementationProgressState>
 export type WorkProgress =
   | { phase: 'planning'; plan: WorkReading<'writing' | 'ready'>; activity: WorkReading<PlanningActivity> }
   | { phase: 'implementing'; execution: WorkExecutionReading }
-  | { phase: 'uncertain'; diagnostic: string; recovery: { action: RecoveryAction; detail: string }; refusal: PlanRefusal | null }
+  | { phase: 'uncertain'; diagnostic: string; recovery: { action: RecoveryAction; detail: string }; refusal: PlanRefusal | null; execution: WorkExecutionReading }
 
 export type WorkIdentity = { repo: string; issue: number; agent: string }
 export type WorkSnapshot = WorkIdentity & { progress: WorkProgress }

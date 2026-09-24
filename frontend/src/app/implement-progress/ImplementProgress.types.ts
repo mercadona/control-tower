@@ -36,6 +36,7 @@ export type ImplementProgressRead =
   | { phase: 'connecting' }
   | { phase: 'waiting' }
   | ({ phase: 'progress' } & ImplementationProgressState)
+  | ({ phase: 'partial' } & ImplementationProgressState)
   | { phase: 'failed'; error: string }
   | { phase: 'unreachable' }
 

@@ -40,6 +40,26 @@ describe('unified work polling', () => {
     vi.unstubAllGlobals()
   })
 
+  it('pauses an unconfirmed identity without clearing its last reading and never reuses it for a different identity', async () => {
+    const scenario = new ProgressScenario()
+    scenario.install()
+    const { result, rerender } = renderHook(({ identity, enabled }) => useWorkProgress(identity, enabled), {
+      initialProps: { identity: scenario.identity, enabled: true },
+    })
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.kind).toBe('read')
+
+    rerender({ identity: scenario.identity, enabled: false })
+    expect(result.current).toMatchObject({ kind: 'stale', snapshot: { agent: scenario.identity.agent } })
+    expect(scenario.requests.mock.calls[0][1]?.signal?.aborted).toBe(true)
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    expect(scenario.requests).toHaveBeenCalledTimes(1)
+
+    rerender({ identity: { ...scenario.identity, agent: 'another-conversation' }, enabled: false })
+    expect(result.current.kind).toBe('connecting')
+    expect(scenario.requests).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the last reading explicitly stale on failure and recovers on the next poll', async () => {
     const scenario = new ProgressScenario()
     scenario.install()

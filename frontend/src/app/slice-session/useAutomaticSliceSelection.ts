@@ -56,6 +56,8 @@ const useAutomaticSliceSelection = ({ workflow, plans, enabled, onSelect }: Auto
     }
 
     if (!enabled || pendingRef.current !== identity) return
+    const selectedStillActive = plans.some((active) => identityOf(active.plan) === identity)
+    if (selectedStillActive && selectedProgress?.phase !== 'progress') return
     const candidates = plans.filter((active) =>
       identityOf(active.plan) !== identity &&
       active.plan.repo === workflow.plan.repo &&

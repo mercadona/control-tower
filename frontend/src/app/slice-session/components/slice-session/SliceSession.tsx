@@ -101,7 +101,7 @@ const SliceImplementationPanel = ({ recovery, onSelect, onProgress, progress, ob
   )
 }
 
-const SliceProgress = ({ issue, read, recovery = null, onSelect = null, onProgress = null }: Omit<SliceSessionProps, 'repo' | 'agent'> & { read: WorkProgressRead }) => {
+const SliceProgress = ({ issue, read, recovery = null, onSelect = null, onProgress = null, showUncertainty = true }: Omit<SliceSessionProps, 'repo' | 'agent'> & { read: WorkProgressRead; showUncertainty?: boolean }) => {
   const progress = useMemo(() => WorkProgressPresentation.execution(read), [read])
   const observation = useMemo(() => WorkProgressPresentation.observation(read), [read])
   const snapshot = read.kind === 'read' || read.kind === 'stale' ? read.snapshot : null
@@ -114,7 +114,7 @@ const SliceProgress = ({ issue, read, recovery = null, onSelect = null, onProgre
     <section className="slice-session" aria-label={`Slice #${issue}`}>
       <h2 className="slice-session__title lg-body-medium">{`Slice #${issue}`}</h2>
       {(read.kind === 'stale' || read.kind === 'unavailable') && <Banner type="warning" role="alert" title={read.detail} description={read.kind === 'stale' ? 'Mostramos la última lectura. Reintentando la conexión…' : 'Reintentando la lectura…'} />}
-      {uncertain !== null && recovery === null && <Banner type="warning" role="alert" title={UNCERTAIN_TITLE} description={uncertain.diagnostic} />}
+      {uncertain !== null && recovery === null && showUncertainty && <Banner type="warning" role="alert" title={UNCERTAIN_TITLE} description={uncertain.diagnostic} />}
       {partial !== null && <Banner type="warning" role="alert" title="Entrega a GitHub sin confirmar" description={partial.detail} />}
       {planning !== null ? (
         <>

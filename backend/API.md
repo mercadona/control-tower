@@ -253,7 +253,7 @@ one of three variants:
 |---|---|
 | `planning` | `plan`, `activity` |
 | `implementing` | `execution` |
-| `uncertain` | `diagnostic`, `recovery: {action, detail}`, `refusal` |
+| `uncertain` | `diagnostic`, `recovery: {action, detail}`, `refusal`, `execution` |
 
 A reading is `{kind:"available", value:...}` or
 `{kind:"unavailable", detail:"..."}`. Plan and activity are independent: one
@@ -261,6 +261,16 @@ failed read does not erase the other. Execution can also be
 `{kind:"partial", value:..., detail:"..."}` when local progress is known but
 delivery evidence could not be checked. Never treat partial delivery as a
 confirmed publication or use it to advance automatically to another slice.
+
+An uncertain publication does not erase proven local completion. When the run
+machine has confirmed delivery, `uncertain.execution` carries that local fact as
+a partial reading alongside the publication diagnostic and recovery action. The
+machine fact alone does not supply task counts or other metrics; those fields
+remain null rather than being invented. For uncertainty without proven local
+completion (for example, unowned calls or conflicting evidence), execution is
+explicitly unavailable. Neither variant changes recovery permissions or starts
+publication. The execution reader also preserves a returned uncertain publication
+result as an incomplete reading, not only failures thrown as exceptions.
 
 **Planning example**
 
