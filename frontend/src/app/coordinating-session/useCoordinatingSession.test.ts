@@ -216,6 +216,7 @@ describe('useCoordinatingSession', () => {
     expect(result.current.opened).toMatchObject({
       target: CoordinatingSessionMother.TARGET,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
     })
     expect(gets).toBe(2)

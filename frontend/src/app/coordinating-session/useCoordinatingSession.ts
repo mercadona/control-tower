@@ -201,6 +201,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
       target: opened.target,
       conversation: opened.conversation,
       repo: opened.repo,
+      story: opened.story,
       root: opened.root,
       session: opened.session,
       attention: { status: 'working', question: null },
@@ -302,6 +303,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
         target: held.outcome.target,
         conversation: held.outcome.conversation,
         repo: held.outcome.repo,
+        story: held.outcome.story,
         root: held.outcome.root,
         session: held.terminal,
       }

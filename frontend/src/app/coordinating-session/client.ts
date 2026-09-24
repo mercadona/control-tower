@@ -61,8 +61,7 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
     typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
     typeof body.repo === 'string' &&
-    typeof body.root === 'string' &&
-    typeof body.repo === 'string' &&
+    typeof body.story === 'string' &&
     typeof body.root === 'string' &&
     isLiveSessionRef(body.session) &&
     isAttention(body.attention) &&
@@ -74,6 +73,7 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
       target: body.target,
       conversation: body.conversation,
       repo: body.repo,
+      story: body.story,
       root: body.root,
       session: body.session,
       attention: body.attention,
@@ -87,13 +87,14 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
     typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
     typeof body.repo === 'string' &&
+    typeof body.story === 'string' &&
     typeof body.root === 'string' &&
     typeof body.detail === 'string' &&
     isTimeline(body.timeline)
   ) {
     return {
       kind: 'unresumable', operation: body.operation, target: body.target, conversation: body.conversation,
-      repo: body.repo, root: body.root,
+      repo: body.repo, story: body.story, root: body.root,
       detail: body.detail, timeline: body.timeline, closureError: closureErrorIn(body),
     }
   }
@@ -103,13 +104,14 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
     typeof body.target === 'string' &&
     typeof body.conversation === 'string' &&
     typeof body.repo === 'string' &&
+    typeof body.story === 'string' &&
     typeof body.root === 'string' &&
     typeof body.detail === 'string' &&
     isTimeline(body.timeline)
   ) {
     return {
       kind: 'ended', operation: body.operation, target: body.target, conversation: body.conversation,
-      repo: body.repo, root: body.root,
+      repo: body.repo, story: body.story, root: body.root,
       detail: body.detail, timeline: body.timeline, closureError: closureErrorIn(body),
     }
   }
@@ -128,8 +130,12 @@ const read = async (): Promise<CoordinatingSessionOutcome> => {
 
 const openedIn = (body: unknown): OpenedCoordinatingSession | null =>
   isRecord(body) && typeof body.target === 'string' && typeof body.conversation === 'string' &&
-    typeof body.repo === 'string' && typeof body.root === 'string' && isLiveSessionRef(body.session)
-    ? { target: body.target, conversation: body.conversation, repo: body.repo, root: body.root, session: body.session }
+    typeof body.repo === 'string' && typeof body.story === 'string' && typeof body.root === 'string' &&
+    isLiveSessionRef(body.session)
+    ? {
+      target: body.target, conversation: body.conversation, repo: body.repo, story: body.story, root: body.root,
+      session: body.session,
+    }
     : null
 
 const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
