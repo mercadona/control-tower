@@ -36,6 +36,7 @@ class Environment {
   makeOutput: string | null = null
   mountSource: string | null = null
   canonicalPath: string | null = null
+  extraServices: Record<string, unknown> = {}
   readonly gitCalls: string[][] = []
   readonly makeCalls: string[][] = []
   readonly dockerCalls: string[][] = []
@@ -70,8 +71,8 @@ class Environment {
     const name = override?.match(/^name: (.+)$/m)?.[1] ?? 'playground'
     const stdout = this.dockerOutput ?? JSON.stringify({ name, services: { app: {
       volumes: [{ type: 'bind', source: this.mountSource ?? cwd, target: '/app' }],
-      ports: override === undefined ? [{ published: '8000', target: 8000 }] : [],
-    } } })
+      ports: override?.includes('ports: !reset []') ? [] : [{ published: '8000', target: 8000 }],
+    }, ...this.extraServices } })
     return new ProcessOutput({ code: this.dockerCode, stdout, stderr: '' })
   }
 
@@ -193,6 +194,31 @@ describe('Compose preparation from repository configuration', () => {
     expect(env.written).toEqual([])
     expect(env.files.get(path)).toBe('name: shared\nservices: {}\n')
     expect(result.summary).toContain('does not select this worktree project')
+  })
+
+  it('reports a fixed host port kept by an existing override that selects this worktree project', async () => {
+    const env = new Environment()
+    await env.prepare()
+    const path = `${SourceMother.WORKTREE}/docker/docker-compose.local.yml`
+    env.files.set(path, `${env.files.get(path)?.split('\n')[0]}\n`)
+    const result = await env.prepare()
+    expect(result.state).toBe('required')
+    expect(result.findings).toHaveLength(1)
+    expect(result.summary).toContain('app publishes host port 8000')
+  })
+
+  it('reports a fixed host port that comes from a Compose file other than the base', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: [{ published: '9000', target: 9000 }] } }
+    const result = await env.prepare()
+    expect(result.state).toBe('required')
+    expect(result.summary).toContain('worker publishes host port 9000')
+  })
+
+  it('accepts a container port that publishes no fixed host port', async () => {
+    const env = new Environment()
+    env.extraServices = { worker: { ports: [{ target: 9000 }] } }
+    expect((await env.prepare()).state).toBe('compatible')
   })
 
   it('reports the Playground failure when /app points to a sibling checkout', async () => {
