@@ -20,6 +20,7 @@ type PublishingAsked = { root: CheckoutRoot, milestone: string }
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
 class EpicBranchDouble extends EpicBranch {
+  checkedOut: () => void = () => {}
   publishingAsked: PublishingAsked[]
   committedAsked: CommittedAsked[]
   commitAsked: CommitAsked[]
@@ -43,6 +44,7 @@ class EpicBranchDouble extends EpicBranch {
 
   async publishing(subject: PublishingAsked): Promise<string> {
     this.publishingAsked.push(subject)
+    this.checkedOut()
     return Mother.BRANCH
   }
 
@@ -160,6 +162,7 @@ class Flow {
     this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? PullRequestsDouble.withNoneOpen()
     this.revisions = Mother.REVISIONS
+    this.branch.checkedOut = () => this.specs.checkOutTheMilestoneBranch()
   }
 
   static reading(spec: EpicSpec | null): Flow {

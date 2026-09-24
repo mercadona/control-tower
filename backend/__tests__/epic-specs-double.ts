@@ -12,31 +12,35 @@ type RewriteAsked = { root: CheckoutRoot, spec: EpicSpec, text: string }
 export class EpicSpecsDouble extends EpicSpecs {
   static readonly STORY = CoordinatingConversationMother.STORY
 
-  readonly reads: readonly (EpicSpec | null)[]
   readonly story: UserStoryKey | UserStoryUrl
+  readonly onTheMilestoneBranch: EpicSpec | null
   readonly asked: SpecAsked[]
   readonly rewriteAsked: RewriteAsked[]
+  answer: EpicSpec | null
+  onTheBranch: boolean
 
-  constructor(answer: EpicSpec | null, { then = [], story = EpicSpecsDouble.STORY }: {
-    then?: readonly (EpicSpec | null)[], story?: UserStoryKey | UserStoryUrl,
+  constructor(answer: EpicSpec | null, { onTheMilestoneBranch = answer, story = EpicSpecsDouble.STORY }: {
+    onTheMilestoneBranch?: EpicSpec | null, story?: UserStoryKey | UserStoryUrl,
   } = {}) {
     super()
-    this.reads = [answer, ...then]
+    this.answer = answer
+    this.onTheMilestoneBranch = onTheMilestoneBranch
     this.story = story
+    this.onTheBranch = false
     this.asked = []
     this.rewriteAsked = []
   }
 
   static withTheBranchHolding(answer: EpicSpec, held: EpicSpec): EpicSpecsDouble {
-    return new EpicSpecsDouble(answer, { then: [held] })
+    return new EpicSpecsDouble(answer, { onTheMilestoneBranch: held })
   }
 
   static withTheBranchMissingIt(answer: EpicSpec): EpicSpecsDouble {
-    return new EpicSpecsDouble(answer, { then: [null] })
+    return new EpicSpecsDouble(answer, { onTheMilestoneBranch: null })
   }
 
-  get answer(): EpicSpec | null {
-    return this.reads[0]
+  checkOutTheMilestoneBranch(): void {
+    this.onTheBranch = true
   }
 
   async of(asked: SpecAsked): Promise<EpicSpec | null> {
@@ -45,7 +49,7 @@ export class EpicSpecsDouble extends EpicSpecs {
     }
     this.asked.push(asked)
 
-    return this.reads[Math.min(this.asked.length, this.reads.length) - 1]
+    return this.onTheBranch ? this.onTheMilestoneBranch : this.answer
   }
 
   async rewrite(asked: RewriteAsked): Promise<void> {

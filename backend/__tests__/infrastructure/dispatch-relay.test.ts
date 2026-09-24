@@ -140,16 +140,17 @@ describe('DispatchRelay', () => {
     const unread = new DispatchNotRead('gh could not read the complete issue table')
 
     const relaying = await new Relaying({
-      milestones: Mother.authorised(Mother.MILESTONE, Mother.OTHER_MILESTONE),
+      milestones: Mother.authorised(Mother.OTHER_MILESTONE, Mother.MILESTONE),
       answers: new Map<string, DispatchAnswer>([
-        [Mother.OTHER_MILESTONE, unread],
-        [Mother.MILESTONE, Mother.dispatching(Mother.started(12))],
+        [Mother.MILESTONE, unread],
+        [Mother.OTHER_MILESTONE, Mother.dispatching(Mother.started(20))],
       ]),
     }).run()
 
+    expect(relaying.dispatchAsked.map((asked) => asked.milestone)).toEqual([Mother.MILESTONE, Mother.OTHER_MILESTONE])
     expect(relaying.written).toEqual([
-      RelayLine.dispatched(Mother.started(12)),
-      RelayLine.refusedIn(Mother.REPOSITORY, Mother.OTHER_MILESTONE, unread),
+      RelayLine.refusedIn(Mother.REPOSITORY, Mother.MILESTONE, unread),
+      RelayLine.dispatched(Mother.started(20)),
     ])
   })
 
