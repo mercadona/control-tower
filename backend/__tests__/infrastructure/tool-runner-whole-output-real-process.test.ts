@@ -3,6 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+
+const processes = new SystemProcesses()
 
 class PrintsThenExits {
   static readonly #MADE: string[] = []
@@ -33,7 +36,7 @@ describe('a tool that prints more than a pipe holds and then exits', () => {
   })
 
   it('loses everything past the pipe buffer when its output is read through a pipe', async () => {
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes })
 
     const said = await runner.run([PrintsThenExits.script()])
 
@@ -42,7 +45,7 @@ describe('a tool that prints more than a pipe holds and then exits', () => {
   })
 
   it('keeps every byte when its output is collected whole, and still tells its exit code and its stderr', async () => {
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes })
 
     const said = await runner.runWholeOutput([PrintsThenExits.script()])
 

@@ -1,8 +1,7 @@
-import { execFile, spawn } from 'node:child_process'
 import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { ExecFileException } from 'node:child_process'
+import type { ProcessRunner, RunFailure } from './process-runner.ts'
 
 export class ProcessOutput {
   readonly code: number
@@ -39,26 +38,28 @@ export class ToolRunner {
   readonly bin: string
   readonly budgetMs: number
   readonly env: NodeJS.ProcessEnv | undefined
+  readonly processes: ProcessRunner
 
-  constructor({ bin, budgetMs, env }: { bin: string, budgetMs: number, env?: NodeJS.ProcessEnv }) {
+  constructor({ bin, budgetMs, env, processes }: {
+    bin: string, budgetMs: number, env?: NodeJS.ProcessEnv, processes: ProcessRunner,
+  }) {
     this.bin = bin
     this.budgetMs = budgetMs
     this.env = env
+    this.processes = processes
   }
 
-  run(argv: string[], { cwd }: RunOptions = {}): Promise<ProcessOutput> {
-    return new Promise((resolve) => {
-      execFile(this.bin, argv, { timeout: this.budgetMs, cwd, env: this.env }, (failure, stdout, stderr) => {
-        resolve(new ProcessOutput({
-          code: ToolRunner.#codeOf(failure),
-          stdout,
-          stderr: failure === null || (
-            typeof failure.code === 'number' && !failure.killed && failure.signal == null
-          )
-            ? stderr
-            : (stderr.trim() || failure.message),
-        }))
-      })
+  async run(argv: string[], { cwd }: RunOptions = {}): Promise<ProcessOutput> {
+    const outcome = await this.processes.runAndWait(this.bin, argv, { cwd, env: this.env, timeoutMs: this.budgetMs })
+
+    return new ProcessOutput({
+      code: ToolRunner.#codeOf(outcome.failure),
+      stdout: outcome.stdout,
+      stderr: outcome.failure === null || (
+        typeof outcome.failure.code === 'number' && !outcome.failure.killed && outcome.failure.signal == null
+      )
+        ? outcome.stderr
+        : (outcome.stderr.trim() || outcome.failure.message),
     })
   }
 
@@ -79,7 +80,7 @@ export class ToolRunner {
     { cwd, stdout, onSpawn, ownedProcessGroup }: RunOptions & { stdout: number },
   ): Promise<{ code: number, stderr: string }> {
     return new Promise((resolve) => {
-      const child = spawn(this.bin, argv, {
+      const child = this.processes.launch(this.bin, argv, {
         cwd, env: this.env, timeout: this.budgetMs, stdio: ['ignore', stdout, 'pipe'], detached: ownedProcessGroup,
       })
       let stderr = ''
@@ -108,7 +109,7 @@ export class ToolRunner {
     })
   }
 
-  static #codeOf(failure: ExecFileException | null): number {
+  static #codeOf(failure: RunFailure | null): number {
     if (failure === null) return 0
 
     return typeof failure.code === 'number' && Number.isInteger(failure.code)

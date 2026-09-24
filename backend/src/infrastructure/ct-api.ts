@@ -83,6 +83,7 @@ import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
 import { ToolRunner } from './tool-runner.ts'
+import { SystemProcesses } from './process-border.ts'
 import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
@@ -234,6 +235,7 @@ class Disk {
 }
 
 class CtApi {
+  static readonly #PROCESSES = new SystemProcesses()
   static readonly #USAGE =
     `usage: make run-backend (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
   static readonly #BAD_USAGE = 2
@@ -271,7 +273,7 @@ class CtApi {
     bin: string,
     { budgetMs = CtApi.#PROCESS_TIMEOUT_MS, env }: { budgetMs?: number, env?: NodeJS.ProcessEnv } = {}
   ): LaunchTool {
-    const runner = new ToolRunner({ bin, budgetMs, env })
+    const runner = new ToolRunner({ bin, budgetMs, env, processes: CtApi.#PROCESSES })
     return (argv, options) => runner.run(argv, options)
   }
 
@@ -282,7 +284,7 @@ class CtApi {
   }
 
   static #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
-    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+    const runner = new ToolRunner({ bin, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES })
     return new Tool({
       launch: (argv: string[]) => argv.includes('--paginate')
         ? runner.runWholeOutput(argv)
@@ -426,7 +428,7 @@ class CtApi {
     CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
-    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES })
     const preparation = new CheckRepositoryPreparation({
       environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
       reports: new SessionPreparationReports({
@@ -528,8 +530,12 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
     })
     const journal = new RunJournal({ files, newId: randomUUID, now: () => new Date().toISOString() })
-    const oracleRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS })
-    const runGitRunner = new ToolRunner({ bin: GitWorkspace.BIN, budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+    const oracleRunner = new ToolRunner({
+      bin: process.execPath, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+    })
+    const runGitRunner = new ToolRunner({
+      bin: GitWorkspace.BIN, budgetMs: CtApi.#PROCESS_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+    })
     const machine = new CtRunMachine({
       journal,
       node: oracleRunner.runWholeOutput.bind(oracleRunner),
@@ -539,7 +545,9 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
       pluginRoot: PluginTree.root(),
     })
-    const releaseRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#HARVEST_TIMEOUT_MS })
+    const releaseRunner = new ToolRunner({
+      bin: process.execPath, budgetMs: CtApi.#HARVEST_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+    })
     const runDelivery = new CheckedRunDelivery({
       journal,
       machine,
@@ -698,7 +706,9 @@ class CtApi {
     })
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
-    const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
+    const groomRunner = new ToolRunner({
+      bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS, processes: CtApi.#PROCESSES,
+    })
     const epicGroom = new CtGroomEpic({
       node: (argv, options) => groomRunner.run(argv, options),
       wholeOutput: (argv, options) => groomRunner.runWholeOutput(argv, options),

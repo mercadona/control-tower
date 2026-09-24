@@ -101,6 +101,12 @@ describe('the guard really fires, so it cannot pass by finding nothing', () => {
     expect(SpawnedChildren.sitesIn(Source.typePosition(), 'x.ts')).toEqual([])
   })
 
+  it('a_call_through_a_process_port_is_a_site_of_its_own', () => {
+    const found = SpawnedChildren.sitesIn("this.processes.launch('git', [])\n", 'x.ts')
+
+    expect(found.map((site) => site.call)).toEqual(['launch'])
+  })
+
   it('a_release_that_is_not_the_first_thing_the_entrypoint_does_does_not_count_as_released', () => {
     expect(SpawnedChildren.releasesBeforeAnythingElseIn(Source.releasingEntrypoint())).toBe(true)
     expect(SpawnedChildren.releasesBeforeAnythingElseIn(Source.releasingLate())).toBe(false)

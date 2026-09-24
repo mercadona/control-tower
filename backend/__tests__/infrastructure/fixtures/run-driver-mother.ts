@@ -62,6 +62,7 @@ import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import type { RunDispatch } from '../../../src/infrastructure/run-dispatch.ts'
 import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../../src/infrastructure/process-border.ts'
 import { GhPlanPublication } from '../../../src/infrastructure/gh-plan-publication.ts'
 import { PlanContractProgress } from '../../../src/infrastructure/plan-contract-progress.ts'
 import { Gh } from '../../../src/infrastructure/gh.ts'
@@ -381,6 +382,7 @@ export class RunDriverMother {
   static readonly #PLUGIN = join(RunDriverMother.#ROOT, 'plugin')
   static readonly #CT_STEP = join(RunDriverMother.#PLUGIN, 'scripts', 'ct-step.mjs')
   static readonly #DISPATCH_CHECK = join(RunDriverMother.#PLUGIN, 'scripts', 'dispatch-check.mjs')
+  static readonly #PROCESSES = new SystemProcesses()
   static readonly #PLAN_TEXT = [
     '# #7 - Finite run driver rehearsal', '',
     '> **Task-scoped subagents execute this plan. They arrive with no context.**', '',
@@ -451,8 +453,8 @@ export class RunDriverMother {
       repository: new RepositoryName(RunDriverMother.REPOSITORY),
       agent: RunDriverMother.CONVERSATION,
     })
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000 })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
     this.machine = new CtRunMachine({
       journal: this.journal,
       node: oracle.runWholeOutput.bind(oracle),
@@ -943,8 +945,8 @@ export class RunDriverMother {
   }
 
   #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000 })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000 })
+    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
+    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: RunDriverMother.#PROCESSES })
     return new CtRunMachine({
       journal,
       node: oracle.runWholeOutput.bind(oracle), git: git.runWholeOutput.bind(git),
@@ -1002,9 +1004,15 @@ export class RunDriverMother {
       CT_FIXTURE_CAPTURES: this.captures,
       CT_FIXTURE_PUBLICATION: this.publication,
     }
-    const node = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: environment })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: environment })
-    const ghRunner = new ToolRunner({ bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment })
+    const node = new ToolRunner({
+      bin: process.execPath, budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+    })
+    const git = new ToolRunner({
+      bin: 'git', budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+    })
+    const ghRunner = new ToolRunner({
+      bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES,
+    })
     const gh = new Gh({
       launch: (argv) => ghRunner.run(argv),
       policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
