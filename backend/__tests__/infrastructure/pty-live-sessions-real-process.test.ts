@@ -4,7 +4,8 @@ import { execFile } from 'node:child_process'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import type { TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+import type { TableRead, TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -134,9 +135,11 @@ class RealTerminals {
 }
 
 class RealCabin {
+  static readonly #PROCESSES = new SystemProcesses()
+
   static opening(realTerminals: RealTerminals, over: Partial<{
     termGraceMs: number, killGraceMs: number, pollMs: number,
-    inspectProcessTable: (signal: AbortSignal) => Promise<string>,
+    inspectProcessTable: (read: TableRead) => Promise<string>,
   }> = {}): PtyLiveSessions {
     return new PtyLiveSessions({
       spawn: realTerminals.spawn(),
@@ -148,7 +151,7 @@ class RealCabin {
       termGraceMs: over.termGraceMs ?? 500,
       killGraceMs: over.killGraceMs ?? 500,
       pollMs: over.pollMs ?? 10,
-      inspectProcessTable: over.inspectProcessTable,
+      inspectProcessTable: over.inspectProcessTable ?? RealCabin.#PROCESSES.readTable.bind(RealCabin.#PROCESSES),
     })
   }
 }
@@ -163,15 +166,15 @@ class ObservedProcessTables {
     this.targetGroup = processGroup
   }
 
-  inspect = async (signal: AbortSignal): Promise<string> => {
+  inspect = async (read: TableRead): Promise<string> => {
     const stdout = await new Promise<string>((resolve, reject) => {
       execFile('/bin/ps', ['-axo', 'pid=,pgid=,lstart='], {
         encoding: 'utf8',
-        timeout: PtyLiveSessions.INSPECTION_TIMEOUT_MS,
+        timeout: read.timeoutMs,
         killSignal: 'SIGKILL',
-        maxBuffer: PtyLiveSessions.INSPECTION_MAX_BUFFER_BYTES,
+        maxBuffer: read.maxBufferBytes,
         env: { ...process.env, LC_ALL: 'C' },
-        signal,
+        signal: read.abort,
       }, (failure, output) => {
         if (failure !== null) reject(failure)
         else resolve(output)

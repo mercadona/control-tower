@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -43,7 +42,7 @@ class CallsDouble extends ClaudeCalls {
       files: new HeadlessFiles({ root: '/state', fs, newId: () => 'temporary-record' }),
       binary: 'claude',
       worker: 'worker.ts',
-      spawn,
+      spawn: () => { throw new Error('a planning observation double never spawns') },
       env: {},
       newId: () => Mother.CALL.id,
       now: () => Mother.STARTED_AT,

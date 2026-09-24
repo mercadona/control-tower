@@ -68,6 +68,10 @@ describe('no long-lived child of this backend is born holding a terminal', () =>
       expect(entry.reason.length).toBeGreaterThan(0)
     }
   })
+
+  it('the_border_is_the_only_module_of_src_that_imports_a_spawning_library', () => {
+    expect(Backend.importers()).toEqual([join('infrastructure', 'process-border.ts')])
+  })
 })
 
 describe('the guard really fires, so it cannot pass by finding nothing', () => {
@@ -99,6 +103,12 @@ describe('the guard really fires, so it cannot pass by finding nothing', () => {
   it('a_regular_expression_exec_is_not_mistaken_for_a_process', () => {
     expect(SpawnedChildren.sitesIn(Source.regularExpression(), 'x.ts')).toEqual([])
     expect(SpawnedChildren.sitesIn(Source.typePosition(), 'x.ts')).toEqual([])
+  })
+
+  it('a_call_through_a_process_port_is_a_site_of_its_own', () => {
+    const found = SpawnedChildren.sitesIn("this.processes.launch('git', [])\n", 'x.ts')
+
+    expect(found.map((site) => site.call)).toEqual(['launch'])
   })
 
   it('a_release_that_is_not_the_first_thing_the_entrypoint_does_does_not_count_as_released', () => {

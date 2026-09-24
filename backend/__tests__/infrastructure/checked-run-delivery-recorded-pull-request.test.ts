@@ -142,6 +142,13 @@ class RecordedPullRequestScenario {
     }
   }
 
+  #refusingSignal(): (pid: number, signal: NodeJS.Signals | 0) => void {
+    return (pid, signal) => {
+      this.asked.push(`signal ${signal} ${pid}`)
+      throw new Error(`signal ${signal} was sent to ${pid} while naming a recorded pull request`)
+    }
+  }
+
   delivery(): CheckedRunDelivery {
     const journal = new RunJournal({
       files: new HeadlessFiles({ root: this.root, fs, newId: () => 'temporary' }), newId: () => 'unused', now: () => DeliveredJournalMother.AT,
@@ -163,6 +170,7 @@ class RecordedPullRequestScenario {
       dispatchCheck: DeliveredJournalMother.DISPATCH_CHECK,
       newId: () => 'unused',
       now: () => DeliveredJournalMother.AT,
+      signal: this.#refusingSignal(),
     })
   }
 

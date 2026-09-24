@@ -21,21 +21,38 @@ export class SpawnedChildren {
   static readonly RELEASES_FIRST = 'this module releases before it can spawn anything'
   static readonly CHILD_RELEASES_FIRST = 'the child is ours and releases before it can spawn anything'
   static readonly OWNS_THE_MASTER = 'this spawn opens the terminal instead of inheriting one'
-  static readonly INJECTS_ONLY = 'this module hands the spawn on instead of calling it'
+  static readonly DECLARES_ONLY = 'this module declares the verb and starts nothing'
+  static readonly THE_BORDER = "the border starts what a caller asks, and the caller's entry says what happens to that child"
 
-  static readonly SPAWNING = /(?:(?<=[.\s([{,=])|^)(spawn|spawnSync|execFile|execFileSync|fork)\s*\(|(?<![.\w])(exec)\s*\(/g
+  static readonly SPAWNING =
+    /(?:(?<=[.\s([{,=])|^)(spawn|spawnSync|execFile|execFileSync|fork)\s*\(|(?<![.\w])(exec)\s*\(|(?<=\bprocesses\.)(launch|runAndWait)\s*\(|(?:(?<=[.\s([{,=])|^)(launch|runAndWait)\s*\(binary:|(?:(?<=[.\s([{,=])|^)(openTerminal)\s*\(file:/g
   static readonly IMPORTING = /['"]node:child_process['"]|['"]node-pty['"]/
   static readonly ENTRYPOINT = /static async main\([^)]*\)[^{]*\{[^\n]*\n([^\n]*)/
 
   static readonly ACCOUNTED: readonly AccountedFile[] = [
     {
       file: join('infrastructure', 'tool-runner.ts'),
-      calls: ['execFile', 'spawn'],
+      calls: ['launch', 'runAndWait'],
       reason: SpawnedChildren.SHORT_LIVED,
     },
     {
+      file: join('infrastructure', 'process-border.ts'),
+      calls: ['execFile', 'execFile', 'launch', 'openTerminal', 'runAndWait', 'spawn'],
+      reason: SpawnedChildren.THE_BORDER,
+    },
+    {
+      file: join('infrastructure', 'process-runner.ts'),
+      calls: ['launch', 'runAndWait'],
+      reason: SpawnedChildren.DECLARES_ONLY,
+    },
+    {
+      file: join('infrastructure', 'process-table.ts'),
+      calls: ['openTerminal'],
+      reason: SpawnedChildren.DECLARES_ONLY,
+    },
+    {
       file: join('infrastructure', 'pty-live-sessions.ts'),
-      calls: ['spawn', 'execFile'],
+      calls: ['spawn'],
       reason: SpawnedChildren.OWNS_THE_MASTER,
     },
     {
@@ -43,11 +60,6 @@ export class SpawnedChildren {
       calls: ['spawn'],
       reason: SpawnedChildren.RELEASES_FIRST,
       child: join('infrastructure', 'headless-call-worker.ts'),
-    },
-    {
-      file: join('infrastructure', 'ct-api.ts'),
-      calls: [],
-      reason: SpawnedChildren.INJECTS_ONLY,
     },
     {
       file: join('infrastructure', 'claude-calls.ts'),
@@ -60,7 +72,7 @@ export class SpawnedChildren {
   static sitesIn(source: string, file: string): SpawnSite[] {
     return source.split('\n').flatMap((text, index) => (
       [...text.matchAll(SpawnedChildren.SPAWNING)]
-        .map((found) => ({ file, line: index + 1, call: found[1] ?? found[2] }))
+        .map((found) => ({ file, line: index + 1, call: found[1] ?? found[2] ?? found[3] ?? found[4] ?? found[5] }))
     ))
   }
 

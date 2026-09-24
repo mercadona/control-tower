@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -78,7 +79,7 @@ class RealCallMother {
       files: new HeadlessFiles({ root, fs, newId: () => 'temporary-record' }),
       binary: process.execPath,
       worker: RealCallMother.WORKER,
-      spawn,
+      spawn: new SystemProcesses().launch,
       env: process.env,
       newId: () => RealCallMother.CALL,
       now: () => new Date().toISOString(),

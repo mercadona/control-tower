@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+import type { TableRead, Terminal, TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
 import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -17,8 +18,10 @@ import {
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 import { SessionProcessOwnership } from '../../src/domain/value-objects/session-process-ownership.ts'
 
-const childProcessDouble = vi.hoisted(() => ({ execFile: vi.fn() }))
-vi.mock('node:child_process', () => ({ execFile: childProcessDouble.execFile }))
+const childProcessDouble = vi.hoisted(() => ({ execFile: vi.fn(), spawn: vi.fn() }))
+vi.mock('node:child_process', () => ({ execFile: childProcessDouble.execFile, spawn: childProcessDouble.spawn }))
+
+const border = new SystemProcesses()
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void
 type ExecInvocation = {
@@ -158,7 +161,7 @@ class Cabin {
     signal: (pid: number, signal: NodeJS.Signals | 0) => void,
     sleep: (milliseconds: number) => Promise<void>,
     now: () => number,
-    inspectProcessTable: (signal: AbortSignal) => Promise<string>,
+    inspectProcessTable: (read: TableRead) => Promise<string>,
     inspectionNow: () => number,
     termGraceMs: number,
     killGraceMs: number,
@@ -241,11 +244,11 @@ class ControlledInspection {
     this.now = now
   }
 
-  inspect = (signal: AbortSignal): Promise<string> => new Promise((resolve, reject) => {
+  inspect = (read: TableRead): Promise<string> => new Promise((resolve, reject) => {
     this.active += 1
     this.maximumActive = Math.max(this.maximumActive, this.active)
     this.calls.push({
-      signal,
+      signal: read.abort,
       startedAt: this.now(),
       resolve: (stdout) => {
         this.active -= 1
@@ -2415,6 +2418,7 @@ describe('PtyLiveSessions', () => {
       termGraceMs: 2,
       killGraceMs: 2,
       pollMs: 1,
+      inspectProcessTable: (read) => border.readTable(read),
     })
     const session = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
@@ -2495,6 +2499,7 @@ describe('PtyLiveSessions', () => {
       termGraceMs: 1,
       killGraceMs: 1,
       pollMs: 1,
+      inspectProcessTable: (read) => border.readTable(read),
     })
     sessions.open(LoginProgram.default())
     await vi.advanceTimersByTimeAsync(0)
@@ -2538,6 +2543,7 @@ describe('PtyLiveSessions', () => {
       termGraceMs: 2,
       killGraceMs: 2,
       pollMs: 1,
+      inspectProcessTable: (read) => border.readTable(read),
     })
     const session = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
@@ -2583,6 +2589,7 @@ describe('PtyLiveSessions', () => {
       termGraceMs: 1,
       killGraceMs: 1,
       pollMs: 1,
+      inspectProcessTable: (read) => border.readTable(read),
     })
     sessions.open(LoginProgram.default())
     await vi.advanceTimersByTimeAsync(0)
@@ -2593,6 +2600,26 @@ describe('PtyLiveSessions', () => {
     exec.responds(0, null, ProcessTables.group(4101, new Map([[4101, 'original']])))
     await Inspections.until(() => exec.calls.length === 2, 'default inspection did not settle after its late callback')
     expect(exec.calls).toHaveLength(2)
+  })
+
+  it('the_process_table_read_carries_the_inspection_bounds', async () => {
+    const received: TableRead[] = []
+    const sessions = Cabin.opening({
+      inspectProcessTable: async (read) => {
+        received.push(read)
+
+        return ProcessTables.group(4101, new Map([[4101, '4101:original']]))
+      },
+    })
+    sessions.open(LoginProgram.default())
+    await Inspections.settle()
+
+    expect(received).toHaveLength(1)
+    expect(received[0]).toMatchObject({
+      timeoutMs: PtyLiveSessions.INSPECTION_TIMEOUT_MS,
+      maxBufferBytes: PtyLiveSessions.INSPECTION_MAX_BUFFER_BYTES,
+    })
+    expect(received[0].abort).toBeInstanceOf(AbortSignal)
   })
 
   it('concurrent closes share inspection work without sharing signal authority', async () => {

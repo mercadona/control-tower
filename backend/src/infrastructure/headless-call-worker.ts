@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
@@ -11,6 +10,9 @@ import { ClaudeCallResult } from './claude-call-result.ts'
 import { HeadlessFiles } from './headless-files.ts'
 import { InheritedTerminals } from './inherited-terminals.ts'
 import { NonLaunchRecord } from './non-launch-record.ts'
+import { SystemProcesses } from './process-border.ts'
+import type { LaunchedProcess, ProcessRunner } from './process-runner.ts'
+import type { ProcessTable } from './process-table.ts'
 
 type LeaderOutcome = { readonly kind: 'pending' }
   | { readonly kind: 'known', readonly code: number | null, readonly signal: string | null }
@@ -96,8 +98,8 @@ class RecordedStream {
 
 export class HeadlessCallWorker {
   readonly files: HeadlessFiles
-  readonly spawn: typeof import('node:child_process').spawn
-  readonly kill: (pid: number, signal: NodeJS.Signals | 0) => void
+  readonly spawn: ProcessRunner['launch']
+  readonly kill: ProcessTable['signal']
   readonly now: () => string
   readonly schedule: (callback: () => void, delayMs: number) => WorkerTimer
   readonly cancel: (timer: WorkerTimer) => void
@@ -119,8 +121,8 @@ export class HeadlessCallWorker {
 
   constructor(ports: {
     files: HeadlessFiles,
-    spawn: typeof import('node:child_process').spawn,
-    kill: (pid: number, signal: NodeJS.Signals | 0) => void,
+    spawn: ProcessRunner['launch'],
+    kill: ProcessTable['signal'],
     now: () => string,
     schedule: (callback: () => void, delayMs: number) => WorkerTimer,
     cancel: (timer: WorkerTimer) => void,
@@ -148,7 +150,7 @@ export class HeadlessCallWorker {
     const directory = this.#location.directory
     const stdout = await this.files.fs.open(join(directory, CallDescriptor.STREAM), 'wx')
     const stderr = await this.files.fs.open(join(directory, CallDescriptor.STDERR), 'wx')
-    let child: import('node:child_process').ChildProcess
+    let child: LaunchedProcess
     try {
       child = this.spawn(this.#descriptor.binary, [...this.#descriptor.argv], {
         cwd: this.#descriptor.cwd,
@@ -360,10 +362,11 @@ export class HeadlessCallWorker {
     const descriptor = CallDescriptor.from(await fs.readFile(descriptorPath, 'utf8'))
     const location = WorkerCallLocation.from(descriptorPath, descriptor)
     const files = new HeadlessFiles({ root: location.root, fs, newId: () => randomUUID() })
+    const processes = new SystemProcesses()
     const worker = new HeadlessCallWorker({
       files,
-      spawn,
-      kill: (pid, signal) => process.kill(pid, signal),
+      spawn: processes.launch,
+      kill: processes.signal,
       now: () => new Date().toISOString(),
       schedule: (callback, delayMs) => {
         const timer = setTimeout(callback, delayMs)

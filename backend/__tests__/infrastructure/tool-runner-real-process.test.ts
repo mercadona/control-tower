@@ -4,8 +4,10 @@ import { once } from 'node:events'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
 
 const tracked = vi.hoisted(() => ({ children: new Set<ChildProcess>() }))
+const processes = new SystemProcesses()
 
 vi.mock('node:child_process', async (importOriginal) => {
   const native = await importOriginal<typeof import('node:child_process')>()
@@ -25,7 +27,7 @@ class Node {
   static GIVEN = 'CT_TOOL_RUNNER_GIVEN'
 
   static running(budgetMs: number) {
-    return new ToolRunner({ bin: process.execPath, budgetMs })
+    return new ToolRunner({ bin: process.execPath, budgetMs, processes, signal: processes.signal.bind(processes) })
   }
 
   static sleeping() {
@@ -33,7 +35,7 @@ class Node {
   }
 
   static withEnvironment(env: NodeJS.ProcessEnv) {
-    return new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env })
+    return new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env, processes, signal: processes.signal.bind(processes) })
   }
 
   static printing(variable: string) {
@@ -157,7 +159,7 @@ describe('ToolRunner', () => {
   })
 
   it('a_tool_that_is_not_installed_is_a_refusal_with_a_reason_and_not_an_empty_channel', async () => {
-    const output = await new ToolRunner({ bin: 'ct-no-such-tool', budgetMs: 30_000 }).run(['whatever'])
+    const output = await new ToolRunner({ bin: 'ct-no-such-tool', budgetMs: 30_000, processes, signal: processes.signal.bind(processes) }).run(['whatever'])
 
     expect(output.failed).toBe(true)
     expect(output.stderr).toContain('ct-no-such-tool')

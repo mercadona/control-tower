@@ -16,6 +16,7 @@ import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
+import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
@@ -101,7 +102,7 @@ class RecoveryMother {
       files: this.files,
       binary: '/usr/local/bin/claude',
       worker: '/backend/headless-call-worker.ts',
-      spawn: (() => { throw new Error('recovery must never launch a process') }) as typeof import('node:child_process').spawn,
+      spawn: (() => { throw new Error('recovery must never launch a process') }) as ProcessRunner['launch'],
       env: {},
       newId: () => { throw new Error('recovery must never mint a call') },
       now: () => { throw new Error('recovery must never ask for the current time') },
@@ -285,7 +286,7 @@ describe('RecordedPlanRecovery', () => {
       spawn: (() => {
         queueMicrotask(() => child.emit('message', { kind: 'accepted' }))
         return child
-      }) as typeof import('node:child_process').spawn,
+      }) as ProcessRunner['launch'],
       env: {},
       newId: () => RecoveryMother.SECOND_CALL,
       now: () => RecoveryMother.STARTED_AT,

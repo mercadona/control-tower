@@ -20,6 +20,9 @@ import { ProcessOutput, ToolRunner } from '../../src/infrastructure/tool-runner.
 import type { RunOptions } from '../../src/infrastructure/tool-runner.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
+import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
+
+const processes = new SystemProcesses()
 
 const REPOSITORY_FOUND_FROM_THIS_FILE_AND_NEVER_FROM_THE_WORKING_DIRECTORY =
   join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -229,7 +232,7 @@ describe('checked run delivery with real git', () => {
   it('keeps inspection read-only while a failed owned release result is pending and accepts its bound disposition', async () => {
     const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-release-result-race-'))))
     roots.push(fixture.home)
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000 })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000, processes, signal: processes.signal.bind(processes) })
     let commandExited!: () => void
     let persistResult!: () => void
     const exited = new Promise<void>((resolve) => { commandExited = resolve })
@@ -261,7 +264,7 @@ describe('checked run delivery with real git', () => {
   it('refuses an invalid disposition paired with a valid failed result', async () => {
     const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-invalid-release-disposition-'))))
     roots.push(fixture.home)
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000 })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000, processes, signal: processes.signal.bind(processes) })
     fixture.setReleaseLaunch((_argv, options) => runner.runWholeOutput(['-e', 'process.exitCode = 7'], options))
     await expect(fixture.delivery.deliver(fixture.watch)).rejects.toThrow('checked release failed')
     await fixture.writeReleaseDisposition(1, { ownerDigest: '0'.repeat(64) })
@@ -275,7 +278,7 @@ describe('checked run delivery with real git', () => {
     const fixture = await DeliveryFixture.at(await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-failed-release-group-'))))
     roots.push(fixture.home)
     const descendantPath = join(fixture.home, 'release-descendant.pid')
-    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000 })
+    const runner = new ToolRunner({ bin: process.execPath, budgetMs: 10_000, processes, signal: processes.signal.bind(processes) })
     fixture.setReleaseLaunch((_argv, options) => runner.runWholeOutput(['-e', `
       const { spawn } = require('node:child_process')
       const { writeFileSync } = require('node:fs')
@@ -457,8 +460,8 @@ class DeliveryFixture {
   const worktree = join(root, '.worktrees', '7')
   await fs.mkdir(root, { recursive: true })
   await fs.mkdir(accountDirectory, { recursive: true })
-  const rawGit = new ToolRunner({ bin: 'git', budgetMs: 10_000 })
-  const rawNode = new ToolRunner({ bin: process.execPath, budgetMs: 10_000 })
+  const rawGit = new ToolRunner({ bin: 'git', budgetMs: 10_000, processes, signal: processes.signal.bind(processes) })
+  const rawNode = new ToolRunner({ bin: process.execPath, budgetMs: 10_000, processes, signal: processes.signal.bind(processes) })
   const runGit = async (argv: string[], options: { cwd?: string } = {}) => {
     const output = await rawGit.runWholeOutput(argv, options)
     if (output.failed) throw new Error(`git ${argv.join(' ')}: ${output.stderr}`)
@@ -583,13 +586,14 @@ class DeliveryFixture {
     dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
     newId: () => `10000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
     now: () => '2026-09-22T10:00:00.000Z',
+    signal: processes.signal.bind(processes),
   })
   const realBuild = () => {
     const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GITHUB_STATE: externalStatePath,
       FAKE_HEAD_SHA: sha,
       CT_STATE_DIR: join(home, 'control-state'), CLAUDE_CONFIG_DIR: accountDirectory }
-    const ghRunner = new ToolRunner({ bin: join(fakeBin, 'gh'), budgetMs: 10_000, env })
-    const releaseRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env })
+    const ghRunner = new ToolRunner({ bin: join(fakeBin, 'gh'), budgetMs: 10_000, env, processes, signal: processes.signal.bind(processes) })
+    const releaseRunner = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env, processes, signal: processes.signal.bind(processes) })
     const externalGh = new Gh({
       launch: (argv) => ghRunner.runWholeOutput(argv),
       policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
@@ -601,6 +605,7 @@ class DeliveryFixture {
       dispatchCheck: DISPATCH_CHECK,
       newId: () => `20000000-0000-4000-8000-${String(++id).padStart(12, '0')}`,
       now: () => '2026-09-22T10:00:00.000Z',
+      signal: processes.signal.bind(processes),
     })
   }
   return {
