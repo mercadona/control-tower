@@ -149,6 +149,30 @@ fixed 680px, because the 280 px navigation rail already takes its own share of
 a 1440 px viewport and a fixed column left the work area too narrow for its own
 flow bar; below 1280 px the column stacks under the work area with no overlay.
 
+**The focused view.** While a coordinating session is live and no plan of its
+story is in progress, `Home` renders `FocusedSession`
+(`app/focused-session`) in place of everything above: no request form, no slice
+cards, no gate sequence, no drawer. The navigation rail and the top bar stay.
+The view holds, in order:
+
+- a header with the name of the current step, the story and repository the
+  session was opened for, **Cancelar la sesión** as a secondary action, and the
+  four steps (Brainstorming, Congelación del spec, Groom y autorización,
+  Implementación);
+- a band with the gate that asks for something right now, the same
+  `SpecFreezePanel` or `EpicGroomPanel` today's view shows, and nothing when no
+  gate asks for anything;
+- the session itself in the centre (`CentredSession`), with no tabs.
+
+The step and the band are derived from gate 1 and gate 2 in
+`SessionStage.of`; no phase is stored. `FocusedMode.of` decides whether the page
+is focused: a plan the page adopted on its own stops the focus only when gate 2
+names its issue among this story's issues, so a plan of another story never
+takes the page over. A single **Sin conexión con el backend** replaces the
+per-poll warnings while the coordinating session poll fails. When the session
+ends or a plan of its story starts, today's view comes back as it was, and the
+banners of `CoordinatingSessionStatus` say why.
+
 The coordinating session remains available and recoverable while a headless
 plan conversation plans and implements. They have different roles: expanding
 the drawer exposes the coordinating session as the interactive entrance in its
