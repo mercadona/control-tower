@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ReadWorkProgressResult, type ReadWorkProgressParams } from '../../src/application/queries/read-work-progress.ts'
-import { WorkProgress } from '../../src/domain/value-objects/work-progress.ts'
+import { WorkProgress, type WorkProgressDetail } from '../../src/domain/value-objects/work-progress.ts'
 import { WorkProgressMother } from '../work-progress-mother.ts'
 import { WorkNotFound, WorkNotRead, WorkNotUnderstood } from '../../src/domain/exceptions.ts'
 
@@ -9,15 +9,16 @@ class RunningWorkApi {
   static readonly live: ApiServer[] = []
   readonly requests: ReadWorkProgressParams[] = []
   failure: Error | null = null
+  detail: WorkProgressDetail = {
+    phase: 'planning', plan: { kind: 'available', value: 'ready' },
+    activity: { kind: 'unavailable', detail: 'stream unreadable' },
+  }
   readonly server = new ApiServer({
     port: 0, frontendRoot: '/no-frontend',
     workProgress: { execute: async (params) => {
       this.requests.push(params)
       if (this.failure !== null) throw this.failure
-      return new ReadWorkProgressResult(new WorkProgress(WorkProgressMother.watch(), {
-        phase: 'planning', plan: { kind: 'available', value: 'ready' },
-        activity: { kind: 'unavailable', detail: 'stream unreadable' },
-      }))
+      return new ReadWorkProgressResult(new WorkProgress(WorkProgressMother.watch(), this.detail))
     } },
   })
 
@@ -45,6 +46,22 @@ describe('work progress route', () => {
     })
     expect(tested.requests[0].repository.text).toBe('owner/name')
     expect(tested.requests[0].issue).toBe(7)
+  })
+
+  it('returns the literal finished contract of a harvested slice', async () => {
+    const tested = new RunningWorkApi()
+    tested.detail = {
+      phase: 'finished', harvestedAt: WorkProgressMother.HARVESTED_AT, pullRequest: WorkProgressMother.pullRequest(),
+    }
+    const response = await fetch(`${await tested.start()}/work-progress/7?repo=owner%2Fname`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      repo: 'owner/name', issue: 7, agent: 'conversation-7',
+      progress: {
+        phase: 'finished', harvested_at: '2026-09-24T09:30:00.000Z',
+        pull_request: { number: 998, url: 'https://github.com/owner/name/pull/998' },
+      },
+    })
   })
 
   it.each([

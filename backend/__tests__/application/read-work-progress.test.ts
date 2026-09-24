@@ -70,6 +70,17 @@ describe('ReadWorkProgress', () => {
     expect(tested.activityReads).toBe(0)
   })
 
+  it('finished work carries its harvest and pull request without reading plan, activity or execution', async () => {
+    const tested = new WorkScenario()
+    tested.condition = {
+      phase: 'finished', harvestedAt: WorkProgressMother.HARVESTED_AT, pullRequest: WorkProgressMother.pullRequest(),
+    }
+    expect((await tested.read()).progress.detail).toEqual(tested.condition)
+    expect(tested.executionRequests).toEqual([])
+    expect(tested.planReads).toBe(0)
+    expect(tested.activityReads).toBe(0)
+  })
+
   it('uncertain work carries its recorded recovery without trying to execute or reinterpret it', async () => {
     const tested = new WorkScenario()
     tested.condition = { phase: 'uncertain', diagnostic: 'unowned call', recovery: { action: 'inspect', detail: 'inspect evidence' }, refusal: null, execution: null }

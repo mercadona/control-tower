@@ -53,6 +53,11 @@ export class WorkProgressResponse {
             task: detail.refusal.task, findings: detail.refusal.findings, verdict: detail.refusal.verdict,
           },
         }
+      case 'finished':
+        return {
+          phase: 'finished', harvested_at: detail.harvestedAt,
+          pull_request: detail.pullRequest === null ? null : { number: detail.pullRequest.number, url: detail.pullRequest.url },
+        }
     }
   }
 

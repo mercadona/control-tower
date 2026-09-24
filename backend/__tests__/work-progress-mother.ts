@@ -4,6 +4,7 @@ import { RepositoryName } from '../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../src/domain/value-objects/workspace-location.ts'
 import { PlanningActivity, PlanningToolCall } from '../src/domain/value-objects/planning-activity.ts'
 import { ImplementationState } from '../src/domain/value-objects/implementation-state.ts'
+import type { DeliveredPullRequest } from '../src/domain/value-objects/run-delivery.ts'
 
 export class WorkProgressMother {
   static watch(repository = 'owner/name'): PlanWatch {
@@ -25,5 +26,11 @@ export class WorkProgressMother {
 
   static execution(): ImplementationState {
     return ImplementationState.of({ step: 'implement', task: 1, totalTasks: 3, name: 'Keep progress visible', attempt: 1, discards: 0 })
+  }
+
+  static readonly HARVESTED_AT = '2026-09-24T09:30:00.000Z'
+
+  static pullRequest(): DeliveredPullRequest {
+    return { number: 998, url: 'https://github.com/owner/name/pull/998' }
   }
 }

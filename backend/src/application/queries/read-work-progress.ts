@@ -78,6 +78,8 @@ export class ReadWorkProgress {
             ? { kind: 'unavailable', detail: work.condition.diagnostic }
             : { kind: 'partial', value: work.condition.execution, detail: work.condition.diagnostic },
         }))
+      case 'finished':
+        return new ReadWorkProgressResult(new WorkProgress(watch, work.condition))
     }
   }
 

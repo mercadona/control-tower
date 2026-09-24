@@ -571,7 +571,9 @@ describe('RunPlanRecovery projection', () => {
     delivery.inspection = { kind: 'uncertain', pullRequest: null, diagnostic: 'GitHub unavailable' }
     const tested = new ProjectionScenario([watch], delivery)
     const query = new ReadWorkProgress({
-      inventory: new InspectedWorkInventory({ inspection: tested.recovery, plans: tested.activePlans }),
+      inventory: new InspectedWorkInventory({
+        inspection: tested.recovery, plans: tested.activePlans, records: new PlanRecords(), delivery,
+      }),
       plans: new PlanProgress(), activities: new PlanningActivities(),
       implementation: { execute: async () => { throw new Error('known local completion must not depend on another remote read') } },
     })

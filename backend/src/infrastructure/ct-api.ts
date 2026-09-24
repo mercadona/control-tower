@@ -757,7 +757,7 @@ class CtApi {
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       workProgress: new ReadWorkProgress({
-        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans }),
+        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery }),
         plans: planProgress,
         activities: planningActivities,
         implementation: implementProgress,
