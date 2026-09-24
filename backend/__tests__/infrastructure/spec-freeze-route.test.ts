@@ -471,7 +471,7 @@ describe('SpecFreezeRoute', () => {
 
     expect(response.status).toBe(200)
     expect(freeze.asked).toEqual([new FreezeSpecParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: Mother.CONVERSATION.story,
     })])
     expect(held.held()?.target).toBe(Mother.NEXT_TARGET)
   })
@@ -693,6 +693,7 @@ describe('SpecFreezeRoute', () => {
       pullRequest: Mother.PULL_REQUEST,
     })
     expect(read.asked.map((asked) => asked.root.text)).toEqual([Mother.ROOT.text])
+    expect(read.asked.map((asked) => asked.story)).toEqual([Mother.CONVERSATION.story])
   })
 
   it('the freeze is refused on the closed checkout, which offers no target to carry', async () => {

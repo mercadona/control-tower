@@ -521,6 +521,7 @@ describe('EpicGroomRoute', () => {
     expect(response.status).toBe(200)
     expect(groom.asked).toHaveLength(1)
     expect(groom.asked[0].root).toEqual(Mother.ROOT)
+    expect(groom.asked[0].story).toEqual(Mother.CONVERSATION.story)
   })
 
   it.each([
@@ -914,6 +915,7 @@ describe('EpicGroomRoute', () => {
       key: Keys.MINTED,
     })
     expect(read.asked.map((asked) => asked.root.text)).toEqual([Mother.ROOT.text])
+    expect(read.asked.map((asked) => asked.story)).toEqual([Mother.CONVERSATION.story])
   })
 
   it('the groom is refused on the closed checkout, which offers no target to carry', async () => {

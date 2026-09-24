@@ -84,7 +84,7 @@ export class OpenGroomSession {
   }
 
   async execute(params: OpenGroomSessionParams): Promise<GroomSessionOpened> {
-    const spec = await this.specs.mostRecent(params.root)
+    const spec = await this.specs.of({ root: params.root, story: params.story })
     if (spec === null) return GroomSessionOpened.noSpec()
 
     const conversation = new CoordinatingConversation({

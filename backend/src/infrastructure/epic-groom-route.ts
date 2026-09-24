@@ -103,6 +103,7 @@ export class EpicGroomRoute {
         outcome = await read.execute(new ReadEpicGroomParams({
           root: reading.conversation.root,
           repository: reading.conversation.repository,
+          story: reading.conversation.story,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause
@@ -142,6 +143,7 @@ export class EpicGroomRoute {
         groomed = await groom.execute(new GroomEpicParams({
           root: holding.conversation.root,
           repository: holding.conversation.repository,
+          story: holding.conversation.story,
           fingerprint: request.get(EpicGroomRoute.PLAN_FINGERPRINT_HEADER) ?? null,
         }))
       } catch (cause) {

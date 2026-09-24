@@ -303,6 +303,7 @@ describe('EpicPromotionRoute', () => {
     expect(response.status).toBe(200)
     expect(promote.asked).toHaveLength(1)
     expect(promote.asked[0].root).toEqual(Mother.ROOT)
+    expect(promote.asked[0].story).toEqual(Mother.CONVERSATION.story)
   })
 
   it('an epic with no issues is refused as no-epic-issues', async () => {

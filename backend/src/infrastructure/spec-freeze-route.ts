@@ -85,6 +85,7 @@ export class SpecFreezeRoute {
         outcome = await read.execute(new ReadSpecFreezeParams({
           root: reading.conversation.root,
           repository: reading.conversation.repository,
+          story: reading.conversation.story,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause
@@ -123,6 +124,7 @@ export class SpecFreezeRoute {
         frozen = await freeze.execute(new FreezeSpecParams({
           root: holding.conversation.root,
           repository: holding.conversation.repository,
+          story: holding.conversation.story,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause

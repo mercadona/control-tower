@@ -90,6 +90,7 @@ export class EpicPromotionRoute {
         promoted = await promote.execute(new PromoteEpicParams({
           root: holding.conversation.root,
           repository: holding.conversation.repository,
+          story: holding.conversation.story,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause

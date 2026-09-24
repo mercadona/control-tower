@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { FreezeSpec, FreezeSpecParams, FreezeOutcome } from '../../src/application/actions/freeze-spec.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -20,51 +20,6 @@ type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 type PublishingAsked = { root: CheckoutRoot, milestone: string }
 
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
-
-class EpicSpecsDouble extends EpicSpecs {
-  answer: EpicSpec | null
-  held: EpicSpec | null
-  mostRecentAsked: CheckoutRoot[]
-  rereadAsked: RereadAsked[]
-  rewriteAsked: RewriteAsked[]
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.answer = answer
-    this.held = answer
-    this.mostRecentAsked = []
-    this.rereadAsked = []
-    this.rewriteAsked = []
-  }
-
-  static withTheBranchHolding(answer: EpicSpec, held: EpicSpec): EpicSpecsDouble {
-    const double = new EpicSpecsDouble(answer)
-    double.held = held
-
-    return double
-  }
-
-  static withTheBranchMissingIt(answer: EpicSpec): EpicSpecsDouble {
-    const double = new EpicSpecsDouble(answer)
-    double.held = null
-
-    return double
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.mostRecentAsked.push(root)
-    return this.answer
-  }
-
-  async reread(subject: RereadAsked): Promise<EpicSpec | null> {
-    this.rereadAsked.push(subject)
-    return this.held
-  }
-
-  async rewrite(subject: RewriteAsked): Promise<void> {
-    this.rewriteAsked.push(subject)
-  }
-}
 
 class EpicBranchDouble extends EpicBranch {
   answer: string
@@ -354,7 +309,7 @@ class Flow {
   }
 
   async run() {
-    return new FreezeSpec(this).execute(new FreezeSpecParams({ root: Mother.ROOT, repository: Mother.REPOSITORY }))
+    return new FreezeSpec(this).execute(new FreezeSpecParams({ root: Mother.ROOT, repository: Mother.REPOSITORY, story: EpicSpecsDouble.STORY }))
   }
 }
 
@@ -443,7 +398,7 @@ describe('FreezeSpec', () => {
 
     expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
     expect(flow.branch.publishingAsked).toEqual([{ root: Mother.ROOT, milestone: Mother.MILESTONE_BRANCH }])
-    expect(flow.specs.rereadAsked).toEqual([])
+    expect(flow.specs.asked).toEqual([{ root: Mother.ROOT, story: EpicSpecsDouble.STORY }])
     expect(flow.specs.rewriteAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
@@ -527,7 +482,9 @@ describe('FreezeSpec', () => {
 
     const frozen = await flow.run()
 
-    expect(flow.specs.rereadAsked).toEqual([{ root: Mother.ROOT, spec: draft }])
+    expect(flow.specs.asked).toEqual([
+      { root: Mother.ROOT, story: EpicSpecsDouble.STORY }, { root: Mother.ROOT, story: EpicSpecsDouble.STORY },
+    ])
     expect(frozen.outcome).toBe(FreezeOutcome.ALREADY_FROZEN)
     expect(flow.specs.rewriteAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])

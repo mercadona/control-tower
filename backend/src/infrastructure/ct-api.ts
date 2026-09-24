@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import * as fs from 'node:fs/promises'
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
@@ -218,15 +218,6 @@ class Disk {
       return true
     } catch (failure) {
       if (Disk.#isMissing(failure)) return false
-      throw failure
-    }
-  }
-
-  static async list(path: string): Promise<string[] | null> {
-    try {
-      return await readdir(path)
-    } catch (failure) {
-      if (Disk.#isMissing(failure)) return null
       throw failure
     }
   }
@@ -657,7 +648,7 @@ class CtApi {
       records: conversationRecords,
       liveSessions,
     })
-    const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
+    const epicSpecs = new DiskEpicSpecs({ read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
       specs: epicSpecs,
       conversations: claudeConversations,

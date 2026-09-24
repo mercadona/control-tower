@@ -311,6 +311,7 @@ describe('StartPlanRoute milestone entrance', () => {
     expect(start.asked[0].root).toBe(Mother.ROOT)
     expect(groom.asked[0].repository).toBe(Mother.REPOSITORY)
     expect(groom.asked[0].root).toBe(Mother.ROOT)
+    expect(groom.asked[0].story).toEqual(CoordinatingConversationMother.STORY)
   })
 
   it('a milestone 202 names the slice that could not start beside the ones that did', async () => {

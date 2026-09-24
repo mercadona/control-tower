@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { AskGroomReview, AskGroomReviewParams, GroomReviewAsk } from '../../src/application/actions/ask-groom-review.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
@@ -30,31 +30,18 @@ class Deferred<T> {
   }
 }
 
-class PendingSpecs extends EpicSpecs {
+class PendingSpecs extends EpicSpecsDouble {
   readonly reading = new Deferred<void>()
-  readonly answer = new Deferred<EpicSpec | null>()
+  readonly pending = new Deferred<EpicSpec | null>()
 
-  async mostRecent(): Promise<EpicSpec | null> {
+  constructor() {
+    super(null)
+  }
+
+  override async of(): Promise<EpicSpec | null> {
     this.reading.resolve()
 
-    return this.answer.promise
-  }
-}
-
-class EpicSpecsDouble extends EpicSpecs {
-  readonly asked: CheckoutRoot[]
-  readonly answer: EpicSpec | null
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.asked = []
-    this.answer = answer
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.asked.push(root)
-
-    return this.answer
+    return this.pending.promise
   }
 }
 
@@ -88,7 +75,7 @@ class Mother {
 
   static asking(): AskGroomReviewParams {
     return new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
+      repository: Mother.REPOSITORY, root: Mother.ROOT, story: EpicSpecsDouble.STORY, session: Mother.SESSION, target: Mother.TARGET,
     })
   }
 }
@@ -137,7 +124,7 @@ describe('AskGroomReview', () => {
       await specs.reading.promise
       expect(admission.asked).toEqual([])
       admission.refusal = refusal
-      specs.answer.resolve(Mother.spec())
+      specs.pending.resolve(Mother.spec())
       const asked = await pending
 
       expect(asked.outcome).toBe(GroomReviewAsk.REFUSED)

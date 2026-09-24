@@ -4,7 +4,7 @@ import {
 } from '../../src/application/actions/open-groom-session.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
@@ -15,22 +15,6 @@ import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
-
-class EpicSpecsDouble extends EpicSpecs {
-  answer: EpicSpec | null
-  asked: CheckoutRoot[]
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.answer = answer
-    this.asked = []
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.asked.push(root)
-    return this.answer
-  }
-}
 
 class ConversationsDouble extends Conversations {
   static readonly ID = new ConversationId('9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f')
@@ -213,7 +197,7 @@ describe('OpenGroomSession', () => {
     expect(started.conversation.root).toBe(Flow.ROOT)
     expect(started.conversation.repository).toBe(Flow.REPOSITORY)
     expect(started.conversation.id).toBe(ConversationsDouble.ID)
-    expect(flow.specs.asked).toEqual([Flow.ROOT])
+    expect(flow.specs.asked).toEqual([{ root: Flow.ROOT, story: CoordinatingConversationMother.STORY }])
   })
 
   it('the new conversation keeps the story of the conversation it follows', async () => {

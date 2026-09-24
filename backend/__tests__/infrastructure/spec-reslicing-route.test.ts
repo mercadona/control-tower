@@ -202,7 +202,7 @@ describe('SpecReslicingRoute', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ status: 'published', pullRequest: Mother.PULL_REQUEST })
     expect(publish.asked).toEqual([new PublishReslicingParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: Mother.CONVERSATION.story,
     })])
   })
 
@@ -215,7 +215,7 @@ describe('SpecReslicingRoute', () => {
 
     expect(response.status).toBe(200)
     expect(publish.asked).toEqual([new PublishReslicingParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: Mother.CONVERSATION.story,
     })])
   })
 

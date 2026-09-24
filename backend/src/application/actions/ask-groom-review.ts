@@ -5,18 +5,22 @@ import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { LiveSessions } from '../../domain/ports/live-sessions.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { GroomReviewAdmission, GroomReviewRefusalValue } from '../../domain/ports/groom-review-admission.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 export class AskGroomReviewParams {
   readonly repository: RepositoryName
   readonly root: CheckoutRoot
+  readonly story: UserStoryKey | UserStoryUrl
   readonly session: LiveSession
   readonly target: string
 
-  constructor({ repository, root, session, target }: {
-    repository: RepositoryName, root: CheckoutRoot, session: LiveSession, target: string,
+  constructor({ repository, root, story, session, target }: {
+    repository: RepositoryName, root: CheckoutRoot, story: UserStoryKey | UserStoryUrl, session: LiveSession, target: string,
   }) {
     this.repository = repository
     this.root = root
+    this.story = story
     this.session = session
     this.target = target
     Object.freeze(this)
@@ -70,7 +74,7 @@ export class AskGroomReview {
   }
 
   async execute(params: AskGroomReviewParams): Promise<GroomReviewAsked> {
-    const spec = await this.specs.mostRecent(params.root)
+    const spec = await this.specs.of({ root: params.root, story: params.story })
     if (spec === null) return GroomReviewAsked.noSpec()
 
     const prompt = PhasePrompt.groom({
