@@ -50,9 +50,7 @@ describe('what became of a saved workflow no longer active', () => {
     await act(async () => vi.advanceTimersByTimeAsync(0))
     scenario.answer = WorkProgressMother.finished()
     await act(async () => vi.advanceTimersByTimeAsync(3000))
-    expect(result.current).toEqual({
-      kind: 'finished', harvestedAt: WorkProgressMother.HARVESTED_AT, pullRequest: WorkProgressMother.PULL_REQUEST,
-    })
+    expect(result.current).toEqual({ kind: 'finished', pullRequest: WorkProgressMother.PULL_REQUEST })
     await act(async () => vi.advanceTimersByTimeAsync(30000))
     expect(scenario.requests).toHaveBeenCalledTimes(2)
   })

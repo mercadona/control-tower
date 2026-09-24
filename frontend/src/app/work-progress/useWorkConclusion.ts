@@ -11,7 +11,7 @@ class WorkConclusionReading {
     if (outcome.kind === 'unavailable') return previous
     const progress = outcome.snapshot.progress
     if (progress.phase !== 'finished') return CHECKING
-    return { kind: 'finished', harvestedAt: progress.harvestedAt, pullRequest: progress.pullRequest }
+    return { kind: 'finished', pullRequest: progress.pullRequest }
   }
 }
 

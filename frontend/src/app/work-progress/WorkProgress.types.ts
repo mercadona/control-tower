@@ -32,5 +32,5 @@ export type WorkProgressRead =
 
 export type WorkConclusion =
   | { kind: 'checking' }
-  | { kind: 'finished'; harvestedAt: string; pullRequest: DeliveredPullRequest | null }
+  | { kind: 'finished'; pullRequest: DeliveredPullRequest | null }
   | { kind: 'not-found' }

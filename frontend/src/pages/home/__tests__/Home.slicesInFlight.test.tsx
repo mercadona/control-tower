@@ -33,6 +33,8 @@ const backendFallsOver = () => {
   throw new TypeError('Failed to fetch')
 }
 
+const unscriptedConclusions: number[] = []
+
 const WORK_PROGRESS = /^\/work-progress\/(\d+)/
 const IMPLEMENT_HISTORY = /^\/implement-history\/(\d+)/
 
@@ -41,13 +43,16 @@ const backendWith = ({
   progress = () => ImplementProgressMother.inReview(),
   planningProgress = () => PlanningProgressMother.running(),
   history = () => ImplementHistoryMother.empty(),
-  concluded = () => null,
+  concluded = (issue) => {
+    unscriptedConclusions.push(issue)
+    throw new Error(`nobody scripted what became of slice #${issue}`)
+  },
 }: {
   activePlans: () => Answer
   progress?: (issue: number) => Answer
   planningProgress?: (issue: number) => Answer
   history?: (issue: number) => Answer
-  concluded?: (issue: number) => Answer | null
+  concluded?: (issue: number) => Answer
 }) => {
   let known: ActivePlan[] = []
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -68,7 +73,7 @@ const backendWith = ({
       const issue = Number(asProgress[1])
       const repo = new URL(url, 'http://localhost').searchParams.get('repo')
       const active = known.find((entry) => entry.plan.issue.number === issue && entry.plan.repo === repo)
-      if (active === undefined) return responseFor(concluded(issue) ?? WorkProgressMother.notFound())
+      if (active === undefined) return responseFor(concluded(issue))
       return responseFor(WorkProgressMother.fromActive(active, progress(issue), planningProgress(issue)))
     }
     const asHistory = IMPLEMENT_HISTORY.exec(url)
@@ -88,9 +93,14 @@ const finishedSlice = (issue: number, pullRequest: { number: number; url: string
 const panelOf = async (issue: number) => within(await screen.findByRole('region', { name: `Slice #${issue}` }))
 
 describe('Home · the slices in flight', () => {
+  beforeEach(() => {
+    unscriptedConclusions.splice(0)
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
+    expect(unscriptedConclusions.splice(0)).toEqual([])
   })
 
   it('paints one panel per slice, titled with its issue, and asks nothing', async () => {
@@ -687,6 +697,7 @@ describe('Home · the slices in flight', () => {
     let secondProgress = ImplementProgressMother.progress()
     backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(...inFlight),
+      concluded: (issue) => finishedSlice(issue),
       progress: (issue) => issue === 7 ? firstProgress : issue === 8 ? secondProgress : ImplementProgressMother.progress(),
     })
     openHome()
@@ -746,7 +757,7 @@ describe('Home · the slices in flight', () => {
 
   it('a saved workflow the backend no longer reports leaves the other slices standing', async () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(9))
-    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8) })
+    backendWith({ activePlans: () => HeadlessPlanMother.slicesInFlight(7, 8), concluded: () => WorkProgressMother.notFound() })
     openHome()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El plan guardado ya no está activo')
@@ -807,7 +818,7 @@ describe('Home · the slices in flight', () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlight(8),
-      concluded: (issue) => issue === 7 ? finishedSlice(7) : null,
+      concluded: () => finishedSlice(7),
     })
     openHome()
 
@@ -822,7 +833,7 @@ describe('Home · the slices in flight', () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     backendWith({
       activePlans: () => HeadlessPlanMother.empty(),
-      concluded: (issue) => issue === 7 ? finishedSlice(7, null) : null,
+      concluded: () => finishedSlice(7, null),
     })
     const { user } = openHome()
 
@@ -842,7 +853,7 @@ describe('Home · the slices in flight', () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     backendWith({
       activePlans: () => HeadlessPlanMother.slicesInFlightWithOneElsewhere('/elsewhere/clone', 10, 8, 9),
-      concluded: (issue) => issue === 7 ? finishedSlice(7) : null,
+      concluded: () => finishedSlice(7),
     })
     openHome()
 
@@ -855,7 +866,7 @@ describe('Home · the slices in flight', () => {
     let harvested = false
     backendWith({
       activePlans: () => HeadlessPlanMother.empty(),
-      concluded: (issue) => issue === 7 && harvested ? finishedSlice(7) : null,
+      concluded: () => harvested ? finishedSlice(7) : WorkProgressMother.notFound(),
     })
     openHome()
     await act(async () => vi.advanceTimersByTimeAsync(0))
@@ -874,7 +885,7 @@ describe('Home · the slices in flight', () => {
     WorkflowSnapshotStorage.save(HeadlessPlanMother.workflowOfSlice(7))
     const { fetching } = backendWith({
       activePlans: () => HeadlessPlanMother.empty(),
-      concluded: (issue) => issue === 7 ? WorkProgressMother.finished({ issue: 7, agent: 'another-conversation' }) : null,
+      concluded: () => WorkProgressMother.finished({ issue: 7, agent: 'another-conversation' }),
     })
     const asked = () => fetching.mock.calls.filter(([input]) => String(input).startsWith('/work-progress/7?')).length
     openHome()

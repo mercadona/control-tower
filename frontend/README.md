@@ -190,11 +190,12 @@ decides: `finished` — its harvest is recorded — renders an informative
 **Slice #N entregado**, naming the slices still running in the same repository
 and checkout (or saying none are), linking the pull request when the backend
 names one, and offering **Cerrar** to clear the saved workflow. `work-not-found`
-keeps the warning, whose copy no longer names cmux. Until either answer arrives,
-or while the backend cannot be reached, the page says it is still checking and
-warns nobody; the question is repeated every three seconds and stops once the
-answer is `finished`, so a warning read in the instant before the harvest is
-recorded turns into the announcement on the next poll.
+keeps the warning, whose copy no longer names cmux. Until the first of those
+answers arrives the page says it is still checking and warns nobody; after it, a
+read that fails keeps the last answer on screen. The question is repeated every
+three seconds and stops once the answer is `finished`, so a warning read in the
+instant before the harvest is recorded turns into the announcement on the next
+poll, and a slice the backend reports in flight again withdraws the warning.
 
 The mutation owns the active-plan read barrier from the click until its fresh
 GET completes. It first drains a GET that predates the click; timer and manual
