@@ -228,6 +228,7 @@ describe('CoordinatingSessionRoute', () => {
       conversation: Mother.CONVERSATION.id.text,
       target: Mother.TARGET,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
@@ -465,6 +466,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
       attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
@@ -484,6 +486,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       detail: 'the terminal of this coordinating session exited and no other one was opened',
       timeline: Mother.timelineJson(),
@@ -502,6 +505,24 @@ describe('CoordinatingSessionRoute', () => {
     expect(held.held()?.state).toBe('live')
   })
 
+  it('answers the story of a conversation opened for a GitHub issue exactly as it was given', async () => {
+    const held = Mother.registry()
+    held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
+      state: CoordinatingSessionState.LIVE,
+      conversation: CoordinatingConversationMother.of({
+        id: Mother.CONVERSATION.id, repository: Mother.REPOSITORY, root: Mother.ROOT,
+        story: CoordinatingConversationMother.ISSUE_STORY,
+      }),
+      session: Mother.SESSION,
+      attention: SessionAttention.working(),
+    }), Mother.TIMELINE)
+
+    const answered = await (await RunningApi.get(held)).json() as { story: string }
+
+    expect(answered.story).toBe('https://github.com/owner/name/issues/12')
+  })
+
   it('answers unresumable for a conversation Claude Code no longer holds', async () => {
     const held = Mother.unresumable()
 
@@ -514,6 +535,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       detail: 'claude code no longer holds this conversation: the coordinating session was not resumed',
       timeline: Mother.timelineJson(),

@@ -134,6 +134,7 @@ export class GroomSessionRoute {
       target: holding.target,
       conversation: holding.conversation.id.text,
       repo: holding.conversation.repository.text,
+      story: holding.conversation.story.text,
       root: holding.conversation.root.text,
       session: { id: holding.session!.id, name: holding.session!.name },
     })
@@ -201,6 +202,7 @@ export class GroomSessionRoute {
       target: held.held()!.target,
       conversation: opened.conversation!.id.text,
       repo: opened.conversation!.repository.text,
+      story: opened.conversation!.story.text,
       root: opened.conversation!.root.text,
       session: { id: opened.session!.id, name: opened.session!.name },
     })

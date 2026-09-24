@@ -940,7 +940,7 @@ refuses the opening, because that story's brainstorming is over.
 ```json
 {"status":"brainstorming","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
@@ -1024,7 +1024,7 @@ A conversation is live:
 ```json
 {"status":"live","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
  "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"},
  "timeline":[
@@ -1034,6 +1034,11 @@ A conversation is live:
     "detail":"should the button read Arrancar brainstorming?"}
  ]}
 ```
+
+`story` is the user story the conversation was opened for, exactly as
+`POST /coordinating-session` accepted it: a key (`ABC-123`) or a GitHub issue
+url. `unresumable` and `ended` carry it too, and so does every answer that
+opens a conversation, so the page names the story from the first paint.
 
 `attention.status` is `working` or `waiting`, moved by `POST /session-hooks`.
 `attention.question` carries the live question while `waiting`, and is `null`
@@ -1057,7 +1062,7 @@ start-up:
 ```json
 {"status":"unresumable","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "detail":"claude code no longer holds this conversation: the coordinating session was not resumed",
  "timeline":[{"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null}]}
 ```
@@ -1172,7 +1177,7 @@ conversation supplies the checkout; it is never silently retargeted.
 ```json
 {"status":"grooming","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
  "target":"69d8d78f-1f6f-47db-98c5-3a13b1710691",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
@@ -1186,7 +1191,7 @@ already held:
 ```json
 {"status":"typed","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
