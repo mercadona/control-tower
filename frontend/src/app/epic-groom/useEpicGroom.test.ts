@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 
@@ -55,6 +55,22 @@ describe('useEpicGroom', () => {
     await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
 
     rerender({ reviewing: true })
+
+    expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' })
+  })
+
+  it('keeps what it last read of the same target while the backend cannot be reached', async () => {
+    vi.useFakeTimers()
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockRejectedValue(new TypeError('offline'))
+    vi.stubGlobal('fetch', fetching)
+    const { result } = renderHook(() => useEpicGroom(true, EpicGroomMother.TARGET))
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
 
     expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' })
   })

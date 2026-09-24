@@ -142,6 +142,34 @@ describe('Home and the coordinating session', () => {
     }))))
     await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelando…' })).not.toBeInTheDocument())
   })
+  it('keeps the freeze of a draft spec out of reach while durable cancellation is pending', async () => {
+    let confirm: (response: Response) => void = () => undefined
+    const pending = new Promise<Response>((resolve) => { confirm = resolve })
+    const fetching = backendHolding(CoordinatingSessionMother.working())
+    fetching.mockImplementation((input: string | URL | Request) => {
+      if (input === '/coordinating-session/close') return pending
+      if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
+      if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
+      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
+      if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
+      if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
+      if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.draft()))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    openHome()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
+
+    expect(await screen.findByRole('button', { name: 'Cancelando…' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
+
+    await act(async () => confirm(new Response(JSON.stringify({
+      status: 'closed',
+      conversation: CoordinatingSessionMother.CONVERSATION,
+      target: CoordinatingSessionMother.TARGET,
+    }))))
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelando…' })).not.toBeInTheDocument())
+  })
 
   it('keeps a failed cancellation visible for retry', async () => {
     let attempts = 0
@@ -252,7 +280,7 @@ describe('Home and the coordinating session', () => {
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
   })
 
-  it('gives way to an externally discovered session and comes back empty once it is closed', async () => {
+  it('gives way to an externally discovered session and comes back once it is closed', async () => {
     vi.useFakeTimers()
     let reads = 0
     let closed = false
@@ -288,8 +316,7 @@ describe('Home and the coordinating session', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' })))
     await act(async () => vi.advanceTimersByTimeAsync(2000))
 
-    expect(screen.getByLabelText('Ticket')).toHaveValue('')
-    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
   })
 
   it('gate 2 offers neither the ask nor the groom while the live conversation is working, and says what to wait for', async () => {

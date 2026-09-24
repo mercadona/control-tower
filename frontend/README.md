@@ -266,7 +266,12 @@ keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
 conversation can still change. The panel says so while the groom conversation it
 opened is on screen or while a press it could not confirm is outstanding, and
 passing that flag re-arms the read at once, so the §9 table the session edits
-reaches the page without a reload. At `groomed` and `authorised` it rests
+reaches the page without a reload. `Home` reads the same checkout once more for
+the focused view and keeps asking at those two rungs, and at `groomed` and
+`authorised` too, while a live session holds no plan: that read is what tells the
+step and the band, and what recognises this story's plans once they start. A
+read that fails keeps the last answer for the same target instead of blanking
+the view. At `groomed` and `authorised` the panel's read rests
 whatever the review is doing: there is nothing left for a conversation to
 change there. It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
@@ -308,8 +313,10 @@ it created, `CoordinatingSessionClient.openedIn` reads that payload — one read
 for the two doors that answer it — and the adopted session appears and is
 selected without waiting for the next `GET /sessions`. A delayed old listing
 cannot remove that adoption or resurrect a terminal after confirmed closure.
-`GateSequence` is keyed by the current target, so old gate reads, confirmation
-fallbacks and automatic reslicing presses cannot repaint a replacement target.
+Both gate reads answer `connecting` in the very render a new target appears,
+and `GateSequence` is keyed by the current target, so old gate reads,
+confirmation fallbacks and automatic reslicing presses cannot repaint a
+replacement target.
 
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a

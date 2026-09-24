@@ -69,14 +69,16 @@ const Home = () => {
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
-  const columnsRef = useRef<HTMLDivElement>(null)
-  const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
+  const [columns, setColumns] = useState<HTMLDivElement | null>(null)
+  const sessionsColumnWidth = useSessionsColumnWidth(columns)
   const coordinatingSession = useCoordinatingSession()
   const specFreezeRead = useSpecFreeze(coordinatingSession.target)
-  const sessionMayBeFocused = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live' &&
-    workflow === null
+  const isSessionLive = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live'
+  const sessionMayBeFocused = isSessionLive && workflow === null
   const epicGroomRead = useEpicGroom(sessionMayBeFocused, coordinatingSession.target, sessionMayBeFocused)
   const [adoptedUnasked, setAdoptedUnasked] = useState<ActivePlan | null>(null)
+  const isSessionLiveRef = useRef(isSessionLive)
+  const epicGroomReadRef = useRef(epicGroomRead)
   const sessionsColumnCollapse = useSessionsColumnCollapse(coordinatingSession.target)
   const [requestExpanded, setRequestExpanded] = useState(false)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
@@ -192,6 +194,10 @@ const Home = () => {
       return active
     }
 
+    if (plans.length === 1 && isSessionLiveRef.current && !FocusedMode.claims(epicGroomReadRef.current, plans[0])) {
+      setReconciliation('not-required')
+      return null
+    }
     if (plans.length === 1) {
       selectActivePlan(plans[0])
       setAdoptedUnasked(plans[0])
@@ -249,6 +255,27 @@ const Home = () => {
       mountedRef.current = false
     }
   }, [reconcile])
+
+  useEffect(() => {
+    isSessionLiveRef.current = isSessionLive
+    epicGroomReadRef.current = epicGroomRead
+  }, [isSessionLive, epicGroomRead])
+
+  useEffect(() => {
+    if (adoptedUnasked === null || !isSessionLive || epicGroomRead.phase !== 'read') return
+    if (FocusedMode.claims(epicGroomRead, adoptedUnasked)) return
+    recoveryGenerationRef.current += 1
+    recoveryTokenRef.current = null
+    workflowRef.current = null
+    restoredRef.current = false
+    uncertainActiveRef.current = null
+    setWorkflow(null)
+    setUncertainRequest(null)
+    setReconciliation('not-required')
+    setAdoptedUnasked(null)
+    WorkflowSnapshotStorage.remove()
+    void reconcile()
+  }, [adoptedUnasked, isSessionLive, epicGroomRead, reconcile])
 
   const keepsFollowingActivePlans =
     workflow !== null || slicesInFlight.length > 0 || uncertainRequest !== null || (workflow === null && isCoordinatingSessionLive)
@@ -582,7 +609,6 @@ const Home = () => {
     read: coordinatingSession.read,
     opened: coordinatingSession.opened,
     planHeld: workflow !== null || uncertainActive !== null,
-    adoptedUnasked,
     activePlans,
     epicGroom: epicGroomRead,
   })
@@ -622,7 +648,7 @@ const Home = () => {
       >
         <div
           className={`home__columns${sessionsColumnCollapse.collapsed ? ' home__columns--sessions-collapsed' : ''}`}
-          ref={columnsRef}
+          ref={setColumns}
           style={
             sessionsColumnCollapse.collapsed
               ? ({ '--home-sessions-width': `${SESSIONS_DRAWER_COLLAPSED_WIDTH_PX}px` } as CSSProperties)

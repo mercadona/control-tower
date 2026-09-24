@@ -177,6 +177,7 @@ describe('Home · restore workflow', () => {
 
     expect(screen.getByRole('navigation', { name: 'Pasos de la sesión' })).toBeInTheDocument()
     expect(screen.queryByText('Plan arrancado')).toBeNull()
+    expect(WorkflowSnapshotStorage.load()).toBeNull()
   })
 
   it('polling stops on unmount and cannot readopt a discarded plan', async () => {

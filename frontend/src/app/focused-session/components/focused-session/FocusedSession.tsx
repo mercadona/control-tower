@@ -16,7 +16,9 @@ type FocusedSessionProps = {
   target: string
   terminal: LiveSession
   stage: SessionStageOf
-  lifecycle: CoordinatingLifecycle
+  lifecycle: Pick<
+    CoordinatingLifecycle, 'connection' | 'closeError' | 'close' | 'liveAsk' | 'blocksOpening' | 'operationBusy' | 'openGroom'
+  >
   closing: boolean
   dispatched: number
 }

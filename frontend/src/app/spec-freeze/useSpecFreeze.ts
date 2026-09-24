@@ -14,13 +14,20 @@ const answeredFor = (outcome: SpecFreezeOutcome): string | null | typeof NAMES_N
 
 const POLL_INTERVAL_MS = 2000
 
+type HeldRead = { target: string | null; read: SpecFreezeRead }
+
+const settledOver = (previous: HeldRead, target: string | null, read: SpecFreezeRead): HeldRead =>
+  read.phase === 'read' && read.kind === 'unavailable' && previous.target === target && previous.read.phase === 'read'
+    ? previous
+    : { target, read }
+
 const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
-  const [read, setRead] = useState<SpecFreezeRead>(CONNECTING)
+  const [held, setHeld] = useState<HeldRead>({ target, read: CONNECTING })
 
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
-    setRead(CONNECTING)
+    const setRead = (read: SpecFreezeRead) => setHeld((previous) => settledOver(previous, target, read))
 
     const poll = async (): Promise<void> => {
       const outcome = await SpecFreezeClient.read()
@@ -44,7 +51,7 @@ const useSpecFreeze = (target: string | null = null): SpecFreezeRead => {
     }
   }, [target])
 
-  return read
+  return held.target === target ? held.read : CONNECTING
 }
 
 export { useSpecFreeze }
