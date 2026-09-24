@@ -107,14 +107,14 @@ describe('Home and gate 2', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows gate 2 in the request stage and still shows it while a slice is being implemented', async () => {
+  it('shows gate 2 as the band of the live session and still shows it while a slice is being implemented', async () => {
     stubBackend(NO_ACTIVE_PLANS)
     const { unmount } = openHome()
 
-    expect(await screen.findByRole('heading', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
 
     unmount()
-    stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) })
+    stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) }, CoordinatingSessionMother.ended())
     const implementing = openHome()
 
     expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
@@ -152,7 +152,11 @@ describe('Home and gate 2', () => {
     if (failed === CoordinatingSessionMother.endedCloseFailed && action === 'Ejecutar el groom') {
       expect(screen.getByRole('button', { name: REVIEW_THE_SLICING })).toBeDisabled()
     }
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    if (failed === CoordinatingSessionMother.endedCloseFailed) {
+      expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    } else {
+      expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
+    }
   })
 
   it('opens and selects a groom conversation over an idle ended coordinator', async () => {
@@ -164,7 +168,7 @@ describe('Home and gate 2', () => {
 
     await user.click(session)
 
-    expect(await screen.findByRole('tab', { name: EpicGroomMother.GROOM_SESSION.name })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByRole('region', { name: EpicGroomMother.GROOM_SESSION.name })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(1)
   })

@@ -92,7 +92,11 @@ describe('Home and gate 1', () => {
     openHome()
 
     expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    if (failed === CoordinatingSessionMother.endedCloseFailed) {
+      expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    } else {
+      expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
+    }
   })
 })
 import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

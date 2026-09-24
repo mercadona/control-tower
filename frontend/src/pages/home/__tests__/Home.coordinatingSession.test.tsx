@@ -132,10 +132,8 @@ describe('Home and the coordinating session', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
     expect(await screen.findByRole('button', { name: 'Cancelando…' })).toBeDisabled()
-    expect(screen.getByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'zsh' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
+    expect(screen.getByRole('region', { name: 'brainstorming' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
 
     await act(async () => confirm(new Response(JSON.stringify({
       status: 'closed',
@@ -254,7 +252,7 @@ describe('Home and the coordinating session', () => {
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
   })
 
-  it('preserves every request field while an externally discovered session is closed', async () => {
+  it('gives way to an externally discovered session and comes back empty once it is closed', async () => {
     vi.useFakeTimers()
     let reads = 0
     let closed = false
@@ -285,11 +283,13 @@ describe('Home and the coordinating session', () => {
     fireEvent.change(screen.getByLabelText(/Ruta local/), { target: { value: '/repo' } })
 
     await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' })))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
 
-    expect(screen.getByLabelText('Ticket')).toHaveValue('ABC-123')
-    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
+    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
   })
 
   it('gate 2 offers neither the ask nor the groom while the live conversation is working, and says what to wait for', async () => {
@@ -353,7 +353,7 @@ describe('Home and the coordinating session', () => {
 
     expect(await screen.findByText('Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.'))
       .toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'brainstorming' })).toBeInTheDocument()
   })
 
   it('reads both gates of the checkout with no coordinating session held', async () => {

@@ -1,0 +1,47 @@
+.step-indicator__steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.step-indicator__step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  color: var(--foreground-secondary);
+  border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
+}
+
+.step-indicator__caption {
+  grid-column: 2;
+}
+
+.step-indicator__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--size-icon-md);
+  height: var(--size-icon-md);
+  color: var(--foreground-secondary);
+  border: var(--borderwidth-md) solid var(--border-secondary);
+  border-radius: var(--shape-button-full);
+}
+
+.step-indicator__step--active {
+  color: var(--foreground-brand-primary);
+  border-color: var(--border-brand-primary);
+}
+
+.step-indicator__step--active .step-indicator__number,
+.step-indicator__step--completed .step-indicator__number {
+  color: var(--foreground-ondark);
+  background-color: var(--background-brand-primary);
+  border-color: var(--border-brand-primary);
+}
