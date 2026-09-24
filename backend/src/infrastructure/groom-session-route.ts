@@ -108,6 +108,7 @@ export class GroomSessionRoute {
     try {
       asked = await ask.execute(new AskGroomReviewParams({
         root: holding.conversation.root,
+        story: holding.conversation.story,
         session: holding.session!,
         target: holding.target,
       }))
@@ -175,6 +176,7 @@ export class GroomSessionRoute {
       opened = await open.execute(new OpenGroomSessionParams({
         repository: holding.conversation.repository,
         root: holding.conversation.root,
+        story: holding.conversation.story,
       }))
     } catch (cause) {
       held.release()

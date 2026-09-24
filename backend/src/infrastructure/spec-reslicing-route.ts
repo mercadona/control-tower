@@ -76,6 +76,7 @@ export class SpecReslicingRoute {
         published = await publish.execute(new PublishReslicingParams({
           root: holding.conversation.root,
           repository: holding.conversation.repository,
+          story: holding.conversation.story,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause

@@ -12,16 +12,22 @@ import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { PlanFingerprint } from '../../domain/policies/plan-fingerprint.ts'
 import type { SpecRevision } from '../../domain/policies/spec-revision.ts'
 import { Reslicing } from '../../domain/value-objects/reslicing.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 export class ReadEpicGroomParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor({ root, repository, story }: {
+    root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl,
+  }) {
     this.root = root
     this.repository = repository
+    this.story = story
     Object.freeze(this)
   }
 }
@@ -108,7 +114,7 @@ export class ReadEpicGroom {
   }
 
   async execute(params: ReadEpicGroomParams): Promise<EpicGroomRead> {
-    const spec = await this.specs.mostRecent(params.root)
+    const spec = await this.specs.of({ root: params.root, story: params.story })
     if (spec === null) {
       return new EpicGroomRead({
         state: EpicGroomState.NO_SPEC, spec: null, milestone: null, plan: null, planFingerprint: null, issues: [],

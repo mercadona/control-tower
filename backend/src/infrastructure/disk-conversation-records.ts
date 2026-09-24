@@ -14,6 +14,7 @@ import { SessionTimelineEvent, TimelineEventKind } from '../domain/value-objects
 import type { PhasePrompt } from '../domain/value-objects/phase-prompt.ts'
 import { ClosureStatus, SessionClosure } from '../domain/value-objects/session-closure.ts'
 import { SessionProcessOwnership } from '../domain/value-objects/session-process-ownership.ts'
+import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
 
 type ReadText = (path: string) => Promise<string | null>
 type WriteText = (path: string, text: string) => Promise<void>
@@ -93,6 +94,7 @@ export class DiskConversationRecords extends ConversationRecords {
       conversation: conversation.id.text,
       repo: conversation.repository.text,
       root: conversation.root.text,
+      story: conversation.story.text,
     }
   }
 
@@ -101,10 +103,14 @@ export class DiskConversationRecords extends ConversationRecords {
     if (!DiskConversationRecords.#isRecord(parsed)) {
       throw new Error(`expected a JSON object, got ${JSON.stringify(parsed)}`)
     }
+    if (!UserStoryReference.isWellFormed(parsed.story)) {
+      throw new Error(`expected the story the conversation was opened for, got ${JSON.stringify(parsed.story)}`)
+    }
     return new CoordinatingConversation({
       id: new ConversationId(parsed.conversation),
       repository: new RepositoryName(parsed.repo),
       root: new CheckoutRoot(parsed.root),
+      story: UserStoryReference.of(parsed.story),
     })
   }
 

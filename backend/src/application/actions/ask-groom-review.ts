@@ -4,14 +4,20 @@ import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { LiveSessions } from '../../domain/ports/live-sessions.ts'
 import type { GroomReviewAdmission, GroomReviewRefusalValue } from '../../domain/ports/groom-review-admission.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 export class AskGroomReviewParams {
   readonly root: CheckoutRoot
+  readonly story: UserStoryKey | UserStoryUrl
   readonly session: LiveSession
   readonly target: string
 
-  constructor({ root, session, target }: { root: CheckoutRoot, session: LiveSession, target: string }) {
+  constructor({ root, story, session, target }: {
+    root: CheckoutRoot, story: UserStoryKey | UserStoryUrl, session: LiveSession, target: string,
+  }) {
     this.root = root
+    this.story = story
     this.session = session
     this.target = target
     Object.freeze(this)
@@ -63,7 +69,7 @@ export class AskGroomReview {
   }
 
   async execute(params: AskGroomReviewParams): Promise<GroomReviewAsked> {
-    const spec = await this.specs.mostRecent(params.root)
+    const spec = await this.specs.of({ root: params.root, story: params.story })
     if (spec === null) return GroomReviewAsked.noSpec()
 
     const prompt = PhasePrompt.groomReview({ spec, milestone: spec.title()! })

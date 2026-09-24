@@ -2,6 +2,7 @@ import type { CheckoutRoot } from './checkout-root.ts'
 import type { EpicSpec } from './epic-spec.ts'
 import type { RepositoryName } from './repository-name.ts'
 import type { UserStory } from './user-story.ts'
+import { StoryDocuments } from './story-documents.ts'
 
 export class PhasePrompt {
   static readonly BRAINSTORMING_SKILL = 'control-tower-loop:ct-brainstorming'
@@ -59,6 +60,7 @@ export class PhasePrompt {
       PhasePrompt.#roleOf({ repository, root }),
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       PhasePrompt.#idea(story),
+      PhasePrompt.#documentsOf(story),
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
@@ -90,6 +92,13 @@ export class PhasePrompt {
 
   static #roleOf({ repository, root }: { repository: RepositoryName, root: CheckoutRoot }): string {
     return `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`
+  }
+
+  static #documentsOf(story: UserStory): string {
+    const documents = new StoryDocuments(story.key)
+
+    return `Write the design document at ${documents.design} and the execution spec at ${documents.spec}, `
+      + 'exactly those paths: when either already exists, continue it instead of starting another.'
   }
 
   static #slicingReview({ spec, milestone }: { spec: EpicSpec, milestone: string }): string[] {

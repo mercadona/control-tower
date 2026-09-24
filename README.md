@@ -369,8 +369,11 @@ GitHub issue URL, plus the repository and the absolute path of its
 local clone. Its button opens a coordinating session with
 `POST /coordinating-session`: a `claude` conversation in the governed checkout,
 with no worktree cut and no branch created. That conversation writes the design
-document and the execution spec. Additional context and feedback go directly
-into the coordinating conversation.
+document and the execution spec, named after the ticket:
+`docs/superpowers/specs/<ticket>-design.md` and `<ticket>-execution.md`. Both
+gates read the spec of the conversation's ticket and no other, and a ticket whose
+spec is already frozen does not open a second brainstorming. Additional context
+and feedback go directly into the coordinating conversation.
 
 **Puerta 1 · Congelación del spec.** The panel polls `GET /spec-freeze` and
 shows the yardstick's findings over the spec on disk. **Congelar el spec** stays
@@ -390,7 +393,9 @@ the groom then presses itself.
 
 **Implementación, including planning.** Once work is authorized, the backend
 dispatches the slices that dependencies and shared-file constraints allow to run
-together. `POST /start-plan` is the explicit dispatch entrance: a milestone
+together. Every minute it looks for milestones with an open issue at
+`status:ready` and dispatches each, so an authorised epic keeps going while the
+next one is being brainstormed in the same clone. `POST /start-plan` is the explicit dispatch entrance: a milestone
 request selects eligible existing issues. Each dispatched slice gets its own worktree and agent
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.

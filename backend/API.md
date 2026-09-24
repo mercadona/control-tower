@@ -927,6 +927,14 @@ The required user story hydrates the conversation: the coordinating session
 starts knowing its summary and description. Additional context and feedback
 are entered directly in that conversation.
 
+The story also names the conversation's two documents:
+`docs/superpowers/specs/<story>-design.md` and
+`docs/superpowers/specs/<story>-execution.md`, where `<story>` is the key, or
+`<owner>__<repo>-<number>` for a GitHub issue. The phase prompt gives both
+paths, and every gate reads the spec at that path and nowhere else. A spec
+already there as a draft is continued by the new conversation; a frozen one
+refuses the opening, because that story's brainstorming is over.
+
 **202 Accepted**
 
 ```json
@@ -963,6 +971,9 @@ From opening the conversation, once the body is well-formed:
 
 | `code` | Meaning |
 |---|---|
+| `story-spec-frozen` | the checkout already holds this story's execution spec frozen: `detail` names the story and the path |
+| `epic-spec-not-read` | this story's execution spec exists but could not be read |
+| `epic-spec-not-understood` | this story's execution spec carries no title |
 | `user-story-not-read` | the tracker holding the story refused |
 | `user-story-not-understood` | the tracker holding the story answered something unreadable |
 | `workspace-not-understood` | git answered something unreadable while resolving the checkout's canonical root |
@@ -971,12 +982,15 @@ From opening the conversation, once the body is well-formed:
 | `session-hooks-not-written` | the checkout's `.claude/settings.local.json` could not be written |
 | `session-hooks-not-understood` | that settings file exists but is not the JSON object the hooks are merged into |
 
-All seven answer 400 and carry the tool's own message in `detail`, the same
-convention `POST /start-plan`'s tool refusals follow.
+All ten answer 400 and carry the tool's own message in `detail`, the same
+convention `POST /start-plan`'s tool refusals follow. `story-spec-frozen` is
+checked right after the checkout is confirmed, so it is answered before the
+tracker is asked or anything is written or spawned.
 
 `PlanCollapse` (`backend/src/infrastructure/start-plan-route.ts`) also declares
 `conversation-not-understood`, the code for a conversation record that is on
-disk but cannot be parsed. No endpoint answers it today: that record is only
+disk but cannot be parsed, including one that names no story or a story that
+is not a key nor an issue url. No endpoint answers it today: that record is only
 read by `records.recall()` at the backend's start-up, before this route or any
 other ever runs, and `ct-api.ts` awaits that recovery with nothing catching it
 — an unreadable record currently crashes the backend at start-up instead of
@@ -1301,7 +1315,9 @@ curl -s -X POST -H 'Content-Type: application/json' \
 ## `GET /spec-freeze`
 
 Gate 1's own state for the checkout the held coordinating session sits in,
-derived from the execution spec on disk and nothing stored. No parameters.
+derived from the execution spec on disk and nothing stored. The spec is the one
+at `docs/superpowers/specs/<story>-execution.md` for the conversation's story:
+specs of other stories in the same checkout are never read. No parameters.
 The cabin polls it to draw gate 1's panel.
 
 **200 OK** — four shapes, told apart by `status`.
@@ -1314,8 +1330,8 @@ in another checkout:
 {"status":"none"}
 ```
 
-The checkout is known, but it carries no execution spec under
-`docs/superpowers/specs/`:
+The checkout is known, but it carries no execution spec at the path the
+conversation's story names:
 
 ```json
 {"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
@@ -1326,7 +1342,7 @@ A spec exists and is not frozen yet:
 ```json
 {"status":"draft",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "spec":"docs/superpowers/specs/STAFF-128-execution.md",
  "findings":[
    {"code":"clarification-marker","line":42,"detail":"[NEEDS CLARIFICATION: which button?]"},
    {"code":"hypothesis-absent","line":null,"detail":null}
@@ -1354,7 +1370,7 @@ The spec is frozen:
 ```json
 {"status":"frozen",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "spec":"docs/superpowers/specs/STAFF-128-execution.md",
  "on":"2026-09-14",
  "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
@@ -1378,8 +1394,8 @@ started in another checkout forgets that closed one, and the read goes back to
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a
 foreign `Origin` — and, with a 400 and its own `{code, detail}`, every tool
-refusal this read can meet. Reading the spec runs on disk, so a specs directory
-it cannot list is `epic-spec-not-read` and a file carrying no title is
+refusal this read can meet. Reading the spec runs on disk, so a spec file it
+cannot read is `epic-spec-not-read` and a file carrying no title is
 `epic-spec-not-understood`; and on the frozen branch alone it also runs
 `git rev-parse` and `gh pr list`, so a logged-out `gh` or a checkout git cannot
 read surface here rather than as a generic failure. The cabin polls this route,
@@ -1474,8 +1490,8 @@ time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
 
 | `code` | Meaning |
 |---|---|
-| `epic-spec-not-read` | the execution spec could not be listed or read back from disk |
-| `epic-spec-not-understood` | the spec carries no title, or names no design document under `**Handoff origen:**` |
+| `epic-spec-not-read` | the execution spec could not be read back from disk |
+| `epic-spec-not-understood` | the spec carries no title |
 | `epic-spec-not-written` | the state line and its date could not be written back to disk |
 | `epic-branch-not-published` | `git` failed to resolve, cut, switch to, fetch, add, commit or push the branch gate 1 publishes on, or neither the checkout nor the remote could say which branch is default — the branch is resolved before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
 | `epic-branch-not-understood` | `git` printed something this backend cannot read while resolving the branch or the remote's default |
@@ -1574,8 +1590,9 @@ in another checkout:
 conversation. The read is the same; the presses of gate 2 refuse with
 `coordinating-session-target-changed`, because they have no target to carry.
 
-The checkout is known, but it carries no execution spec — the same absence `GET
-/spec-freeze` answers with `no-spec`:
+The checkout is known, but it carries no execution spec at the path the
+conversation's story names — the same absence `GET /spec-freeze` answers with
+`no-spec`:
 
 ```json
 {"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}

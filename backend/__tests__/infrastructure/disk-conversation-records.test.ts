@@ -8,7 +8,7 @@ import {
 } from '../../src/domain/exceptions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
@@ -21,7 +21,7 @@ const STATE_ROOT = '/state'
 const REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
 const CHECKOUT_ROOT = new CheckoutRoot('/real/repo')
 const CONVERSATION_ID = new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f')
-const CONVERSATION = new CoordinatingConversation({ id: CONVERSATION_ID, repository: REPOSITORY, root: CHECKOUT_ROOT })
+const CONVERSATION = CoordinatingConversationMother.of({ id: CONVERSATION_ID, repository: REPOSITORY, root: CHECKOUT_ROOT })
 
 const PROMPT = PhasePrompt.brainstorming({
   story: new UserStory({ key: new UserStoryKey('ABC-1'), summary: 'Plan the work', description: '' }),
@@ -32,6 +32,8 @@ const PROMPT_TEXT = [
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
   PhasePrompt.FREEZE_IS_NOT_YOURS,
   'The ticket ABC-1 says: "Plan the work".',
+  'Write the design document at docs/superpowers/specs/ABC-1-design.md and the execution spec at '
+    + 'docs/superpowers/specs/ABC-1-execution.md, exactly those paths: when either already exists, continue it instead of starting another.',
   PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
   PhasePrompt.RECOVERY_CAPABILITIES,
@@ -121,7 +123,7 @@ describe('DiskConversationRecords', () => {
     expect(write).toHaveBeenCalledWith(PROMPT_PATH, PROMPT_TEXT)
   })
 
-  it('writes the record beside it with the conversation, the repository and the root', async () => {
+  it('writes the record beside it with the conversation, the repository, the root and the story', async () => {
     const write = vi.fn(async () => {})
     const records = new DiskConversationRecords(Collaborators.of({ write }))
 
@@ -133,6 +135,7 @@ describe('DiskConversationRecords', () => {
         conversation: '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f',
         repo: 'josemerca/ct-loop-sandbox',
         root: '/real/repo',
+        story: 'STAFF-128',
       }, null, 2)}\n`
     )
   })
@@ -157,6 +160,7 @@ describe('DiskConversationRecords', () => {
       conversation: '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f',
       repo: 'josemerca/ct-loop-sandbox',
       root: '/real/repo',
+      story: 'STAFF-128',
     }))
     const records = new DiskConversationRecords(Collaborators.of({ read }))
 
@@ -164,6 +168,45 @@ describe('DiskConversationRecords', () => {
 
     expect(recalled).toEqual(CONVERSATION)
     expect(read).toHaveBeenCalledWith(RECORD_PATH)
+  })
+
+  it('recalls a conversation opened for a GitHub issue with that issue as its story', async () => {
+    const read = vi.fn(async () => JSON.stringify({
+      conversation: '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f',
+      repo: 'josemerca/ct-loop-sandbox',
+      root: '/real/repo',
+      story: 'https://github.com/owner/name/issues/12',
+    }))
+    const records = new DiskConversationRecords(Collaborators.of({ read }))
+
+    const recalled = await records.recall()
+
+    expect(recalled).toEqual(CoordinatingConversationMother.of({
+      id: CONVERSATION_ID, repository: REPOSITORY, root: CHECKOUT_ROOT, story: CoordinatingConversationMother.ISSUE_STORY,
+    }))
+  })
+
+  it('raises conversation-not-understood for a record that names no story', async () => {
+    const read = vi.fn(async () => JSON.stringify({
+      conversation: '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f',
+      repo: 'josemerca/ct-loop-sandbox',
+      root: '/real/repo',
+    }))
+    const records = new DiskConversationRecords(Collaborators.of({ read }))
+
+    await expect(records.recall()).rejects.toBeInstanceOf(ConversationNotUnderstood)
+  })
+
+  it('raises conversation-not-understood for a record whose story is not a key nor an issue url', async () => {
+    const read = vi.fn(async () => JSON.stringify({
+      conversation: '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f',
+      repo: 'josemerca/ct-loop-sandbox',
+      root: '/real/repo',
+      story: 'owner/name#12',
+    }))
+    const records = new DiskConversationRecords(Collaborators.of({ read }))
+
+    await expect(records.recall()).rejects.toBeInstanceOf(ConversationNotUnderstood)
   })
 
   it('answers no conversation when nothing was ever recorded', async () => {

@@ -6,14 +6,20 @@ import type { EpicIssues } from '../../domain/ports/epic-issues.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 import type { CheckRepositoryPreparation } from './check-repository-preparation.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 export class PromoteEpicParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor({ root, repository, story }: {
+    root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl,
+  }) {
     this.root = root
     this.repository = repository
+    this.story = story
     Object.freeze(this)
   }
 }
@@ -56,7 +62,7 @@ export class PromoteEpic {
   }
 
   async execute(params: PromoteEpicParams): Promise<EpicPromoted> {
-    const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository, story: params.story }))
     const nothingSafeToAuthorise = before.issues.length === 0 ||
       before.state === EpicGroomState.PARTIALLY_GROOMED ||
       before.state === EpicGroomState.ISSUES_UNCERTAIN
@@ -74,7 +80,7 @@ export class PromoteEpic {
       await this.issues.promote({ repository: params.repository, issue })
     }
 
-    const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository, story: params.story }))
 
     return new EpicPromoted({
       state: after.state,

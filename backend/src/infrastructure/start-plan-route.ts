@@ -380,6 +380,7 @@ export class StartPlanRoute {
         const groomed = await groom.execute(new ReadEpicGroomParams({
           root: holding.conversation.root,
           repository,
+          story: holding.conversation.story,
         }))
         switch (groomed.state) {
           case EpicGroomState.GROOMED:

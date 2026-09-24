@@ -1,11 +1,11 @@
 import { Reservation, WorkInFlight } from './work-in-flight.ts'
 import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
 import type { PlanStarted, SliceNotStarted, StartMilestonePlanResult } from '../application/actions/start-milestone-plan.ts'
-import { EpicSpec } from '../domain/value-objects/epic-spec.ts'
+import type { AuthorisedMilestones } from '../domain/value-objects/authorised-milestones.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
-export type EpicSpecRead = (root: CheckoutRoot) => Promise<EpicSpec | null>
+export type AuthorisedMilestonesRead = (repository: RepositoryName) => Promise<AuthorisedMilestones>
 
 export type MilestoneDispatched = (asked: {
   repository: RepositoryName, root: CheckoutRoot, milestone: string,
@@ -25,45 +25,58 @@ export class RelayLine {
   static refused(repository: RepositoryName, failure: PlanFailure): string {
     return `relay: ${repository.text} could not be dispatched: ${failure.message}\n`
   }
+
+  static refusedIn(repository: RepositoryName, milestone: string, failure: PlanFailure): string {
+    return `relay: ${repository.text} milestone "${milestone}" could not be dispatched: ${failure.message}\n`
+  }
 }
 
 export class DispatchRelay {
   static readonly OWN_KEY_PREFIX = 'relay:'
 
-  readonly spec: EpicSpecRead
+  readonly milestones: AuthorisedMilestonesRead
   readonly dispatch: MilestoneDispatched
   readonly inFlight: WorkInFlight
   readonly stderr: (line: string) => void
 
-  constructor({ spec, dispatch, inFlight, stderr }: {
-    spec: EpicSpecRead,
+  constructor({ milestones, dispatch, inFlight, stderr }: {
+    milestones: AuthorisedMilestonesRead,
     dispatch: MilestoneDispatched,
     inFlight: WorkInFlight,
     stderr: (line: string) => void,
   }) {
-    this.spec = spec
+    this.milestones = milestones
     this.dispatch = dispatch
     this.inFlight = inFlight
     this.stderr = stderr
   }
 
   async relay(root: CheckoutRoot, repository: RepositoryName): Promise<void> {
-    let found: EpicSpec | null
+    let authorised: AuthorisedMilestones
     try {
-      found = await this.spec(root)
+      authorised = await this.milestones(repository)
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
       this.stderr(RelayLine.refused(repository, failure))
 
       return
     }
-    const milestone = DispatchRelay.#milestoneOf(found)
-    if (milestone === null) return
-
+    if (authorised.titles.length === 0) return
     if (this.inFlight.holds(repository.text)) return
 
     const own = DispatchRelay.ownKeyFor(repository)
     if (this.inFlight.reserve(own) === Reservation.IN_PROGRESS) return
+    try {
+      for (const milestone of authorised.titles) {
+        if (this.inFlight.holds(repository.text)) return
+        await this.#dispatchMilestone(root, repository, milestone)
+      }
+    } finally {
+      this.inFlight.release(own)
+    }
+  }
+
+  async #dispatchMilestone(root: CheckoutRoot, repository: RepositoryName, milestone: string): Promise<void> {
     try {
       const dispatched = await this.dispatch({ repository, root, milestone })
       for (const started of dispatched.started) this.stderr(RelayLine.dispatched(started))
@@ -71,19 +84,11 @@ export class DispatchRelay {
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
       if (failure instanceof DispatchNotAvailable) return
-      this.stderr(RelayLine.refused(repository, failure))
-    } finally {
-      this.inFlight.release(own)
+      this.stderr(RelayLine.refusedIn(repository, milestone, failure))
     }
   }
 
   static ownKeyFor(repository: RepositoryName): string {
     return `${DispatchRelay.OWN_KEY_PREFIX}${repository.text}`
-  }
-
-  static #milestoneOf(spec: EpicSpec | null): string | null {
-    if (spec === null || !spec.isFrozen()) return null
-
-    return spec.title()
   }
 }

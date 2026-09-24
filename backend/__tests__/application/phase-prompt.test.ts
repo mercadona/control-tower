@@ -5,6 +5,7 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 
 class Phase {
   static REPOSITORY = new RepositoryName('owner/name')
@@ -76,5 +77,16 @@ describe('what the coordinating session is told about a veto that blocks a run',
   it('tells_the_session_what_to_do_when_the_grant_call_itself_is_refused', () => {
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('tell the person what the refusal said')
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('do not retry it in a loop')
+  })
+})
+
+describe('where the brainstorming is told to write its documents', () => {
+  it('names_the_issue_by_its_repository_and_number_when_the_ticket_is_a_github_issue', () => {
+    const prompt = PhasePrompt.brainstorming({
+      story: new UserStory({ key: new UserStoryUrl('https://github.com/owner/name/issues/12'), summary: 'Plan', description: '' }),
+      repository: Phase.REPOSITORY, root: Phase.ROOT,
+    })
+
+    expect(prompt.text).toContain('docs/superpowers/specs/owner__name-12-execution.md')
   })
 })

@@ -9,6 +9,7 @@ import type { Terminal, TerminalSpawn } from '../../src/infrastructure/process-t
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class TerminalDouble implements Terminal {
@@ -25,7 +26,7 @@ class Governed {
   static readonly PLUGIN_ROOT = "/opt/plugins with spaces/Pedro's code/control-tower/plugin"
 
   static conversation(): CoordinatingConversation {
-    return new CoordinatingConversation({
+    return CoordinatingConversationMother.of({
       id: Governed.ID,
       repository: new RepositoryName('josemerca/ct-loop-sandbox'),
       root: new CheckoutRoot('/repo/governed-checkout'),

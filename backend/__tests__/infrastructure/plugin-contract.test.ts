@@ -237,13 +237,12 @@ class ExecutionSpecTemplate {
 }
 
 describe('the execution spec the plugin seeds, as this backend reads and freezes it', () => {
-  it('the execution spec template the plugin seeds reads here as a draft that names its design document', async () => {
+  it('the execution spec template the plugin seeds reads here as a draft', async () => {
     const spec = await ExecutionSpecTemplate.read()
 
     expect(spec.isFrozen()).toBe(false)
     expect(spec.frozenOn()).toBe(null)
     expect(spec.title()).toBe('<Milestone name>')
-    expect(spec.design()).toBe('docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md')
   })
 
   it('freezing that template rewrites the two header lines the plugin left blank and nothing else', async () => {

@@ -6,6 +6,8 @@ import type { EpicGroom } from '../../domain/ports/epic-groom.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { PlanFingerprint } from '../../domain/policies/plan-fingerprint.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 export const PlanStaleness = Object.freeze({
   FRESH: 'fresh',
@@ -17,13 +19,15 @@ export type PlanStalenessValue = (typeof PlanStaleness)[keyof typeof PlanStalene
 export class GroomEpicParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
   readonly fingerprint: string | null
 
-  constructor({ root, repository, fingerprint }: {
-    root: CheckoutRoot, repository: RepositoryName, fingerprint: string | null,
+  constructor({ root, repository, story, fingerprint }: {
+    root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl, fingerprint: string | null,
   }) {
     this.root = root
     this.repository = repository
+    this.story = story
     this.fingerprint = fingerprint
     Object.freeze(this)
   }
@@ -75,7 +79,7 @@ export class GroomEpic {
   }
 
   async execute(params: GroomEpicParams): Promise<EpicGroomed> {
-    const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository, story: params.story }))
 
     if (GroomEpic.REFUSED.includes(before.state)) {
       return new EpicGroomed({
@@ -98,7 +102,7 @@ export class GroomEpic {
       milestone: before.milestone!,
     })
 
-    const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository, story: params.story }))
 
     return new EpicGroomed({
       state: after.state, milestone: after.milestone, plan: before.plan, issues: after.issues,

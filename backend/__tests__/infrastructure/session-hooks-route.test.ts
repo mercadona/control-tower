@@ -9,7 +9,7 @@ import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
@@ -51,7 +51,7 @@ class RecordsDouble extends ConversationRecords {
 class Mother {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
   static readonly CONVERSATION_ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId(Mother.CONVERSATION_ID),
     repository: new RepositoryName('josemerca/ct-loop-sandbox'),
     root: new CheckoutRoot('/repo'),

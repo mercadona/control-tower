@@ -14,6 +14,7 @@ import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
@@ -101,7 +102,7 @@ class Mother {
   static readonly SECOND_TARGET = 'f910a470-13f7-4956-b750-bef89f55dd6d'
 
   static conversation(id: string): CoordinatingConversation {
-    return new CoordinatingConversation({
+    return CoordinatingConversationMother.of({
       id: new ConversationId(id),
       repository: Mother.REPOSITORY,
       root: Mother.ROOT,

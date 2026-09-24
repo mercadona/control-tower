@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import * as fs from 'node:fs/promises'
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
@@ -217,15 +217,6 @@ class Disk {
       return true
     } catch (failure) {
       if (Disk.#isMissing(failure)) return false
-      throw failure
-    }
-  }
-
-  static async list(path: string): Promise<string[] | null> {
-    try {
-      return await readdir(path)
-    } catch (failure) {
-      if (Disk.#isMissing(failure)) return null
       throw failure
     }
   }
@@ -644,6 +635,7 @@ class CtApi {
       newId: randomUUID,
       now: () => new Date().toISOString(),
     })
+    const epicSpecs = new DiskEpicSpecs({ read: Disk.read, write: Disk.write })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
       workspace,
@@ -651,6 +643,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
       checkouts,
+      specs: epicSpecs,
     })
     const recoverCoordinatingSession = new RecoverCoordinatingSession({
       conversations: claudeConversations,
@@ -666,7 +659,6 @@ class CtApi {
       records: conversationRecords,
       liveSessions,
     })
-    const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
       specs: epicSpecs,
       conversations: claudeConversations,
@@ -712,9 +704,10 @@ class CtApi {
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues, preparation })
     const startsInFlight = new WorkInFlight()
+    const dispatchCandidates = new GhDispatchCandidates({ gh })
     const startMilestonePlan = new StartMilestonePlan({
       preparation,
-      candidates: new GhDispatchCandidates({ gh }),
+      candidates: dispatchCandidates,
       claims,
       workspace,
       agents: planAgents,
@@ -722,7 +715,7 @@ class CtApi {
       checkouts,
     })
     const dispatchRelay = new DispatchRelay({
-      spec: (root) => epicSpecs.mostRecent(root),
+      milestones: (repository) => dispatchCandidates.authorisedMilestones({ repository }),
       dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),

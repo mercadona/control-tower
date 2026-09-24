@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReadSpecFreeze, ReadSpecFreezeParams, SpecFreezeState } from '../../src/application/queries/read-spec-freeze.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -11,22 +11,6 @@ import { FreezeFinding, FreezeFindingCode } from '../../src/domain/value-objects
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 type PullRequestAsked = { branch: string, repository: RepositoryName }
-
-class EpicSpecsDouble extends EpicSpecs {
-  answer: EpicSpec | null
-  asked: CheckoutRoot[]
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.answer = answer
-    this.asked = []
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.asked.push(root)
-    return this.answer
-  }
-}
 
 class EpicBranchDouble extends EpicBranch {
   answer: string
@@ -236,7 +220,7 @@ class Flow {
 
   async run() {
     return new ReadSpecFreeze(this).execute(new ReadSpecFreezeParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: EpicSpecsDouble.STORY,
     }))
   }
 }
