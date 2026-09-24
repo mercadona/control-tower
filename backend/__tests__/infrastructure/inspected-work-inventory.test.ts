@@ -17,10 +17,11 @@ import { WorkProgressMother } from '../work-progress-mother.ts'
 
 class HarvestedRecords extends PlanRecords {
   readonly asked: { issue: number, repository: RepositoryName }[] = []
-  harvest: HarvestedWork | Error | null = null
+  harvest: HarvestedWork | Error | null | undefined = undefined
 
   async harvested(asked: { issue: number, repository: RepositoryName }): Promise<HarvestedWork | null> {
     this.asked.push(asked)
+    if (this.harvest === undefined) throw new Error(`nobody scripted the harvest of ${asked.repository.text}#${asked.issue}`)
     if (this.harvest instanceof Error) throw this.harvest
     return this.harvest
   }
@@ -28,7 +29,7 @@ class HarvestedRecords extends PlanRecords {
 
 class RecordedDelivery extends RunDelivery {
   readonly asked: PlanWatch[] = []
-  pullRequest: DeliveredPullRequest | Error | null = null
+  pullRequest: DeliveredPullRequest | Error | null | undefined = undefined
 
   override async deliver(): Promise<void> {
     throw new Error('a read never delivers')
@@ -40,6 +41,7 @@ class RecordedDelivery extends RunDelivery {
 
   override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
     this.asked.push(watch)
+    if (this.pullRequest === undefined) throw new Error(`nobody scripted the pull request of ${watch.agent}`)
     if (this.pullRequest instanceof Error) throw this.pullRequest
     return this.pullRequest
   }
@@ -82,6 +84,7 @@ describe('InspectedWorkInventory', () => {
   it('distinguishes missing work, unreadable evidence and conflicting identities', async () => {
     const tested = new InventoryScenario()
     const watch = WorkProgressMother.watch()
+    tested.records.harvest = null
     await expect(tested.inventory.find(7, watch.repository)).rejects.toBeInstanceOf(WorkNotFound)
     tested.diagnostic = 'records unavailable'
     await expect(tested.inventory.find(7, watch.repository)).rejects.toBeInstanceOf(WorkNotRead)
@@ -107,6 +110,7 @@ describe('InspectedWorkInventory', () => {
   it('answers finished with no pull request for a slice delivered outside the backend', async () => {
     const tested = new InventoryScenario()
     const watch = tested.harvested()
+    tested.delivery.pullRequest = null
 
     expect((await tested.inventory.find(7, watch.repository)).condition).toEqual({
       phase: 'finished', harvestedAt: WorkProgressMother.HARVESTED_AT, pullRequest: null,

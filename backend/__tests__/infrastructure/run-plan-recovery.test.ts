@@ -32,7 +32,7 @@ import { RegisteredCheckout } from '../../src/domain/value-objects/registered-ch
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import type { RunDeliveryInspection } from '../../src/domain/value-objects/run-delivery.ts'
+import type { DeliveredPullRequest, RunDeliveryInspection } from '../../src/domain/value-objects/run-delivery.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
@@ -354,6 +354,10 @@ class StartupRunDelivery extends RunDelivery {
       ? { kind: 'delivered', pullRequest: { number: 31, url: 'https://github.com/owner/name/pull/31' } }
       : { kind: 'publishing', pullRequest: null, diagnostic: this.refuse ? 'checked release refused at startup' : null }
   }
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    throw new Error(`nobody scripted the recorded pull request of ${watch.agent}`)
+  }
+
 }
 
 class HeldRunDelivery extends RunDelivery {
@@ -368,6 +372,10 @@ class HeldRunDelivery extends RunDelivery {
   override async inspect(): Promise<RunDeliveryInspection> {
     return { kind: 'publishing', pullRequest: null, diagnostic: null }
   }
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    throw new Error(`nobody scripted the recorded pull request of ${watch.agent}`)
+  }
+
 
   finish(): void {
     this.#release?.()

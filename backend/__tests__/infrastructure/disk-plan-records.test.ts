@@ -696,14 +696,37 @@ describe('DiskPlanRecords', () => {
     expect(refusal.message).toBe(`${receipt} could not be written: Error: disk full`)
   })
 
-  it('a harvested slice is found with the moment it was harvested although its worktree is gone', async () => {
+  it.each([
+    ['a record it cannot read', async (root: string) => {
+      await mkdir(join(root, 'harness', PlanRecordMother.FIRST_AGENT), { recursive: true })
+      await writeFile(join(root, 'harness', PlanRecordMother.FIRST_AGENT, 'dispatch.json'), 'not a dispatch', 'utf8')
+    }],
+    ['a folder that names no conversation', async (root: string) => {
+      await mkdir(join(root, 'harness', 'not-a-conversation'), { recursive: true })
+    }],
+  ])('a harvest among %s is told as not recorded instead of escaping as another family', async (_case, damage) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    await PlanRecordMother.seedHarvested(root)
+    await damage(root)
+
+    const refusal = await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+    }).catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(HarvestNotRecorded)
+    expect(refusal.message).toContain('the harvest of mercadona/control-tower-plugin#332 could not be recorded')
+  })
+
+  it('a harvested slice is found with the moment it was harvested although it is no longer in flight', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
     roots.push(root)
     await PlanRecordMother.seedHarvested(root, PlanRecordMother.harvestReceipt())
+    const records = PlanRecordMother.harvestedRecords(root)
 
-    const harvested = await PlanRecordMother.harvestedRecords(root).harvested({
-      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
-    })
+    const harvested = await records.harvested({ issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY })
+
+    expect(await records.find({ issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY })).toBeNull()
 
     expect(harvested?.harvestedAt).toBe(PlanRecordMother.HARVESTED_AT)
     expect(harvested?.watch).toMatchObject({

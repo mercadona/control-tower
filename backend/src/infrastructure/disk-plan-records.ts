@@ -380,7 +380,15 @@ export class DiskPlanRecords extends PlanRecords {
   }
 
   async recordHarvest(asked: { issue: number, repository: RepositoryName }): Promise<void> {
-    const found = this.#matching(await this.#descriptors(), asked)
+    let found: PlanWatch | null
+    try {
+      found = this.#matching(await this.#descriptors(), asked)
+    } catch (cause) {
+      if (!(cause instanceof PlanAgentFailure)) throw cause
+      throw new HarvestNotRecorded(
+        `the harvest of ${asked.repository.text}#${asked.issue} could not be recorded: ${cause.message}`
+      )
+    }
     if (found === null) return
     const path = this.#harvestReceiptPath(found.agent)
     try {
