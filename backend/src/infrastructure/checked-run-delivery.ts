@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseStateSafe } from '../../../plugin/scripts/state.js'
+import { RunNotAdvanced, RunNotUnderstood } from '../domain/exceptions.ts'
 import { RunDelivery } from '../domain/ports/run-delivery.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import {
@@ -195,11 +196,17 @@ export class CheckedRunDelivery extends RunDelivery {
   }
 
   override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
-    const intent = await this.journal.publicationRead(watch, CheckedRunDelivery.#INTENT)
-    if (intent === null) return null
-    const receipt = await this.journal.publicationRead(watch, CheckedRunDelivery.#RECEIPT)
-    if (receipt === null) return null
-    return this.#validateReceipt(watch, this.#parseIntent(intent, watch), receipt)
+    try {
+      const intent = await this.journal.publicationRead(watch, CheckedRunDelivery.#INTENT)
+      if (intent === null) return null
+      const receipt = await this.journal.publicationRead(watch, CheckedRunDelivery.#RECEIPT)
+      if (receipt === null) return null
+      return await this.#validateReceipt(watch, this.#parseIntent(intent, watch), receipt)
+    } catch (cause) {
+      if (cause instanceof RunNotUnderstood) throw new RunDeliveryUncertain(cause.message)
+      if (cause instanceof RunNotAdvanced) throw new RunDeliveryFailure(cause.message)
+      throw cause
+    }
   }
 
   async #provenPull(watch: PlanWatch, intent: DeliveryIntent, receipt: string): Promise<DeliveredPullRequest> {
