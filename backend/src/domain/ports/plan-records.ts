@@ -1,3 +1,4 @@
+import type { HarvestedWork } from '../value-objects/harvested-work.ts'
 import type { PlanBriefing } from '../value-objects/plan-briefing.ts'
 import type { PlansInFlight } from '../value-objects/plans-in-flight.ts'
 import type { PlanWatch } from '../value-objects/plan-watch.ts'
@@ -43,6 +44,18 @@ export class PlanRecords {
   async find(asked: { issue: number, repository: RepositoryName }): Promise<PlanWatch | null> {
     throw new Error(
       `${this.constructor.name} must implement find({ issue, repository }), asked for ${asked.issue} in ${asked.repository}`
+    )
+  }
+
+  async recordHarvest(asked: { issue: number, repository: RepositoryName }): Promise<void> {
+    throw new Error(
+      `${this.constructor.name} must implement recordHarvest({ issue, repository }), asked for ${asked.issue} in ${asked.repository}`
+    )
+  }
+
+  async harvested(asked: { issue: number, repository: RepositoryName }): Promise<HarvestedWork | null> {
+    throw new Error(
+      `${this.constructor.name} must implement harvested({ issue, repository }), asked for ${asked.issue} in ${asked.repository}`
     )
   }
 

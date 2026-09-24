@@ -1,7 +1,8 @@
 import { join } from 'node:path'
-import { PlanAgentFailure, PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
+import { HarvestNotRecorded, PlanAgentFailure, PlanAgentNotLaunched, PlanAgentNotNamed } from '../domain/exceptions.ts'
 import { PlanRecords } from '../domain/ports/plan-records.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
+import { HarvestedWork } from '../domain/value-objects/harvested-work.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import type { PlanNonLaunch } from '../domain/value-objects/plan-non-launch.ts'
 import { StartedPlanCall } from '../domain/value-objects/plan-call.ts'
@@ -182,11 +183,38 @@ class CleanupEvidenceRecord {
   }
 }
 
+class HarvestReceiptRecord {
+  static readonly VERSION = 1
+  static readonly #FIELDS = Object.freeze(['at', 'version'])
+
+  static text(harvestedAt: string): string {
+    return `${JSON.stringify({ version: HarvestReceiptRecord.VERSION, at: harvestedAt }, null, 2)}\n`
+  }
+
+  static read(text: string, watch: PlanWatch): HarvestedWork {
+    const parsed: unknown = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('a harvest receipt must be a JSON object')
+    }
+    const record = Object.fromEntries(Object.entries(parsed))
+    const fields = Object.keys(record).sort()
+    if (fields.length !== HarvestReceiptRecord.#FIELDS.length
+      || fields.some((field, index) => field !== HarvestReceiptRecord.#FIELDS[index])) {
+      throw new Error(`a harvest receipt must contain exactly ${HarvestReceiptRecord.#FIELDS.join(', ')}, got ${fields.join(', ')}`)
+    }
+    if (record.version !== HarvestReceiptRecord.VERSION) {
+      throw new Error(`a harvest receipt must be version ${HarvestReceiptRecord.VERSION}, got ${JSON.stringify(record.version)}`)
+    }
+    return new HarvestedWork({ watch, harvestedAt: String(record.at) })
+  }
+}
+
 export class DiskPlanRecords extends PlanRecords {
   static readonly DIRECTORY = 'harness'
   static readonly RETIRED_DIRECTORY = 'retired-harness'
   static readonly NON_LAUNCH = 'non-launch.json'
   static readonly CLEANUP_EVIDENCE = 'cleanup-evidence.json'
+  static readonly HARVEST_RECEIPT = 'harvest.json'
 
   readonly files: HeadlessFiles
   readonly newId: () => string
@@ -349,6 +377,30 @@ export class DiskPlanRecords extends PlanRecords {
     if (found === null) return null
     if (!(await this.#exists(found.located.path)) && await this.cleanupEvidence(found) === null) return null
     return found
+  }
+
+  async recordHarvest(asked: { issue: number, repository: RepositoryName }): Promise<void> {
+    const found = this.#matching(await this.#descriptors(), asked)
+    if (found === null) return
+    const path = this.#harvestReceiptPath(found.agent)
+    try {
+      await this.files.writeOnce(path, HarvestReceiptRecord.text(this.now()))
+    } catch (cause) {
+      throw new HarvestNotRecorded(`${path} could not be written: ${String(cause)}`)
+    }
+  }
+
+  async harvested(asked: { issue: number, repository: RepositoryName }): Promise<HarvestedWork | null> {
+    const found = this.#matching(await this.#descriptors(), asked)
+    if (found === null) return null
+    const path = this.#harvestReceiptPath(found.agent)
+    const text = await this.#read(path)
+    if (text === null) return null
+    try {
+      return HarvestReceiptRecord.read(text, found)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(`${path} cannot be read as a harvest receipt: ${String(cause)}`)
+    }
   }
 
   async inFlight(): Promise<PlansInFlight> {
@@ -520,6 +572,10 @@ export class DiskPlanRecords extends PlanRecords {
 
   #nonLaunchPath(agent: string): string {
     return join(this.files.root, DiskPlanRecords.DIRECTORY, agent, DiskPlanRecords.NON_LAUNCH)
+  }
+
+  #harvestReceiptPath(agent: string): string {
+    return join(this.files.root, DiskPlanRecords.DIRECTORY, agent, DiskPlanRecords.HARVEST_RECEIPT)
   }
 
   #matching(watches: readonly PlanWatch[], asked: {
