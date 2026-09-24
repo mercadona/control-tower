@@ -32,6 +32,8 @@ const PROMPT_TEXT = [
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
   PhasePrompt.FREEZE_IS_NOT_YOURS,
   'The ticket ABC-1 says: "Plan the work".',
+  'Write the design document at docs/superpowers/specs/ABC-1-design.md and the execution spec at '
+    + 'docs/superpowers/specs/ABC-1-execution.md, exactly those paths: when either already exists, continue it instead of starting another.',
   PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
   PhasePrompt.RECOVERY_CAPABILITIES,

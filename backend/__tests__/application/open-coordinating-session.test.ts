@@ -162,6 +162,8 @@ class Flow {
   static ROOT = new CheckoutRoot('/repo')
   static CANONICAL_ROOT = new CheckoutRoot('/real/repo')
   static STORY = new UserStoryKey('MO_SHOP-42')
+  static DOCUMENTS_LINE = 'Write the design document at docs/superpowers/specs/MO_SHOP-42-design.md and the execution spec at '
+    + 'docs/superpowers/specs/MO_SHOP-42-execution.md, exactly those paths: when either already exists, continue it instead of starting another.'
 
   userStories: UserStoriesDouble
   workspace: WorkspaceDouble
@@ -245,6 +247,7 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
+      Flow.DOCUMENTS_LINE,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
@@ -360,6 +363,7 @@ describe('OpenCoordinatingSession', () => {
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,
+      Flow.DOCUMENTS_LINE,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
       PhasePrompt.RECOVERY_CAPABILITIES,
