@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { BaselineExists, CoverageBaseline } from './coverage-baseline.ts'
 import type { FileCoverage, Tally } from './coverage-baseline.ts'
 
@@ -37,6 +38,33 @@ class RawFile {
 class TemporaryDirectory {
   static make(): string {
     return mkdtempSync(join(tmpdir(), 'coverage-baseline-'))
+  }
+}
+
+class Backend {
+  static HERE = dirname(fileURLToPath(import.meta.url))
+  static ROOT = join(Backend.HERE, '..')
+
+  static sourceFiles(): string[] {
+    return Backend.#filesUnder(join(Backend.ROOT, 'src'))
+      .map((path) => relative(Backend.ROOT, path).split(sep).join('/'))
+  }
+
+  static #filesUnder(directory: string): string[] {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) return Backend.#filesUnder(path)
+
+      return entry.name.endsWith('.ts') ? [path] : []
+    })
+  }
+}
+
+class CommittedBaseline {
+  static PATH = join(Backend.ROOT, CoverageBaseline.BASELINE)
+
+  static read(): { files: Record<string, FileCoverage> } {
+    return JSON.parse(readFileSync(CommittedBaseline.PATH, 'utf8'))
   }
 }
 
@@ -99,5 +127,25 @@ describe('a per-file line and branch ratio measures against the last baseline', 
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
+  })
+})
+
+describe('the committed baseline', () => {
+  it('the_committed_baseline_counts_what_only_a_child_process_runs', () => {
+    const baseline = CommittedBaseline.read()
+
+    expect(baseline.files['src/infrastructure/ct-api.ts'].lines.covered).toBeGreaterThan(0)
+  })
+
+  it('the_committed_baseline_names_every_src_file_but_the_border', () => {
+    const baseline = CommittedBaseline.read()
+    const border = new Set(CoverageBaseline.EXCLUDED.filter((entry) => entry.from === null).map((entry) => entry.file))
+    const named = new Set(Object.keys(baseline.files))
+
+    const missing = Backend.sourceFiles().filter((file) => !border.has(file) && !named.has(file))
+    const stillNamed = Backend.sourceFiles().filter((file) => border.has(file) && named.has(file))
+
+    expect(missing).toEqual([])
+    expect(stillNamed).toEqual([])
   })
 })

@@ -299,6 +299,11 @@ infrastructure/
 
 From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.ts'`. During a working session, run the fast subset per change and the whole suite before handing anything over.
 
+The coverage of `src/` is measured from `backend/` with `env -u CT_STATE_DIR npm run coverage`:
+`c8` over `vitest run`, children counted. `npm run coverage:compare` then names every file that
+fell below `coverage-baseline.json`. The baseline is written once, and
+`CoverageBaseline.EXCLUDED` says what it leaves out and why.
+
 ## Testing: a failing test must not leak a process
 
 This suite launches real processes by design. Every spawned child is

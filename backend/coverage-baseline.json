@@ -1,0 +1,2355 @@
+{
+  "instrument": "c8 over vitest run, with the children counted",
+  "files": {
+    "src/application/actions/ask-groom-review.ts": {
+      "lines": {
+        "covered": 89,
+        "total": 89
+      },
+      "branches": {
+        "covered": 16,
+        "total": 16
+      }
+    },
+    "src/application/actions/check-repository-preparation.ts": {
+      "lines": {
+        "covered": 34,
+        "total": 34
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/application/actions/cleanup-plan.ts": {
+      "lines": {
+        "covered": 114,
+        "total": 126
+      },
+      "branches": {
+        "covered": 52,
+        "total": 60
+      }
+    },
+    "src/application/actions/close-coordinating-session.ts": {
+      "lines": {
+        "covered": 76,
+        "total": 85
+      },
+      "branches": {
+        "covered": 26,
+        "total": 27
+      }
+    },
+    "src/application/actions/continue-plan.ts": {
+      "lines": {
+        "covered": 72,
+        "total": 74
+      },
+      "branches": {
+        "covered": 21,
+        "total": 23
+      }
+    },
+    "src/application/actions/deliver-held-messages.ts": {
+      "lines": {
+        "covered": 61,
+        "total": 63
+      },
+      "branches": {
+        "covered": 19,
+        "total": 21
+      }
+    },
+    "src/application/actions/drive-run.ts": {
+      "lines": {
+        "covered": 166,
+        "total": 168
+      },
+      "branches": {
+        "covered": 52,
+        "total": 55
+      }
+    },
+    "src/application/actions/execute-run-instruction.ts": {
+      "lines": {
+        "covered": 38,
+        "total": 39
+      },
+      "branches": {
+        "covered": 11,
+        "total": 12
+      }
+    },
+    "src/application/actions/freeze-spec.ts": {
+      "lines": {
+        "covered": 161,
+        "total": 161
+      },
+      "branches": {
+        "covered": 40,
+        "total": 42
+      }
+    },
+    "src/application/actions/groom-epic.ts": {
+      "lines": {
+        "covered": 108,
+        "total": 108
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/application/actions/harvest-delivery.ts": {
+      "lines": {
+        "covered": 50,
+        "total": 50
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/application/actions/open-coordinating-session.ts": {
+      "lines": {
+        "covered": 86,
+        "total": 86
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/application/actions/open-groom-session.ts": {
+      "lines": {
+        "covered": 98,
+        "total": 98
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/application/actions/promote-epic.ts": {
+      "lines": {
+        "covered": 87,
+        "total": 87
+      },
+      "branches": {
+        "covered": 15,
+        "total": 15
+      }
+    },
+    "src/application/actions/publish-reslicing.ts": {
+      "lines": {
+        "covered": 107,
+        "total": 107
+      },
+      "branches": {
+        "covered": 23,
+        "total": 24
+      }
+    },
+    "src/application/actions/recover-coordinating-session.ts": {
+      "lines": {
+        "covered": 159,
+        "total": 164
+      },
+      "branches": {
+        "covered": 26,
+        "total": 29
+      }
+    },
+    "src/application/actions/recover-plan.ts": {
+      "lines": {
+        "covered": 27,
+        "total": 27
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/application/actions/request-fixes.ts": {
+      "lines": {
+        "covered": 61,
+        "total": 61
+      },
+      "branches": {
+        "covered": 11,
+        "total": 11
+      }
+    },
+    "src/application/actions/resize-session.ts": {
+      "lines": {
+        "covered": 27,
+        "total": 27
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/application/actions/start-milestone-plan.ts": {
+      "lines": {
+        "covered": 196,
+        "total": 203
+      },
+      "branches": {
+        "covered": 38,
+        "total": 42
+      }
+    },
+    "src/application/actions/type-into-session.ts": {
+      "lines": {
+        "covered": 25,
+        "total": 25
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/application/queries/list-live-sessions.ts": {
+      "lines": {
+        "covered": 23,
+        "total": 23
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/application/queries/read-epic-groom.ts": {
+      "lines": {
+        "covered": 191,
+        "total": 191
+      },
+      "branches": {
+        "covered": 32,
+        "total": 32
+      }
+    },
+    "src/application/queries/read-fixes-asked.ts": {
+      "lines": {
+        "covered": 54,
+        "total": 54
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/application/queries/read-implementation-history.ts": {
+      "lines": {
+        "covered": 48,
+        "total": 48
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/application/queries/read-implementation-progress.ts": {
+      "lines": {
+        "covered": 131,
+        "total": 135
+      },
+      "branches": {
+        "covered": 24,
+        "total": 28
+      }
+    },
+    "src/application/queries/read-plan-story.ts": {
+      "lines": {
+        "covered": 41,
+        "total": 41
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/application/queries/read-slice-escalation.ts": {
+      "lines": {
+        "covered": 37,
+        "total": 37
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/application/queries/read-spec-freeze.ts": {
+      "lines": {
+        "covered": 82,
+        "total": 82
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/application/queries/read-work-progress.ts": {
+      "lines": {
+        "covered": 91,
+        "total": 94
+      },
+      "branches": {
+        "covered": 20,
+        "total": 23
+      }
+    },
+    "src/application/queries/survey-external-tools.ts": {
+      "lines": {
+        "covered": 52,
+        "total": 52
+      },
+      "branches": {
+        "covered": 16,
+        "total": 16
+      }
+    },
+    "src/application/queries/survey-workspaces.ts": {
+      "lines": {
+        "covered": 33,
+        "total": 33
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/application/queries/watch-live-session.ts": {
+      "lines": {
+        "covered": 42,
+        "total": 42
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/domain/exceptions.ts": {
+      "lines": {
+        "covered": 212,
+        "total": 212
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4
+      }
+    },
+    "src/domain/policies/delivery-policy.ts": {
+      "lines": {
+        "covered": 26,
+        "total": 28
+      },
+      "branches": {
+        "covered": 4,
+        "total": 5
+      }
+    },
+    "src/domain/policies/plan-fingerprint.ts": {
+      "lines": {
+        "covered": 14,
+        "total": 14
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4
+      }
+    },
+    "src/domain/policies/plan-recovery.ts": {
+      "lines": {
+        "covered": 139,
+        "total": 143
+      },
+      "branches": {
+        "covered": 72,
+        "total": 81
+      }
+    },
+    "src/domain/policies/retry-policy.ts": {
+      "lines": {
+        "covered": 44,
+        "total": 48
+      },
+      "branches": {
+        "covered": 12,
+        "total": 14
+      }
+    },
+    "src/domain/policies/spec-revision.ts": {
+      "lines": {
+        "covered": 18,
+        "total": 18
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/ports/agent-calls.ts": {
+      "lines": {
+        "covered": 14,
+        "total": 14
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/agent-measurement-reader.ts": {
+      "lines": {
+        "covered": 6,
+        "total": 6
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/agent-measurement-store.ts": {
+      "lines": {
+        "covered": 5,
+        "total": 5
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/change-announcements.ts": {
+      "lines": {
+        "covered": 14,
+        "total": 14
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/checkout-registry.ts": {
+      "lines": {
+        "covered": 11,
+        "total": 11
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/closure-announcements.ts": {
+      "lines": {
+        "covered": 18,
+        "total": 18
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/conversation-records.ts": {
+      "lines": {
+        "covered": 47,
+        "total": 47
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/domain/ports/conversations.ts": {
+      "lines": {
+        "covered": 29,
+        "total": 29
+      },
+      "branches": {
+        "covered": 5,
+        "total": 5
+      }
+    },
+    "src/domain/ports/dispatch-candidates.ts": {
+      "lines": {
+        "covered": 10,
+        "total": 10
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/dispatch-claims.ts": {
+      "lines": {
+        "covered": 19,
+        "total": 19
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/epic-branch.ts": {
+      "lines": {
+        "covered": 44,
+        "total": 44
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/domain/ports/epic-groom.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/epic-issues.ts": {
+      "lines": {
+        "covered": 19,
+        "total": 19
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/epic-specs.ts": {
+      "lines": {
+        "covered": 20,
+        "total": 20
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4
+      }
+    },
+    "src/domain/ports/groom-review-admission.ts": {
+      "lines": {
+        "covered": 18,
+        "total": 18
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/harvest.ts": {
+      "lines": {
+        "covered": 14,
+        "total": 14
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/implementation-history.ts": {
+      "lines": {
+        "covered": 15,
+        "total": 15
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/implementation-progress.ts": {
+      "lines": {
+        "covered": 15,
+        "total": 15
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/live-sessions.ts": {
+      "lines": {
+        "covered": 56,
+        "total": 56
+      },
+      "branches": {
+        "covered": 11,
+        "total": 12
+      }
+    },
+    "src/domain/ports/plan-agents.ts": {
+      "lines": {
+        "covered": 55,
+        "total": 55
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/ports/plan-calls.ts": {
+      "lines": {
+        "covered": 33,
+        "total": 33
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/ports/plan-issues.ts": {
+      "lines": {
+        "covered": 47,
+        "total": 47
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/ports/plan-progress.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/plan-publication.ts": {
+      "lines": {
+        "covered": 7,
+        "total": 7
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/plan-records.ts": {
+      "lines": {
+        "covered": 66,
+        "total": 66
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/domain/ports/planning-activity.ts": {
+      "lines": {
+        "covered": 8,
+        "total": 8
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/preparation-reports.ts": {
+      "lines": {
+        "covered": 12,
+        "total": 12
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/published-specs.ts": {
+      "lines": {
+        "covered": 11,
+        "total": 11
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/pull-requests.ts": {
+      "lines": {
+        "covered": 58,
+        "total": 58
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/ports/review-log.ts": {
+      "lines": {
+        "covered": 15,
+        "total": 15
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/ports/run-calls.ts": {
+      "lines": {
+        "covered": 6,
+        "total": 6
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/run-delivery.ts": {
+      "lines": {
+        "covered": 8,
+        "total": 8
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/run-machine.ts": {
+      "lines": {
+        "covered": 15,
+        "total": 15
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/session-hooks.ts": {
+      "lines": {
+        "covered": 7,
+        "total": 7
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/slice-escalations.ts": {
+      "lines": {
+        "covered": 7,
+        "total": 7
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/slice-messages.ts": {
+      "lines": {
+        "covered": 8,
+        "total": 8
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/tool-sessions.ts": {
+      "lines": {
+        "covered": 7,
+        "total": 7
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/user-stories.ts": {
+      "lines": {
+        "covered": 9,
+        "total": 9
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/work-inventory.ts": {
+      "lines": {
+        "covered": 6,
+        "total": 6
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/ports/workbench.ts": {
+      "lines": {
+        "covered": 9,
+        "total": 9
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/ports/workspace.ts": {
+      "lines": {
+        "covered": 54,
+        "total": 54
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/domain/ports/worktree-environments.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/agent-call-measurements.ts": {
+      "lines": {
+        "covered": 64,
+        "total": 64
+      },
+      "branches": {
+        "covered": 22,
+        "total": 22
+      }
+    },
+    "src/domain/value-objects/change-asked.ts": {
+      "lines": {
+        "covered": 12,
+        "total": 12
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/checkout-root.ts": {
+      "lines": {
+        "covered": 17,
+        "total": 21
+      },
+      "branches": {
+        "covered": 6,
+        "total": 7
+      }
+    },
+    "src/domain/value-objects/conversation-id.ts": {
+      "lines": {
+        "covered": 20,
+        "total": 22
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/domain/value-objects/coordinating-conversation.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/epic-issue.ts": {
+      "lines": {
+        "covered": 30,
+        "total": 38
+      },
+      "branches": {
+        "covered": 5,
+        "total": 9
+      }
+    },
+    "src/domain/value-objects/epic-issues-listing.ts": {
+      "lines": {
+        "covered": 18,
+        "total": 22
+      },
+      "branches": {
+        "covered": 5,
+        "total": 7
+      }
+    },
+    "src/domain/value-objects/epic-spec.ts": {
+      "lines": {
+        "covered": 119,
+        "total": 121
+      },
+      "branches": {
+        "covered": 41,
+        "total": 46
+      }
+    },
+    "src/domain/value-objects/freeze-finding.ts": {
+      "lines": {
+        "covered": 25,
+        "total": 27
+      },
+      "branches": {
+        "covered": 4,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/groom-plan.ts": {
+      "lines": {
+        "covered": 45,
+        "total": 45
+      },
+      "branches": {
+        "covered": 10,
+        "total": 10
+      }
+    },
+    "src/domain/value-objects/harvest-outcome.ts": {
+      "lines": {
+        "covered": 13,
+        "total": 13
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/harvested-work.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/held-message.ts": {
+      "lines": {
+        "covered": 19,
+        "total": 21
+      },
+      "branches": {
+        "covered": 5,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/implementation-history-entry.ts": {
+      "lines": {
+        "covered": 52,
+        "total": 52
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4
+      }
+    },
+    "src/domain/value-objects/implementation-state.ts": {
+      "lines": {
+        "covered": 82,
+        "total": 82
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/domain/value-objects/live-session.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 16
+      },
+      "branches": {
+        "covered": 7,
+        "total": 7
+      }
+    },
+    "src/domain/value-objects/metrics-delivery.ts": {
+      "lines": {
+        "covered": 37,
+        "total": 37
+      },
+      "branches": {
+        "covered": 16,
+        "total": 16
+      }
+    },
+    "src/domain/value-objects/phase-prompt.ts": {
+      "lines": {
+        "covered": 100,
+        "total": 100
+      },
+      "branches": {
+        "covered": 11,
+        "total": 11
+      }
+    },
+    "src/domain/value-objects/plan-briefing.ts": {
+      "lines": {
+        "covered": 25,
+        "total": 25
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/plan-call.ts": {
+      "lines": {
+        "covered": 103,
+        "total": 103
+      },
+      "branches": {
+        "covered": 23,
+        "total": 23
+      }
+    },
+    "src/domain/value-objects/plan-issue-status.ts": {
+      "lines": {
+        "covered": 9,
+        "total": 9
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/value-objects/plan-issue.ts": {
+      "lines": {
+        "covered": 16,
+        "total": 20
+      },
+      "branches": {
+        "covered": 4,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/plan-non-launch.ts": {
+      "lines": {
+        "covered": 46,
+        "total": 51
+      },
+      "branches": {
+        "covered": 10,
+        "total": 13
+      }
+    },
+    "src/domain/value-objects/plan-state.ts": {
+      "lines": {
+        "covered": 6,
+        "total": 6
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/value-objects/plan-watch.ts": {
+      "lines": {
+        "covered": 32,
+        "total": 32
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/planning-activity.ts": {
+      "lines": {
+        "covered": 54,
+        "total": 65
+      },
+      "branches": {
+        "covered": 6,
+        "total": 10
+      }
+    },
+    "src/domain/value-objects/plans-in-flight.ts": {
+      "lines": {
+        "covered": 24,
+        "total": 24
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/prepared-workspace.ts": {
+      "lines": {
+        "covered": 13,
+        "total": 17
+      },
+      "branches": {
+        "covered": 3,
+        "total": 4
+      }
+    },
+    "src/domain/value-objects/recorded-call.ts": {
+      "lines": {
+        "covered": 25,
+        "total": 25
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/recovery-call.ts": {
+      "lines": {
+        "covered": 26,
+        "total": 26
+      },
+      "branches": {
+        "covered": 3,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/registered-checkout.ts": {
+      "lines": {
+        "covered": 18,
+        "total": 18
+      },
+      "branches": {
+        "covered": 5,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/repository-name.ts": {
+      "lines": {
+        "covered": 22,
+        "total": 22
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/domain/value-objects/repository-preparation.ts": {
+      "lines": {
+        "covered": 40,
+        "total": 40
+      },
+      "branches": {
+        "covered": 7,
+        "total": 7
+      }
+    },
+    "src/domain/value-objects/reslicing.ts": {
+      "lines": {
+        "covered": 49,
+        "total": 53
+      },
+      "branches": {
+        "covered": 12,
+        "total": 13
+      }
+    },
+    "src/domain/value-objects/rooted-workspace-location.ts": {
+      "lines": {
+        "covered": 9,
+        "total": 9
+      },
+      "branches": {
+        "covered": 2,
+        "total": 2
+      }
+    },
+    "src/domain/value-objects/run-delivery.ts": {
+      "lines": {
+        "covered": 14,
+        "total": 14
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/domain/value-objects/run-instruction.ts": {
+      "lines": {
+        "covered": 44,
+        "total": 45
+      },
+      "branches": {
+        "covered": 12,
+        "total": 13
+      }
+    },
+    "src/domain/value-objects/session-attention.ts": {
+      "lines": {
+        "covered": 22,
+        "total": 22
+      },
+      "branches": {
+        "covered": 5,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/session-closure.ts": {
+      "lines": {
+        "covered": 79,
+        "total": 87
+      },
+      "branches": {
+        "covered": 26,
+        "total": 30
+      }
+    },
+    "src/domain/value-objects/session-process-ownership.ts": {
+      "lines": {
+        "covered": 52,
+        "total": 62
+      },
+      "branches": {
+        "covered": 20,
+        "total": 26
+      }
+    },
+    "src/domain/value-objects/session-program.ts": {
+      "lines": {
+        "covered": 22,
+        "total": 28
+      },
+      "branches": {
+        "covered": 3,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/session-timeline-event.ts": {
+      "lines": {
+        "covered": 55,
+        "total": 57
+      },
+      "branches": {
+        "covered": 17,
+        "total": 18
+      }
+    },
+    "src/domain/value-objects/slice-escalation.ts": {
+      "lines": {
+        "covered": 47,
+        "total": 49
+      },
+      "branches": {
+        "covered": 6,
+        "total": 7
+      }
+    },
+    "src/domain/value-objects/sown-workspace.ts": {
+      "lines": {
+        "covered": 13,
+        "total": 13
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/tool-session.ts": {
+      "lines": {
+        "covered": 41,
+        "total": 41
+      },
+      "branches": {
+        "covered": 10,
+        "total": 10
+      }
+    },
+    "src/domain/value-objects/tracked-work.ts": {
+      "lines": {
+        "covered": 27,
+        "total": 27
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/unused-workspace.ts": {
+      "lines": {
+        "covered": 17,
+        "total": 21
+      },
+      "branches": {
+        "covered": 3,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/user-story-key.ts": {
+      "lines": {
+        "covered": 20,
+        "total": 22
+      },
+      "branches": {
+        "covered": 7,
+        "total": 8
+      }
+    },
+    "src/domain/value-objects/user-story-reference.ts": {
+      "lines": {
+        "covered": 12,
+        "total": 12
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/domain/value-objects/user-story-url.ts": {
+      "lines": {
+        "covered": 36,
+        "total": 40
+      },
+      "branches": {
+        "covered": 13,
+        "total": 14
+      }
+    },
+    "src/domain/value-objects/user-story.ts": {
+      "lines": {
+        "covered": 20,
+        "total": 22
+      },
+      "branches": {
+        "covered": 4,
+        "total": 5
+      }
+    },
+    "src/domain/value-objects/work-progress.ts": {
+      "lines": {
+        "covered": 29,
+        "total": 29
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/workspace-location.ts": {
+      "lines": {
+        "covered": 12,
+        "total": 12
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/domain/value-objects/workspace-survey.ts": {
+      "lines": {
+        "covered": 13,
+        "total": 13
+      },
+      "branches": {
+        "covered": 3,
+        "total": 3
+      }
+    },
+    "src/infrastructure/acli-user-stories.ts": {
+      "lines": {
+        "covered": 108,
+        "total": 108
+      },
+      "branches": {
+        "covered": 33,
+        "total": 35
+      }
+    },
+    "src/infrastructure/active-plans-route.ts": {
+      "lines": {
+        "covered": 217,
+        "total": 220
+      },
+      "branches": {
+        "covered": 34,
+        "total": 35
+      }
+    },
+    "src/infrastructure/another-round-route.ts": {
+      "lines": {
+        "covered": 209,
+        "total": 224
+      },
+      "branches": {
+        "covered": 44,
+        "total": 49
+      }
+    },
+    "src/infrastructure/api-server.ts": {
+      "lines": {
+        "covered": 478,
+        "total": 484
+      },
+      "branches": {
+        "covered": 37,
+        "total": 41
+      }
+    },
+    "src/infrastructure/checked-run-delivery.ts": {
+      "lines": {
+        "covered": 867,
+        "total": 957
+      },
+      "branches": {
+        "covered": 272,
+        "total": 354
+      }
+    },
+    "src/infrastructure/claude-call-result.ts": {
+      "lines": {
+        "covered": 34,
+        "total": 34
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/infrastructure/claude-calls.ts": {
+      "lines": {
+        "covered": 733,
+        "total": 775
+      },
+      "branches": {
+        "covered": 218,
+        "total": 244
+      }
+    },
+    "src/infrastructure/claude-conversations.ts": {
+      "lines": {
+        "covered": 130,
+        "total": 130
+      },
+      "branches": {
+        "covered": 14,
+        "total": 15
+      }
+    },
+    "src/infrastructure/claude-plan-calls.ts": {
+      "lines": {
+        "covered": 175,
+        "total": 190
+      },
+      "branches": {
+        "covered": 43,
+        "total": 52
+      }
+    },
+    "src/infrastructure/claude-result-envelope.ts": {
+      "lines": {
+        "covered": 173,
+        "total": 175
+      },
+      "branches": {
+        "covered": 92,
+        "total": 94
+      }
+    },
+    "src/infrastructure/claude-run-calls.ts": {
+      "lines": {
+        "covered": 171,
+        "total": 177
+      },
+      "branches": {
+        "covered": 50,
+        "total": 58
+      }
+    },
+    "src/infrastructure/claude-run-measurements.ts": {
+      "lines": {
+        "covered": 64,
+        "total": 69
+      },
+      "branches": {
+        "covered": 27,
+        "total": 29
+      }
+    },
+    "src/infrastructure/cleanup-plan-route.ts": {
+      "lines": {
+        "covered": 91,
+        "total": 99
+      },
+      "branches": {
+        "covered": 22,
+        "total": 24
+      }
+    },
+    "src/infrastructure/compose-worktree-environments.ts": {
+      "lines": {
+        "covered": 188,
+        "total": 192
+      },
+      "branches": {
+        "covered": 92,
+        "total": 108
+      }
+    },
+    "src/infrastructure/coordinating-session-close-route.ts": {
+      "lines": {
+        "covered": 182,
+        "total": 195
+      },
+      "branches": {
+        "covered": 51,
+        "total": 55
+      }
+    },
+    "src/infrastructure/coordinating-session-recovery.ts": {
+      "lines": {
+        "covered": 50,
+        "total": 74
+      },
+      "branches": {
+        "covered": 2,
+        "total": 9
+      }
+    },
+    "src/infrastructure/coordinating-session-route.ts": {
+      "lines": {
+        "covered": 195,
+        "total": 198
+      },
+      "branches": {
+        "covered": 36,
+        "total": 38
+      }
+    },
+    "src/infrastructure/coordinating-session-target.ts": {
+      "lines": {
+        "covered": 57,
+        "total": 57
+      },
+      "branches": {
+        "covered": 14,
+        "total": 14
+      }
+    },
+    "src/infrastructure/coordinating-sessions.ts": {
+      "lines": {
+        "covered": 475,
+        "total": 490
+      },
+      "branches": {
+        "covered": 123,
+        "total": 133
+      }
+    },
+    "src/infrastructure/ct-api.ts": {
+      "lines": {
+        "covered": 230,
+        "total": 817
+      },
+      "branches": {
+        "covered": 6,
+        "total": 9
+      }
+    },
+    "src/infrastructure/ct-groom-epic.ts": {
+      "lines": {
+        "covered": 100,
+        "total": 108
+      },
+      "branches": {
+        "covered": 26,
+        "total": 28
+      }
+    },
+    "src/infrastructure/ct-run-machine.ts": {
+      "lines": {
+        "covered": 783,
+        "total": 830
+      },
+      "branches": {
+        "covered": 262,
+        "total": 296
+      }
+    },
+    "src/infrastructure/disk-agent-measurements.ts": {
+      "lines": {
+        "covered": 53,
+        "total": 53
+      },
+      "branches": {
+        "covered": 11,
+        "total": 11
+      }
+    },
+    "src/infrastructure/disk-checkout-registry.ts": {
+      "lines": {
+        "covered": 144,
+        "total": 144
+      },
+      "branches": {
+        "covered": 52,
+        "total": 55
+      }
+    },
+    "src/infrastructure/disk-conversation-records.ts": {
+      "lines": {
+        "covered": 295,
+        "total": 315
+      },
+      "branches": {
+        "covered": 101,
+        "total": 110
+      }
+    },
+    "src/infrastructure/disk-epic-specs.ts": {
+      "lines": {
+        "covered": 92,
+        "total": 94
+      },
+      "branches": {
+        "covered": 24,
+        "total": 27
+      }
+    },
+    "src/infrastructure/disk-implementation-start-registry.ts": {
+      "lines": {
+        "covered": 81,
+        "total": 83
+      },
+      "branches": {
+        "covered": 11,
+        "total": 13
+      }
+    },
+    "src/infrastructure/disk-plan-records.ts": {
+      "lines": {
+        "covered": 555,
+        "total": 625
+      },
+      "branches": {
+        "covered": 183,
+        "total": 213
+      }
+    },
+    "src/infrastructure/disk-slice-escalations.ts": {
+      "lines": {
+        "covered": 102,
+        "total": 114
+      },
+      "branches": {
+        "covered": 29,
+        "total": 39
+      }
+    },
+    "src/infrastructure/dispatch-check-claims.ts": {
+      "lines": {
+        "covered": 53,
+        "total": 53
+      },
+      "branches": {
+        "covered": 14,
+        "total": 14
+      }
+    },
+    "src/infrastructure/dispatch-check-harvest.ts": {
+      "lines": {
+        "covered": 116,
+        "total": 116
+      },
+      "branches": {
+        "covered": 26,
+        "total": 26
+      }
+    },
+    "src/infrastructure/dispatch-check-workbench.ts": {
+      "lines": {
+        "covered": 71,
+        "total": 71
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/infrastructure/dispatch-relay.ts": {
+      "lines": {
+        "covered": 89,
+        "total": 89
+      },
+      "branches": {
+        "covered": 34,
+        "total": 35
+      }
+    },
+    "src/infrastructure/epic-groom-route.ts": {
+      "lines": {
+        "covered": 254,
+        "total": 271
+      },
+      "branches": {
+        "covered": 51,
+        "total": 62
+      }
+    },
+    "src/infrastructure/epic-promotion-route.ts": {
+      "lines": {
+        "covered": 123,
+        "total": 127
+      },
+      "branches": {
+        "covered": 21,
+        "total": 24
+      }
+    },
+    "src/infrastructure/external-tool.ts": {
+      "lines": {
+        "covered": 63,
+        "total": 63
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/infrastructure/external-tools-route.ts": {
+      "lines": {
+        "covered": 44,
+        "total": 44
+      },
+      "branches": {
+        "covered": 7,
+        "total": 7
+      }
+    },
+    "src/infrastructure/gate-key.ts": {
+      "lines": {
+        "covered": 28,
+        "total": 28
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/infrastructure/gh-dispatch-candidates.ts": {
+      "lines": {
+        "covered": 232,
+        "total": 248
+      },
+      "branches": {
+        "covered": 56,
+        "total": 69
+      }
+    },
+    "src/infrastructure/gh-epic-issues.ts": {
+      "lines": {
+        "covered": 132,
+        "total": 132
+      },
+      "branches": {
+        "covered": 28,
+        "total": 29
+      }
+    },
+    "src/infrastructure/gh-plan-issues.ts": {
+      "lines": {
+        "covered": 397,
+        "total": 401
+      },
+      "branches": {
+        "covered": 83,
+        "total": 86
+      }
+    },
+    "src/infrastructure/gh-plan-publication.ts": {
+      "lines": {
+        "covered": 176,
+        "total": 187
+      },
+      "branches": {
+        "covered": 47,
+        "total": 56
+      }
+    },
+    "src/infrastructure/gh-published-specs.ts": {
+      "lines": {
+        "covered": 62,
+        "total": 62
+      },
+      "branches": {
+        "covered": 15,
+        "total": 15
+      }
+    },
+    "src/infrastructure/gh-pull-requests.ts": {
+      "lines": {
+        "covered": 328,
+        "total": 344
+      },
+      "branches": {
+        "covered": 77,
+        "total": 89
+      }
+    },
+    "src/infrastructure/gh-user-stories.ts": {
+      "lines": {
+        "covered": 103,
+        "total": 103
+      },
+      "branches": {
+        "covered": 34,
+        "total": 39
+      }
+    },
+    "src/infrastructure/gh.ts": {
+      "lines": {
+        "covered": 31,
+        "total": 31
+      },
+      "branches": {
+        "covered": 9,
+        "total": 9
+      }
+    },
+    "src/infrastructure/git-epic-branch.ts": {
+      "lines": {
+        "covered": 172,
+        "total": 222
+      },
+      "branches": {
+        "covered": 42,
+        "total": 50
+      }
+    },
+    "src/infrastructure/git-workspace.ts": {
+      "lines": {
+        "covered": 804,
+        "total": 848
+      },
+      "branches": {
+        "covered": 274,
+        "total": 306
+      }
+    },
+    "src/infrastructure/groom-session-route.ts": {
+      "lines": {
+        "covered": 200,
+        "total": 212
+      },
+      "branches": {
+        "covered": 36,
+        "total": 40
+      }
+    },
+    "src/infrastructure/harvest-clock.ts": {
+      "lines": {
+        "covered": 148,
+        "total": 148
+      },
+      "branches": {
+        "covered": 46,
+        "total": 46
+      }
+    },
+    "src/infrastructure/headless-call-worker.ts": {
+      "lines": {
+        "covered": 342,
+        "total": 357
+      },
+      "branches": {
+        "covered": 64,
+        "total": 79
+      }
+    },
+    "src/infrastructure/headless-files.ts": {
+      "lines": {
+        "covered": 80,
+        "total": 80
+      },
+      "branches": {
+        "covered": 38,
+        "total": 39
+      }
+    },
+    "src/infrastructure/headless-plan-agents.ts": {
+      "lines": {
+        "covered": 119,
+        "total": 157
+      },
+      "branches": {
+        "covered": 18,
+        "total": 28
+      }
+    },
+    "src/infrastructure/http.ts": {
+      "lines": {
+        "covered": 112,
+        "total": 118
+      },
+      "branches": {
+        "covered": 38,
+        "total": 42
+      }
+    },
+    "src/infrastructure/implement-history-route.ts": {
+      "lines": {
+        "covered": 185,
+        "total": 185
+      },
+      "branches": {
+        "covered": 36,
+        "total": 36
+      }
+    },
+    "src/infrastructure/inherited-terminals.ts": {
+      "lines": {
+        "covered": 58,
+        "total": 66
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/infrastructure/inspected-work-inventory.ts": {
+      "lines": {
+        "covered": 71,
+        "total": 71
+      },
+      "branches": {
+        "covered": 24,
+        "total": 27
+      }
+    },
+    "src/infrastructure/invocation.ts": {
+      "lines": {
+        "covered": 152,
+        "total": 152
+      },
+      "branches": {
+        "covered": 47,
+        "total": 47
+      }
+    },
+    "src/infrastructure/local-settings-session-hooks.ts": {
+      "lines": {
+        "covered": 111,
+        "total": 115
+      },
+      "branches": {
+        "covered": 38,
+        "total": 40
+      }
+    },
+    "src/infrastructure/measured-agent-calls.ts": {
+      "lines": {
+        "covered": 68,
+        "total": 68
+      },
+      "branches": {
+        "covered": 18,
+        "total": 18
+      }
+    },
+    "src/infrastructure/memory-review-log.ts": {
+      "lines": {
+        "covered": 29,
+        "total": 29
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/infrastructure/metrics-file-history.ts": {
+      "lines": {
+        "covered": 109,
+        "total": 109
+      },
+      "branches": {
+        "covered": 35,
+        "total": 35
+      }
+    },
+    "src/infrastructure/non-launch-record.ts": {
+      "lines": {
+        "covered": 45,
+        "total": 48
+      },
+      "branches": {
+        "covered": 12,
+        "total": 16
+      }
+    },
+    "src/infrastructure/plan-agent-brief.ts": {
+      "lines": {
+        "covered": 87,
+        "total": 87
+      },
+      "branches": {
+        "covered": 7,
+        "total": 7
+      }
+    },
+    "src/infrastructure/plan-contract-progress.ts": {
+      "lines": {
+        "covered": 66,
+        "total": 66
+      },
+      "branches": {
+        "covered": 15,
+        "total": 15
+      }
+    },
+    "src/infrastructure/plan-operation-request.ts": {
+      "lines": {
+        "covered": 48,
+        "total": 48
+      },
+      "branches": {
+        "covered": 20,
+        "total": 20
+      }
+    },
+    "src/infrastructure/plan-sessions.ts": {
+      "lines": {
+        "covered": 28,
+        "total": 28
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/infrastructure/probed-tool-sessions.ts": {
+      "lines": {
+        "covered": 102,
+        "total": 102
+      },
+      "branches": {
+        "covered": 33,
+        "total": 33
+      }
+    },
+    "src/infrastructure/process-runner.ts": {
+      "lines": {
+        "covered": 51,
+        "total": 55
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/infrastructure/process-table.ts": {
+      "lines": {
+        "covered": 31,
+        "total": 37
+      },
+      "branches": {
+        "covered": 1,
+        "total": 1
+      }
+    },
+    "src/infrastructure/projection.ts": {
+      "lines": {
+        "covered": 31,
+        "total": 31
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/infrastructure/pty-live-sessions.ts": {
+      "lines": {
+        "covered": 1018,
+        "total": 1099
+      },
+      "branches": {
+        "covered": 375,
+        "total": 420
+      }
+    },
+    "src/infrastructure/recorded-plan-recovery.ts": {
+      "lines": {
+        "covered": 179,
+        "total": 198
+      },
+      "branches": {
+        "covered": 45,
+        "total": 47
+      }
+    },
+    "src/infrastructure/recover-plan-route.ts": {
+      "lines": {
+        "covered": 85,
+        "total": 90
+      },
+      "branches": {
+        "covered": 22,
+        "total": 24
+      }
+    },
+    "src/infrastructure/referred-user-stories.ts": {
+      "lines": {
+        "covered": 21,
+        "total": 21
+      },
+      "branches": {
+        "covered": 4,
+        "total": 4
+      }
+    },
+    "src/infrastructure/review-watch.ts": {
+      "lines": {
+        "covered": 187,
+        "total": 187
+      },
+      "branches": {
+        "covered": 68,
+        "total": 80
+      }
+    },
+    "src/infrastructure/run-announcement.ts": {
+      "lines": {
+        "covered": 273,
+        "total": 277
+      },
+      "branches": {
+        "covered": 104,
+        "total": 112
+      }
+    },
+    "src/infrastructure/run-dispatch.ts": {
+      "lines": {
+        "covered": 346,
+        "total": 360
+      },
+      "branches": {
+        "covered": 66,
+        "total": 80
+      }
+    },
+    "src/infrastructure/run-file-progress.ts": {
+      "lines": {
+        "covered": 131,
+        "total": 131
+      },
+      "branches": {
+        "covered": 40,
+        "total": 40
+      }
+    },
+    "src/infrastructure/run-journal.ts": {
+      "lines": {
+        "covered": 391,
+        "total": 416
+      },
+      "branches": {
+        "covered": 175,
+        "total": 195
+      }
+    },
+    "src/infrastructure/run-plan-agents.ts": {
+      "lines": {
+        "covered": 506,
+        "total": 595
+      },
+      "branches": {
+        "covered": 164,
+        "total": 205
+      }
+    },
+    "src/infrastructure/run-plan-recovery.ts": {
+      "lines": {
+        "covered": 508,
+        "total": 527
+      },
+      "branches": {
+        "covered": 142,
+        "total": 161
+      }
+    },
+    "src/infrastructure/session-change-announcements.ts": {
+      "lines": {
+        "covered": 25,
+        "total": 25
+      },
+      "branches": {
+        "covered": 5,
+        "total": 5
+      }
+    },
+    "src/infrastructure/session-closure-announcements.ts": {
+      "lines": {
+        "covered": 31,
+        "total": 31
+      },
+      "branches": {
+        "covered": 13,
+        "total": 13
+      }
+    },
+    "src/infrastructure/session-hooks-route.ts": {
+      "lines": {
+        "covered": 186,
+        "total": 197
+      },
+      "branches": {
+        "covered": 42,
+        "total": 47
+      }
+    },
+    "src/infrastructure/session-input-route.ts": {
+      "lines": {
+        "covered": 144,
+        "total": 151
+      },
+      "branches": {
+        "covered": 31,
+        "total": 34
+      }
+    },
+    "src/infrastructure/session-preparation-reports.ts": {
+      "lines": {
+        "covered": 62,
+        "total": 62
+      },
+      "branches": {
+        "covered": 16,
+        "total": 17
+      }
+    },
+    "src/infrastructure/session-resize-route.ts": {
+      "lines": {
+        "covered": 166,
+        "total": 168
+      },
+      "branches": {
+        "covered": 37,
+        "total": 39
+      }
+    },
+    "src/infrastructure/session-stream-route.ts": {
+      "lines": {
+        "covered": 52,
+        "total": 52
+      },
+      "branches": {
+        "covered": 12,
+        "total": 12
+      }
+    },
+    "src/infrastructure/sessions-route.ts": {
+      "lines": {
+        "covered": 22,
+        "total": 22
+      },
+      "branches": {
+        "covered": 6,
+        "total": 6
+      }
+    },
+    "src/infrastructure/slice-escalation-route.ts": {
+      "lines": {
+        "covered": 160,
+        "total": 164
+      },
+      "branches": {
+        "covered": 29,
+        "total": 30
+      }
+    },
+    "src/infrastructure/slice-message-route.ts": {
+      "lines": {
+        "covered": 255,
+        "total": 270
+      },
+      "branches": {
+        "covered": 51,
+        "total": 57
+      }
+    },
+    "src/infrastructure/spec-freeze-route.ts": {
+      "lines": {
+        "covered": 177,
+        "total": 186
+      },
+      "branches": {
+        "covered": 38,
+        "total": 42
+      }
+    },
+    "src/infrastructure/spec-reslicing-route.ts": {
+      "lines": {
+        "covered": 102,
+        "total": 102
+      },
+      "branches": {
+        "covered": 20,
+        "total": 21
+      }
+    },
+    "src/infrastructure/start-plan-route.ts": {
+      "lines": {
+        "covered": 498,
+        "total": 508
+      },
+      "branches": {
+        "covered": 95,
+        "total": 105
+      }
+    },
+    "src/infrastructure/stream-planning-activities.ts": {
+      "lines": {
+        "covered": 174,
+        "total": 175
+      },
+      "branches": {
+        "covered": 59,
+        "total": 64
+      }
+    },
+    "src/infrastructure/tool-runner.ts": {
+      "lines": {
+        "covered": 117,
+        "total": 122
+      },
+      "branches": {
+        "covered": 28,
+        "total": 31
+      }
+    },
+    "src/infrastructure/work-in-flight.ts": {
+      "lines": {
+        "covered": 29,
+        "total": 29
+      },
+      "branches": {
+        "covered": 8,
+        "total": 8
+      }
+    },
+    "src/infrastructure/work-progress-route.ts": {
+      "lines": {
+        "covered": 97,
+        "total": 121
+      },
+      "branches": {
+        "covered": 27,
+        "total": 33
+      }
+    },
+    "src/infrastructure/work-recovery-clock.ts": {
+      "lines": {
+        "covered": 56,
+        "total": 57
+      },
+      "branches": {
+        "covered": 13,
+        "total": 14
+      }
+    }
+  }
+}
