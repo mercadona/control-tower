@@ -35,8 +35,6 @@ type Baseline = {
   readonly files: Record<string, FileCoverage>,
 }
 
-type Dimension = 'lines' | 'branches'
-
 export class BaselineExists extends Error {}
 
 export class CoverageBaseline {
@@ -85,10 +83,16 @@ export class CoverageBaseline {
       const found = measured[file]
       if (found === undefined) return [`${file} is in the baseline and the report no longer holds it`]
 
-      return [
-        ...CoverageBaseline.#dropOf(file, 'lines', expected.lines, found.lines),
-        ...CoverageBaseline.#dropOf(file, 'branches', expected.branches, found.branches),
-      ]
+      return CoverageBaseline.#lineDropOf(file, expected.lines, found.lines)
+    })
+  }
+
+  static branchDifferences(baseline: Baseline, measured: Record<string, FileCoverage>): string[] {
+    return Object.entries(baseline.files).flatMap(([file, expected]) => {
+      const found = measured[file]
+      if (found === undefined) return []
+
+      return CoverageBaseline.#branchDifferenceOf(file, expected.branches, found.branches)
     })
   }
 
@@ -108,6 +112,8 @@ export class CoverageBaseline {
     }
     if (verb === 'compare') {
       const baseline: Baseline = JSON.parse(readFileSync(CoverageBaseline.BASELINE, 'utf8'))
+      const differences = CoverageBaseline.branchDifferences(baseline, measured)
+      if (differences.length > 0) process.stdout.write(`${differences.join('\n')}\n`)
       const drops = CoverageBaseline.dropsAgainst(baseline, measured)
       if (drops.length > 0) {
         process.stderr.write(`${drops.join('\n')}\n`)
@@ -118,14 +124,16 @@ export class CoverageBaseline {
     throw new Error(`unknown coverage verb: ${String(verb)}`)
   }
 
-  static #dropOf(file: string, dimension: Dimension, baseline: Tally, current: Tally): string[] {
-    const before = CoverageBaseline.#ratio(baseline)
-    const after = CoverageBaseline.#ratio(current)
-    return after < before ? [`${file} ${dimension} ratio dropped from ${before} to ${after}`] : []
+  static #lineDropOf(file: string, baseline: Tally, current: Tally): string[] {
+    return current.covered < baseline.covered
+      ? [`${file} lines covered dropped from ${baseline.covered} to ${current.covered}`]
+      : []
   }
 
-  static #ratio(tally: Tally): number {
-    return tally.total === 0 ? 1 : tally.covered / tally.total
+  static #branchDifferenceOf(file: string, baseline: Tally, current: Tally): string[] {
+    return baseline.covered !== current.covered || baseline.total !== current.total
+      ? [`${file} branches changed from ${baseline.covered}/${baseline.total} to ${current.covered}/${current.total}`]
+      : []
   }
 
   static #sorted(measured: Record<string, FileCoverage>): Record<string, FileCoverage> {

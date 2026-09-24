@@ -68,27 +68,30 @@ class CommittedBaseline {
   }
 }
 
-describe('a per-file line and branch ratio measures against the last baseline', () => {
-  it('a_file_whose_line_ratio_falls_below_its_baseline_is_a_drop_and_an_equal_ratio_is_not', () => {
-    const baseline = { instrument: 'test', files: { 'src/a.ts': Coverage.full(2, 0) } }
+describe('the covered lines of a file are the gate; branch differences are information', () => {
+  it('a_file_whose_covered_lines_fall_below_its_baseline_is_a_drop_and_an_equal_count_is_not', () => {
+    const baseline = { instrument: 'test', files: { 'src/a.ts': Coverage.of({ covered: 89, total: 100 }, { covered: 0, total: 0 }) } }
 
     const dropped = CoverageBaseline.dropsAgainst(baseline, {
-      'src/a.ts': Coverage.of({ covered: 1, total: 2 }, { covered: 0, total: 0 }),
+      'src/a.ts': Coverage.of({ covered: 88, total: 100 }, { covered: 0, total: 0 }),
     })
-    const steady = CoverageBaseline.dropsAgainst(baseline, { 'src/a.ts': Coverage.full(2, 0) })
+    const steady = CoverageBaseline.dropsAgainst(baseline, {
+      'src/a.ts': Coverage.of({ covered: 89, total: 100 }, { covered: 0, total: 0 }),
+    })
 
-    expect(dropped).toEqual(['src/a.ts lines ratio dropped from 1 to 0.5'])
+    expect(dropped).toEqual(['src/a.ts lines covered dropped from 89 to 88'])
     expect(steady).toEqual([])
   })
 
-  it('a_branch_drop_is_named_even_when_every_line_holds', () => {
-    const baseline = { instrument: 'test', files: { 'src/a.ts': Coverage.full(1, 2) } }
+  it('a_branch_difference_is_printed_and_never_fails_the_comparison', () => {
+    const baseline = { instrument: 'test', files: { 'src/a.ts': Coverage.of({ covered: 10, total: 10 }, { covered: 1, total: 2 }) } }
+    const measured = { 'src/a.ts': Coverage.of({ covered: 10, total: 10 }, { covered: 2, total: 2 }) }
 
-    const drops = CoverageBaseline.dropsAgainst(baseline, {
-      'src/a.ts': Coverage.of({ covered: 1, total: 1 }, { covered: 1, total: 2 }),
-    })
+    const differences = CoverageBaseline.branchDifferences(baseline, measured)
+    const drops = CoverageBaseline.dropsAgainst(baseline, measured)
 
-    expect(drops).toEqual(['src/a.ts branches ratio dropped from 1 to 0.5'])
+    expect(differences).toEqual(['src/a.ts branches changed from 1/2 to 2/2'])
+    expect(drops).toEqual([])
   })
 
   it('a_baseline_file_the_report_no_longer_holds_is_named', () => {

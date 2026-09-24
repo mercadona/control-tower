@@ -304,6 +304,9 @@ The coverage of `src/` is measured from `backend/` with `env -u CT_STATE_DIR npm
 fell below `coverage-baseline.json`. The baseline is written once, and
 `CoverageBaseline.EXCLUDED` says what it leaves out and why.
 
+While a test still launches a process, the comparison gates covered lines only, and it prints
+branch differences without a failure.
+
 ## Testing: a failing test must not leak a process
 
 This suite launches real processes by design. Every spawned child is

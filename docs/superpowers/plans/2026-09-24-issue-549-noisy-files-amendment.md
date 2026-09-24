@@ -1,4 +1,4 @@
-# #549 — amendment: the coverage floor of the files whose counts vary between runs
+# #549 — amendment: covered lines are the gate while tests still launch processes
 
 > **Task-scoped subagents execute this plan.** They arrive with no context. They decide
 > nothing. Each task carries the state of what it changes, copied exactly from the repo, and
@@ -14,21 +14,21 @@ The first plan of #549, `docs/superpowers/plans/2026-09-24-issue-549-the-declare
 delivered its eight tasks. Its run closed at `blocked-global`. `npm run coverage:compare` named
 `src/infrastructure/pty-live-sessions.ts`: branches `374/419` against a baseline of `375/420`.
 
-That was not a drop. V8 counts only the branches that a run reaches. The real PTY tests of
-that file run timers, so its covered count and its total change between two runs of the same
-tree. Task 8 saw the same noise in `checked-run-delivery.ts` and `run-journal.ts`.
+That was not a drop. Under tests that launch processes, V8 does not count branches the same
+way twice. Five samples of the full suite measured it. Covered lines were equal in all 235
+files, and branches varied in three files, in their uncovered count too.
 
-The owner of the milestone decided a rule for these files. This amendment applies it to
+The owner of the milestone decided the rule. While a test still launches a process, covered
+lines are the gate and branches are information. This amendment applies it to
 `backend/__tests__/coverage-baseline.ts` and writes `backend/coverage-baseline.json` again.
 
 ### Desired end state
 
-- `backend/coverage-baseline.json` comes from 5 runs of `npm run coverage` over one tree.
-- A file with the same counts in all 5 runs is stable, and `files` keeps its strict floor.
-- A file whose counts vary is in `unstable`, floored at its minimum covered count.
-- `npm run coverage:compare` compares an unstable file with its floor, and a stable file as
-  before.
-- The ledger header states the rule in one line.
+- `npm run coverage:compare` fails when the covered lines of a file drop below its baseline.
+- It prints each branch difference as information and never fails on one.
+- `backend/coverage-baseline.json` comes from one run of `npm run coverage` and records lines
+  and branches for every file of `backend/src` but the border.
+- The ledger header states the rule, and that #556 makes branches a strict gate too.
 - The global verification of the first plan passes.
 
 ### Out of scope
@@ -36,8 +36,7 @@ The owner of the milestone decided a rule for these files. This amendment applie
 - `plugin/` and `frontend/`: nothing under them changes.
 - The low finding of the review on the `CASE` pattern of `backend/__tests__/ledger.test.ts`.
   The pull request reports it.
-- The migration of any test file. Slices 2 to 8 do that, and each one empties its files from
-  `unstable`.
+- The branch gate itself. #556 turns it on, once `ProcessRatchet.LISTED` is empty.
 
 ## 2. Closed decisions (take as given)
 
@@ -57,17 +56,17 @@ The owner of the milestone decided a rule for these files. This amendment applie
 | D-12 · Order | `slices are ordered by the false reds measured in CI, the most first.` |
 | D-13 · Conventions | `only backend/conventions/this-repository.md is amended; the amendment of plugin/conventions/testing.md waits for the plugin milestone.` |
 | D-14 · Timeouts | `testTimeout and hookTimeout in backend/vitest.config.ts return to vitest's defaults at the close, since nothing left can wait on a child.` |
-| The amendment of D-4 | `The baseline is measured 5 times on the same tree. A file whose covered and total counts are identical in all 5 runs is stable. Its floor stays strict, exactly as D-4 says. A file whose counts vary between runs is unstable. The baseline JSON lists it in a list of its own, with the minimum covered count over the 5 runs as its floor, and compares its ratio against that floor. That list can only shrink.` |
+| The amendment of D-4 | `Gate: covered lines per file must not drop below the baseline. It is strict and applies to every file of backend/src except the declared border. Branches: recorded in the baseline for every file, and not compared while any test still launches a process. The comparison prints branch differences as information and never fails on them. At the close (#556), when the ratchet list is empty, branches become a strict gate too.` |
 | Who decided it | the owner of the milestone, on 2026-09-24, through the coordinating session |
-| The floor of an unstable file | for lines and for branches, `covered` is the minimum over the 5 runs and `total` is the maximum |
-| The list | `unstable` in `backend/coverage-baseline.json`, beside `files`; no file sits in both |
-| A stable file | never enters `unstable` after the baseline exists; only a new baseline of the whole tree moves it |
-| The samples | `node_modules/.cache/coverage/samples/<n>.json`, one per run, written by `npm run coverage:sample` |
+| A line drop | `lines.covered` of the report is lower than `lines.covered` of the baseline |
+| A branch difference | `branches` of the report differs from `branches` of the baseline, in covered or in total |
+| Where the information goes | stdout of `compare`, one line per file; the drops go to stderr, as today |
+| The baseline | one run of `npm run coverage`, then `npm run coverage:baseline`; the task deletes the old file first |
 | The feature flag | none; the `flag-discipline` default of this repository is off |
 
 ## 3. Reference patterns
 
-Files to imitate: N/A — the module that this task extends is new in this branch. Its own shape
+Files to imitate: N/A — the module that this task changes is new in this branch. Its own shape
 is the pattern.
 
 Rules to obey: `.agent/conventions.md`, `CLAUDE.md`, `docs/language.md`, `docs/glossary.md`,
@@ -82,7 +81,6 @@ Rules to obey: `.agent/conventions.md`, `CLAUDE.md`, `docs/language.md`, `docs/g
 |---|---|---|---|
 | `backend/__tests__/coverage-baseline.ts` | modify | the `package.json` scripts | none (prose) |
 | `backend/__tests__/coverage-baseline.test.ts` | modify | the backend suite | none (body by TDD) |
-| `backend/package.json` | modify | `npm run coverage:sample` | prose (config) |
 | `backend/coverage-baseline.json` | modify | `npm run coverage:compare` | none (generated) |
 | `docs/superpowers/ledgers/2026-09-24-backend-without-processes.md` | modify | the judges of slices 2 to 8 | Final text |
 | `backend/conventions/this-repository.md` | modify | every later slice | Final text |
@@ -92,46 +90,42 @@ Rules to obey: `.agent/conventions.md`, `CLAUDE.md`, `docs/language.md`, `docs/g
 Consumes: `CoverageBaseline.measured`, `dropsAgainst`, `write` and `main`, which the first plan
 of #549 produced.
 
-Produces: `CoverageBaseline.SAMPLES` (`5`) and `CoverageBaseline.SAMPLE_DIR`.
-`CoverageBaseline.sampled(runs: readonly Record<string, FileCoverage>[]): Baseline`.
-`Baseline` becomes `{ instrument, files, unstable }`, and `write` takes a `Baseline`.
-The verb `sample` of `main`, and the script `coverage:sample` of `backend/package.json`.
+Produces: `CoverageBaseline.branchDifferences(baseline, measured): string[]`.
+`dropsAgainst(baseline, measured): string[]` now names line drops and missing files only.
 
 ## 6. Test strategy
 
 The task runs `npm run typecheck` and `npx vitest run` over its files, from `backend/`, with
-`env -u CT_STATE_DIR` in front. `sampled` gets literal runs in its tests, so no test runs `c8`.
-The five measurements run in the task itself, and the global verification runs one more.
+`env -u CT_STATE_DIR` in front. Literal tallies drive the tests, so no test runs `c8`. The task
+runs `npm run coverage` once to write the baseline, and the global verification runs it again.
 
 ## 7. Tasks
 
-### Task 1 — the unstable list, measured over five runs
+### Task 1 — covered lines are the gate, and branches are information
 
-**Objective:** The baseline floors each file whose counts vary between five runs at its minimum,
-and keeps every other floor strict.
+**Objective:** `npm run coverage:compare` fails only on a covered line that a file lost, and
+prints every branch difference.
 
 **Files:** `backend/__tests__/coverage-baseline.ts` and `backend/__tests__/coverage-baseline.test.ts`
-(modify). Also `backend/package.json`, `backend/coverage-baseline.json`,
+(modify). Also `backend/coverage-baseline.json`,
 `docs/superpowers/ledgers/2026-09-24-backend-without-processes.md` and
 `backend/conventions/this-repository.md` (modify).
 
 No code — the module lives under `backend/__tests__`, so its signatures travel in prose.
 
-`sampled` throws unless it gets `SAMPLES` runs. It puts a file with equal counts in every run in
-`files`. It puts any other file in `unstable`, with the floor of §2. `dropsAgainst` compares a
-file of `unstable` with its floor the way it compares a file of `files`. The verb `sample`
-writes the measurement of `REPORT` to the next free `<n>.json` of `SAMPLE_DIR`. The verb `write`
-reads every sample there and gives them to `sampled`.
+`dropsAgainst` stops the comparison of ratios. It names a file whose `lines.covered` falls below
+its baseline, and a baseline file that the report lacks. `branchDifferences` names each file
+whose `branches` differ, with both tallies. The verb `compare` writes the drops to stderr and
+sets exit code 1 when there is one. It writes the branch differences to stdout, and they never
+change the exit code.
 
-`package.json` adds the script `coverage:sample`, which is `node __tests__/coverage-baseline.ts sample`.
-Delete `backend/coverage-baseline.json` and `SAMPLE_DIR`. Then run five times
-`env -u CT_STATE_DIR npm run coverage && npm run coverage:sample`, and then
-`npm run coverage:baseline`. Commit the file it writes as it is.
+Delete `backend/coverage-baseline.json`. Then run `env -u CT_STATE_DIR npm run coverage` once,
+then `npm run coverage:baseline`. Commit the file it writes as it is.
 
 Final text (docs/superpowers/ledgers/2026-09-24-backend-without-processes.md):
 
 ```markdown
-The coverage floor: a file whose counts vary across the five runs that wrote `backend/coverage-baseline.json` sits in its `unstable` list, floored at its minimum covered count; that list only shrinks, and the slice that migrates a file's tests takes it out and measures its entry again.
+The coverage gate: while a test on `ProcessRatchet.LISTED` still launches a process, `npm run coverage:compare` fails only when the covered lines of a file drop below `backend/coverage-baseline.json`, and prints branch differences as information; at the close (#556), with that list empty, branches become a strict gate too.
 ```
 
 It goes after the paragraph that ends `reads each one.`, with a blank line on each side.
@@ -139,28 +133,27 @@ It goes after the paragraph that ends `reads each one.`, with a blank line on ea
 Final text (backend/conventions/this-repository.md):
 
 ```markdown
-The baseline comes from five runs: `npm run coverage` then `npm run coverage:sample`, five
-times, then `npm run coverage:baseline`.
+While a test still launches a process, the comparison gates covered lines only, and it prints
+branch differences without a failure.
 ```
 
 It goes after the paragraph that ends `says what it leaves out and why.`, with a blank line.
 
-**TDD:** `it('a_file_whose_counts_vary_between_runs_is_unstable_with_the_minimum_covered_count_as_its_floor')`.
-Runs of `375/420` and `374/419` branches give the floor `374/420`.
+**TDD:** `it('a_file_whose_covered_lines_fall_below_its_baseline_is_a_drop_and_an_equal_count_is_not')`.
+Its boundary: 88 covered against 89 is a drop, and 89 against 89 is not.
 
-**Tests:** added: that one, and `'a_file_whose_counts_are_identical_in_all_five_runs_is_stable_and_keeps_its_strict_floor'`,
-`'an_unstable_file_below_its_floor_is_a_drop_and_one_at_its_floor_is_not'`,
-`'a_baseline_is_refused_from_any_number_of_runs_but_five'`,
-`'the_committed_baseline_lists_no_file_as_both_stable_and_unstable'`. The two tests of the
-committed baseline read `files` and `unstable` together. Removed on purpose: none.
+**Tests:** added: that one, and `'a_branch_difference_is_printed_and_never_fails_the_comparison'`.
+Removed on purpose: `'a_file_whose_line_ratio_falls_below_its_baseline_is_a_drop_and_an_equal_ratio_is_not'`,
+`'a_branch_drop_is_named_even_when_every_line_holds'`. Both pin the ratio rule that this task
+retires.
 
 **Verification:** The rule holds in its tests, and a fresh run holds against the new baseline.
 
 ```bash
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/coverage-baseline.test.ts __tests__/ledger.test.ts __tests__/yardstick.test.ts   # expected: exit 0
-cd backend && env -u CT_STATE_DIR npm run coverage && npm run coverage:compare   # expected: exit 0 — no drop
-test "$(grep -c '"unstable"' backend/coverage-baseline.json)" -eq 1   # expected: exit 0 — the list exists
+cd backend && env -u CT_STATE_DIR npm run coverage && npm run coverage:compare   # expected: exit 0 — no line drop
+test "$(grep -c '"unstable"' backend/coverage-baseline.json)" -eq 0   # expected: exit 0 — no unstable list
 ```
 
 ## 8. Global verification
@@ -181,9 +174,9 @@ test -z "$(git status --porcelain -- plugin frontend)"   # expected: exit 0 — 
 
 1. §2 quotes each frozen decision inside a code span, as the first plan does: the gate of
    Simplified Technical English refuses their exact words. Provenance: own call.
-2. The floor of an unstable file takes the maximum total beside the minimum covered count. The
-   rule names only the covered count, and totals vary too. The lower ratio is the safe side.
-   Provenance: own call.
+2. Two attempts of this task implemented earlier rules, and the owner replaced both. Their
+   uncommitted work went back to the committed state before this rewrite. A patch of it stays in
+   the scratchpad of the session. Provenance: the coordinating session.
 3. The first run sits in `.agent/run-549-first-run/`, untouched. Provenance: the coordinating
    session.
 4. `backend/coverage-baseline.json` exists already, and `write` refuses to overwrite it. The task
