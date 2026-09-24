@@ -245,6 +245,14 @@ describe('HarvestClock', () => {
     ])
   })
 
+  it('a_slice_whose_worktree_and_branch_were_already_gone_says_nothing_was_collected', async () => {
+    const swept = await Sweeping.answering([[1, HarvestOutcome.NOTHING_LEFT]]).run()
+
+    expect(swept.written).toEqual([
+      'harvest #1: nothing left to collect, its worktree and branch were already gone, so no harvest is recorded\n',
+    ])
+  })
+
   it('a_collected_slice_whose_harvest_could_not_be_recorded_says_so_and_the_next_workspace_is_still_collected', async () => {
     const swept = await Sweeping.answering([
       [1, new HarvestNotRecorded('/state/harness/x/harvest.json could not be written: Error: disk full')],

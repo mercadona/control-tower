@@ -41,7 +41,9 @@ export class HarvestDelivery {
       root: params.prepared.located.root,
     })
     if (outcome === HarvestOutcome.COLLECTED) {
-      await this.records.recordHarvest({ issue: params.prepared.issueNumber, repository: params.repository })
+      await this.records.recordHarvest({
+        issue: params.prepared.issueNumber, repository: params.repository, located: params.prepared.located,
+      })
     }
     return new HarvestDeliveryResult({ outcome })
   }

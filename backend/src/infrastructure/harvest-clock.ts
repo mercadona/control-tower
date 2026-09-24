@@ -29,6 +29,8 @@ export class SweepLine {
   static #BY_OUTCOME = new Projection<(prepared: PreparedWorkspace) => string | null, HarvestOutcomeValue>('harvest outcome sweep line', [
     [HarvestOutcome.WAITING, () => SweepLine.SILENT],
     [HarvestOutcome.COLLECTED, (prepared: PreparedWorkspace) => `harvest #${prepared.issueNumber}: collected\n`],
+    [HarvestOutcome.NOTHING_LEFT, (prepared: PreparedWorkspace) =>
+      `harvest #${prepared.issueNumber}: nothing left to collect, its worktree and branch were already gone, so no harvest is recorded\n`],
     [HarvestOutcome.KEPT, (prepared: PreparedWorkspace) =>
       `harvest #${prepared.issueNumber}: kept, the plugin refused to delete because the disk disagrees with the merged pull request; look at ${prepared.located.path}\n`],
     [HarvestOutcome.PARTIAL, (prepared: PreparedWorkspace) =>

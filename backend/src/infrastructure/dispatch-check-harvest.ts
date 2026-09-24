@@ -18,7 +18,7 @@ export class DispatchCheckHarvest extends Harvest {
   static readonly LEDGER_REFUSED = 11
 
   static readonly #BY_CODE = Object.freeze<Record<number, HarvestProjection | undefined>>({
-    [DispatchCheckHarvest.COLLECTED]: () => HarvestOutcome.COLLECTED,
+    [DispatchCheckHarvest.COLLECTED]: (said, issueNumber) => DispatchCheckHarvest.#succeeded(said, issueNumber),
     [DispatchCheckHarvest.WAITING]: (said, issueNumber) => DispatchCheckHarvest.#waiting(said, issueNumber),
     [DispatchCheckHarvest.USAGE_REFUSED]: (said, issueNumber) => {
       throw new HarvestNotUnderstood(
@@ -90,6 +90,14 @@ export class DispatchCheckHarvest extends Harvest {
     }
 
     return projected(said, issueNumber)
+  }
+
+  static #succeeded(said: ProcessOutput, issueNumber: number): HarvestOutcomeValue {
+    if (said.stdout.startsWith(`collected #${issueNumber}: `)) return HarvestOutcome.COLLECTED
+    if (said.stdout.startsWith(`nothing left for #${issueNumber}: `)) return HarvestOutcome.NOTHING_LEFT
+    throw new HarvestNotUnderstood(
+      `${DispatchCheckHarvest.COMMAND} exited ${DispatchCheckHarvest.COLLECTED} for #${issueNumber} naming neither a collection nor nothing left, so it cannot pass for a merged slice: ${DispatchCheckHarvest.#printed(said)}`
+    )
   }
 
   static #waiting(said: ProcessOutput, issueNumber: number): HarvestOutcomeValue {

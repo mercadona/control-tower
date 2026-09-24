@@ -70,7 +70,11 @@ harvest removes a worktree only when its pull request is `MERGED`
   nothing is written.
 - **Where.** `harness/<conversation>/harvest.json`, next to `dispatch.json`. The
   conversation is the record of `harness/` whose repository and issue number
-  match the harvested workspace. `DiskPlanRecords` already refuses two records
+  match the harvested workspace, and whose checkout and worktree are the ones
+  just collected; a record cut elsewhere gets nothing. `dispatch-check` exits 0
+  both for a collection and for *nothing left* (no worktree and no branch, found
+  before the pull request is even read), so the adapter tells them apart by the
+  line it prints, and *nothing left* writes no receipt. `DiskPlanRecords` already refuses two records
   for the same slice. A worktree with no record — one the backend did not
   dispatch — gets no receipt, and its harvest behaves as today.
 - **What.** `{"version": 1, "at": "<ISO timestamp>"}`. The pull request is not

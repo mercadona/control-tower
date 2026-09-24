@@ -320,7 +320,10 @@ and last text (nullable).
 `finished` answers for a slice that is no longer in flight and whose harvest
 this backend recorded: when the sweep collects a merged slice it writes
 `harness/<conversation>/harvest.json` (`{"version":1,"at":"<ISO timestamp>"}`)
-beside its `dispatch.json`. `harvested_at` is that moment. `pull_request` is the
+beside its `dispatch.json`. Only a real collection counts — `dispatch-check`
+also exits 0 when it finds nothing left, which proves no merge, and that writes
+nothing — and only into the record whose checkout and worktree are the ones
+collected. `harvested_at` is that moment. `pull_request` is the
 one the slice's delivery receipt names, read from the journal alone, or `null`
 when the slice was delivered outside this backend. A harvest run by hand, or one
 that happened before this backend wrote receipts, leaves none, so that slice

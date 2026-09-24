@@ -379,7 +379,7 @@ export class DiskPlanRecords extends PlanRecords {
     return found
   }
 
-  async recordHarvest(asked: { issue: number, repository: RepositoryName }): Promise<void> {
+  async recordHarvest(asked: { issue: number, repository: RepositoryName, located: WorkspaceLocation }): Promise<void> {
     let found: PlanWatch | null
     try {
       found = this.#matching(await this.#descriptors(), asked)
@@ -389,7 +389,7 @@ export class DiskPlanRecords extends PlanRecords {
         `the harvest of ${asked.repository.text}#${asked.issue} could not be recorded: ${cause.message}`
       )
     }
-    if (found === null) return
+    if (found === null || !DiskPlanRecords.#cutAt(found, asked.located)) return
     const path = this.#harvestReceiptPath(found.agent)
     try {
       await this.files.writeOnce(path, HarvestReceiptRecord.text(this.now()))
@@ -580,6 +580,10 @@ export class DiskPlanRecords extends PlanRecords {
 
   #nonLaunchPath(agent: string): string {
     return join(this.files.root, DiskPlanRecords.DIRECTORY, agent, DiskPlanRecords.NON_LAUNCH)
+  }
+
+  static #cutAt(watch: PlanWatch, located: WorkspaceLocation): boolean {
+    return watch.located.root === located.root && watch.located.path === located.path
   }
 
   #harvestReceiptPath(agent: string): string {

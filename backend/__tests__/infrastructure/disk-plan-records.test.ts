@@ -58,6 +58,9 @@ class PlanRecordMother {
 
   static readonly HARVESTED_REPOSITORY = new RepositoryName('mercadona/control-tower-plugin')
   static readonly HARVESTED_AT = '2026-09-24T09:30:00.000Z'
+  static readonly HARVESTED_LOCATION = new WorkspaceLocation({
+    root: '/checkout', path: '/checkout/removed-worktree', branch: 'feat/332',
+  })
 
   static harvestReceipt(): string {
     return `{\n  "version": 1,\n  "at": "${PlanRecordMother.HARVESTED_AT}"\n}\n`
@@ -662,7 +665,7 @@ describe('DiskPlanRecords', () => {
     const receipt = await PlanRecordMother.seedHarvested(root)
 
     await PlanRecordMother.harvestedRecords(root).recordHarvest({
-      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
     })
 
     expect(await readFile(receipt, 'utf8')).toBe(PlanRecordMother.harvestReceipt())
@@ -674,7 +677,22 @@ describe('DiskPlanRecords', () => {
     const receipt = await PlanRecordMother.seedHarvested(root)
 
     await PlanRecordMother.harvestedRecords(root).recordHarvest({
-      issue: 333, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+      issue: 333, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
+    })
+
+    await expect(readFile(receipt, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it.each([
+    ['another checkout', new WorkspaceLocation({ root: '/other/checkout', path: '/checkout/removed-worktree', branch: 'feat/332' })],
+    ['another worktree', new WorkspaceLocation({ root: '/checkout', path: '/checkout/.worktrees/332', branch: 'feat/332' })],
+  ])('a harvest collected from %s than the recorded one writes nothing into that record', async (_case, located) => {
+    const root = await mkdtemp(join(tmpdir(), 'ct-plan-records-harvest-'))
+    roots.push(root)
+    const receipt = await PlanRecordMother.seedHarvested(root)
+
+    await PlanRecordMother.harvestedRecords(root).recordHarvest({
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located,
     })
 
     await expect(readFile(receipt, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -689,7 +707,7 @@ describe('DiskPlanRecords', () => {
     })
 
     const refusal = await PlanRecordMother.harvestedRecords(root, files).recordHarvest({
-      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
     }).catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(HarvestNotRecorded)
@@ -711,7 +729,7 @@ describe('DiskPlanRecords', () => {
     await damage(root)
 
     const refusal = await PlanRecordMother.harvestedRecords(root).recordHarvest({
-      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY,
+      issue: 332, repository: PlanRecordMother.HARVESTED_REPOSITORY, located: PlanRecordMother.HARVESTED_LOCATION,
     }).catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(HarvestNotRecorded)

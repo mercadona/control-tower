@@ -135,10 +135,12 @@ describe('HarvestDelivery', () => {
 
     await harvest.harvested()
 
-    expect(harvest.records.harvests).toEqual([{ issue: 42, repository: HarvestDouble.REPOSITORY }])
+    expect(harvest.records.harvests).toEqual([
+      { issue: 42, repository: HarvestDouble.REPOSITORY, located: HarvestDouble.PREPARED.located },
+    ])
   })
 
-  it.each<HarvestOutcomeValue>([HarvestOutcome.WAITING, HarvestOutcome.KEPT, HarvestOutcome.PARTIAL])(
+  it.each<HarvestOutcomeValue>([HarvestOutcome.WAITING, HarvestOutcome.KEPT, HarvestOutcome.PARTIAL, HarvestOutcome.NOTHING_LEFT])(
     'a_slice_the_plugin_answered_%s_for_is_not_recorded_as_harvested_because_its_worktree_may_still_stand',
     async (outcome) => {
       const harvest = HarvestDouble.answering(outcome)
