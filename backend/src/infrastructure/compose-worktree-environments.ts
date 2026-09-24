@@ -16,6 +16,7 @@ type FileAccess = {
 class ConfigurationNotChecked extends Error {}
 
 export class ComposeWorktreeEnvironments extends WorktreeEnvironments {
+  static readonly #DJANGO_TARGETS = ['env-start', 'collectstatic', 'compilemessages'] as const
   readonly git: ToolLaunch
   readonly make: ToolLaunch
   readonly docker: (argv: string[], cwd: string) => Promise<ProcessOutput>
@@ -117,9 +118,20 @@ export class ComposeWorktreeEnvironments extends WorktreeEnvironments {
         }
       }
       if (!mounted) throw new ConfigurationNotChecked('No /app mount was found; this environment has not been checked')
+      if (findings.length === 0) await this.#prepareDjango(expanded.stdout, asked.path)
       return this.#result(asked, revision, findings.length ? PreparationState.REQUIRED : PreparationState.COMPATIBLE, findings)
     } catch (error) {
       return this.#unreadable(asked, revision, error)
+    }
+  }
+
+  async #prepareDjango(database: string, worktree: string): Promise<void> {
+    if (!ComposeWorktreeEnvironments.#DJANGO_TARGETS.every((target) => new RegExp(`^${target}\\s*:`, 'm').test(database))) return
+    for (const target of ComposeWorktreeEnvironments.#DJANGO_TARGETS) {
+      const output = await this.make(['-C', worktree, '--no-print-directory', target])
+      if (output.failed) throw new ConfigurationNotChecked(
+        `make ${target} exited with code ${output.code}: ${[output.stdout.trim(), output.stderr.trim()].filter(Boolean).join('\n')}`
+      )
     }
   }
 

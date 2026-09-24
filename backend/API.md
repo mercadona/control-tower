@@ -72,9 +72,13 @@ For the Playground/Catalog layout, each freshly cut worktree receives an ignored
 the base configuration's published ports. Existing overrides are inspected, not
 overwritten. Make resolves `DOCKER_COMMAND`; the checker asks that Compose
 invocation for `config --no-env-resolution --format json`, then verifies the
-project name and `/app` bind mount before baseline execution. This does not start
-containers, read service env-file contents or verify live mounts. Normal workspace
-preparation cleanup still applies when preparation fails.
+project name and `/app` bind mount before baseline execution. When Make declares
+`env-start`, `collectstatic` and `compilemessages`, those targets then run in that
+order before the baseline or agent can start. A failed target returns the existing
+preparation refusal with the command and its diagnostic. Repositories without all
+three targets retain configuration-only preparation. Credential files are not
+copied and live mounts are not inspected. Normal workspace preparation cleanup
+still applies when preparation fails.
 
 Starts headless plan agents for a milestone. The request selects **every**
 admissible ready issue with the

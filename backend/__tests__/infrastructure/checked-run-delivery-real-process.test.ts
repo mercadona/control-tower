@@ -222,7 +222,8 @@ describe('checked run delivery with real git', () => {
     await expect(fixture.realDelivery().deliver(fixture.watch)).rejects.toThrow('checked release failed')
 
     expect(await fixture.externalState()).toMatchObject({ labels: ['status:in-progress'] })
-    expect(await fixture.realDelivery().inspect(fixture.watch)).toMatchObject({ kind: 'publishing' })
+    const inspected = await fixture.realDelivery().inspect(fixture.watch)
+    expect(inspected, JSON.stringify(inspected)).toMatchObject({ kind: 'publishing' })
   })
 
   it('keeps inspection read-only while a failed owned release result is pending and accepts its bound disposition', async () => {

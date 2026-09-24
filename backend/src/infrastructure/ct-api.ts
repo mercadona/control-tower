@@ -407,7 +407,7 @@ class CtApi {
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
     const preparation = new CheckRepositoryPreparation({
-      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
+      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make', { budgetMs: CtApi.#BASELINE_TIMEOUT_MS }), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
       reports: new SessionPreparationReports({
         sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
       }),
