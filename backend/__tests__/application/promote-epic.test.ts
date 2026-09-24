@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { PromoteEpic, PromoteEpicParams } from '../../src/application/actions/promote-epic.ts'
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
@@ -165,6 +166,7 @@ class Mother {
 }
 
 class Flow {
+  preparation = PreparationMother.check()
   read: ReadEpicGroomDouble
   issues: EpicIssuesDouble
 
@@ -179,6 +181,13 @@ class Flow {
 }
 
 describe('PromoteEpic', () => {
+  it('does not promote any issue while preparation is required', async () => {
+    const flow = new Flow()
+    flow.preparation = PreparationMother.check(PreparationMother.blocked())
+    await expect(flow.run()).rejects.toThrow(PreparationMother.blocked().summary)
+    expect(flow.issues.promoteAsked).toEqual([])
+  })
+
   it('it promotes the issues waiting at backlog and asks nothing of the ones that are not', async () => {
     const waiting = [Mother.backlogIssue(), Mother.noStatusLabelIssue()]
     const before = [...waiting, Mother.inProgressIssue(), Mother.closedBacklogIssue()]

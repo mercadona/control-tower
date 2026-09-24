@@ -83,6 +83,8 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (body.status === 'none') return { kind: 'none' }
   if (!namesACheckout(body)) return { kind: 'unavailable' }
   const target = targetOf(body)
+  if ('preparation' in body && (typeof body.preparation !== 'string' || body.preparation.length === 0)) return { kind: 'unavailable' }
+  const preparation = typeof body.preparation === 'string' ? { preparation: body.preparation } : {}
   if (body.status === 'no-spec') return { kind: 'no-spec', target }
   if (body.status === 'draft') return { kind: 'draft', target }
   if (body.status === 'awaiting-publication') {
@@ -122,10 +124,11 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     }
   }
   if (body.status === 'groomed' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
-    return { kind: 'groomed', target, milestone: body.milestone, issues: body.issues, key: keyOf(body) }
+    return { kind: 'groomed', target, milestone: body.milestone, issues: body.issues, key: keyOf(body), ...preparation }
   }
   if (body.status === 'authorised' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
-    return { kind: 'authorised', target, milestone: body.milestone, issues: body.issues }
+    return { kind: 'authorised', target, milestone: body.milestone, issues: body.issues, ...preparation,
+      ...(preparation.preparation === undefined ? {} : { key: keyOf(body) }) }
   }
   return { kind: 'unavailable' }
 }

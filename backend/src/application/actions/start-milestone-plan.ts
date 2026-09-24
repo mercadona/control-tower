@@ -1,4 +1,5 @@
 import { PlanStarted } from './start-plan.ts'
+import type { CheckRepositoryPreparation } from './check-repository-preparation.ts'
 import {
   PlanAgentNotLaunched, PlanFailure, PlanIssueNotClaimed, WorkspaceNotCleaned,
 } from '../../domain/exceptions.ts'
@@ -66,6 +67,7 @@ export class StartMilestonePlan {
   readonly agents: PlanAgents
   readonly records: PlanRecords
   readonly checkouts: CheckoutRegistry
+  readonly preparation: CheckRepositoryPreparation
 
   constructor(ports: {
     candidates: DispatchCandidates,
@@ -74,6 +76,7 @@ export class StartMilestonePlan {
     agents: PlanAgents,
     records: PlanRecords,
     checkouts: CheckoutRegistry,
+    preparation: CheckRepositoryPreparation,
   }) {
     this.candidates = ports.candidates
     this.claims = ports.claims
@@ -81,6 +84,7 @@ export class StartMilestonePlan {
     this.agents = ports.agents
     this.records = ports.records
     this.checkouts = ports.checkouts
+    this.preparation = ports.preparation
   }
 
   async execute(params: StartMilestonePlanParams): Promise<StartMilestonePlanResult> {
@@ -91,6 +95,7 @@ export class StartMilestonePlan {
 
     const started: PlanStarted[] = []
     const failed: SliceNotStarted[] = []
+    if (admissible.length > 0) await this.preparation.execute({ root, repository: params.repository })
     for (const issue of admissible) {
       try {
         started.push(await this.#start({ issue, repository: params.repository, root }))

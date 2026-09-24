@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { lstat as realLstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -151,8 +152,11 @@ class GitDouble {
     this.remoteHead = remoteHead ?? GitDouble.printing(`ref: refs/heads/${GitDouble.BASE}\tHEAD\n`)
   }
 
+  preparation = PreparationMother.check()
+
   workspace(): GitWorkspace {
     return new GitWorkspace({
+      preparation: this.preparation,
       baseline: this.baseline,
       gh: this.gh(),
       read: (path) => {
@@ -296,6 +300,14 @@ class GitDouble {
 }
 
 describe('GitWorkspace', () => {
+  it('checks the local environment before measuring the baseline', async () => {
+    const git = new GitDouble()
+    git.preparation = PreparationMother.check(PreparationMother.blocked())
+    await expect(git.prepared()).rejects.toThrow(PreparationMother.blocked().summary)
+    expect(git.baseline.measured).toEqual([])
+    expect(git.written).toEqual([])
+  })
+
   it('the default branch is fetched before cutting the worktree', async () => {
     const git = new GitDouble()
 
@@ -720,6 +732,7 @@ describe('GitWorkspace', () => {
   it('a_common_dir_it_cannot_resolve_stops_the_seeding_because_the_state_would_be_visible_to_git', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: git.baseline,
       gh: git.gh(),
       read: () => Promise.resolve(null),
@@ -805,6 +818,7 @@ describe('GitWorkspace', () => {
   it('a_remote_base_it_cannot_verify_stops_before_writing_a_state_without_a_cut', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: git.baseline,
       gh: git.gh(),
       read: () => Promise.resolve(null),
@@ -898,6 +912,7 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
   it('a_common_dir_git_refuses_to_resolve_still_gets_the_worktree_and_branch_undone', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: git.baseline,
       gh: git.gh(),
       read: () => Promise.resolve(null),
@@ -1024,6 +1039,7 @@ class UnlaunchedWorkspaceDouble {
 
   workspace(): GitWorkspace {
     return new GitWorkspace({
+      preparation: PreparationMother.check(),
       baseline: new BaselineDouble(),
       stderr: () => {},
       write: async () => {},

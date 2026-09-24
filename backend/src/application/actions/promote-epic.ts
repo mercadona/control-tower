@@ -5,6 +5,7 @@ import type { RepositoryName } from '../../domain/value-objects/repository-name.
 import type { EpicIssues } from '../../domain/ports/epic-issues.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
+import type { CheckRepositoryPreparation } from './check-repository-preparation.ts'
 
 export class PromoteEpicParams {
   readonly root: CheckoutRoot
@@ -46,10 +47,12 @@ export class EpicPromoted {
 export class PromoteEpic {
   readonly read: ReadEpicGroom
   readonly issues: EpicIssues
+  readonly preparation: CheckRepositoryPreparation
 
-  constructor({ read, issues }: { read: ReadEpicGroom, issues: EpicIssues }) {
+  constructor({ read, issues, preparation }: { read: ReadEpicGroom, issues: EpicIssues, preparation: CheckRepositoryPreparation }) {
     this.read = read
     this.issues = issues
+    this.preparation = preparation
   }
 
   async execute(params: PromoteEpicParams): Promise<EpicPromoted> {
@@ -66,6 +69,7 @@ export class PromoteEpic {
     }
 
     const waiting = before.issues.filter((issue) => issue.isPromotable())
+    await this.preparation.execute(params)
     for (const issue of waiting) {
       await this.issues.promote({ repository: params.repository, issue })
     }

@@ -16,8 +16,8 @@ export type EpicGroomOutcome =
       kind: 'partially-groomed'; target: string | null; milestone: string; plan: GroomPlanIssue[];
       planFingerprint: string; issues: EpicIssue[]; key: string | null;
     }
-  | { kind: 'groomed'; target: string | null; milestone: string; issues: EpicIssue[]; key: string | null }
-  | { kind: 'authorised'; target: string | null; milestone: string; issues: EpicIssue[] }
+  | { kind: 'groomed'; target: string | null; milestone: string; issues: EpicIssue[]; key: string | null; preparation?: string }
+  | { kind: 'authorised'; target: string | null; milestone: string; issues: EpicIssue[]; key?: string | null; preparation?: string }
   | { kind: 'refused'; code: string; error: string } | { kind: 'unavailable' }
 export type ReslicingOutcome =
   | { kind: 'published'; pullRequest: EpicPullRequest }

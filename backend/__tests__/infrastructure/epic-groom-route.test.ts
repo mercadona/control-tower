@@ -1,4 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
+import { CheckRepositoryPreparation } from '../../src/application/actions/check-repository-preparation.ts'
+import { WorktreeEnvironments } from '../../src/domain/ports/worktree-environments.ts'
+import { SessionPreparationReports } from '../../src/infrastructure/session-preparation-reports.ts'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import express from 'express'
@@ -371,10 +375,11 @@ class RunningApi {
     groom: GroomEpic,
     key: GateKey,
     inFlight: WorkInFlight = new WorkInFlight(),
-    stderr: (line: string) => void = (): void => {}
+    stderr: (line: string) => void = (): void => {},
+    preparation: CheckRepositoryPreparation | null = null,
   ): Promise<number> {
     const app = express()
-    app.get(RunningApi.PATH, Browsers.turnAwayForeign, EpicGroomRoute.reading(held, read, key))
+    app.get(RunningApi.PATH, Browsers.turnAwayForeign, EpicGroomRoute.reading(held, read, key, preparation))
     app.post(RunningApi.PATH, EpicGroomRoute.grooming(held, groom, key, inFlight, stderr))
     app.all(RunningApi.PATH, EpicGroomRoute.refuseOtherMethods)
     return RunningServers.listening(app)
@@ -419,6 +424,25 @@ afterEach(async () => {
 })
 
 describe('EpicGroomRoute', () => {
+  it('an authorized milestone exposes a pending preparation diagnosis and a key to recheck', async () => {
+    const held = Mother.live()
+    const reports = new SessionPreparationReports({ sessions: () => held, stderr: () => {} })
+    await reports.announce({ root: Mother.ROOT, repository: Mother.REPOSITORY, path: '/repo/.worktrees/1', preparation: PreparationMother.blocked() })
+    const preparation = new CheckRepositoryPreparation({ environments: new WorktreeEnvironments(), reports })
+    const port = await RunningApi.listening(held,
+      ReadEpicGroomSpy.answering(Mother.authorisedRead([Mother.readyIssue()])), GroomEpicSpy.neverAsked(),
+      Keys.minted(), new WorkInFlight(), () => {}, preparation)
+    const response = await RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'authorised', target: Mother.TARGET, key: Keys.MINTED,
+      preparation: PreparationMother.blocked().summary,
+      milestone: Mother.MILESTONE,
+      issues: [{ number: 2, url: `https://github.com/${Mother.REPOSITORY.text}/issues/2`,
+        title: 'already promoted to status:ready', status: 'ready' }],
+    })
+  })
+
   it('the read hands the gate key only at a rung with something to press', async () => {
     const key = Keys.minted()
     const groomablePort = await RunningApi.listening(

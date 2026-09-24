@@ -24,7 +24,7 @@ const restsAt = (outcome: EpicGroomOutcome): boolean => RESTING_KINDS.includes(o
 const isWorthWatching = (outcome: EpicGroomOutcome): boolean =>
   A_CONVERSATION_CAN_STILL_CHANGE.includes(outcome.kind)
 
-const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = null): EpicGroomRead => {
+const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = null, watchPreparation = false): EpicGroomRead => {
   const [read, setRead] = useState<EpicGroomRead>(CONNECTING)
 
   useEffect(() => {
@@ -41,7 +41,8 @@ const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = nul
         return
       }
       setRead({ phase: 'read', ...outcome })
-      if (restsAt(outcome) && !(isReviewingTheSlicing && isWorthWatching(outcome))) return
+      const preparationCanChange = watchPreparation && (outcome.kind === 'groomed' || outcome.kind === 'authorised')
+      if (restsAt(outcome) && !preparationCanChange && !(isReviewingTheSlicing && isWorthWatching(outcome))) return
       timer = window.setTimeout(poll, POLL_INTERVAL_MS)
     }
 
@@ -51,7 +52,7 @@ const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = nul
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [isReviewingTheSlicing, target])
+  }, [isReviewingTheSlicing, target, watchPreparation])
 
   return read
 }

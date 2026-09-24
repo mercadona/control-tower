@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
 import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
@@ -128,6 +129,7 @@ describe('GitWorkspace real cleanup', () => {
       const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000 })
       const action = (): CleanupPlan => {
         const workspace = new GitWorkspace({
+          preparation: PreparationMother.check(),
           run: async (argv) => {
             if (JSON.stringify(argv) === JSON.stringify([
               '-C', root, 'ls-remote', '--heads', 'origin', 'feat/331',
@@ -337,6 +339,7 @@ describe('GitWorkspace real cleanup', () => {
     })
     const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000 })
     const workspace = new GitWorkspace({
+      preparation: PreparationMother.check(),
       run: runner.run.bind(runner),
       write: async () => {},
       read: async () => null,

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { describe, expect, it } from 'vitest'
+import { PreparationMother } from '../preparation-mother.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { ContinuePlan } from '../../src/application/actions/continue-plan.ts'
 import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
@@ -588,6 +589,7 @@ describe('headless dispatch dry run', () => {
       },
     })
     const workspace = new GitWorkspace({
+      preparation: PreparationMother.check(),
       run: boundaries.git,
       write: async (path, text) => {
         await fs.mkdir(dirname(path), { recursive: true })
@@ -604,6 +606,7 @@ describe('headless dispatch dry run', () => {
     })
     const checkouts = new RememberingCheckouts()
     const start = new StartMilestonePlan({
+      preparation: PreparationMother.check(),
       candidates: new GhDispatchCandidates({ gh }),
       claims: new DispatchCheckClaims({ node: boundaries.node, dispatchCheck: '/plugin/dispatch-check.mjs' }),
       workspace,

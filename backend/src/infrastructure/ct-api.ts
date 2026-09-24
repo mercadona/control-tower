@@ -37,6 +37,9 @@ import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
 import { SessionChangeAnnouncements } from './session-change-announcements.ts'
+import { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
+import { ComposeWorktreeEnvironments } from './compose-worktree-environments.ts'
+import { SessionPreparationReports } from './session-preparation-reports.ts'
 import { SessionClosureAnnouncements } from './session-closure-announcements.ts'
 import { CoordinatingSessionRecovery } from './coordinating-session-recovery.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
@@ -423,7 +426,15 @@ class CtApi {
     CtApi.#publishStateRoot(asked.stateRoot, environment)
     const git = CtApi.#tool(GitWorkspace.BIN)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const docker = new ToolRunner({ bin: 'docker', budgetMs: CtApi.#PROCESS_TIMEOUT_MS })
+    const preparation = new CheckRepositoryPreparation({
+      environments: new ComposeWorktreeEnvironments({ git, make: CtApi.#tool('make'), docker: (argv, cwd) => docker.run(argv, { cwd }), files: fs }),
+      reports: new SessionPreparationReports({
+        sessions: () => coordinatingSessions, stderr: (line) => process.stderr.write(line),
+      }),
+    })
     const workspace = new GitWorkspace({
+      preparation,
       run: git,
       gh,
       write: Disk.write,
@@ -707,9 +718,10 @@ class CtApi {
       revisions: specRevisions,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
-    const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
+    const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues, preparation })
     const startsInFlight = new WorkInFlight()
     const startMilestonePlan = new StartMilestonePlan({
+      preparation,
       candidates: new GhDispatchCandidates({ gh }),
       claims,
       workspace,
@@ -732,6 +744,7 @@ class CtApi {
       isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
     })
     const server = new ApiServer({
+      preparation,
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories, records, claims),
       startMilestonePlan,

@@ -26,6 +26,8 @@ export class PlanIssueNotClaimed extends PlanIssueFailure {}
 
 export class DispatchFailure extends PlanFailure {}
 
+export class RepositoryPreparationRequired extends PlanFailure {}
+
 export class DispatchNotAvailable extends DispatchFailure {}
 
 export class DispatchNotRead extends DispatchFailure {}

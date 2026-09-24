@@ -472,6 +472,12 @@ export class ActualHeadlessRuntime {
     await writeFile(join(bin, 'git'), [
       '#!/bin/sh',
       'if [ "$3" = "fetch" ]; then exit 0; fi',
+      'if [ "$3" = "ls-remote" ]; then',
+      '  if [ "$4" != "--symref" ] || [ "$5" != "origin" ] || [ "$6" != "HEAD" ]; then exit 2; fi',
+      '  revision=$("$CT_REAL_GIT" -C "$2" rev-parse refs/remotes/origin/main) || exit 1',
+      '  printf "%s\\tHEAD\\n" "$revision"',
+      '  exit 0',
+      'fi',
       'exec "$CT_REAL_GIT" "$@"',
     ].join('\n') + '\n', { mode: 0o755 })
     await writeFile(join(bin, 'claude'), [

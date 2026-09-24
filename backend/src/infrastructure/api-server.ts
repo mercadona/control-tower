@@ -21,6 +21,7 @@ import { SpecFreezeRoute } from './spec-freeze-route.ts'
 import { SpecReslicingRoute } from './spec-reslicing-route.ts'
 import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
+import type { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
 import { RecoverPlanRoute } from './recover-plan-route.ts'
 import { CleanupPlanRoute } from './cleanup-plan-route.ts'
 import { SliceEscalationRoute } from './slice-escalation-route.ts'
@@ -144,6 +145,7 @@ export type ApiCollaborators = {
   groomEpic?: GroomEpic | null,
   epicGroomInFlight?: WorkInFlight | null,
   promoteEpic?: PromoteEpic | null,
+  preparation?: CheckRepositoryPreparation | null,
   sliceMessage?: SliceChangeAsked | null,
   sliceHeldChange?: SliceChangeHeld | null,
   anotherRound?: AnotherRoundAsked | null,
@@ -216,6 +218,7 @@ export class ApiServer {
   readonly groomEpic: GroomEpic | null | undefined
   readonly epicGroomInFlight: WorkInFlight | null | undefined
   readonly promoteEpic: PromoteEpic | null | undefined
+  readonly preparation: CheckRepositoryPreparation | null | undefined
   readonly sliceMessage: SliceChangeAsked | null | undefined
   readonly sliceHeldChange: SliceChangeHeld | null | undefined
   readonly anotherRound: AnotherRoundAsked | null | undefined
@@ -230,7 +233,7 @@ export class ApiServer {
     watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
-    publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
+    publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic, preparation,
     sliceMessage, sliceHeldChange, anotherRound, sliceEscalation, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
@@ -267,6 +270,7 @@ export class ApiServer {
     this.groomEpic = groomEpic
     this.epicGroomInFlight = epicGroomInFlight
     this.promoteEpic = promoteEpic
+    this.preparation = preparation
     this.sliceMessage = sliceMessage
     this.sliceHeldChange = sliceHeldChange
     this.anotherRound = anotherRound
@@ -441,7 +445,7 @@ export class ApiServer {
       ))
     app.all(SpecReslicingRoute.PATH, SpecReslicingRoute.refuseOtherMethods)
     app.get(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
-      EpicGroomRoute.reading(this.coordinatingSessions!, this.readEpicGroom!, this.gateKey!))
+      EpicGroomRoute.reading(this.coordinatingSessions!, this.readEpicGroom!, this.gateKey!, this.preparation ?? null))
     app.post(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
       EpicGroomRoute.grooming(this.coordinatingSessions!, this.groomEpic!, this.gateKey!, this.epicGroomInFlight!, this.stderr!))
     app.all(EpicGroomRoute.PATH, EpicGroomRoute.refuseOtherMethods)
