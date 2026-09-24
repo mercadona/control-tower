@@ -13,11 +13,15 @@ export type WorkProgress =
   | { phase: 'planning'; plan: WorkReading<'writing' | 'ready'>; activity: WorkReading<PlanningActivity> }
   | { phase: 'implementing'; execution: WorkExecutionReading }
   | { phase: 'uncertain'; diagnostic: string; recovery: { action: RecoveryAction; detail: string }; refusal: PlanRefusal | null; execution: WorkExecutionReading }
+  | { phase: 'finished'; harvestedAt: string; pullRequest: DeliveredPullRequest | null }
+
+export type DeliveredPullRequest = { number: number; url: string }
 
 export type WorkIdentity = { repo: string; issue: number; agent: string }
 export type WorkSnapshot = WorkIdentity & { progress: WorkProgress }
 export type WorkProgressOutcome =
   | { kind: 'read'; snapshot: WorkSnapshot }
+  | { kind: 'not-found'; detail: string }
   | { kind: 'unavailable'; detail: string }
 
 export type WorkProgressRead =
@@ -25,3 +29,8 @@ export type WorkProgressRead =
   | { kind: 'read'; snapshot: WorkSnapshot }
   | { kind: 'stale'; snapshot: WorkSnapshot; detail: string }
   | { kind: 'unavailable'; detail: string }
+
+export type WorkConclusion =
+  | { kind: 'checking' }
+  | { kind: 'finished'; pullRequest: DeliveredPullRequest | null }
+  | { kind: 'not-found' }

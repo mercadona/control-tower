@@ -6,7 +6,7 @@ export class WorkProgressPresentation {
     if (read.kind === 'connecting') return { phase: 'connecting' }
     if (read.kind === 'unavailable') return { phase: 'unreachable' }
     const progress = read.snapshot.progress
-    if (progress.phase === 'planning') return { phase: 'waiting' }
+    if (progress.phase === 'planning' || progress.phase === 'finished') return { phase: 'waiting' }
     if (progress.phase === 'uncertain' && progress.execution.kind === 'unavailable') return { phase: 'waiting' }
     if (progress.execution.kind === 'unavailable') return { phase: 'failed', error: progress.execution.detail }
     return { phase: progress.execution.kind === 'partial' ? 'partial' : 'progress', ...progress.execution.value }

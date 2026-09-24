@@ -82,6 +82,18 @@ class HeadlessPlanMother {
     }
   }
 
+  static slicesInFlightWithOneElsewhere(root: string, elsewhere: number, ...issues: number[]): Answer {
+    const other = HeadlessPlanMother.slice(elsewhere)
+    return {
+      status: 200,
+      body: JSON.stringify({ plans: [...issues.map((issue) => HeadlessPlanMother.slice(issue)), {
+        ...other,
+        request: { ...other.request, path: root },
+        plan: { ...other.plan, worktree: `${root}/.worktrees/${elsewhere}` },
+      }] }),
+    }
+  }
+
   static planningAmong(planning: number, ...others: number[]): Answer {
     const plans = [planning, ...others].map((issue) => (issue === planning
       ? { ...HeadlessPlanMother.slice(issue), phase: 'planning' }

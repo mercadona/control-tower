@@ -11,6 +11,7 @@ import { WorkflowSnapshot, WORKFLOW_SNAPSHOT_KEY, WorkflowSnapshotStorage } from
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import {
+  UnscriptedWork,
   backendRecovering,
   openHome,
   openRestored,
@@ -52,7 +53,10 @@ const NO_COORDINATING_SESSION = CoordinatingSessionMother.none().body
 const NO_SPEC_FREEZE = SpecFreezeMother.none().body
 const NO_EPIC_GROOM = EpicGroomMother.none().body
 
-const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
+const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(
+  fetching: T,
+  concluded: (input: string) => { status: number; body: string } = UnscriptedWork.answer,
+) => {
   let plans: ActivePlan[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
@@ -63,7 +67,10 @@ const withReadyTools = <T extends (input: string | URL | Request, init?: Request
     if (String(input).startsWith('/work-progress/')) {
       const url = new URL(String(input), 'http://localhost')
       const active = plans.find((plan) => plan.plan.issue.number === Number(url.pathname.split('/')[2]) && plan.plan.repo === url.searchParams.get('repo'))
-      if (active === undefined) throw new Error(`no work fixture for ${String(input)}`)
+      if (active === undefined) {
+        const answer = concluded(String(input))
+        return new Response(answer.body, { status: answer.status })
+      }
       return new Response(WorkProgressMother.fromActive(active).body)
     }
     const response = await (init === undefined ? fetching(input) : fetching(input, init))
@@ -363,11 +370,11 @@ describe('Home · restore workflow', () => {
 
   it('should mark restored planning as stale without opening SSE', async () => {
     storeWorkflow('planning')
-    const fetching = backendRecovering(activePlansAnswer())
+    const fetching = backendRecovering(activePlansAnswer(), WorkProgressMother.fromActive, WorkProgressMother.notFound)
 
     openHome()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('backend o cmux ya no tiene este plan activo')
+    expect(await screen.findByRole('alert')).toHaveTextContent('El backend ya no tiene constancia de este plan')
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     expect(fetching).toHaveBeenCalledTimes(1)
@@ -409,7 +416,7 @@ describe('Home · restore workflow', () => {
 
   it('should mark restored ready as stale without sending duplicate implementation', async () => {
     storeWorkflow('ready')
-    const fetching = backendRecovering(activePlansAnswer())
+    const fetching = backendRecovering(activePlansAnswer(), WorkProgressMother.fromActive, WorkProgressMother.notFound)
 
     openHome()
 
@@ -713,7 +720,7 @@ describe('Home · restore workflow', () => {
 
   it('should discard stale storage and return to a fresh request', async () => {
     storeWorkflow('ready')
-    backendRecovering(activePlansAnswer())
+    backendRecovering(activePlansAnswer(), WorkProgressMother.fromActive, WorkProgressMother.notFound)
     const { user } = openHome()
     await screen.findByRole('alert')
 
@@ -730,7 +737,7 @@ describe('Home · restore workflow', () => {
     const fetching = vi.fn()
       .mockResolvedValueOnce(new Response(activePlansAnswer(live).body, { status: 200 }))
       .mockResolvedValueOnce(new Response(activePlansAnswer(live).body, { status: 200 }))
-    withReadyTools(fetching)
+    withReadyTools(fetching, WorkProgressMother.notFound)
     const { user } = openHome()
     await screen.findByRole('alert')
 

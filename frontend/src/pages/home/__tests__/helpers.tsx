@@ -54,7 +54,28 @@ const backendAnswering = (answer: Answer) => {
   return fetching
 }
 
-const backendRecovering = (answer: Answer, progress: (active: ActivePlan) => Answer = WorkProgressMother.fromActive) => {
+class UnscriptedWork {
+  static readonly asked: string[] = []
+
+  static answer(input: string): Answer {
+    UnscriptedWork.asked.push(input)
+    throw new Error(`nobody scripted what became of ${input}`)
+  }
+}
+
+beforeEach(() => {
+  UnscriptedWork.asked.splice(0)
+})
+
+afterEach(() => {
+  expect(UnscriptedWork.asked.splice(0)).toEqual([])
+})
+
+const backendRecovering = (
+  answer: Answer,
+  progress: (active: ActivePlan) => Answer = WorkProgressMother.fromActive,
+  concluded: (input: string) => Answer = UnscriptedWork.answer,
+) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
   const progressRequests = vi.fn((active: ActivePlan, _init?: RequestInit) => responseFor(progress(active)))
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
@@ -69,7 +90,7 @@ const backendRecovering = (answer: Answer, progress: (active: ActivePlan) => Ans
       const issue = Number(url.pathname.split('/')[2])
       const plans: ActivePlan[] = JSON.parse(answer.body).plans ?? []
       const active = plans.find((plan) => plan.plan.issue.number === issue && plan.plan.repo === url.searchParams.get('repo'))
-      if (active === undefined) throw new Error(`no progress fixture for ${String(input)}`)
+      if (active === undefined) return responseFor(concluded(String(input)))
       return progressRequests(active, init)
     }
     return init === undefined ? fetching(input) : fetching(input, init)
@@ -190,6 +211,7 @@ const openRestored = ({ phase, request = DEFAULT_RESTORED_REQUEST, plan = {} }: 
 }
 
 export {
+  UnscriptedWork,
   backendAnswering,
   backendRecovering,
   backendPending,

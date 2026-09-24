@@ -1,4 +1,5 @@
 import type { PlanWatch } from './plan-watch.ts'
+import type { DeliveredPullRequest } from './run-delivery.ts'
 import type { RunClosure } from './run-instruction.ts'
 import type { ImplementationState } from './implementation-state.ts'
 
@@ -12,6 +13,7 @@ export type WorkCondition =
     readonly refusal: RunClosure | null,
     readonly execution: ImplementationState | null,
   }
+  | { readonly phase: 'finished', readonly harvestedAt: string, readonly pullRequest: DeliveredPullRequest | null }
 
 export class TrackedWork {
   readonly watch: PlanWatch

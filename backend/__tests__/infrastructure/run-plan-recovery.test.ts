@@ -32,7 +32,7 @@ import { RegisteredCheckout } from '../../src/domain/value-objects/registered-ch
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { RunInstruction } from '../../src/domain/value-objects/run-instruction.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import type { RunDeliveryInspection } from '../../src/domain/value-objects/run-delivery.ts'
+import type { DeliveredPullRequest, RunDeliveryInspection } from '../../src/domain/value-objects/run-delivery.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
@@ -354,6 +354,10 @@ class StartupRunDelivery extends RunDelivery {
       ? { kind: 'delivered', pullRequest: { number: 31, url: 'https://github.com/owner/name/pull/31' } }
       : { kind: 'publishing', pullRequest: null, diagnostic: this.refuse ? 'checked release refused at startup' : null }
   }
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    throw new Error(`nobody scripted the recorded pull request of ${watch.agent}`)
+  }
+
 }
 
 class HeldRunDelivery extends RunDelivery {
@@ -368,6 +372,10 @@ class HeldRunDelivery extends RunDelivery {
   override async inspect(): Promise<RunDeliveryInspection> {
     return { kind: 'publishing', pullRequest: null, diagnostic: null }
   }
+  override async recordedPullRequest(watch: PlanWatch): Promise<DeliveredPullRequest | null> {
+    throw new Error(`nobody scripted the recorded pull request of ${watch.agent}`)
+  }
+
 
   finish(): void {
     this.#release?.()
@@ -571,7 +579,9 @@ describe('RunPlanRecovery projection', () => {
     delivery.inspection = { kind: 'uncertain', pullRequest: null, diagnostic: 'GitHub unavailable' }
     const tested = new ProjectionScenario([watch], delivery)
     const query = new ReadWorkProgress({
-      inventory: new InspectedWorkInventory({ inspection: tested.recovery, plans: tested.activePlans }),
+      inventory: new InspectedWorkInventory({
+        inspection: tested.recovery, plans: tested.activePlans, records: new PlanRecords(), delivery,
+      }),
       plans: new PlanProgress(), activities: new PlanningActivities(),
       implementation: { execute: async () => { throw new Error('known local completion must not depend on another remote read') } },
     })

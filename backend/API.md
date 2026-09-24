@@ -216,6 +216,7 @@ one of three variants:
 | `planning` | `plan`, `activity` |
 | `implementing` | `execution` |
 | `uncertain` | `diagnostic`, `recovery: {action, detail}`, `refusal`, `execution` |
+| `finished` | `harvested_at`, `pull_request` |
 
 A reading is `{kind:"available", value:...}` or
 `{kind:"unavailable", detail:"..."}`. Plan and activity are independent: one
@@ -265,6 +266,27 @@ and last text (nullable).
 }}
 ```
 
+**Finished example**
+
+```json
+{"repo":"owner/name","issue":7,"agent":"conversation-7","progress":{
+  "phase":"finished","harvested_at":"2026-09-24T09:30:00.000Z",
+  "pull_request":{"number":998,"url":"https://github.com/owner/name/pull/998"}
+}}
+```
+
+`finished` answers for a slice that is no longer in flight and whose harvest
+this backend recorded: when the sweep collects a merged slice it writes
+`harness/<conversation>/harvest.json` (`{"version":1,"at":"<ISO timestamp>"}`)
+beside its `dispatch.json`. Only a real collection counts — `dispatch-check`
+also exits 0 when it finds nothing left, which proves no merge, and that writes
+nothing — and only into the record whose checkout and worktree are the ones
+collected. `harvested_at` is that moment. `pull_request` is the
+one the slice's delivery receipt names, read from the journal alone, or `null`
+when the slice was delivered outside this backend. A harvest run by hand, or one
+that happened before this backend wrote receipts, leaves none, so that slice
+answers `work-not-found`. In-flight work always wins over a harvest receipt.
+
 The execution vocabulary remains `starting`, `implement`, `controls`, `judge`,
 `advise`, `commit`, `reconcile`, `global`, `slice-judge`, `e2e`, `publishing`,
 `delivered`, `in-review`, and `fixing`. Taskless steps carry null task/name/attempt.
@@ -279,8 +301,8 @@ publication can also carry an already-created pull request while release is pend
 | `malformed-work-issue` | issue is not a positive safe integer |
 | `malformed-work-repo` | repo is missing or malformed |
 | `unknown-work-field` | a query field other than repo was supplied |
-| `work-not-found` | no recorded work has this identity |
-| `work-not-read` | inventory evidence could not be inspected |
+| `work-not-found` | no recorded work has this identity in flight, and no harvest of it is recorded |
+| `work-not-read` | inventory evidence could not be inspected, a harvest receipt is unreadable, or a finished slice's delivery receipt cannot be proven |
 | `work-not-understood` | the recorded work lacks its checkout root |
 
 The frontend polls every three seconds after a response, or fifteen seconds for
@@ -441,6 +463,7 @@ The durable layout is:
 harness/<conversation>/dispatch.json
 harness/<conversation>/non-launch.json
 harness/<conversation>/cleanup-evidence.json
+harness/<conversation>/harvest.json
 harness/<conversation>/calls/<call>/call.json
 harness/<conversation>/calls/<call>/prompt.md
 harness/<conversation>/calls/<call>/stream.ndjson
@@ -449,7 +472,7 @@ harness/<conversation>/calls/<call>/completion.json
 retired-harness/<conversation>/...
 ```
 
-`dispatch.json`, `call.json`, `prompt.md` and `completion.json` are immutable
+`dispatch.json`, `harvest.json`, `call.json`, `prompt.md` and `completion.json` are immutable
 records; stream and stderr files are process output. Identity comes from the
 enclosing conversation and call directories. A descriptor records the
 conversation, purpose, nullable request identity, cwd, binary, argv, start time,
