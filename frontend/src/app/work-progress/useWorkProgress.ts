@@ -3,11 +3,12 @@ import { WorkProgressClient } from './client'
 import type { WorkIdentity, WorkProgress, WorkProgressRead } from './WorkProgress.types'
 
 const CONNECTING: WorkProgressRead = { kind: 'connecting' }
-const POLL_INTERVAL_MS = 3000
 const REVIEW_INTERVAL_MS = 15000
-const READ_TIMEOUT_MS = 10000
 
 class WorkPolling {
+  static readonly INTERVAL_MS = 3000
+  static readonly READ_TIMEOUT_MS = 10000
+
   static paused(read: WorkProgressRead): WorkProgressRead {
     return read.kind === 'read'
       ? { kind: 'stale', snapshot: read.snapshot, detail: 'El inventario del trabajo no está confirmado.' }
@@ -15,12 +16,14 @@ class WorkPolling {
   }
 
   static next(read: WorkProgressRead): number {
-    if (read.kind !== 'read' || read.snapshot.progress.phase !== 'implementing') return POLL_INTERVAL_MS
+    if (read.kind !== 'read' || read.snapshot.progress.phase !== 'implementing') return WorkPolling.INTERVAL_MS
     const execution = read.snapshot.progress.execution
-    if (execution.kind !== 'available') return POLL_INTERVAL_MS
-    return ['delivered', 'in-review', 'fixing'].includes(execution.value.step) ? REVIEW_INTERVAL_MS : POLL_INTERVAL_MS
+    if (execution.kind !== 'available') return WorkPolling.INTERVAL_MS
+    return ['delivered', 'in-review', 'fixing'].includes(execution.value.step) ? REVIEW_INTERVAL_MS : WorkPolling.INTERVAL_MS
   }
 }
+
+export { WorkPolling }
 
 export const useWorkProgress = (identity: WorkIdentity | null, enabled = true, phase: WorkProgress['phase'] | null = null): WorkProgressRead => {
   const repo = identity?.repo
@@ -45,8 +48,9 @@ export const useWorkProgress = (identity: WorkIdentity | null, enabled = true, p
     if (observedRef.current.key !== key) setObserved({ key, read: CONNECTING })
 
     const poll = async () => {
-      const outcome = await WorkProgressClient.get({ repo, issue, agent }, controller.signal, READ_TIMEOUT_MS)
+      const answered = await WorkProgressClient.get({ repo, issue, agent }, controller.signal, WorkPolling.READ_TIMEOUT_MS)
       if (controller.signal.aborted) return
+      const outcome = answered.kind === 'not-found' ? { kind: 'unavailable' as const, detail: answered.detail } : answered
       previous = outcome.kind === 'read'
         ? outcome
         : previous.kind === 'read' || previous.kind === 'stale'

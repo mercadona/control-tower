@@ -1,6 +1,8 @@
 import { WorkProgressContract } from './contract'
 import type { WorkIdentity, WorkProgressOutcome } from './WorkProgress.types'
 
+const NOT_FOUND = 'work-not-found'
+
 export class WorkProgressClient {
   static async get(identity: WorkIdentity, signal: AbortSignal, timeoutMs: number): Promise<WorkProgressOutcome> {
     try {
@@ -10,8 +12,9 @@ export class WorkProgressClient {
       const body: unknown = await response.json()
       if (!response.ok) {
         const refusal = WorkProgressContract.object(body, ['code', 'detail'])
-        WorkProgressContract.text(refusal.code)
-        return { kind: 'unavailable', detail: WorkProgressContract.text(refusal.detail) }
+        const code = WorkProgressContract.text(refusal.code)
+        const detail = WorkProgressContract.text(refusal.detail)
+        return code === NOT_FOUND ? { kind: 'not-found', detail } : { kind: 'unavailable', detail }
       }
       const snapshot = WorkProgressContract.read(body)
       if (snapshot.repo !== identity.repo || snapshot.issue !== identity.issue || snapshot.agent !== identity.agent) {
