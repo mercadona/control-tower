@@ -16,7 +16,6 @@ import { DispatchClaims } from '../../src/domain/ports/dispatch-claims.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanRecords } from '../../src/domain/ports/plan-records.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
-import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
@@ -43,13 +42,16 @@ class Slice {
   static readonly MILESTONE = Object.freeze({
     number: 370, title: 'The chain that does not stop', description: null,
   })
+  static readonly OTHER_MILESTONE = Object.freeze({
+    number: 371, title: 'The groom is an interactive session', description: null,
+  })
   static readonly ROOT = new CheckoutRoot('/repo/checkout')
 
   static issue({
-    number, order, status = 'ready', dependencies = [], touches = [], stateReason = null,
+    number, order, status = 'ready', dependencies = [], touches = [], stateReason = null, milestone = Slice.MILESTONE,
   }: {
     number: number, order: number, status?: string, dependencies?: number[], touches?: string[],
-    stateReason?: string | null,
+    stateReason?: string | null, milestone?: { number: number, title: string, description: string | null },
   }): RawIssue {
     const dependencySection = dependencies.length === 0
       ? ''
@@ -62,7 +64,7 @@ class Slice {
       body: `<!-- ct-order:${order} -->${dependencySection}`,
       state: stateReason === null ? 'OPEN' : 'CLOSED',
       stateReason,
-      milestone: Slice.MILESTONE,
+      milestone,
       labels: { nodes: [
         { name: `status:${status}` },
         ...touches.map((touch) => ({ name: `touches:${touch}` })),
@@ -75,13 +77,6 @@ class Slice {
     return JSON.stringify([
       { data: { repository: { issues: { nodes: issues, pageInfo: { hasNextPage: false, endCursor: null } } } } },
     ])
-  }
-
-  static frozenSpec(): EpicSpec {
-    return new EpicSpec({
-      path: 'docs/superpowers/specs/2026-09-18-the-chain-that-does-not-stop-execution.md',
-      text: `# ${Slice.MILESTONE.title}${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
-    })
   }
 }
 
@@ -202,9 +197,10 @@ class Sweep {
   }
 
   async run(): Promise<Sweep> {
+    const candidates = new GhDispatchCandidates({ gh: this.gh.build() })
     const startMilestonePlan = new StartMilestonePlan({
       preparation: PreparationMother.check(),
-      candidates: new GhDispatchCandidates({ gh: this.gh.build() }),
+      candidates,
       claims: this.claims,
       workspace: this.workspace,
       agents: this.agents,
@@ -212,7 +208,7 @@ class Sweep {
       checkouts: this.checkouts,
     })
     const relay = new DispatchRelay({
-      spec: () => Promise.resolve(Slice.frozenSpec()),
+      milestones: (repository) => candidates.authorisedMilestones({ repository }),
       dispatch: (asked) => {
         this.dispatchAsked.push(asked)
 
@@ -364,5 +360,19 @@ describe('DispatchRelay crossed with the real plugin selection', () => {
       'relay: dispatched mercadona/control-tower-plugin#33 as workspace:33\n',
       'relay: mercadona/control-tower-plugin#32 could not be dispatched: worker acceptance was lost\n',
     ])
+  })
+
+  it('ready slices of two authorised milestones are both dispatched by one sweep', async () => {
+    const gh = new ScriptedGh([
+      Slice.issue({ number: 40, order: 1, status: 'ready', touches: ['api'] }),
+      Slice.issue({ number: 50, order: 1, status: 'ready', touches: ['ui'], milestone: Slice.OTHER_MILESTONE }),
+    ])
+
+    const swept = await new Sweep(gh).run()
+
+    expect(swept.dispatchAsked.map((asked) => asked.milestone)).toEqual([
+      Slice.MILESTONE.title, Slice.OTHER_MILESTONE.title,
+    ])
+    expect(swept.dispatched()).toEqual([40, 50])
   })
 })

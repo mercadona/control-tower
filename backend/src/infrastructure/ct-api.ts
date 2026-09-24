@@ -701,9 +701,10 @@ class CtApi {
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues, preparation })
     const startsInFlight = new WorkInFlight()
+    const dispatchCandidates = new GhDispatchCandidates({ gh })
     const startMilestonePlan = new StartMilestonePlan({
       preparation,
-      candidates: new GhDispatchCandidates({ gh }),
+      candidates: dispatchCandidates,
       claims,
       workspace,
       agents: planAgents,
@@ -711,7 +712,7 @@ class CtApi {
       checkouts,
     })
     const dispatchRelay = new DispatchRelay({
-      spec: (root) => epicSpecs.mostRecent(root),
+      milestones: (repository) => dispatchCandidates.authorisedMilestones({ repository }),
       dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),

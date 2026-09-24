@@ -120,6 +120,11 @@ class GhDouble {
     return this.candidates().admissible({ repository: CandidateMother.REPOSITORY, milestone: CandidateMother.TARGET })
   }
 
+  authorised(): Promise<readonly string[]> {
+    return this.candidates().authorisedMilestones({ repository: CandidateMother.REPOSITORY })
+      .then((milestones) => milestones.titles)
+  }
+
   numbers(): Promise<number[]> {
     return this.admissible().then((issues) => issues.map((issue) => issue.number))
   }
@@ -292,5 +297,24 @@ describe('GhDispatchCandidates', () => {
     } finally {
       TOKEN_HOLDING_STATUSES.splice(TOKEN_HOLDING_STATUSES.indexOf(authorityOnlyStatus), 1)
     }
+  })
+
+  it('the authorised milestones are the ones with an open ready slice, read from the open issues alone', async () => {
+    const gh = new GhDouble([GhDouble.output(0, CandidateMother.pages([
+      CandidateMother.issue({ number: 11, order: 1 }),
+      CandidateMother.issue({ number: 12, order: 2 }),
+      CandidateMother.issue({ number: 20, order: 1, status: 'backlog', milestone: CandidateMother.OTHER_MILESTONE }),
+      { ...CandidateMother.issue({ number: 30, order: 1 }), milestone: null },
+    ]))])
+
+    await expect(gh.authorised()).resolves.toEqual([CandidateMother.TARGET])
+    expect(gh.calls).toEqual([CandidateMother.listing(['OPEN'])])
+  })
+
+  it('an open table gh could not print is not read, and one it printed badly is not understood', async () => {
+    await expect(new GhDouble([GhDouble.output(1, '', 'open refused')]).authorised())
+      .rejects.toBeInstanceOf(DispatchNotRead)
+    await expect(new GhDouble([GhDouble.output(0, 'not json')]).authorised())
+      .rejects.toBeInstanceOf(DispatchNotUnderstood)
   })
 })

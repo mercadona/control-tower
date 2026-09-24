@@ -3,6 +3,7 @@ import { buildDispatchInput, mapGhIssue } from '../../../plugin/scripts/gh-issue
 import { UNCAPPED, collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
 import { DispatchCandidates } from '../domain/ports/dispatch-candidates.ts'
 import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../domain/exceptions.ts'
+import { AuthorisedMilestones } from '../domain/value-objects/authorised-milestones.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -193,6 +194,17 @@ export class GhDispatchCandidates extends DispatchCandidates {
     }
 
     return new PlanIssue({ number: raw.number, url: raw.url })
+  }
+
+  async authorisedMilestones({ repository }: { repository: RepositoryName }): Promise<AuthorisedMilestones> {
+    const output = await this.gh.run(GhDispatchCandidates.#argv(repository, 'open'), { safeToRepeat: true })
+    const failure = GhDispatchCandidates.#readFailure('open', output)
+    if (failure !== null) throw new DispatchNotRead(`gh could not read the open issue table: ${failure}`)
+
+    return AuthorisedMilestones.of(GhDispatchCandidates.#openIssues(output.stdout).map((issue) => ({
+      milestone: issue.milestone?.title ?? null,
+      status: mapGhIssue(issue).status,
+    })))
   }
 
   async admissible({ repository, milestone }: {
