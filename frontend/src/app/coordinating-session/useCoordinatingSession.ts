@@ -16,6 +16,7 @@ type HeldOutcome = Extract<CoordinatingSessionOutcome, { kind: 'live' | 'ended' 
 type HeldSnapshot = { outcome: HeldOutcome; terminal: LiveSessionRef | null }
 type OpeningState = 'idle' | 'pending' | 'uncertain' | 'reconciling'
 type PendingClose = { target: string; conversation: string; sessionId: string | null }
+type BackendConnection = 'reachable' | 'unreachable'
 
 const CONNECTING: CoordinatingSessionRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 2000
@@ -36,6 +37,7 @@ const BLOCKED_OPENING: OpenOutcome = {
 
 type CoordinatingLifecycle = {
   read: CoordinatingSessionRead
+  connection: BackendConnection
   occupied: boolean
   blocksOpening: boolean
   operationBusy: boolean
@@ -52,6 +54,7 @@ type CoordinatingLifecycle = {
 
 const useCoordinatingSession = (): CoordinatingLifecycle => {
   const [read, setRead] = useState<CoordinatingSessionRead>(CONNECTING)
+  const [connection, setConnection] = useState<BackendConnection>('reachable')
   const [held, setHeld] = useState<HeldSnapshot | null>(null)
   const [opening, setOpening] = useState<OpeningState>('idle')
   const [closing, setClosing] = useState(false)
@@ -91,6 +94,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
   }, [])
 
   const applyOutcome = useCallback((outcome: CoordinatingSessionOutcome) => {
+    setConnection(outcome.kind === 'unavailable' ? 'unreachable' : 'reachable')
     if (outcome.kind === 'unavailable') {
       if (readRef.current.phase === 'connecting') updateRead({ phase: 'read', kind: 'unavailable' })
       return
@@ -311,6 +315,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
 
   return {
     read,
+    connection,
     occupied: blocksOpening,
     blocksOpening,
     operationBusy,
