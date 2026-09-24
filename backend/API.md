@@ -1130,21 +1130,22 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ## `POST /groom-session`
 
-Gate 2's way into the conversation, by either of two roads. The prompt is the
-same on both: `PhasePrompt.groom` invokes the plugin's own
-`control-tower-loop:ct-groom` skill, names the milestone and its frozen spec,
-and tells the session that the issues are not its to create and that a change
-to the slicing is an edit of §9 which this program publishes. No worktree is
-cut and no branch is created.
+Gate 2's way into the conversation, by either of two roads. Both ask the
+session to review the slicing: they name the milestone and its frozen spec, and
+tell the session that the issues are not its to create and that a change to
+the slicing is an edit of §9 which this program publishes. Neither points the
+session at `ct-groom`, which is the command that creates the issues. No
+worktree is cut and no branch is created.
 
 Which road depends on the conversation this backend holds:
 
 - **no live conversation** — an `ended` or `unresumable` one, or a failed
   closure — opens a new conversation in the groom phase and answers
   `status: grooming` with the target it minted;
-- **a live conversation** is asked instead: the prompt is typed into its
-  terminal as one line and submitted, and the answer is `status: typed`. No
-  second conversation is opened and the held target does not change.
+- **a live conversation** is asked instead: only the review of the slicing,
+  `PhasePrompt.groomReview`, is pasted into its terminal as one bracketed paste
+  and submitted by an Enter sent on its own, and the answer is `status: typed`.
+  No second conversation is opened and the held target does not change.
 
 **Request** — no body. The checkout and the repository are the ones the
 coordinating session this backend holds already names, so nothing is sent.

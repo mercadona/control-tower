@@ -3,6 +3,7 @@ import { SessionPreparationReports } from '../../src/infrastructure/session-prep
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PreparationMother } from '../preparation-mother.ts'
+import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 
 class Session {
   readonly sent: string[] = []
@@ -10,9 +11,15 @@ class Session {
   repository = new RepositoryName('owner/repo')
   root = new CheckoutRoot('/repo')
   available = true
+  failing = false
 
   gateCheckout() { return { target: this.target, conversation: { root: this.root, repository: this.repository } } }
-  announce(line: string): boolean { if (!this.available) return false; this.sent.push(line); return true }
+  async announce(line: string): Promise<boolean> {
+    if (!this.available) return false
+    this.sent.push(line)
+    if (this.failing) throw new LiveSessionNotLive('session-1')
+    return true
+  }
 }
 
 describe('preparation findings reach the matching coordinating session', () => {
@@ -24,6 +31,19 @@ describe('preparation findings reach the matching coordinating session', () => {
       await adapter.announce({ ...target, path: '/repo/.worktrees/1' })
       await adapter.announce({ ...target, path: '/repo/.worktrees/2' })
     }
+    expect(session.sent).toHaveLength(2)
+  })
+
+  it('a finding whose submission failed after the paste is not remembered as announced, so the next sweep sends it again', async () => {
+    const session = new Session()
+    const adapter = new SessionPreparationReports({ sessions: () => session, stderr: () => {} })
+    const asked = { root: session.root, repository: session.repository, preparation: PreparationMother.blocked() }
+    session.failing = true
+    await adapter.announce(asked)
+    session.failing = false
+
+    await adapter.announce(asked)
+
     expect(session.sent).toHaveLength(2)
   })
 

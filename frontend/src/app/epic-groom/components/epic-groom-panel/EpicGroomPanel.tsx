@@ -89,7 +89,8 @@ type EpicGroomPanelProps = {
 const EpicGroomPanel = ({
   target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
 }: EpicGroomPanelProps) => {
-  const askBlocked = liveAsk === null ? openingBlocked : liveAsk !== 'ready'
+  const sessionMidTurn = liveAsk !== null && liveAsk !== 'ready'
+  const askBlocked = liveAsk === null ? openingBlocked : sessionMidTurn
   const presses = useGatePresses({ target, askBlocked, operationBusy, openSession })
   const { acted, refusal, session, reslicing } = presses
   const preparationRefused = refusal?.kind === 'refused' && refusal.code === 'repository-preparation-required'
@@ -98,7 +99,9 @@ const EpicGroomPanel = ({
     session?.kind === 'opened' || session?.kind === 'typed' || refusal?.kind === 'unconfirmed'
   const read = useEpicGroom(isReviewingTheSlicing, target, true)
   const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key ?? null : null
-  useMergedReslicing({ read, operationBusy, press: (planFingerprint) => presses.groom(gateKey, planFingerprint) })
+  useMergedReslicing({
+    read, held: operationBusy || sessionMidTurn, press: (planFingerprint) => presses.groom(gateKey, planFingerprint),
+  })
 
   if (read.phase === 'connecting') return null
   if (acted === null && EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
@@ -242,7 +245,7 @@ const EpicGroomPanel = ({
             ? (liveAsk === null ? OPENING_SESSION : SENDING_ASK)
             : OPEN_SESSION}
         </Button>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy || sessionMidTurn}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {askNotice}
@@ -269,7 +272,7 @@ const EpicGroomPanel = ({
           ))}
         </ul>
         <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy || sessionMidTurn}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {gateNotice}

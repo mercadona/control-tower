@@ -497,6 +497,46 @@ describe('PtyLiveSessions', () => {
     expect(opened.terminal.written).toEqual(['ls -la\n'])
   })
 
+  it('a submitted message reaches the terminal as one bracketed paste and its enter only after the pause', async () => {
+    const spawn = SpawnDouble.recording()
+    const paused: number[] = []
+    let resume: () => void = () => {}
+    const sessions = Cabin.opening({
+      spawn,
+      sleep: (milliseconds) => {
+        paused.push(milliseconds)
+
+        return new Promise((resolved) => { resume = resolved })
+      },
+    })
+    const session = sessions.open(LoginProgram.default())
+    const terminal = spawn.terminals[0]
+
+    const submitted = sessions.submit({ session, text: 'review the slicing' })
+
+    expect(terminal.written).toEqual(['\x1b[200~review the slicing\x1b[201~'])
+    expect(paused).toEqual([PtyLiveSessions.SUBMIT_DELAY_MS])
+    resume()
+    await submitted
+    expect(terminal.written).toEqual(['\x1b[200~review the slicing\x1b[201~', '\r'])
+  })
+
+  it('a submission whose session goes away during the pause fails instead of losing its enter silently', async () => {
+    const spawn = SpawnDouble.recording()
+    let resume: () => void = () => {}
+    const sessions = Cabin.opening({
+      spawn,
+      sleep: () => new Promise((resolved) => { resume = resolved }),
+    })
+    const session = sessions.open(LoginProgram.default())
+
+    const submitted = sessions.submit({ session, text: 'review the slicing' })
+    spawn.terminals[0].exits()
+    resume()
+
+    await expect(submitted).rejects.toThrow(LiveSessionNotLive)
+  })
+
   it('a resize reaches the terminal of that session', () => {
     const opened = OpenedTerminal.with()
 

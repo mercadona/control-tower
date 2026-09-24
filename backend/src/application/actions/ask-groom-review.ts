@@ -3,19 +3,14 @@ import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { LiveSessions } from '../../domain/ports/live-sessions.ts'
-import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { GroomReviewAdmission, GroomReviewRefusalValue } from '../../domain/ports/groom-review-admission.ts'
 
 export class AskGroomReviewParams {
-  readonly repository: RepositoryName
   readonly root: CheckoutRoot
   readonly session: LiveSession
   readonly target: string
 
-  constructor({ repository, root, session, target }: {
-    repository: RepositoryName, root: CheckoutRoot, session: LiveSession, target: string,
-  }) {
-    this.repository = repository
+  constructor({ root, session, target }: { root: CheckoutRoot, session: LiveSession, target: string }) {
     this.root = root
     this.session = session
     this.target = target
@@ -55,8 +50,6 @@ export class GroomReviewAsked {
 }
 
 export class AskGroomReview {
-  static readonly SUBMIT = '\r'
-
   readonly specs: EpicSpecs
   readonly liveSessions: LiveSessions
   readonly admission: GroomReviewAdmission
@@ -73,16 +66,10 @@ export class AskGroomReview {
     const spec = await this.specs.mostRecent(params.root)
     if (spec === null) return GroomReviewAsked.noSpec()
 
-    const prompt = PhasePrompt.groom({
-      spec, milestone: spec.title()!, repository: params.repository, root: params.root,
-    })
-    const text = `${prompt.oneLine()}${AskGroomReview.SUBMIT}`
+    const prompt = PhasePrompt.groomReview({ spec, milestone: spec.title()! })
     const refusal = this.admission.refusalFor({ target: params.target, session: params.session })
     if (refusal !== null) return GroomReviewAsked.refused(refusal)
-    this.liveSessions.write({
-      session: params.session,
-      text,
-    })
+    await this.liveSessions.submit({ session: params.session, text: prompt.oneLine() })
 
     return GroomReviewAsked.asked()
   }

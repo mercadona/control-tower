@@ -386,7 +386,7 @@ describe('GroomSessionRoute', () => {
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
     expect(ask.asked).toEqual([new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
+      root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
     })])
     expect(open.asked).toEqual([])
     expect(held.held()?.target).toBe(Mother.TARGET)

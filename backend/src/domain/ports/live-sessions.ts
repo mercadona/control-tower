@@ -30,6 +30,10 @@ export class LiveSessions {
     throw new Error(`${this.constructor.name} must implement write()`)
   }
 
+  submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
+    throw new Error(`${this.constructor.name} must implement submit()`)
+  }
+
   resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
     throw new Error(`${this.constructor.name} must implement resize()`)
   }
