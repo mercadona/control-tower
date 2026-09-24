@@ -9,12 +9,16 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "coverage": "c8 --reporter=json --report-dir=node_modules/.cache/coverage --temp-directory=node_modules/.cache/coverage/raw --include='src/**' --all vitest run --config __tests__/coverage.config.ts",
+    "coverage:baseline": "node __tests__/coverage-baseline.ts write",
+    "coverage:compare": "node __tests__/coverage-baseline.ts compare"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^24.13.3",
     "@types/shell-quote": "^1.7.5",
+    "c8": "^11.0.0",
     "typescript": "^5.8.0",
     "vitest": "^4.0.0"
   },
