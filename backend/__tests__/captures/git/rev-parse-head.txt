@@ -1,0 +1,8 @@
+command: git rev-parse HEAD
+version: git version 2.50.1 (Apple Git-155)
+date: 2026-09-24
+exit: 0
+--- stdout
+a9e84013456ff85edbe36613e3a4cfcc78c7c224
+
+--- stderr
