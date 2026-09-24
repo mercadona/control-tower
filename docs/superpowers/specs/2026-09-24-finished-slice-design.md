@@ -93,6 +93,10 @@ harvest removes a worktree only when its pull request is `MERGED`
   pull request read from the delivery receipt if one exists. Otherwise
   `WorkNotFound`, as now. A finished slice has no worktree, so it cannot be
   active; if both were ever true, active wins.
+- The pull request is read by `CheckedRunDelivery`, the one owner of the
+  delivery receipt's format, through a new `RunDelivery.recordedPullRequest`
+  that validates intent and receipt from the journal alone. `inspect` cannot
+  serve it: it demands the worktree still exist and asks GitHub.
 - `ReadWorkProgress` passes the condition through, as it does for `uncertain`.
 - The answer keeps `{repo, issue, agent, progress}`; the new variant is:
 
