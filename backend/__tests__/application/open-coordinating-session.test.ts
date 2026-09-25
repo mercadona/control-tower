@@ -250,6 +250,7 @@ describe('OpenCoordinatingSession', () => {
       Flow.DOCUMENTS_LINE,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })
@@ -366,6 +367,7 @@ describe('OpenCoordinatingSession', () => {
       Flow.DOCUMENTS_LINE,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   })

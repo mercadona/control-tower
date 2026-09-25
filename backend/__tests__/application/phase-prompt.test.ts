@@ -26,6 +26,10 @@ class Phase {
       root: Phase.ROOT,
     })
   }
+
+  static implementation(): PhasePrompt {
+    return PhasePrompt.implementation({ milestone: 'One', repository: Phase.REPOSITORY, root: Phase.ROOT })
+  }
 }
 
 describe('what the coordinating session is told about a change to a slice', () => {
@@ -77,6 +81,37 @@ describe('what the coordinating session is told about a veto that blocks a run',
   it('tells_the_session_what_to_do_when_the_grant_call_itself_is_refused', () => {
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('tell the person what the refusal said')
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO).toContain('do not retry it in a loop')
+  })
+})
+
+describe('what the coordinating session is told about a check that closes a run', () => {
+  it('reaches_the_coordinating_session_in_every_phase_because_a_red_check_lands_in_any', () => {
+    const afterTheVeto = `${PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO}\n${PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK}`
+
+    expect(Phase.brainstorming().text).toContain(afterTheVeto)
+    expect(Phase.groom().text).toContain(afterTheVeto)
+    expect(Phase.implementation().text).toContain(afterTheVeto)
+  })
+
+  it('names_both_closures_and_the_call_that_lifts_them', () => {
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('blocked-controls')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('blocked-global')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('POST /slices/<issue>/another-round')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('{repo, agent, instruction}')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('could not be measured')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('GET /active-plans')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('the failing command and the log')
+  })
+
+  it('says_what_a_round_does_for_each_closure', () => {
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('the implementer of the same task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('a fix round after the last task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('the Global verification runs again')
+  })
+
+  it('keeps_the_instruction_with_the_person', () => {
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('you do not invent it')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('do not retry it in a loop')
   })
 })
 
