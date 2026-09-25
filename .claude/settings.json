@@ -1,0 +1,26 @@
+{
+  "extraKnownMarketplaces": {
+    "control-tower": {
+      "source": {
+        "source": "github",
+        "repo": "mercadona/control-tower",
+        "ref": "plugin-v0.62.0"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "control-tower-loop@control-tower": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(gh:*)",
+      "Bash(git:*)"
+    ],
+    "deny": [
+      "Bash(git commit *--no-verify*)",
+      "Bash(git push *--no-verify*)",
+      "Bash(git push *--force*)",
+      "Bash(git -c core.hooksPath=*)"
+    ]
+  }
+}

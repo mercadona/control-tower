@@ -32,3 +32,4 @@ plugin/scripts/experiments/*-results/
 .agent/SLICE.md
 .agent/run-*.json
 .agent/run-*/
+.claude/settings.local.json
