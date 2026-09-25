@@ -15,6 +15,7 @@ const OPENED = {
     target: CoordinatingSessionMother.TARGET,
     conversation: CoordinatingSessionMother.CONVERSATION,
     repo: CoordinatingSessionMother.REPO,
+    story: CoordinatingSessionMother.STORY,
     root: CoordinatingSessionMother.ROOT,
     session: CoordinatingSessionMother.SESSION,
   },

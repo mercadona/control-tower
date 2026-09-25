@@ -216,6 +216,7 @@ describe('useCoordinatingSession', () => {
     expect(result.current.opened).toMatchObject({
       target: CoordinatingSessionMother.TARGET,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
     })
     expect(gets).toBe(2)
@@ -268,6 +269,27 @@ describe('useCoordinatingSession', () => {
     expect(result.current.closeError).toBe(
       'No se pudo inspeccionar o terminar la sesión. Vuelve a intentarlo; las sesiones nuevas seguirán bloqueadas hasta confirmar el cierre.'
     )
+  })
+
+  it('says the backend is unreachable while its polls fail and keeps the live session held, then recovers', async () => {
+    vi.useFakeTimers()
+    let reads = 0
+    vi.stubGlobal('fetch', vi.fn(() => {
+      reads += 1
+      return reads === 2 ? Promise.reject(new TypeError('offline')) : Promise.resolve(response(CoordinatingSessionMother.working()))
+    }))
+    const { result } = renderHook(() => useCoordinatingSession())
+    await vi.waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
+    expect(result.current.connection).toBe('reachable')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+
+    expect(result.current.connection).toBe('unreachable')
+    expect(result.current.read).toMatchObject({ kind: 'live', target: CoordinatingSessionMother.TARGET })
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+
+    expect(result.current.connection).toBe('reachable')
   })
 
   it('retires an externally closed live target when a fresh read authoritatively returns idle', async () => {

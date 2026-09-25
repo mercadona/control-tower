@@ -19,17 +19,27 @@ const NAMES_NO_CHECKOUT = Symbol('the read names no checkout')
 const answeredFor = (outcome: EpicGroomOutcome): string | null | typeof NAMES_NO_CHECKOUT =>
   'target' in outcome ? outcome.target : NAMES_NO_CHECKOUT
 
+type HeldRead = { target: string | null; read: EpicGroomRead }
+
+const settledOver = (previous: HeldRead, target: string | null, read: EpicGroomRead): HeldRead =>
+  read.phase === 'read' && read.kind === 'unavailable' && previous.target === target && previous.read.phase === 'read'
+    ? previous
+    : { target, read }
+
 const restsAt = (outcome: EpicGroomOutcome): boolean => RESTING_KINDS.includes(outcome.kind)
 
 const isWorthWatching = (outcome: EpicGroomOutcome): boolean =>
   A_CONVERSATION_CAN_STILL_CHANGE.includes(outcome.kind)
 
-const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = null, watchPreparation = false): EpicGroomRead => {
-  const [read, setRead] = useState<EpicGroomRead>(CONNECTING)
+const useEpicGroom = (
+  aConversationCanChangeIt = false, target: string | null = null, watchPreparation = false,
+): EpicGroomRead => {
+  const [held, setHeld] = useState<HeldRead>({ target, read: CONNECTING })
 
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
+    const setRead = (read: EpicGroomRead) => setHeld((previous) => settledOver(previous, target, read))
 
     const poll = async (): Promise<void> => {
       const outcome = await EpicGroomClient.read()
@@ -42,7 +52,7 @@ const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = nul
       }
       setRead({ phase: 'read', ...outcome })
       const preparationCanChange = watchPreparation && (outcome.kind === 'groomed' || outcome.kind === 'authorised')
-      if (restsAt(outcome) && !preparationCanChange && !(isReviewingTheSlicing && isWorthWatching(outcome))) return
+      if (restsAt(outcome) && !preparationCanChange && !(aConversationCanChangeIt && isWorthWatching(outcome))) return
       timer = window.setTimeout(poll, POLL_INTERVAL_MS)
     }
 
@@ -52,9 +62,9 @@ const useEpicGroom = (isReviewingTheSlicing = false, target: string | null = nul
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [isReviewingTheSlicing, target, watchPreparation])
+  }, [aConversationCanChangeIt, target, watchPreparation])
 
-  return read
+  return held.target === target ? held.read : CONNECTING
 }
 
 export { useEpicGroom }

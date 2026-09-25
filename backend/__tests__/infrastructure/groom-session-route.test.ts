@@ -314,6 +314,7 @@ describe('GroomSessionRoute', () => {
       target: Mother.NEXT_TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
@@ -383,6 +384,7 @@ describe('GroomSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })

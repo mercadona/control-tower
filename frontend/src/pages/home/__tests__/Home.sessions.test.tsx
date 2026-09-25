@@ -79,12 +79,6 @@ const stubFetchOpeningTheBrainstorming = () => {
   return fetching
 }
 
-const stubScrollIntoView = () => {
-  const scrolling = vi.fn()
-  ;(Element.prototype as ScrollableElement).scrollIntoView = scrolling
-  return scrolling
-}
-
 describe('Home · sessions panel', () => {
   beforeEach(() => {
     FakeTerminal.install()
@@ -141,16 +135,12 @@ describe('Home · sessions panel', () => {
   })
 
   it('the brainstorming terminal is immediately closeable and accepts input as soon as the entrance opens it', async () => {
-    const scrolling = stubScrollIntoView()
     stubFetchOpeningTheBrainstorming()
     const { user } = openHome()
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('tab', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(await screen.findByRole('region', { name: CoordinatingSessionMother.SESSION.name })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
     const terminal = await waitFor(() => lastTerminal())
     terminal.onDataHandler?.('pwd')
@@ -158,7 +148,6 @@ describe('Home · sessions panel', () => {
       `/sessions/${CoordinatingSessionMother.SESSION.id}/input`,
       expect.objectContaining({ method: 'POST' }),
     ))
-    expect(scrolling).toHaveBeenCalled()
   })
 })
 import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

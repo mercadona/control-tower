@@ -1,0 +1,365 @@
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
+import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
+import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
+import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
+import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
+import { WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
+import { FakeEventSource } from './FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from './FakeXterm'
+import { openHome } from './helpers'
+
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
+
+type Answer = { status: number; body: string }
+type Answering = Answer | (() => Answer)
+type Backend = {
+  session?: Answering
+  specFreeze?: Answering
+  epicGroom?: Answering
+  activePlans?: Answering
+  close?: Answering
+}
+
+class Plans {
+  static readonly NONE: Answer = { status: 200, body: '{"plans":[]}' }
+  static readonly INCONCLUSIVE: Answer = {
+    status: 400,
+    body: '{"code":"active-plans-recovery-inconclusive","detail":"cmux could not be asked"}',
+  }
+
+  static planning(...issues: { number: number; url: string }[]): Answer {
+    return {
+      status: 200,
+      body: JSON.stringify({
+        plans: issues.map((issue) => ({
+          phase: 'planning',
+          request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
+          plan: {
+            id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, issue, agent: `${StartPlanMother.AGENT}-${issue.number}`,
+            branch: StartPlanMother.BRANCH, worktree: StartPlanMother.WORKTREE,
+          },
+        })),
+      }),
+    }
+  }
+
+  static ofAnotherStory(): Answer {
+    return Plans.planning(StartPlanMother.ISSUE)
+  }
+
+  static ofThisStory(): Answer {
+    return Plans.planning({ number: EpicGroomMother.READY_GATE.number, url: EpicGroomMother.READY_GATE.url })
+  }
+
+  static twoOfThisStory(): Answer {
+    return Plans.planning(
+      { number: EpicGroomMother.READY_GATE.number, url: EpicGroomMother.READY_GATE.url },
+      { number: EpicGroomMother.READY_CHANNEL.number, url: EpicGroomMother.READY_CHANNEL.url },
+    )
+  }
+}
+
+class Closing {
+  static confirmed(): Answer {
+    return {
+      status: 200,
+      body: JSON.stringify({
+        status: 'closed', conversation: CoordinatingSessionMother.CONVERSATION, target: CoordinatingSessionMother.TARGET,
+      }),
+    }
+  }
+
+  static refused(): Answer {
+    return { status: 400, body: '{"code":"session-not-terminated","detail":"still running"}' }
+  }
+}
+
+class FocusedBackend {
+  static readonly #NOT_READ_YET: Answer = {
+    status: 400, body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
+  }
+
+  static #now(answering: Answering): Answer {
+    return typeof answering === 'function' ? answering() : answering
+  }
+
+  static #responseFor(answer: Answer): Response {
+    return new Response(answer.body, { status: answer.status })
+  }
+
+  static with({
+    session = CoordinatingSessionMother.working,
+    specFreeze = SpecFreezeMother.none(),
+    epicGroom = EpicGroomMother.none(),
+    activePlans = Plans.NONE,
+    close,
+  }: Backend = {}) {
+    const fetching = vi.fn(async (input: string | URL | Request) => {
+      const path = String(input)
+      const answer = (answering: Answering) => FocusedBackend.#responseFor(FocusedBackend.#now(answering))
+      if (path === '/coordinating-session') return answer(session)
+      if (path === '/coordinating-session/close' && close !== undefined) return answer(close)
+      if (path === '/external-tools') return answer(ExternalToolsMother.allReady())
+      if (path === '/sessions') return answer(SessionsMother.noSessions())
+      if (path === '/active-plans') return answer(activePlans)
+      if (path === '/spec-freeze') return answer(specFreeze)
+      if (path === '/epic-groom') return answer(epicGroom)
+      if (path.startsWith('/work-progress/')) return answer(WorkProgressMother.planning())
+      if (path.startsWith('/implement-history/')) return answer(FocusedBackend.#NOT_READ_YET)
+      throw new Error(`nobody scripted ${path}`)
+    })
+    vi.stubGlobal('fetch', fetching)
+
+    return fetching
+  }
+}
+
+class FocusedPage {
+  static async heading(): Promise<HTMLElement> {
+    await screen.findByRole('navigation', { name: 'Pasos de la sesión' })
+
+    return screen.getByRole('heading', { level: 1 })
+  }
+
+  static isFocused(): boolean {
+    return screen.queryByRole('navigation', { name: 'Pasos de la sesión' }) !== null
+  }
+}
+
+describe('Home while a coordinating session is live and no plan is in progress', () => {
+  beforeEach(() => {
+    FakeTerminal.install()
+    FakeFitAddon.install()
+    FakeEventSource.install()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows only the header of the step and the session, with nothing of the request view around it', async () => {
+    FocusedBackend.with()
+
+    openHome()
+
+    expect(await FocusedPage.heading()).toHaveTextContent('Brainstorming')
+    expect(screen.getByText(`${CoordinatingSessionMother.STORY} ·`, { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(CoordinatingSessionMother.REPO)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: CoordinatingSessionMother.SESSION.name })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Flujo del plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Slices en vuelo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Etapas completadas' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Sesión coordinadora' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['nothing written yet', SpecFreezeMother.none(), EpicGroomMother.none(), 'Brainstorming'],
+    ['a draft spec', SpecFreezeMother.draftReady(), EpicGroomMother.draft(), 'Congelación del spec'],
+    ['a frozen spec ready to groom', SpecFreezeMother.frozen(), EpicGroomMother.groomable(), 'Groom y autorización'],
+    ['a frozen spec waiting for its merge', SpecFreezeMother.frozen(), EpicGroomMother.awaitingPublication(), 'Groom y autorización'],
+    ['authorised work', SpecFreezeMother.frozen(), EpicGroomMother.authorised(), 'Implementación'],
+  ])('names the step the gates are at, with %s', async (_, specFreeze, epicGroom, step) => {
+    FocusedBackend.with({ specFreeze, epicGroom })
+
+    openHome()
+
+    await vi.waitFor(async () => expect(await FocusedPage.heading()).toHaveTextContent(step))
+    const steps = screen.getByRole('navigation', { name: 'Pasos de la sesión' })
+    expect(within(steps).getByText(step).closest('li')).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('puts the freeze in a band above the session while the spec is a draft', async () => {
+    FocusedBackend.with({ specFreeze: SpecFreezeMother.draftReady(), epicGroom: EpicGroomMother.draft() })
+
+    openHome()
+
+    const band = await screen.findByRole('region', { name: 'Puerta 1 · Congelación del spec' })
+    expect(await within(band).findByRole('button', { name: 'Congelar el spec' })).toBeInTheDocument()
+  })
+
+  it('puts the groom in a band above the session while gate 2 asks for it', async () => {
+    FocusedBackend.with({ specFreeze: SpecFreezeMother.frozen(), epicGroom: EpicGroomMother.groomable() })
+
+    openHome()
+
+    const band = await screen.findByRole('region', { name: 'Puerta 2 · El groom y la autorización' })
+    expect(await within(band).findByRole('button', { name: 'Ejecutar el groom' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['no spec yet', SpecFreezeMother.noSpec(), EpicGroomMother.noSpec(), 'Brainstorming'],
+    ['a spec waiting for its merge', SpecFreezeMother.frozen(), EpicGroomMother.awaitingPublication(), 'Groom y autorización'],
+    ['authorised work', SpecFreezeMother.frozen(), EpicGroomMother.authorised(), 'Implementación'],
+  ])('shows no band when no gate asks for anything, with %s', async (_, specFreeze, epicGroom, step) => {
+    FocusedBackend.with({ specFreeze, epicGroom })
+
+    openHome()
+
+    await vi.waitFor(async () => expect(await FocusedPage.heading()).toHaveTextContent(step))
+    expect(screen.queryByRole('region', { name: /^Puerta/ })).not.toBeInTheDocument()
+  })
+
+  it('offers cancelling the session as a secondary action', async () => {
+    FocusedBackend.with()
+
+    openHome()
+
+    const cancel = await screen.findByRole('button', { name: 'Cancelar la sesión' })
+    expect(cancel).toHaveClass('button--secondary')
+  })
+
+  it('says once that the backend is unreachable when the session poll fails, and keeps the session in front', async () => {
+    let reads = 0
+    FocusedBackend.with({
+      session: () => {
+        reads += 1
+        if (reads > 1) throw new TypeError('offline')
+        return CoordinatingSessionMother.working()
+      },
+    })
+
+    openHome()
+    await FocusedPage.heading()
+
+    await vi.waitFor(() => expect(screen.getAllByText('Sin conexión con el backend')).toHaveLength(1), { timeout: 4000 })
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Brainstorming')
+    expect(screen.queryByText('No se pudo comprobar el estado del plan')).not.toBeInTheDocument()
+  })
+
+  it('does not show what the inventory of other stories could not tell', async () => {
+    FocusedBackend.with({ activePlans: Plans.INCONCLUSIVE })
+
+    openHome()
+    await FocusedPage.heading()
+
+    expect(screen.queryByText('No se puede saber qué hay en marcha')).not.toBeInTheDocument()
+  })
+
+  it('does not let a single plan of another story take the page over', async () => {
+    const fetching = FocusedBackend.with({ activePlans: Plans.ofAnotherStory() })
+
+    openHome()
+    await vi.waitFor(() => expect(fetching.mock.calls.some(([input]) => input === '/active-plans')).toBe(true))
+
+    expect(await FocusedPage.heading()).toHaveTextContent('Brainstorming')
+    expect(screen.queryByRole('region', { name: 'Implementación' })).not.toBeInTheDocument()
+    await vi.waitFor(() => expect(WorkflowSnapshotStorage.load()).toBeNull())
+  })
+
+  it('gives today’s view back once the session ends', async () => {
+    let ended = false
+    FocusedBackend.with({ session: () => ended ? CoordinatingSessionMother.ended() : CoordinatingSessionMother.working() })
+
+    openHome()
+    await FocusedPage.heading()
+    ended = true
+
+    expect(await screen.findByText('La conversación coordinadora ha terminado', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Pasos de la sesión' })).not.toBeInTheDocument()
+  })
+
+  it('gives today’s view back once a plan of this story is in progress', async () => {
+    const fetching = FocusedBackend.with({
+      specFreeze: SpecFreezeMother.frozen(),
+      epicGroom: EpicGroomMother.authorised(),
+      activePlans: Plans.ofThisStory(),
+    })
+
+    openHome()
+
+    await vi.waitFor(() => expect(fetching.mock.calls.some(([input]) => input === '/epic-groom')).toBe(true))
+
+    expect((await screen.findAllByRole('region', { name: 'Implementación' }, { timeout: 4000 })).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('navigation', { name: 'Pasos de la sesión' })).not.toBeInTheDocument()
+  })
+
+  it('measures the sessions column of the view it gives back, not the one it replaced', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { width: this.isConnected ? 1200 : 0, right: this.isConnected ? 1200 : 0 } as DOMRect
+    })
+    localStorage.setItem('ct.sessions-column-width', '500')
+    localStorage.setItem('ct.sessions-column-collapsed', 'false')
+    let ended = false
+    FocusedBackend.with({ session: () => ended ? CoordinatingSessionMother.ended() : CoordinatingSessionMother.working() })
+
+    openHome()
+    await FocusedPage.heading()
+    ended = true
+
+    await screen.findByText('La conversación coordinadora ha terminado', {}, { timeout: 4000 })
+    fireEvent(window, new Event('resize'))
+    const columns = document.querySelector('.home__columns') as HTMLElement
+    await vi.waitFor(() => expect(columns.style.getPropertyValue('--home-sessions-width')).toBe('500px'))
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('gives today’s view back when the gates move on while focused and this story’s plan starts', async () => {
+    vi.useFakeTimers()
+    let started = false
+    FocusedBackend.with({
+      specFreeze: SpecFreezeMother.frozen(),
+      epicGroom: () => started ? EpicGroomMother.authorised() : EpicGroomMother.groomable(),
+      activePlans: () => started ? Plans.ofThisStory() : Plans.NONE,
+    })
+    openHome()
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+    expect(FocusedPage.isFocused()).toBe(true)
+
+    started = true
+    await act(async () => vi.advanceTimersByTimeAsync(10000))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    await act(async () => vi.advanceTimersByTimeAsync(0))
+
+    expect(FocusedPage.isFocused()).toBe(false)
+    expect(screen.getAllByRole('region', { name: 'Implementación' }).length).toBeGreaterThan(0)
+    vi.useRealTimers()
+  })
+
+  it('gives today’s view back once several plans of this story are in progress, with none adopted', async () => {
+    FocusedBackend.with({
+      specFreeze: SpecFreezeMother.frozen(),
+      epicGroom: EpicGroomMother.authorised(),
+      activePlans: Plans.twoOfThisStory(),
+    })
+
+    openHome()
+
+    expect(await screen.findByRole('region', { name: 'Slices en vuelo' }, { timeout: 4000 })).toBeInTheDocument()
+    expect(FocusedPage.isFocused()).toBe(false)
+  })
+
+  it('gives the request form back once the session is cancelled', async () => {
+    let closed = false
+    FocusedBackend.with({
+      session: () => closed ? CoordinatingSessionMother.none() : CoordinatingSessionMother.working(),
+      close: () => {
+        closed = true
+        return Closing.confirmed()
+      },
+    })
+
+    openHome()
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
+
+    expect(await screen.findByLabelText('Ticket', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(FocusedPage.isFocused()).toBe(false)
+  })
+
+  it('says in the header why the session could not be cancelled, and keeps it in front', async () => {
+    FocusedBackend.with({ close: Closing.refused() })
+
+    openHome()
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo inspeccionar o terminar la sesión')
+    expect(FocusedPage.isFocused()).toBe(true)
+  })
+
+})

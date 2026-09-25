@@ -292,6 +292,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
         target: EpicGroomMother.GROOM_TARGET,
         conversation: EpicGroomMother.GROOM_CONVERSATION,
         repo: 'owner/name',
+        story: 'STAFF-128',
         root: '/repo',
         session: EpicGroomMother.GROOM_SESSION,
       },

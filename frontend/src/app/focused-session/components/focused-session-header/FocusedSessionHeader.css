@@ -1,0 +1,30 @@
+.focused-session-header {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.focused-session-header__identity {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+.focused-session-header__titles {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.focused-session-header__title {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.focused-session-header__story {
+  margin: 0;
+  color: var(--foreground-secondary);
+  overflow-wrap: anywhere;
+}

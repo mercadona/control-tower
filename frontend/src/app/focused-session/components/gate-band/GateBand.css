@@ -1,0 +1,7 @@
+.gate-band {
+  box-sizing: border-box;
+  padding: 16px 20px;
+  background-color: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-brand-primary);
+  border-radius: var(--shape-container-sm);
+}

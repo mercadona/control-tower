@@ -24,12 +24,20 @@ describe('CoordinatingSessionClient', () => {
       target: CoordinatingSessionMother.TARGET,
       conversation: CoordinatingSessionMother.CONVERSATION,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
       session: CoordinatingSessionMother.SESSION,
       attention: { status: 'waiting', question: CoordinatingSessionMother.QUESTION },
       timeline: CoordinatingSessionMother.WAITING_TIMELINE,
       closureError: null,
     })
+  })
+
+  it('reads a live answer that names no story as unavailable, because the header could not say which story it is', async () => {
+    const withoutStory = CoordinatingSessionMother.working().body.replace(`"story":"${CoordinatingSessionMother.STORY}",`, '')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(withoutStory, { status: 200 })))
+
+    expect(await CoordinatingSessionClient.read()).toEqual({ kind: 'unavailable' })
   })
 
   it('reads a conversation whose terminal exited as ended', async () => {
@@ -43,6 +51,7 @@ describe('CoordinatingSessionClient', () => {
       target: CoordinatingSessionMother.TARGET,
       conversation: CoordinatingSessionMother.CONVERSATION,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
       detail: CoordinatingSessionMother.ENDED_DETAIL,
       timeline: CoordinatingSessionMother.WORKING_TIMELINE,
@@ -69,6 +78,7 @@ describe('CoordinatingSessionClient', () => {
         target: CoordinatingSessionMother.TARGET,
         conversation: CoordinatingSessionMother.CONVERSATION,
         repo: CoordinatingSessionMother.REPO,
+        story: CoordinatingSessionMother.STORY,
         root: CoordinatingSessionMother.ROOT,
         session: CoordinatingSessionMother.SESSION,
       },

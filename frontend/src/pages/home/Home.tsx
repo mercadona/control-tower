@@ -5,6 +5,11 @@ import { CoordinatingSessionStatus } from 'app/coordinating-session/components/c
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { GateSequence } from 'app/gate-sequence/components/gate-sequence'
+import { FocusedSession } from 'app/focused-session/components/focused-session'
+import { SessionStage } from 'app/focused-session/SessionStage'
+import { FocusedMode } from 'pages/home/FocusedMode'
+import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
+import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { WorkDetails } from 'app/work-progress/WorkDetails'
 import { useWorkConclusion } from 'app/work-progress/useWorkConclusion'
@@ -64,9 +69,16 @@ const Home = () => {
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const sessionsRef = useRef<HTMLDivElement | null>(null)
-  const columnsRef = useRef<HTMLDivElement>(null)
-  const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
+  const [columns, setColumns] = useState<HTMLDivElement | null>(null)
+  const sessionsColumnWidth = useSessionsColumnWidth(columns)
   const coordinatingSession = useCoordinatingSession()
+  const specFreezeRead = useSpecFreeze(coordinatingSession.target)
+  const isSessionLive = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live'
+  const sessionMayBeFocused = isSessionLive && workflow === null
+  const epicGroomRead = useEpicGroom(sessionMayBeFocused, coordinatingSession.target, sessionMayBeFocused)
+  const [adoptedUnasked, setAdoptedUnasked] = useState<ActivePlan | null>(null)
+  const isSessionLiveRef = useRef(isSessionLive)
+  const epicGroomReadRef = useRef(epicGroomRead)
   const sessionsColumnCollapse = useSessionsColumnCollapse(coordinatingSession.target)
   const [requestExpanded, setRequestExpanded] = useState(false)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
@@ -127,6 +139,7 @@ const Home = () => {
   }, [selectWorkflow])
 
   const selectSlice = useCallback((slice: ActivePlan) => {
+    setAdoptedUnasked(null)
     selectActivePlan(slice)
     setSlicesInFlight(activePlans.filter((active) => activePlanIdentity(active) !== activePlanIdentity(slice)))
   }, [activePlans, selectActivePlan])
@@ -181,8 +194,13 @@ const Home = () => {
       return active
     }
 
+    if (plans.length === 1 && isSessionLiveRef.current && !FocusedMode.claims(epicGroomReadRef.current, plans[0])) {
+      setReconciliation('not-required')
+      return null
+    }
     if (plans.length === 1) {
       selectActivePlan(plans[0])
+      setAdoptedUnasked(plans[0])
       return plans[0]
     }
     setReconciliation('not-required')
@@ -238,6 +256,27 @@ const Home = () => {
     }
   }, [reconcile])
 
+  useEffect(() => {
+    isSessionLiveRef.current = isSessionLive
+    epicGroomReadRef.current = epicGroomRead
+  }, [isSessionLive, epicGroomRead])
+
+  useEffect(() => {
+    if (adoptedUnasked === null || !isSessionLive || epicGroomRead.phase !== 'read') return
+    if (FocusedMode.claims(epicGroomRead, adoptedUnasked)) return
+    recoveryGenerationRef.current += 1
+    recoveryTokenRef.current = null
+    workflowRef.current = null
+    restoredRef.current = false
+    uncertainActiveRef.current = null
+    setWorkflow(null)
+    setUncertainRequest(null)
+    setReconciliation('not-required')
+    setAdoptedUnasked(null)
+    WorkflowSnapshotStorage.remove()
+    void reconcile()
+  }, [adoptedUnasked, isSessionLive, epicGroomRead, reconcile])
+
   const keepsFollowingActivePlans =
     workflow !== null || slicesInFlight.length > 0 || uncertainRequest !== null || (workflow === null && isCoordinatingSessionLive)
 
@@ -281,6 +320,7 @@ const Home = () => {
   }, [])
 
   const discardWorkflow = () => {
+    setAdoptedUnasked(null)
     const current = workflowRef.current
     const uncertain = uncertainActiveRef.current
     if (current !== null) discardedPlansRef.current.add(workflowIdentity(current))
@@ -560,6 +600,37 @@ const Home = () => {
       ]
   const showStartAnother = workflow?.phase === 'implementing' && restoredIsConfirmed
   const showHistory = workflow !== null && executionStarted && restoredIsConfirmed
+  const coordinatingSessionClosing = coordinatingSession.closing || (
+    coordinatingSession.read.phase === 'read' &&
+    coordinatingSession.read.kind !== 'unavailable' &&
+    coordinatingSession.read.operation === 'closing'
+  )
+  const focusedMode = FocusedMode.of({
+    read: coordinatingSession.read,
+    opened: coordinatingSession.opened,
+    planHeld: workflow !== null || uncertainActive !== null,
+    activePlans,
+    epicGroom: epicGroomRead,
+  })
+
+  if (focusedMode.kind === 'focused') {
+    return (
+      <div className="home">
+        <Navigation navbar={<ToolsNavbar />} topBar={<TopBar productName="Control Tower" />}>
+          <FocusedSession
+            story={focusedMode.live.story}
+            repo={focusedMode.live.repo}
+            target={focusedMode.live.target}
+            terminal={focusedMode.terminal}
+            stage={SessionStage.of(specFreezeRead, epicGroomRead)}
+            lifecycle={coordinatingSession}
+            closing={coordinatingSessionClosing}
+            dispatched={dispatchedSlices}
+          />
+        </Navigation>
+      </div>
+    )
+  }
 
   return (
     <div className="home">
@@ -577,7 +648,7 @@ const Home = () => {
       >
         <div
           className={`home__columns${sessionsColumnCollapse.collapsed ? ' home__columns--sessions-collapsed' : ''}`}
-          ref={columnsRef}
+          ref={setColumns}
           style={
             sessionsColumnCollapse.collapsed
               ? ({ '--home-sessions-width': `${SESSIONS_DRAWER_COLLAPSED_WIDTH_PX}px` } as CSSProperties)
@@ -693,6 +764,8 @@ const Home = () => {
 
           <GateSequence
             key={coordinatingSession.target ?? NO_COORDINATING_TARGET}
+            specFreezeRead={specFreezeRead}
+            epicGroomRead={epicGroomRead}
             target={coordinatingSession.target}
             liveAsk={coordinatingSession.liveAsk}
             openingBlocked={coordinatingSession.blocksOpening}
@@ -741,11 +814,7 @@ const Home = () => {
                 <SessionsPanel
                   coordinating={coordinatingSession.read}
                   adopted={coordinatingSession.opened}
-                  closing={coordinatingSession.closing || (
-                    coordinatingSession.read.phase === 'read' &&
-                    coordinatingSession.read.kind !== 'unavailable' &&
-                    coordinatingSession.read.operation === 'closing'
-                  )}
+                  closing={coordinatingSessionClosing}
                   closeError={coordinatingSession.closeError}
                   closedSessionIds={coordinatingSession.closedSessionIds}
                   onClose={() => void coordinatingSession.close()}

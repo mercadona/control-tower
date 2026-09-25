@@ -7,10 +7,10 @@ import {
   EPIC_GROOM_NOTHING_TO_SHOW_KINDS,
   EpicGroomPanel,
 } from 'app/epic-groom/components/epic-groom-panel'
-import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
+import { EpicGroomRead } from 'app/epic-groom/useEpicGroom'
 import { SPEC_FREEZE_GATE_HEADING, SpecFreezePanel } from 'app/spec-freeze/components/spec-freeze-panel'
 import { SpecFreezeGateSummary } from 'app/spec-freeze/SpecFreeze.types'
-import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
+import { SpecFreezeRead } from 'app/spec-freeze/useSpecFreeze'
 import { CollapsableCard } from 'system-ui/collapsable-card'
 import './GateSequence.css'
 
@@ -24,6 +24,8 @@ const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' 
 }
 
 type GateSequenceProps = {
+  specFreezeRead: SpecFreezeRead
+  epicGroomRead: EpicGroomRead
   target: string | null
   liveAsk: LiveAsk | null
   openingBlocked: boolean
@@ -33,10 +35,8 @@ type GateSequenceProps = {
 }
 
 const GateSequence = ({
-  target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
+  specFreezeRead, epicGroomRead, target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
 }: GateSequenceProps) => {
-  const specFreezeRead = useSpecFreeze(target)
-  const epicGroomRead = useEpicGroom(false, target)
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
   const [gate2ManualExpanded, setGate2ManualExpanded] = useState<boolean | null>(null)
 
