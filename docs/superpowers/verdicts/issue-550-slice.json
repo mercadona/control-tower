@@ -1,0 +1,26 @@
+{
+  "issue": 550,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Each sentence of the Desired end state holds in the accumulated diff. (1) The three entries 'infrastructure/run-dispatch-real-process.test.ts', 'infrastructure/run-driver-runtime-real-process.test.ts' and 'infrastructure/run-recovery-real-process.test.ts' are removed from ProcessRatchet.LISTED, and the diff deletes all three files, which are also absent from the tree. (2) run-dispatch.test.ts, run-driver.test.ts, run-recovery.test.ts and run-driver-runtime.test.ts exist under backend/__tests__/infrastructure/. None of them, nor in-process-run.ts, imports child_process or a spawning helper. They compose ScriptedOracle, ScriptedClaude, InProcessWorkers and a ScriptedConversation over captures, and the green ratchet test confirms that none of them spawns. (3) The ledger holds 16 rows for this family: all 8 cases of the dispatch file, the 2 of the recovery file, the 2 remaining cases of the runtime file, and the 4 cases owed by PR #563 (run-driver-real-process > a new admission..., runtime > routes every new admission..., runtime > keeps recorded driver ownership..., runtime > the recovery read census..., the last one decided with no substitute). Every it() the diff deletes from the three files maps to one of those rows. (4) Global verification ran green: typecheck, the whole backend suite, the ratchet and the ledger tests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The six #550 commits build on one another without reversal. T1 creates ScriptedOracle and T2 reuses it for the last dispatch cases, then retires the old dispatch file. T3 exports ScriptedProcess and adds ScriptedClaude and InProcessWorkers, which T4's InProcessRun composes. T5 and T6 extend InProcessRun with journaled, recorded and recovery rather than building a second harness. T5 deletes recoverCompletedResponses from RunDriverMother as its objective asks, and no reference remains. The rest of the mother stays for ct-run-machine-real-process.test.ts, as the out-of-scope section declares. The #550 ledger row that T2 deferred lands in T6, as assumption 9 records. The interleaved non-#550 commits come from main merges, and none of them undoes a slice artefact.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"; el juez de slice mide su ítem observabilidad como sin-vara)'. The slice was never asked to promise a signal, so there is nothing to measure against simplicity.md.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "6d2189a2a8a3efdd43f2fcb21cb67e8343f33d45a30f308d642c53aac221bad0"
+  }
+}
