@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { AcliUserStories } from '../../src/infrastructure/acli-user-stories.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { HostProcesses, InProcessApi } from './fixtures/in-process-api.ts'
@@ -245,6 +246,88 @@ class ARecordedConversation {
       root,
       story: ARecordedConversation.STORY,
     }, null, 2)}\n`)
+  }
+}
+
+class ACheckoutWithNothingReady {
+  static readonly REPOSITORY = 'jjponz/repo-pulse'
+  static readonly REPOSITORY_URL = `https://github.com/${ACheckoutWithNothingReady.REPOSITORY}.git`
+  static readonly STORY = 'IDLE-1'
+  static readonly CONVERSATION = '0f3c2a8e-5b1d-4c6e-9a7f-2d8b4e1c9a30'
+  static readonly #GIT_VERSION = 'git version 2.50.1 (Apple Git-155)'
+  static readonly #DATE = '2026-09-25'
+  static readonly #SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678'
+
+  static async prepared(): Promise<{ base: string, root: string, config: string, conversation: ScriptedConversation }> {
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-idle-sweep-'))
+    const root = join(base, 'checkout')
+    const config = join(base, 'config')
+    await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
+    await writeFile(
+      join(root, 'docs', 'superpowers', 'specs', `${ACheckoutWithNothingReady.STORY}-execution.md`),
+      '# The idle milestone — Execution spec\n',
+    )
+    const controlTower = join(config, 'control-tower')
+    await mkdir(join(controlTower, 'coordinating-session'), { recursive: true })
+    await writeFile(join(controlTower, 'checkouts.json'), `${JSON.stringify({
+      checkouts: [{ repo: ACheckoutWithNothingReady.REPOSITORY, path: root }],
+    }, null, 2)}\n`)
+    await writeFile(join(controlTower, 'coordinating-session', 'conversation.json'), `${JSON.stringify({
+      conversation: ACheckoutWithNothingReady.CONVERSATION,
+      repo: ACheckoutWithNothingReady.REPOSITORY,
+      root,
+      story: ACheckoutWithNothingReady.STORY,
+    }, null, 2)}\n`)
+
+    const conversation = new ScriptedConversation()
+      .answering(
+        { binary: 'git', argv: ['-C', root, 'remote', 'get-url', 'origin'] },
+        ACheckoutWithNothingReady.#git(`${ACheckoutWithNothingReady.REPOSITORY_URL}\n`),
+      )
+      .answering(
+        { binary: 'git', argv: ['-C', root, 'worktree', 'list', '--porcelain'] },
+        ACheckoutWithNothingReady.#git(`worktree ${root}\nHEAD ${ACheckoutWithNothingReady.#SHA}\nbranch refs/heads/main\n\n`),
+      )
+      .answering(
+        { binary: 'git', argv: ['-C', root, 'rev-parse', '--abbrev-ref', 'HEAD'] },
+        ACheckoutWithNothingReady.#git('main\n'),
+      )
+      .answering(
+        { binary: 'gh', argv: ACheckoutWithNothingReady.#openIssuesArgv() },
+        Capture.read('gh', 'graphql-open-issues-repo-pulse'),
+      )
+
+    return { base, root, config, conversation }
+  }
+
+  static environment(config: string): NodeJS.ProcessEnv {
+    return { CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh' }
+  }
+
+  static openIssueCallsCarryTheOpenQuery(conversation: ScriptedConversation): boolean {
+    const calls = conversation.asked.filter((request) => request.binary === 'gh')
+
+    return calls.length > 0 && calls.every((request) => request.argv.includes(`query=${issuesQueryFor(['OPEN'])}`))
+  }
+
+  static async remove(base: string): Promise<void> {
+    await rm(base, { recursive: true, force: true })
+  }
+
+  static #openIssuesArgv(): string[] {
+    const [owner, name] = ACheckoutWithNothingReady.REPOSITORY.split('/')
+
+    return [
+      'api', 'graphql', '--paginate', '--slurp',
+      '-f', `query=${issuesQueryFor(['OPEN'])}`,
+      '-f', `owner=${owner}`, '-f', `name=${name}`,
+    ]
+  }
+
+  static #git(stdout: string): Capture {
+    return new Capture({
+      command: 'git', version: ACheckoutWithNothingReady.#GIT_VERSION, date: ACheckoutWithNothingReady.#DATE, code: 0, stdout, stderr: '',
+    })
   }
 }
 
@@ -637,4 +720,34 @@ describe('ct-api entrypoint composed in process', () => {
       await rm(config, { recursive: true, force: true })
     }
   }, 60_000)
+
+  it('the runtime sweeps the checkout of its held story and mounts the slice message path', async () => {
+    const fixture = await ACheckoutWithNothingReady.prepared()
+    const table = new ScriptedTerminals()
+
+    try {
+      const api = await InProcessApi.started(
+        ACheckoutWithNothingReady.environment(fixture.config),
+        new HostProcesses({ conversation: fixture.conversation, table }),
+      )
+
+      const response = await fetch(`http://127.0.0.1:${api.port}/slices/42/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+
+      expect(response.status).not.toBe(404)
+      expect(await response.json()).toMatchObject({ code: 'malformed-repo' })
+      await expect.poll(
+        () => ACheckoutWithNothingReady.openIssueCallsCarryTheOpenQuery(fixture.conversation), { timeout: 10_000 }
+      ).toBe(true)
+      expect(api.saidLater()).not.toContain('could not survey')
+      expect(api.saidLater()).not.toContain('relay:')
+      expect(table.opened).toEqual([])
+      await expect(stat(join(fixture.config, 'control-tower', 'go'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await ACheckoutWithNothingReady.remove(fixture.base)
+    }
+  }, 30_000)
 })
