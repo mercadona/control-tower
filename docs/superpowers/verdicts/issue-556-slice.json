@@ -1,0 +1,26 @@
+{
+  "issue": 556,
+  "tasks_total": 7,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Each sentence of the Desired end state is present in the accumulated diff. (1) LISTED, unlisted and stale are removed from fixtures/process-ratchet.ts. (2) process-ratchet.test.ts carries 'the_backend_suite_launches_no_process', which expects spawningUnder over the real tree toEqual([]), so any spawning test file fails it. (3) No test file under backend/__tests__ imports node:child_process, node-pty or process-border.ts. The six fake children moved to EventEmitter implements LaunchedProcess, git-workspace-real-process, yardstick-real-process, makefile-local-env, state-directory-real-process and the orphan fixtures/headless-child.ts are deleted, and a grep of the tree finds those module names only inside string literals of the detector and its tests. (4) makefile-local-env.test.ts and state-directory-real-process.test.ts are gone, with their 5 cases recorded as 'deleted without substitute — decided'. (5) The whole test object, with testTimeout and hookTimeout, is removed from backend/vitest.config.ts. (6) The two closing sections of this-repository.md name no fast subset, and the text now says no test launches a process. (7) The ledger gains 14 rows: 5 cleanup, 1 census, 5 Makefile and 3 ratchet, one for each deleted case. The suite passed in the inherited Global verification.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "Read the seven task commits in order. Tasks 1-4 each remove from LISTED only the entries their own files stopped earning, and Task 5 then removes the emptied list with unlisted and stale. That retirement is exactly what Task 5's objective asks for, and D-11 decided it, so no leftover scaffolding remains. Task 3 migrates the cleanup cases onto the existing UnlaunchedWorkspaceDouble and adds no second git double. Task 7's convention text describes the prohibition Task 5 built, and the triggers it names (a child_process, node-pty or border import, or the -real-process marker) are the ones ProcessRatchet.SPAWNING/BORDER/MARKER still enforce. No later commit undoes what an earlier one established.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)'. The slice was never asked to promise a signal, so there is nothing to measure against. The slice is also test-only: nothing under backend/src changes.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "5afeac0bd929764b5ae59685e536cf941956da638b7895c62216d95df644c2c2"
+  }
+}
