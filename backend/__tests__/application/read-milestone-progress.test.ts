@@ -17,6 +17,7 @@ import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { TrackedWork } from '../../src/domain/value-objects/tracked-work.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import type { ImplementationStepValue } from '../../src/domain/value-objects/implementation-state.ts'
+import type { RunFailure } from '../../src/domain/value-objects/run-instruction.ts'
 import { ImplementationHistoryEntry } from '../../src/domain/value-objects/implementation-history-entry.ts'
 import { ImplementationActivity } from '../../src/domain/value-objects/implementation-activity.ts'
 import { PlanningActivity, PlanningActivityState, PlanningToolCall } from '../../src/domain/value-objects/planning-activity.ts'
@@ -271,6 +272,18 @@ class Mother {
       recovery: { action: 'observe', detail: 'talk to the coordinating session' },
       refusal: { state: DriveRun.BLOCKED_JUDGE, outcome: 'failed', exit: 1, task, findings, verdict, vetoed: null, failure: null },
       execution: Mother.implementationStateOf({ task, totalTasks: 3, step: ImplementationStep.JUDGE }),
+    })
+  }
+
+  static closedByCheck({ state, outcome = 'failed', task, failure }: {
+    state: string, outcome?: string, task: number | null, failure: RunFailure | null,
+  }): TrackedWork {
+    return new TrackedWork(MilestoneProgressMother.watch(), {
+      phase: 'uncertain',
+      diagnostic: `the run closed at ${state}`,
+      recovery: { action: 'observe', detail: 'talk to the coordinating session' },
+      refusal: { state, outcome, exit: 1, task, findings: null, verdict: null, vetoed: null, failure },
+      execution: Mother.implementationStateOf({ task: task ?? 3, totalTasks: 3, step: ImplementationStep.JUDGE }),
     })
   }
 
@@ -544,6 +557,79 @@ describe('ReadMilestoneProgress', () => {
     const stopped = line.tasks.find((task) => task.number === 2)!
     expect(stopped.status).toBe(SliceTaskStatus.STOPPED)
     expect(stopped.findings).toBe('the judge found a missing test')
+  })
+
+  it('a slice closed by its controls needs the person and carries the failing command and the log path', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.closedByCheck({
+      state: DriveRun.BLOCKED_CONTROLS, task: 2,
+      failure: { command: 'npm test', code: 1, log: '.agent/run-7/controls.log' },
+    }))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({
+      kind: 'controls', task: 2, outcome: 'failed', command: 'npm test', code: 1, log: '.agent/run-7/controls.log',
+    })
+  })
+
+  it('a slice closed by its Global verification needs the person and carries the failing command and the log path', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.closedByCheck({
+      state: DriveRun.BLOCKED_GLOBAL, outcome: 'indeterminate', task: null,
+      failure: { command: 'make test-all', code: null, log: '.agent/run-7/global.log' },
+    }))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({
+      kind: 'global', outcome: 'indeterminate', command: 'make test-all', code: null, log: '.agent/run-7/global.log',
+    })
+  })
+
+  it('a slice closed by a check from a plugin too old to name the failure carries nulls', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.closedByCheck({
+      state: DriveRun.BLOCKED_CONTROLS, outcome: 'indeterminate', task: 2, failure: null,
+    }))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    expect(read.progress!.lines[0].attention).toEqual({
+      kind: 'controls', task: 2, outcome: 'indeterminate', command: null, code: null, log: null,
+    })
+  })
+
+  it('a closure outside the judge, the controls and the Global verification still reads as uncertain', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.closedByCheck({
+      state: 'blocked-slice-judge', task: null,
+      failure: { command: 'npm test', code: 1, log: '.agent/run-7/slice.log' },
+    }))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({
+      kind: 'uncertain', action: 'observe', detail: 'talk to the coordinating session',
+    })
   })
 
   it('an uncertain slice needs the person with its one recovery action', async () => {

@@ -28,6 +28,8 @@ export class DriveRunParams {
 
 export class DriveRun {
   static readonly BLOCKED_JUDGE = 'blocked-judge'
+  static readonly BLOCKED_CONTROLS = 'blocked-controls'
+  static readonly BLOCKED_GLOBAL = 'blocked-global'
   static readonly VETOED = 'failed'
 
   readonly calls: PlanCalls
