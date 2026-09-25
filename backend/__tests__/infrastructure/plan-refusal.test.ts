@@ -41,7 +41,7 @@ describe('PlanCollapse', () => {
   ]
 
   const RAISED_ONLY_BY_THE_DISPATCH_RELAY_OR_STARTUP_RECOVERY = [
-    'PlanIssueNotClaimed', 'DispatchNotAvailable', 'DispatchNotRead', 'DispatchNotUnderstood',
+    'PlanIssueNotClaimed', 'DispatchNotAvailable', 'DispatchWaitsBehind', 'DispatchNotRead', 'DispatchNotUnderstood',
     'PlanAgentNeverLaunched', 'PlanAgentNotLaunched', 'PlanAgentNotNamed',
     'WorkspaceNotPrepared', 'WorkspaceNotCleaned', 'ConversationNotUnderstood',
   ]

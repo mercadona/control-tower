@@ -1,5 +1,5 @@
 import { Reservation, WorkInFlight } from './work-in-flight.ts'
-import { DispatchNotAvailable, PlanFailure } from '../domain/exceptions.ts'
+import { DispatchNotAvailable, DispatchWaitsBehind, PlanFailure } from '../domain/exceptions.ts'
 import type { PlanStarted, SliceNotStarted, StartMilestonePlanResult } from '../application/actions/start-milestone-plan.ts'
 import type { AuthorisedMilestones } from '../domain/value-objects/authorised-milestones.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
@@ -31,6 +31,10 @@ export class RelayLine {
   static refusedIn(repository: RepositoryName, milestone: string, failure: PlanFailure): string {
     return `relay: ${repository.text} milestone "${milestone}" could not be dispatched: ${failure.message}\n`
   }
+
+  static waits(repository: RepositoryName, milestone: string, waiting: DispatchWaitsBehind): string {
+    return `relay: ${repository.text} milestone "${milestone}" waits: ${waiting.message}\n`
+  }
 }
 
 export class DispatchRelay {
@@ -41,6 +45,7 @@ export class DispatchRelay {
   readonly dispatch: MilestoneDispatched
   readonly inFlight: WorkInFlight
   readonly stderr: (line: string) => void
+  readonly #toldWaits = new Map<string, string>()
 
   constructor({ milestones, ownMilestone, dispatch, inFlight, stderr }: {
     milestones: AuthorisedMilestonesRead,
@@ -84,13 +89,25 @@ export class DispatchRelay {
   async #dispatchMilestone(root: CheckoutRoot, repository: RepositoryName, milestone: string): Promise<void> {
     try {
       const dispatched = await this.dispatch({ repository, root, milestone })
+      this.#toldWaits.delete(repository.text)
       for (const started of dispatched.started) this.stderr(RelayLine.dispatched(started))
       for (const slice of dispatched.failed) this.stderr(RelayLine.notStarted(slice))
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
+      if (failure instanceof DispatchWaitsBehind) {
+        this.#tellOnce(repository, RelayLine.waits(repository, milestone, failure))
+        return
+      }
+      this.#toldWaits.delete(repository.text)
       if (failure instanceof DispatchNotAvailable) return
       this.stderr(RelayLine.refusedIn(repository, milestone, failure))
     }
+  }
+
+  #tellOnce(repository: RepositoryName, line: string): void {
+    if (this.#toldWaits.get(repository.text) === line) return
+    this.#toldWaits.set(repository.text, line)
+    this.stderr(line)
   }
 
   static ownKeyFor(repository: RepositoryName): string {

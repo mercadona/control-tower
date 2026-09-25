@@ -26,6 +26,15 @@ export class RepositoryPreparationRequired extends PlanFailure {}
 
 export class DispatchNotAvailable extends DispatchFailure {}
 
+export class DispatchWaitsBehind extends DispatchNotAvailable {
+  readonly wait: import('./value-objects/dispatch-wait.ts').DispatchWait
+
+  constructor(wait: import('./value-objects/dispatch-wait.ts').DispatchWait) {
+    super(wait.describe())
+    this.wait = wait
+  }
+}
+
 export class DispatchNotRead extends DispatchFailure {}
 
 export class DispatchNotUnderstood extends DispatchFailure {}

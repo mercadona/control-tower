@@ -399,7 +399,9 @@ and dispatches it while it has an open issue at `status:ready`. A milestone of
 another story is left alone even when its issues are ready, because in a
 repository several people drive it is somebody else's work. A clone with no
 held conversation dispatches nothing, and that includes one whose conversation
-was closed with **Cancelar la sesión**. Each dispatched slice gets its own worktree and agent
+was closed with **Cancelar la sesión**. A ready slice whose `area:` or `touches:` tokens
+are held by work in progress or in review, in any milestone, waits; the backend
+log then says which issue it waits behind, once while that stays the same. Each dispatched slice gets its own worktree and agent
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.
 
