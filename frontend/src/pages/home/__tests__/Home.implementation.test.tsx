@@ -22,6 +22,7 @@ type Backend = {
   activePlans?: () => Answer
   recoverPlan?: () => Answer
   cleanupPlan?: () => Answer
+  reopen?: () => Answer
 }
 
 const settle = async () => {
@@ -37,11 +38,13 @@ class ImplementationBackend {
     activePlans = HeadlessPlanMother.empty,
     recoverPlan,
     cleanupPlan,
+    reopen,
   }: Backend = {}) {
     const fetching = vi.fn(async (input: string | URL | Request) => {
       const path = String(input)
       const respond = (answer: Answer) => new Response(answer.body, { status: answer.status })
       if (path === '/coordinating-session') return respond(session())
+      if (path === '/coordinating-session/reopen' && reopen !== undefined) return respond(reopen())
       if (path === '/external-tools') return respond(ExternalToolsMother.allReady())
       if (path === '/spec-freeze') return respond(specFreeze())
       if (path === '/epic-groom') return respond(epicGroom())
@@ -298,5 +301,45 @@ describe('Home is the start form with no session held, and the focused view for 
     await user.click(screen.getByRole('button', { name: 'Volver a la lista' }))
 
     expect(screen.queryByRole('dialog', { name: 'Sesión coordinadora' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['brainstorming', SpecFreezeMother.none, EpicGroomMother.none, 'Reábrela para seguir; conserva lo que ya se habló.'],
+    ['spec-freeze', SpecFreezeMother.draftReady, EpicGroomMother.draft, 'Reábrela para seguir; conserva lo que ya se habló.'],
+    ['groom', SpecFreezeMother.frozen, EpicGroomMother.groomable, 'Reábrela para seguir; conserva lo que ya se habló.'],
+    [
+      'implementation',
+      SpecFreezeMother.frozen,
+      EpicGroomMother.authorised,
+      'Los slices siguen en marcha. Reábrela para volver a hablar con ellos; conserva lo que ya se habló.',
+    ],
+  ])('an ended session shows Reabrir la sesión with the copy of its step: %s', async (_step, specFreeze, epicGroom, description) => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.ended,
+      specFreeze,
+      epicGroom,
+    })
+
+    openHome()
+
+    expect(await screen.findByText(description)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reabrir la sesión' })).toBeInTheDocument()
+  })
+
+  it('Reabrir la sesión posts the held target', async () => {
+    const fetching = ImplementationBackend.with({
+      session: CoordinatingSessionMother.ended,
+      specFreeze: SpecFreezeMother.none,
+      epicGroom: EpicGroomMother.none,
+      reopen: () => CoordinatingSessionMother.opened(),
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Reabrir la sesión' }))
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledWith('/coordinating-session/reopen', {
+      method: 'POST',
+      headers: { 'x-coordinating-target': CoordinatingSessionMother.TARGET },
+    }))
   })
 })

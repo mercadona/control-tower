@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CoordinatingLifecycle, CoordinatingSessionRead } from 'app/coordinating-session/useCoordinatingSession'
 import { FocusedSessionHeader } from 'app/focused-session/components/focused-session-header'
 import { GateBand } from 'app/focused-session/components/gate-band'
+import { SessionEndedNotice } from 'app/focused-session/components/session-ended-notice'
 import { SessionPanel } from 'app/focused-session/components/session-panel'
 import { SessionStageOf } from 'app/focused-session/SessionStage'
 import { MilestoneBoard } from 'app/milestone-progress/components/milestone-board'
@@ -23,7 +24,8 @@ type FocusedSessionProps = {
   terminal: LiveSession | null
   stage: SessionStageOf
   lifecycle: Pick<
-    CoordinatingLifecycle, 'connection' | 'closeError' | 'close' | 'liveAsk' | 'blocksOpening' | 'operationBusy' | 'openGroom'
+    CoordinatingLifecycle,
+    'connection' | 'closeError' | 'close' | 'liveAsk' | 'blocksOpening' | 'operationBusy' | 'openGroom' | 'reopen'
   >
   closing: boolean
   milestoneProgress: MilestoneProgressOutcome | null
@@ -51,6 +53,9 @@ const FocusedSession = ({
         onCancel={() => void lifecycle.close()}
         onTalk={isImplementation ? talkAction : undefined}
       />
+      {(held.kind === 'ended' || held.kind === 'unresumable') && (
+        <SessionEndedNotice step={stage.step} busy={lifecycle.operationBusy} onReopen={lifecycle.reopen} />
+      )}
       <GateBand
         band={stage.band}
         target={held.target}
