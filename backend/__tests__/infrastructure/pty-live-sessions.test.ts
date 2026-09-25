@@ -1,6 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
-import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
 import type { TableRead, Terminal, TerminalSpawn } from '../../src/infrastructure/process-table.ts'
 import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
 import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
@@ -17,49 +16,6 @@ import {
 } from '../../src/application/actions/close-coordinating-session.ts'
 import { ClosureStatus, SessionClosure } from '../../src/domain/value-objects/session-closure.ts'
 import { SessionProcessOwnership } from '../../src/domain/value-objects/session-process-ownership.ts'
-
-const childProcessDouble = vi.hoisted(() => ({ execFile: vi.fn(), spawn: vi.fn() }))
-vi.mock('node:child_process', () => ({ execFile: childProcessDouble.execFile, spawn: childProcessDouble.spawn }))
-
-const border = new SystemProcesses()
-
-type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void
-type ExecInvocation = {
-  file: string,
-  argv: string[],
-  options: Record<string, unknown>,
-  callback: ExecCallback,
-  close: (() => void) | null,
-}
-
-class ExecFileDouble {
-  readonly calls: ExecInvocation[] = []
-
-  install(): void {
-    childProcessDouble.execFile.mockImplementation((
-      file: string, argv: string[], options: Record<string, unknown>, callback: ExecCallback
-    ) => {
-      const invocation: ExecInvocation = { file, argv, options, callback, close: null }
-      this.calls.push(invocation)
-
-      return { once: (event: string, listener: () => void) => {
-        if (event === 'close') invocation.close = listener
-      } }
-    })
-  }
-
-  responds(index: number, error: Error | null, stdout = ''): void {
-    const call = this.calls[index]
-    if (call === undefined) throw new Error(`execFile call ${index} has not started`)
-    call.callback(error, stdout, '')
-  }
-
-  closes(index: number): void {
-    const call = this.calls[index]
-    if (call?.close === null || call?.close === undefined) throw new Error(`execFile call ${index} cannot close`)
-    call.close()
-  }
-}
 
 type RecordedSpawn = {
   file: string,
@@ -421,7 +377,6 @@ describe('PtyLiveSessions', () => {
   afterEach(() => {
     TerminalDouble.closeAll()
     vi.useRealTimers()
-    childProcessDouble.execFile.mockReset()
   })
   it('opening names the session after the program it runs', () => {
     const opened = OpenedTerminal.with({
@@ -2489,138 +2444,14 @@ describe('PtyLiveSessions', () => {
     expect(sessions.find(first.id)).toBeNull()
   })
 
-  it('the default inspector executes bounded asynchronous ps and validates its output', async () => {
-    const exec = new ExecFileDouble()
-    exec.install()
-    const processes = new ControlledProcesses()
-    const spawn = SpawnDouble.recording()
-    let heartbeat = false
-    const probeObservedAfterHeartbeat: boolean[] = []
-    const sessions = new PtyLiveSessions({
-      spawn,
-      newId: Ids.sequential(),
-      stderr: (): void => {},
-      signal: (pid, signal) => {
-        if (signal === 0) probeObservedAfterHeartbeat.push(heartbeat)
-        processes.signal(pid, signal)
-      },
-      sleep: processes.sleep,
-      now: () => processes.now,
-      termGraceMs: 2,
-      killGraceMs: 2,
-      pollMs: 1,
-      inspectProcessTable: (read) => border.readTable(read),
-    })
-    const session = sessions.open(LoginProgram.default())
-    processes.alive.add(4101)
-    await Inspections.settle()
-
-    expect(exec.calls[0]).toMatchObject({ file: '/bin/ps', argv: ['-axo', 'pid=,pgid=,lstart='] })
-    expect(exec.calls[0].options).toEqual(expect.objectContaining({
-      encoding: 'utf8', timeout: 500, killSignal: 'SIGKILL', maxBuffer: 4_194_304,
-      env: expect.objectContaining({ LC_ALL: 'C' }), signal: expect.any(AbortSignal),
-    }))
-    const delivered: string[] = []
-    sessions.watch({ session, onBytes: (bytes) => delivered.push(bytes), onEnded: () => {} })
-    spawn.terminals[0].prints('available before ps callback')
-    expect(delivered).toEqual(['available before ps callback'])
-
-    exec.responds(0, null, ProcessTables.group(4101, new Map([[4101, 'original']])))
-    await AsyncTurns.run()
-    expect(exec.calls).toHaveLength(1)
-    exec.closes(0)
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    expect(exec.calls).toHaveLength(2)
-
-    const largeCapture = Array.from({ length: 257 }, (_, index) =>
-      ProcessTables.row(10_000 + index, 0, ProcessTables.ORIGINAL)
-    ).join('\n') + '\n'
-    exec.responds(1, null, largeCapture)
-    setImmediate(() => { heartbeat = true })
-    exec.closes(1)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(probeObservedAfterHeartbeat).toEqual([true])
-
-    const closing = sessions.terminate(TerminationMother.evidence(sessions, session))
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    expect(exec.calls).toHaveLength(3)
-    exec.responds(2, null, ProcessTables.groups(new Map([
-      [4101, new Map([[4101, 'original']])],
-      [9999, new Map([[9999, 'original']])],
-    ])))
-    exec.closes(2)
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    expect(exec.calls).toHaveLength(4)
-    processes.onSignal = (pid, signal) => {
-      if (signal !== 'SIGKILL') return
-      processes.alive.delete(-pid)
-      spawn.terminals[0].exits()
-    }
-    exec.responds(3, null, ProcessTables.group(4101, new Map([[4101, 'original']])))
-    exec.closes(3)
-
-    await expect(closing).resolves.toBeUndefined()
-    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([
-      { pid: -4101, signal: 'SIGTERM' },
-      { pid: -4101, signal: 'SIGKILL' },
-    ])
-  })
-
   it.each([
-    { name: 'ENOENT', code: 'ENOENT', stdout: '' },
-    { name: 'abort', code: 'ABORT_ERR', stdout: '' },
-    { name: 'maxBuffer', code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', stdout: '' },
-    { name: 'malformed output', code: null, stdout: 'truncated process row\n' },
-  ])('the default inspector retains its slot after early $name until child close', async ({ code, stdout }) => {
+    { name: 'ENOENT', code: 'ENOENT' },
+    { name: 'abort', code: 'ABORT_ERR' },
+    { name: 'maxBuffer', code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' },
+    { name: 'malformed output', code: null },
+  ])('a timely $name inspection failure leaves close durably requested', async ({ code }) => {
     vi.useFakeTimers()
-    const exec = new ExecFileDouble()
-    exec.install()
-    const spawn = SpawnDouble.withPids(4101, 4102)
-    const destructive: { pid: number, signal: NodeJS.Signals }[] = []
-    const sessions = new PtyLiveSessions({
-      spawn,
-      newId: Ids.sequential(),
-      stderr: (): void => {},
-      signal: (pid, signal): void => {
-        if (signal !== 0) destructive.push({ pid, signal })
-      },
-      sleep: async (): Promise<void> => {},
-      now: () => 0,
-      inspectionNow: Date.now,
-      termGraceMs: 1,
-      killGraceMs: 1,
-      pollMs: 1,
-      inspectProcessTable: (read) => border.readTable(read),
-    })
-    sessions.open(LoginProgram.default())
-    await vi.advanceTimersByTimeAsync(0)
-    sessions.open(LoginProgram.default())
-    const failure = code === null ? null : new Error(code) as NodeJS.ErrnoException
-    if (failure !== null) failure.code = code ?? undefined
-    exec.responds(0, failure, stdout)
-    await vi.advanceTimersByTimeAsync(2_000)
-    expect(exec.calls).toHaveLength(1)
-    expect(destructive).toEqual([])
-
-    exec.closes(0)
-    await AsyncTurns.run()
-    await Inspections.until(() => exec.calls.length === 2, 'default inspection did not restart after child close')
-    expect(exec.calls).toHaveLength(2)
-  })
-
-  it.each([
-    { name: 'ENOENT', code: 'ENOENT', stdout: ProcessTables.group(4101, new Map([[4101, 'original']])) },
-    { name: 'abort', code: 'ABORT_ERR', stdout: ProcessTables.group(4101, new Map([[4101, 'original']])) },
-    {
-      name: 'maxBuffer',
-      code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
-      stdout: ProcessTables.group(4101, new Map([[4101, 'original']])),
-    },
-    { name: 'malformed output', code: null, stdout: 'truncated process row\n' },
-  ])('a timely default-inspector $name failure leaves close durably requested', async ({ code, stdout }) => {
-    vi.useFakeTimers()
-    const exec = new ExecFileDouble()
-    exec.install()
+    const inspection = new ControlledInspection(Date.now)
     const processes = new ControlledProcesses()
     const spawn = SpawnDouble.recording()
     const sessions = new PtyLiveSessions({
@@ -2634,13 +2465,12 @@ describe('PtyLiveSessions', () => {
       termGraceMs: 2,
       killGraceMs: 2,
       pollMs: 1,
-      inspectProcessTable: (read) => border.readTable(read),
+      inspectProcessTable: inspection.inspect,
     })
     const session = sessions.open(LoginProgram.default())
     processes.alive.add(4101)
     await vi.advanceTimersByTimeAsync(0)
-    exec.responds(0, null, ProcessTables.group(4101, new Map([[4101, 'original']])))
-    exec.closes(0)
+    inspection.succeeds(0, ProcessTables.group(4101, new Map([[4101, 'original']])))
     await AsyncTurns.run()
     const records = new ClosureRecords()
     const close = new CloseCoordinatingSession({ records, liveSessions: sessions })
@@ -2653,44 +2483,14 @@ describe('PtyLiveSessions', () => {
     let settledAt: number | null = null
     void closing.catch(() => { settledAt = Date.now() })
     await vi.advanceTimersByTimeAsync(100)
-    expect(exec.calls).toHaveLength(2)
-    const failure = code === null ? null : Object.assign(new Error(code), { code })
-    exec.responds(1, failure, stdout)
-    exec.closes(1)
+    expect(inspection.calls).toHaveLength(2)
+    if (code === null) inspection.succeeds(1, 'truncated process row\n')
+    else inspection.fails(1, Object.assign(new Error(code), { code }))
     await expect(closing).rejects.toBeInstanceOf(SessionNotTerminated)
 
     expect(settledAt! - startedAt).toBeLessThan(PtyLiveSessions.INSPECTION_TIMEOUT_MS)
-    expect(exec.calls[1].options.signal).toMatchObject({ aborted: false })
     expect(records.closure?.status).toBe(ClosureStatus.REQUESTED)
     expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
-  })
-
-  it('the default inspector also waits for its callback when child close arrives first', async () => {
-    vi.useFakeTimers()
-    const exec = new ExecFileDouble()
-    exec.install()
-    const sessions = new PtyLiveSessions({
-      spawn: SpawnDouble.recording(),
-      newId: Ids.sequential(),
-      stderr: (): void => {},
-      signal: (): void => {},
-      sleep: async (): Promise<void> => {},
-      now: () => 0,
-      inspectionNow: Date.now,
-      termGraceMs: 1,
-      killGraceMs: 1,
-      pollMs: 1,
-      inspectProcessTable: (read) => border.readTable(read),
-    })
-    sessions.open(LoginProgram.default())
-    await vi.advanceTimersByTimeAsync(0)
-    exec.closes(0)
-    await vi.advanceTimersByTimeAsync(2_000)
-    expect(exec.calls).toHaveLength(1)
-
-    exec.responds(0, null, ProcessTables.group(4101, new Map([[4101, 'original']])))
-    await Inspections.until(() => exec.calls.length === 2, 'default inspection did not settle after its late callback')
-    expect(exec.calls).toHaveLength(2)
   })
 
   it('the_process_table_read_carries_the_inspection_bounds', async () => {

@@ -14,7 +14,6 @@ export class ProcessRatchet {
     'infrastructure/headless-plan-agents.test.ts',
     'infrastructure/makefile-local-env.test.ts',
     'infrastructure/pty-live-sessions-real-process.test.ts',
-    'infrastructure/pty-live-sessions.test.ts',
     'infrastructure/recorded-plan-recovery.test.ts',
     'infrastructure/run-plan-recovery.test.ts',
     'infrastructure/session-channel-real-process.test.ts',
