@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.1](https://github.com/mercadona/control-tower/compare/plugin-v0.62.0...plugin-v0.62.1) (2026-09-25)
+
+
+### Correcciones
+
+* a run closed by its controls can be reopened ([#615](https://github.com/mercadona/control-tower/issues/615)) ([5d43178](https://github.com/mercadona/control-tower/commit/5d43178b8dcc0c87205db24d93732ee01a3f585f))
+
 ## [0.62.0](https://github.com/mercadona/control-tower/compare/plugin-v0.61.0...plugin-v0.62.0) (2026-09-25)
 
 

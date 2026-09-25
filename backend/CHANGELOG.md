@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/mercadona/control-tower/compare/backend-v0.7.1...backend-v0.8.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* read the whole milestone's progress in one call, and reopen an ended coordinating session ([#604](https://github.com/mercadona/control-tower/issues/604)) ([5f46290](https://github.com/mercadona/control-tower/commit/5f4629057bcdd03a731180cec52c08f50e195cfa))
+* the tool bar checks whether claude is logged in ([#599](https://github.com/mercadona/control-tower/issues/599)) ([514962e](https://github.com/mercadona/control-tower/commit/514962ecc00b1e0490b0329b03948728040a3b7f))
+
+
+### Correcciones
+
+* a merged spec pull request puts the checkout back on the default branch ([#606](https://github.com/mercadona/control-tower/issues/606)) ([bb56834](https://github.com/mercadona/control-tower/commit/bb56834645b44285bbe84286c0208a060b18db61))
+* **backend:** a live coordinating session is no longer closed as ended when the clock behind ps lstart shifts ([#613](https://github.com/mercadona/control-tower/issues/613)) ([5cc46e4](https://github.com/mercadona/control-tower/commit/5cc46e419bdbd35f14bae972a9548836e24470a9))
+* the relay says which work a ready slice waits behind ([#601](https://github.com/mercadona/control-tower/issues/601)) ([2a4d4be](https://github.com/mercadona/control-tower/commit/2a4d4bef8be743a39cd2a13dda8227639ac466d1))
+
 ## [0.7.1](https://github.com/mercadona/control-tower/compare/backend-v0.7.0...backend-v0.7.1) (2026-09-25)
 
 
