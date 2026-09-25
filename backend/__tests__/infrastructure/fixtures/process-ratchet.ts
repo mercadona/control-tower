@@ -7,7 +7,6 @@ export class ProcessRatchet {
   static readonly BORDER = '/process-border.ts'
 
   static readonly LISTED: readonly string[] = [
-    'infrastructure/checked-run-delivery-real-process.test.ts',
     'infrastructure/claude-calls-real-process.test.ts',
     'infrastructure/claude-calls.test.ts',
     'infrastructure/claude-conversations-real-process.test.ts',
