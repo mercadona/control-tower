@@ -1,0 +1,13 @@
+command: gh auth status
+version: gh version 2.100.0 (2026-09-03)
+date: 2026-09-25
+exit: 0
+--- stdout
+github.com
+  ✓ Logged in to github.com account jjponz (keyring)
+  - Active account: true
+  - Git operations protocol: ssh
+  - Token: gho_************************************
+  - Token scopes: 'admin:public_key', 'gist', 'project', 'read:org', 'repo'
+
+--- stderr

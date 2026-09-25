@@ -1,0 +1,19 @@
+command: claude auth status
+version: 2.1.282 (Claude Code)
+date: 2026-09-25
+exit: 0
+--- stdout
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "analyticsDisabled": false,
+  "projectsDirectory": "/Users/jponzvan/.claude/projects",
+  "configDirectory": "/Users/jponzvan/.claude",
+  "email": "jponzvan@mercadona.es",
+  "orgId": "8da8dce6-5d02-475d-b13c-4fa69a3642c5",
+  "orgName": "MercadonaTech",
+  "subscriptionType": "team"
+}
+
+--- stderr

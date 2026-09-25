@@ -1,0 +1,8 @@
+command: ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com
+version: OpenSSH_10.0p2, LibreSSL 3.3.6
+date: 2026-09-25
+exit: 1
+--- stdout
+
+--- stderr
+Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.

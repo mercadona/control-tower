@@ -2,9 +2,14 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { InProcessApi } from './fixtures/in-process-api.ts'
+import { HostProcesses, InProcessApi } from './fixtures/in-process-api.ts'
+import { LivingProcessGroups } from './fixtures/living-process-groups.ts'
+import { Capture, ScriptedConversation } from './fixtures/scripted-conversation.ts'
 
 type Failure = { code: string, detail: string }
+type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
+type DeliveredMetrics = { enabled: boolean, variable: string, destination: string | null }
+type SurveyedTools = { ready: boolean, tools: ToolRow[], metricsDelivery: DeliveredMetrics }
 
 class RunFileFixture {
   static readonly ISSUE = 7
@@ -33,9 +38,47 @@ class RunFileFixture {
   }
 }
 
+class ExternalToolsProbe {
+  static readonly DESTINATION = 'fixture-project:fixture_dataset.fixture_table'
+  static readonly #BINARIES = ['gh', 'acli', 'claude', 'git', 'ssh', 'bq', 'gcloud']
+  static readonly #paths: string[] = []
+
+  static async started(harvestTable: string): Promise<{ api: InProcessApi, conversation: ScriptedConversation }> {
+    const path = await mkdtemp(join(tmpdir(), 'ct-api-external-tools-path-'))
+    ExternalToolsProbe.#paths.push(path)
+    await Promise.all(
+      ExternalToolsProbe.#BINARIES.map((name) => writeFile(join(path, name), '', { mode: 0o755 }))
+    )
+    const conversation = new ScriptedConversation()
+      .answering({ binary: 'gh', argv: ['auth', 'status'] }, Capture.read('gh', 'auth-status'))
+      .answering({ binary: 'acli', argv: ['jira', 'auth', 'status'] }, Capture.read('acli', 'jira-auth-status'))
+      .answering({ binary: 'claude', argv: ['auth', 'status'] }, Capture.read('claude', 'auth-status'))
+      .answering(
+        { binary: 'ssh', argv: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-T', 'git@github.com'] },
+        Capture.read('ssh', 'github-batch-mode'),
+      )
+      .answering(
+        { binary: 'gcloud', argv: ['auth', 'list', '--filter=status:ACTIVE', '--format=value(account)'] },
+        Capture.read('gcloud', 'auth-list-active'),
+      )
+    const api = await InProcessApi.started(
+      { CT_API_PORT: '0', CT_HARVEST_BQ_TABLE: harvestTable, PATH: path },
+      new HostProcesses({ conversation, table: new LivingProcessGroups([]) }),
+    )
+
+    return { api, conversation }
+  }
+
+  static async cleanUp(): Promise<void> {
+    const paths = ExternalToolsProbe.#paths.splice(0)
+    await Promise.all(paths.map((path) => rm(path, { recursive: true, force: true })))
+  }
+}
+
 describe('ct-api entrypoint composed in process', () => {
   afterEach(async () => {
     await InProcessApi.stopAll()
+    await ExternalToolsProbe.cleanUp()
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
@@ -195,5 +238,35 @@ describe('ct-api entrypoint composed in process', () => {
 
     expect(response.status).toBe(405)
     expect(response.headers.get('Allow')).toBe('POST')
+  })
+
+  it('a_whole_request_to_external_tools_reaches_every_probe_client_the_entrypoint_wired_up', async () => {
+    const { api, conversation } = await ExternalToolsProbe.started(ExternalToolsProbe.DESTINATION)
+
+    const response = await fetch(`http://127.0.0.1:${api.port}/external-tools`)
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as SurveyedTools
+    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
+    const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
+    expect(claude.fix).toBe(claude.session === 'ready' ? null : 'claude auth login')
+    expect(body.metricsDelivery).toEqual({
+      enabled: true,
+      variable: 'CT_HARVEST_BQ_TABLE',
+      destination: ExternalToolsProbe.DESTINATION,
+    })
+    expect(conversation.asked.map((request) => request.binary)).toEqual(['gh', 'acli', 'claude', 'ssh', 'gcloud'])
+  })
+
+  it('without_the_harvest_table_the_entrypoint_answers_a_disabled_delivery_read_from_the_startup_configuration', async () => {
+    const { api } = await ExternalToolsProbe.started('')
+
+    const response = await fetch(`http://127.0.0.1:${api.port}/external-tools`)
+
+    const body = await response.json() as SurveyedTools
+    expect(body.metricsDelivery).toEqual({
+      enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null,
+    })
   })
 })
