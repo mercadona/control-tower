@@ -419,3 +419,11 @@ that `__tests__/yardstick.test.ts` measures on every file: names in English,
 zero prose in comments, no `export default` other than the one Vite demands in
 its config, and no import that climbs with `../`. The interface's labels are in
 Spanish; everything else, in English.
+
+A backend refusal reaches the screen through `src/app/product-error.ts`, which
+turns its `code` into Spanish copy. The protocol codes every endpoint can answer
+(`not-found`, `foreign-origin`, `unsupported-media-type`, `unknown-field` and
+the like) are left out on purpose: only a defect of this page can cause them,
+so they show the backend's own `detail`, which is what makes the defect
+traceable. So does `repository-preparation-required`, whose `detail` is the
+list of what the repository lacks and is shown under a Spanish title.

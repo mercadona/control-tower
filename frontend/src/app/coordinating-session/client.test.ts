@@ -109,6 +109,30 @@ describe('CoordinatingSessionClient', () => {
     })
   })
 
+  it('tells in Spanish that the checkout has to be on the default branch to open a session', async () => {
+    answerWith(CoordinatingSessionMother.checkoutOffTheDefaultBranch())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'checkout-not-on-default-branch',
+      error: 'La ruta local no está en la rama principal. Cámbiala a la rama principal y vuelve a abrir la sesión.',
+    })
+  })
+
+  it('shows a protocol refusal as the backend wrote it, so the defect behind it can be traced', async () => {
+    answerWith(CoordinatingSessionMother.bodyNotDeclaredAsJson())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'unsupported-media-type',
+      error: 'the body must be declared as application/json',
+    })
+  })
+
   it('closes only after a matching acknowledgement', async () => {
     const posting = vi.fn(async () => new Response(JSON.stringify({
       status: 'closed',

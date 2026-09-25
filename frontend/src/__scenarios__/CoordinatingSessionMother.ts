@@ -196,6 +196,18 @@ const alreadyLive = () => ({
     `"conversation":"${CONVERSATION}","session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
+const checkoutOffTheDefaultBranch = () => ({
+  status: 400,
+  body:
+    '{"code":"checkout-not-on-default-branch","detail":"/repo is on milestone/STAFF-129-execution, ' +
+    'and a session starts from master: run git switch master in that checkout and open the session again"}',
+})
+
+const bodyNotDeclaredAsJson = () => ({
+  status: 415,
+  body: '{"code":"unsupported-media-type","detail":"the body must be declared as application/json"}',
+})
+
 const storySpecFrozen = () => ({
   status: 400,
   body:
@@ -236,4 +248,6 @@ export const CoordinatingSessionMother = {
   opened,
   alreadyLive,
   storySpecFrozen,
+  checkoutOffTheDefaultBranch,
+  bodyNotDeclaredAsJson,
 }
