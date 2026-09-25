@@ -35,6 +35,26 @@ class SliceBaselineMarkdown {
     return ['---', 'baseline: [unterminated', '---', ''].join('\n')
   }
 
+  static outcomeNotText(): string {
+    return ['---', 'baseline:', '  outcome: 42', '---', ''].join('\n')
+  }
+
+  static baselineNotAMapping(): string {
+    return ['---', 'baseline: rojo', '---', ''].join('\n')
+  }
+
+  static baselineIsAList(): string {
+    return ['---', 'baseline:', '  - rojo', '  - no-verificado', '---', ''].join('\n')
+  }
+
+  static nullBaseline(): string {
+    return ['---', 'baseline: null', '---', ''].join('\n')
+  }
+
+  static nullOutcome(): string {
+    return ['---', 'baseline:', '  outcome: null', '  command: null', '---', ''].join('\n')
+  }
+
   static path(): string {
     return `${SliceBaselineMarkdown.ROOT}/.worktrees/${SliceBaselineMarkdown.ISSUE}/.agent/SLICE.md`
   }
@@ -106,5 +126,54 @@ describe('DiskSliceBaselines', () => {
     await expect(unparsableBaselines.isRed({
       root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
     })).rejects.toBeInstanceOf(SliceBaselineNotUnderstood)
+  })
+
+  it('a baseline outcome that is not text is not understood, instead of quietly answering not red', async () => {
+    const read = new ReadDouble(new Map([[SliceBaselineMarkdown.path(), SliceBaselineMarkdown.outcomeNotText()]]))
+    const baselines = new DiskSliceBaselines({ read: read.read })
+
+    await expect(baselines.isRed({
+      root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
+    })).rejects.toBeInstanceOf(SliceBaselineNotUnderstood)
+  })
+
+  it('a baseline that is not a mapping is not understood, instead of quietly answering not red', async () => {
+    const read = new ReadDouble(new Map([[SliceBaselineMarkdown.path(), SliceBaselineMarkdown.baselineNotAMapping()]]))
+    const baselines = new DiskSliceBaselines({ read: read.read })
+
+    await expect(baselines.isRed({
+      root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
+    })).rejects.toBeInstanceOf(SliceBaselineNotUnderstood)
+  })
+
+  it('a baseline that is a list rather than a mapping is not understood, instead of quietly answering not red', async () => {
+    const read = new ReadDouble(new Map([[SliceBaselineMarkdown.path(), SliceBaselineMarkdown.baselineIsAList()]]))
+    const baselines = new DiskSliceBaselines({ read: read.read })
+
+    await expect(baselines.isRed({
+      root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
+    })).rejects.toBeInstanceOf(SliceBaselineNotUnderstood)
+  })
+
+  it('a baseline explicitly set to null is not red, the same as a slice with no baseline at all', async () => {
+    const read = new ReadDouble(new Map([[SliceBaselineMarkdown.path(), SliceBaselineMarkdown.nullBaseline()]]))
+    const baselines = new DiskSliceBaselines({ read: read.read })
+
+    const red = await baselines.isRed({
+      root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
+    })
+
+    expect(red).toBe(false)
+  })
+
+  it('an outcome explicitly set to null is not red, the same as a baseline with no outcome yet', async () => {
+    const read = new ReadDouble(new Map([[SliceBaselineMarkdown.path(), SliceBaselineMarkdown.nullOutcome()]]))
+    const baselines = new DiskSliceBaselines({ read: read.read })
+
+    const red = await baselines.isRed({
+      root: new CheckoutRoot(SliceBaselineMarkdown.ROOT), issue: SliceBaselineMarkdown.ISSUE,
+    })
+
+    expect(red).toBe(false)
   })
 })

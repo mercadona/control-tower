@@ -68,6 +68,7 @@ describe('the layers the domain and the application do not know', () => {
 
   it('the matcher tells a disk import and a GitHub import apart from a port import', () => {
     expect(LayerImports.offends('node:fs')).toBe(true)
+    expect(LayerImports.offends('../../infrastructure/gh-epic-issues.ts')).toBe(true)
     expect(LayerImports.offends('../../infrastructure/disk-slice-baselines.ts')).toBe(true)
     expect(LayerImports.offends('../gh-cli.ts')).toBe(true)
     expect(LayerImports.offends('../../domain/ports/epic-specs.ts')).toBe(false)

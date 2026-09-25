@@ -27,7 +27,26 @@ export class DiskSliceBaselines extends SliceBaselines {
       throw new SliceBaselineNotUnderstood(`the frontmatter of ${path} is not valid YAML: ${parsed.error}`)
     }
 
-    return (parsed.meta as { baseline?: { outcome?: string } }).baseline?.outcome === BaselineOutcome.RED
+    return DiskSliceBaselines.#outcomeOf(parsed.meta, path) === BaselineOutcome.RED
+  }
+
+  static #outcomeOf(meta: unknown, path: string): string | null {
+    const baseline = DiskSliceBaselines.#isMapping(meta) ? meta.baseline : undefined
+    if (baseline === undefined || baseline === null) return null
+    if (!DiskSliceBaselines.#isMapping(baseline)) {
+      throw new SliceBaselineNotUnderstood(`the frontmatter of ${path} has a baseline that is not a mapping`)
+    }
+    const outcome = baseline.outcome
+    if (outcome === undefined || outcome === null) return null
+    if (typeof outcome !== 'string') {
+      throw new SliceBaselineNotUnderstood(`the frontmatter of ${path} has a baseline.outcome that is not text`)
+    }
+
+    return outcome
+  }
+
+  static #isMapping(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 
   static #messageOf(cause: unknown): string {
