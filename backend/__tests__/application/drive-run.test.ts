@@ -682,12 +682,12 @@ describe('a run the judge closed', () => {
     }])
   })
 
-  it('a refusal of any other state is not announced, because only the judge has a way out', async () => {
+  it('a refusal of any other state is not announced, because only the judge, the controls and the Global verification have a way out', async () => {
     const announcements = new AnnouncementsSpy()
     const driving = DriveRunMother.refusing({
-      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      detail: 'run blocked-slice-judge: task 3/3, 0 discard(s)',
       closure: {
-        state: 'blocked-global', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
+        state: 'blocked-slice-judge', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
         vetoed: null, failure: null,
       },
       announcements,
@@ -775,5 +775,78 @@ describe('a run the judge closed', () => {
 
     await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
     expect(written).toEqual([])
+  })
+})
+
+describe('a run a check closed', () => {
+  it('a run closed by its controls is announced with the failing command, and still stops the drive', async () => {
+    const announcements = new AnnouncementsSpy()
+    const failure = { command: 'npm test', code: 1, log: '.agent/run-7/controls.log' }
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-controls: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-controls', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-controls',
+      outcome: 'failed',
+      task: 2,
+      findings: null,
+      verdict: null,
+      vetoed: null,
+      failure,
+    }])
+  })
+
+  it('a run closed by its Global verification is announced with the failing command, and still stops the drive', async () => {
+    const announcements = new AnnouncementsSpy()
+    const failure = { command: 'make test-all', code: null, log: '.agent/run-7/global.log' }
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-global', outcome: 'indeterminate', exit: 1, task: 3, findings: null, verdict: null,
+        vetoed: null, failure,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-global',
+      outcome: 'indeterminate',
+      task: 3,
+      findings: null,
+      verdict: null,
+      vetoed: null,
+      failure,
+    }])
+  })
+
+  it('a closure by the controls that nobody was live to hear names blocked-controls on stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-controls: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-controls', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: { command: 'npm test', code: 1, log: '.agent/run-7/controls.log' },
+      },
+      announcements: AnnouncementsSpy.withNobodyListening(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([
+      `drive run: ${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number} closed at blocked-controls `
+        + 'and the closure was not announced: no coordinating session was live to be told\n',
+    ])
   })
 })

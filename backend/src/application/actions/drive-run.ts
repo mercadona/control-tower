@@ -117,8 +117,8 @@ export class DriveRun {
   async #announce(watch: PlanWatch, refused: { closure: RunClosure | null }): Promise<void> {
     const closure = refused.closure
     if (this.announcements === null || closure === null) return
-    if (closure.state !== DriveRun.BLOCKED_JUDGE || closure.outcome !== DriveRun.VETOED) return
-    await this.#carriesOnWhetherOrNotItArrives(watch, this.announcements.announce({
+    if (!DriveRun.#isAnnounced(closure)) return
+    await this.#carriesOnWhetherOrNotItArrives(watch, closure.state, this.announcements.announce({
       repository: watch.repository,
       issue: watch.issue.number,
       state: closure.state,
@@ -131,17 +131,25 @@ export class DriveRun {
     }))
   }
 
-  async #carriesOnWhetherOrNotItArrives(watch: PlanWatch, announcing: Promise<boolean>): Promise<void> {
+  static #isAnnounced(closure: RunClosure): boolean {
+    if (closure.state === DriveRun.BLOCKED_JUDGE) return closure.outcome === DriveRun.VETOED
+
+    return closure.state === DriveRun.BLOCKED_CONTROLS || closure.state === DriveRun.BLOCKED_GLOBAL
+  }
+
+  async #carriesOnWhetherOrNotItArrives(
+    watch: PlanWatch, state: string, announcing: Promise<boolean>,
+  ): Promise<void> {
     try {
       if (await announcing) return
-      this.stderr(DriveRun.#unheard(watch, 'no coordinating session was live to be told'))
+      this.stderr(DriveRun.#unheard(watch, state, 'no coordinating session was live to be told'))
     } catch (cause) {
-      this.stderr(DriveRun.#unheard(watch, cause instanceof Error ? cause.message : String(cause)))
+      this.stderr(DriveRun.#unheard(watch, state, cause instanceof Error ? cause.message : String(cause)))
     }
   }
 
-  static #unheard(watch: PlanWatch, why: string): string {
-    return `drive run: ${watch.repository.text}#${watch.issue.number} closed at ${DriveRun.BLOCKED_JUDGE} `
+  static #unheard(watch: PlanWatch, state: string, why: string): string {
+    return `drive run: ${watch.repository.text}#${watch.issue.number} closed at ${state} `
       + `and the closure was not announced: ${why}\n`
   }
 
