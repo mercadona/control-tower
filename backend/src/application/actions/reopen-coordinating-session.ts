@@ -132,7 +132,9 @@ export class ReopenCoordinatingSession {
           spec: spec!, milestone: spec!.title()!, repository: conversation.repository, root: conversation.root,
         })
       case StoryStep.IMPLEMENTATION:
-        throw new Error('the implementation prompt for step 4 arrives in a later task')
+        return PhasePrompt.implementation({
+          milestone: spec!.title()!, repository: conversation.repository, root: conversation.root,
+        })
     }
   }
 }

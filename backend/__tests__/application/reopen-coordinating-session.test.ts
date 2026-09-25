@@ -314,6 +314,30 @@ describe('ReopenCoordinatingSession', () => {
     expect(reopened.step).toBe(StoryStep.GROOM)
   })
 
+  it('a milestone with every issue authorised reopens with the implementation prompt', async () => {
+    const subject = new Subject(ConversationsDouble.notResumable())
+    subject.specs = new EpicSpecsDouble(Mother.frozenSpec())
+    subject.issues = new EpicIssuesDouble(
+      new EpicIssuesListing({ issues: [Mother.readyIssue()], exhausted: true, reason: null })
+    )
+    const conversation = Mother.conversation()
+
+    const reopened = await subject.action().execute(new ReopenCoordinatingSessionParams({ conversation }))
+
+    expect(reopened.outcome).toBe(Reopening.OPENED)
+    expect(reopened.step).toBe(StoryStep.IMPLEMENTATION)
+    expect(subject.records.prepared[0].prompt.text).toBe(
+      PhasePrompt.implementation({ milestone: Mother.MILESTONE, repository: Mother.REPOSITORY, root: Mother.ROOT }).text
+    )
+  })
+
+  it('the implementation prompt names the milestone and keeps the slices out of the session hands', () => {
+    const prompt = PhasePrompt.implementation({ milestone: 'Some milestone', repository: Mother.REPOSITORY, root: Mother.ROOT })
+
+    expect(prompt.text).toContain('Follow the implementation of the milestone "Some milestone" with the person.')
+    expect(prompt.text).toContain(PhasePrompt.SLICES_ARE_NOT_YOURS)
+  })
+
   it('a frozen spec with no issue yet reopens with the groom prompt', async () => {
     const subject = new Subject(ConversationsDouble.notResumable())
     subject.specs = new EpicSpecsDouble(Mother.frozenSpec())
