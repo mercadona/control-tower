@@ -468,10 +468,7 @@ class CtApi {
       nowMs: Date.now,
     })
     const userStories = CtApi.#userStories(gh)
-    const planIssues = new GhPlanIssues({
-      gh,
-      stderr: (line) => process.stderr.write(line),
-    })
+    const planIssues = new GhPlanIssues({ gh })
     const pullRequests = new GhPullRequests({ gh })
     const workbench = new DispatchCheckWorkbench({
       node: CtApi.#tool(process.execPath),
@@ -737,7 +734,6 @@ class CtApi {
     const server = new ApiServer({
       preparation,
       port: asked.port,
-      startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       sliceHeldChange: (changed) => planAgents.hold(changed),
@@ -751,8 +747,6 @@ class CtApi {
         implementation: implementProgress,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
-      sliceEscalation: readSliceEscalation,
-      sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
         toolSessions: CtApi.#toolSessions(environment),

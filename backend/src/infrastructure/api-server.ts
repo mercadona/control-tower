@@ -5,8 +5,7 @@ import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { Answer, Route, Browsers, JsonBody } from './http.ts'
-import { StartPlanRoute } from './start-plan-route.ts'
-import { ActivePlanPhase, ActivePlansRoute } from './active-plans-route.ts'
+import { ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
@@ -24,15 +23,10 @@ import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { CheckRepositoryPreparation } from '../application/actions/check-repository-preparation.ts'
 import { RecoverPlanRoute } from './recover-plan-route.ts'
 import { CleanupPlanRoute } from './cleanup-plan-route.ts'
-import { SliceEscalationRoute } from './slice-escalation-route.ts'
-import type {
-  ReadSliceEscalationParams, ReadSliceEscalationResult,
-} from '../application/queries/read-slice-escalation.ts'
 import { SliceHeldChangeRoute, SliceMessageRoute } from './slice-message-route.ts'
 import type { SliceChangeAsked, SliceChangeHeld } from './slice-message-route.ts'
 import { AnotherRoundRoute } from './another-round-route.ts'
 import type { AnotherRoundAsked } from './another-round-route.ts'
-import type { StartMilestonePlan } from '../application/actions/start-milestone-plan.ts'
 import type { RecoverPlan } from '../application/actions/recover-plan.ts'
 import type { CleanupPlan } from '../application/actions/cleanup-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -54,53 +48,21 @@ import type { ListLiveSessions } from '../application/queries/list-live-sessions
 import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
 import type { ResizeSession } from '../application/actions/resize-session.ts'
-import type { PlanSessions } from './plan-sessions.ts'
 import type { ActivePlans, ActivePlanRecovering, ActivePlanInspecting } from './active-plans-route.ts'
 import type { WorkRecoveryClock } from './work-recovery-clock.ts'
 import { WorkProgressRoute } from './work-progress-route.ts'
 import type { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
-import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 
 export const LOOPBACK = '127.0.0.1'
 
-type SliceEscalationReader = {
-  execute(params: ReadSliceEscalationParams): Promise<ReadSliceEscalationResult>,
-}
 
 type ImplementationHistoryReader = {
   execute(params: ReadImplementationHistoryParams): Promise<{ readonly entries: ImplementationHistoryEntry[] }>,
 }
 
 type Stderr = (line: string) => void
-
-class EntrypointPlanSessionRegistry {
-  readonly sessions: PlanSessions
-  readonly activePlans: ActivePlans
-
-  constructor({ sessions, activePlans }: { sessions: PlanSessions, activePlans: ActivePlans }) {
-    this.sessions = sessions
-    this.activePlans = activePlans
-    Object.freeze(this)
-  }
-
-  remember(watch: PlanWatch): void {
-    const found = this.activePlans.find({ issue: watch.issue.number, repository: watch.repository })
-    if (found === null) {
-      this.sessions.remember(watch)
-      return
-    }
-    switch (found.phase) {
-      case ActivePlanPhase.PLANNING:
-        this.sessions.remember(watch)
-        return
-      case ActivePlanPhase.IMPLEMENTING:
-      case ActivePlanPhase.UNCERTAIN:
-        return
-    }
-  }
-}
 
 type RequestFailure = {
   readonly type?: unknown,
@@ -111,12 +73,10 @@ type RequestFailure = {
 
 export type ApiCollaborators = {
   port: number,
-  startMilestonePlan?: StartMilestonePlan | null,
   startsInFlight?: WorkInFlight | null,
   recoverPlan?: RecoverPlan | null,
   cleanupPlan?: CleanupPlan | null,
   implementHistory?: ImplementationHistoryReader | null,
-  sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
   listLiveSessions?: ListLiveSessions | null,
@@ -147,7 +107,6 @@ export type ApiCollaborators = {
   sliceMessage?: SliceChangeAsked | null,
   sliceHeldChange?: SliceChangeHeld | null,
   anotherRound?: AnotherRoundAsked | null,
-  sliceEscalation?: SliceEscalationReader | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -183,12 +142,10 @@ class Failures {
 
 export class ApiServer {
   readonly requestedPort: number
-  readonly startMilestonePlan: StartMilestonePlan | null | undefined
   readonly startsInFlight: WorkInFlight
   readonly recoverPlan: RecoverPlan | null | undefined
   readonly cleanupPlan: CleanupPlan | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
-  readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
   readonly listLiveSessions: ListLiveSessions | null | undefined
@@ -219,27 +176,24 @@ export class ApiServer {
   readonly sliceMessage: SliceChangeAsked | null | undefined
   readonly sliceHeldChange: SliceChangeHeld | null | undefined
   readonly anotherRound: AnotherRoundAsked | null | undefined
-  readonly sliceEscalation: SliceEscalationReader | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
 
   constructor({
-    port, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
-    sessions, activePlans, externalTools, listLiveSessions, liveSessions,
+    port, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
+    activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic, preparation,
-    sliceMessage, sliceHeldChange, anotherRound, sliceEscalation, stderr, frontendRoot,
+    sliceMessage, sliceHeldChange, anotherRound, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
-    this.startMilestonePlan = startMilestonePlan
     this.startsInFlight = startsInFlight ?? new WorkInFlight()
     this.recoverPlan = recoverPlan
     this.cleanupPlan = cleanupPlan
     this.implementHistory = implementHistory
-    this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
     this.listLiveSessions = listLiveSessions
@@ -270,7 +224,6 @@ export class ApiServer {
     this.sliceMessage = sliceMessage
     this.sliceHeldChange = sliceHeldChange
     this.anotherRound = anotherRound
-    this.sliceEscalation = sliceEscalation
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -284,22 +237,6 @@ export class ApiServer {
     FrontendPages.mountedOn(app, this.frontendRoot)
     app.get(WorkProgressRoute.PATH, Browsers.turnAwayForeign, WorkProgressRoute.handledBy(this.workProgress!))
     app.all(WorkProgressRoute.PATH, WorkProgressRoute.refuseOtherMethods)
-    app.post(
-      StartPlanRoute.PATH,
-      Browsers.turnAwayForeign,
-      JsonBody.demandDeclared,
-      JsonBody.reader(),
-      StartPlanRoute.handledBy(
-        new EntrypointPlanSessionRegistry({ sessions: this.sessions!, activePlans: this.activePlans! }),
-        {
-          milestone: this.startMilestonePlan ?? null,
-          coordinating: this.coordinatingSessions ?? null,
-          groom: this.readEpicGroom ?? null,
-          inFlight: this.startsInFlight,
-        },
-      )
-    )
-    app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
     app.post(
       RecoverPlanRoute.PATH,
       Browsers.turnAwayForeign,
@@ -346,12 +283,6 @@ export class ApiServer {
       ActivePlansRoute.handledBy(this.activePlans!, this.inspection)
     )
     app.all(ActivePlansRoute.PATH, ActivePlansRoute.refuseOtherMethods)
-    app.get(
-      SliceEscalationRoute.PATH,
-      Browsers.turnAwayForeign,
-      SliceEscalationRoute.handledBy(this.sliceEscalation!)
-    )
-    app.all(SliceEscalationRoute.PATH, SliceEscalationRoute.refuseOtherMethods)
     app.get(
       ImplementHistoryRoute.PATH,
       Browsers.turnAwayForeign,

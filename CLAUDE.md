@@ -77,8 +77,8 @@ it does not say the repository stopped deciding.
 ### What stands between a change and `main`, exactly
 
 The gate is the CI and nothing else. `main` carries a ruleset that requires the
-`ci` check green with the branch up to date, asks for no approval, and has no
-bypass actor. A merge waits for a test run, not for a person.
+`ci` check green, merges through a merge queue, asks for no approval, and has
+no bypass actor. A merge waits for a test run, not for a person.
 
 It reads that way because the gate before it could not be satisfied: an approval
 nobody could give their own pull request, an `always` bypass for admins, and no
@@ -88,8 +88,12 @@ strict gate. It is an absent one with a sign on it**, and this was the sign.
 
 `--admin` no longer gets past anything: it is refused with *Repository rule
 violations found*, watched happening on a pull request opened to test it. A
-branch has to be up to date before merging, so one green against an older `main`
-is measured again on the tree it will land on. `ci` is the one required check
+merge goes through the queue, which builds each entry on top of `main` and of the
+entries ahead of it and runs `ci` there, so one green against an older `main` is
+measured again on the tree it will land on. The branch itself does not have to be
+up to date: that rule made every move of `main` re-run the pull request's own CI
+before the queue measured the same thing again, and the queue already gives what
+it gave. `ci` is the one required check
 because it is the aggregator that counts a skipped job as a pass and fails when
 the job deciding what to run did not — requiring `backend` or `frontend` would
 block every pull request that does not touch them.

@@ -21,7 +21,6 @@ import type { GroomSessionOpened, OpenGroomSession } from '../application/action
 export const GroomSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
@@ -69,8 +68,6 @@ export class GroomSessionRoute {
   static readonly #NOT_LIVE_DETAIL =
     'the coordinating conversation is no longer live: nothing was typed into it'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
-  static readonly #NO_COORDINATING_SESSION_DETAIL =
-    'no coordinating session is held: there is no checkout to open the groom conversation in'
   static readonly #NO_EPIC_SPEC_DETAIL = 'no execution spec exists in this checkout to talk about'
 
   static opening(

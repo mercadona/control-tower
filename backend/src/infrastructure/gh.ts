@@ -8,8 +8,6 @@ export class Gh extends ExternalTool {
     'error connecting to',
   ]
 
-  static readonly #MISSING_LABEL = /'(.+?)' not found/
-
   static readonly #NOT_FOUND = /\(HTTP 404\)/
 
   isTransient(stderr: string): boolean {
@@ -17,12 +15,6 @@ export class Gh extends ExternalTool {
 
     return super.isTransient(stderr) ||
       Gh.#ALSO_TRANSIENT.some((marker) => lowered.includes(marker))
-  }
-
-  static labelMissingIn(stderr: string): string | null {
-    const found = String(stderr).match(Gh.#MISSING_LABEL)
-
-    return found === null ? null : found[1]
   }
 
   static isNotFound(stderr: string): boolean {

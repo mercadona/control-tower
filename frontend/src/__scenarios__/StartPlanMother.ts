@@ -74,11 +74,6 @@ const malformedId = () => ({
     'or a github issue url such as https://github.com/owner/name/issues/123"}',
 })
 
-const malformedRepo = () => ({
-  status: 400,
-  body: '{"code":"malformed-repo","detail":"repo must be a repository such as owner/name"}',
-})
-
 const malformedPath = () => ({
   status: 400,
   body: '{"code":"malformed-path","detail":"path must be an absolute path"}',
@@ -87,11 +82,6 @@ const malformedPath = () => ({
 const notACheckout = () => ({
   status: 400,
   body: '{"code":"checkout-not-confirmed","detail":"/repo has no origin naming a GitHub repository"}',
-})
-
-const planNotStarted = () => ({
-  status: 400,
-  body: '{"code":"plan-agent-not-launched","detail":"cmux is not reachable"}',
 })
 
 export const StartPlanMother = {
@@ -115,8 +105,6 @@ export const StartPlanMother = {
   startedFromNonCanonicalPath,
   startedFromIssueUrl,
   malformedId,
-  malformedRepo,
   malformedPath,
   notACheckout,
-  planNotStarted,
 }

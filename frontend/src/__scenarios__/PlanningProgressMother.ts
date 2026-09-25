@@ -1,7 +1,6 @@
 const ISSUE = 7
 const REPO = 'owner/name'
 const NOT_WATCHED_DETAIL = 'no plan was started for that issue'
-const MALFORMED_REPO_DETAIL = 'repo must be a repository such as owner/name'
 const NOT_READ_DETAIL = 'the conversation has no single recorded planning call'
 
 const running = () => ({
@@ -33,21 +32,14 @@ const notRead = () => ({
   body: `{"code":"planning-progress-not-read","detail":"${NOT_READ_DETAIL}"}`,
 })
 
-const malformedRepo = () => ({
-  status: 400,
-  body: `{"code":"malformed-repo","detail":"${MALFORMED_REPO_DETAIL}"}`,
-})
-
 export const PlanningProgressMother = {
   ISSUE,
   REPO,
   NOT_WATCHED_DETAIL,
-  MALFORMED_REPO_DETAIL,
   NOT_READ_DETAIL,
   running,
   runningBeforeTheFirstToolCall,
   finished,
   notWatched,
   notRead,
-  malformedRepo,
 }
