@@ -40,7 +40,15 @@ export class GitEpicBranch extends EpicBranch {
   }
 
   static pushArgvFor(root: string, branch: string): string[] {
-    return ['-C', root, 'push', '--set-upstream', GitEpicBranch.REMOTE, branch]
+    return ['-C', root, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE, branch]
+  }
+
+  static #refreshArgvFor(root: string): string[] {
+    return ['-C', root, 'fetch', '--prune', GitEpicBranch.REMOTE]
+  }
+
+  static #restartArgvFor(root: string, branch: string, into: string): string[] {
+    return ['-C', root, 'switch', '--no-track', '--force-create', branch, `${GitEpicBranch.REMOTE}/${into}`]
   }
 
   static #localRefArgvFor(root: string, branch: string): string[] {
@@ -85,6 +93,17 @@ export class GitEpicBranch extends EpicBranch {
     if (branch !== await this.defaultBranch(root)) return branch
 
     return await this.#milestoneBranchOf(root, milestone)
+  }
+
+  async restartFromDefault({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<void> {
+    const into = await this.defaultBranch(root)
+    await this.#refresh(root)
+    const restarted = await this.run(GitEpicBranch.#restartArgvFor(root.text, branch, into))
+    if (restarted.failed) {
+      throw new EpicBranchNotPublished(
+        `git switch could not start ${branch} again from ${GitEpicBranch.REMOTE}/${into}: ${restarted.stderr.trim()}`
+      )
+    }
   }
 
   async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {
@@ -152,6 +171,15 @@ export class GitEpicBranch extends EpicBranch {
     if (fetched.failed) {
       throw new EpicBranchNotPublished(
         `git fetch of the ${branch} ${GitEpicBranch.REMOTE} already holds failed: ${fetched.stderr.trim()}`
+      )
+    }
+  }
+
+  async #refresh(root: CheckoutRoot): Promise<void> {
+    const fetched = await this.run(GitEpicBranch.#refreshArgvFor(root.text))
+    if (fetched.failed) {
+      throw new EpicBranchNotPublished(
+        `git fetch could not refresh what ${GitEpicBranch.REMOTE} holds for ${root.text}: ${fetched.stderr.trim()}`
       )
     }
   }
