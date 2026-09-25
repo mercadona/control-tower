@@ -7,7 +7,6 @@ import { RunningServers } from '../servers.ts'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import { SystemProcesses } from '../../src/infrastructure/process-border.ts'
 import type { TerminalSpawn } from '../../src/infrastructure/process-table.ts'
@@ -65,7 +64,6 @@ class RunningApi {
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
       typeIntoSession: new TypeIntoSession({ liveSessions }),
-      sessions: new PlanSessions(),
       activePlans: undefined,
       stderr: undefined,
       frontendRoot: RunningApi.#NO_FRONTEND,

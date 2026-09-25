@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { TextDecoder } from 'node:util'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
   WatchLiveSession, WatchLiveSessionParams, WatchLiveSessionResult,
 } from '../../src/application/queries/watch-live-session.ts'
@@ -135,7 +134,6 @@ class RunningApi {
       listLiveSessions: undefined,
       liveSessions,
       watchLiveSession,
-      sessions: new PlanSessions(),
       activePlans: undefined,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,

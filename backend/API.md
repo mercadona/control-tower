@@ -59,147 +59,6 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 
 ---
 
-## `POST /start-plan`
-
-Milestone dispatch checks repository preparation before claiming any candidate.
-A `repository-preparation-required` refusal carries the repository, the inspected
-remote commit, affected paths and proposed corrections in `detail`. The same
-diagnostic is sent to the matching coordinating session. No plan agent is launched
-on a failed check.
-
-For the Playground/Catalog layout, each freshly cut worktree receives an ignored
-`docker-compose.local.yml` with a worktree-specific project name and resets for
-the base configuration's published ports. Existing overrides are inspected, not
-overwritten. Make resolves `DOCKER_COMMAND`; the checker asks that Compose
-invocation for `config --no-env-resolution --format json`, then verifies the
-project name and `/app` bind mount before baseline execution. When Make declares
-`env-start`, `collectstatic` and `compilemessages`, those targets then run in that
-order before the baseline or agent can start. A failed target returns the existing
-preparation refusal with the command and its diagnostic. Repositories without all
-three targets retain configuration-only preparation. Credential files are not
-copied and live mounts are not inspected. Normal workspace preparation cleanup
-still applies when preparation fails.
-
-Starts headless plan agents for a milestone. The request selects **every**
-admissible ready issue with the
-plugin's ordering, dependency and token rules — there is no cap — claims each of
-them through `dispatch-check`, prepares its worktree and starts planning in a
-newly minted conversation. A slice whose `touches` collide with work that is not
-merged yet waits for that merge, and a slice that fails to start stops none of
-the others.
-
-```json
-{"milestone":"Headless delivery"}
-```
-
-The body contains exactly that one field. It uses the repository and checkout
-held by the coordinating session. The held milestone must match and gate 2 must
-already have left the work groomed or authorised.
-
-### 202 Accepted
-
-The answer covers the whole batch: `started` holds one object per plan that
-started — with `id` always `null` — and `failed` names each slice that did not,
-with the issue it was, and the `code` and `detail` that refusal would have
-answered on its own.
-
-```json
-{"status":"started",
- "started":[{"id":null,"repo":"owner/name",
-             "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
-             "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
-             "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
-             "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],
- "failed":[{"issue":{"number":8,"url":"https://github.com/owner/name/issues/8"},
-            "repo":"owner/name","code":"workspace-not-prepared",
-            "detail":"the worktree could not be cut"}]}
-```
-
-When nothing in the batch started, the request refuses with the first failure
-instead, exactly as it did when it dispatched one slice at a time.
-
-`agent` is the durable Claude conversation UUID. Every new admission writes
-machine provenance before planning. After a successful
-committed plan is published to the issue, the backend drives the plugin's run
-sequencer in that same conversation. There is no feature flag, toggle,
-environment variable or alternate activation path for new admissions. `root` is
-git's canonical checkout path.
-
-The plugin remains the sequencing authority: its real `ct-step next` output
-chooses each call, command, retry, discard, reconciliation and terminal result.
-For each supported model dispatch the backend makes one recorded `--resume
-<agent>` call, identified by `run:<oracle-ticket>`, with the exact prepared file
-paths. The implementer receives the plugin's report schema and declared model
-and tools. Judge, advisor, slice-judge and reconciler calls receive the plugin's
-role files. Implementer, judge, advisor and slice-judge calls receive their
-response schema. Reconciler calls return edits without a response schema.
-Judge roles receive their parsed plugin agent definition through `--agents` and `--agent`.
-Commands run through the dedicated tool adapter and do not create model calls.
-
-The currently supported model roles are implementer, task judge, advisor,
-slice judge and `ct-reconciler`. The plugin's current E2E dispatch has no role in
-`RoleBytes`, and slice-agent reconciliation fallbacks have no prepared role
-package. Both are refused as unsupported material rather than run with invented
-context. A malformed or ambiguous consuming command, changed sealed input, or
-missing prepared file is also a refusal.
-
-`baseline` is what the target repository's suite answered in the worktree that
-was just cut, **the same measurement that is sown into `.agent/SLICE.md`** for
-the agent to read — one measurement, two readers, so the page and the agent
-cannot disagree about it.
-
-| `outcome` | Meaning | What the UI does |
-|---|---|---|
-| `verde` | the suite ran and passed | nothing |
-| `rojo` | the suite ran and failed | say so: the agent will build on a broken repository and cannot tell its own failures from the ones already there |
-| `no-verificado` | there was nothing to run | say so: the repository declares no test command |
-
-`command` is the literal command that ran, `null` when there was none. `summary`
-is capped at 240 characters by the measuring code.
-
-The three values are the plugin's vocabulary, in Spanish, because they are what
-`.agent/SLICE.md` carries and what the agent reads; they move when that
-vocabulary does. **A plan starts whatever the outcome** — whether to work on a
-baseline that is not green is a person's decision, and until now that person was
-never told: the verdict went to the backend's error channel and the page said
-the request had completed.
-
-### Refusals
-
-From a tool refusing:
-
-| `code` | Meaning |
-|---|---|
-| `user-story-not-read` | the tracker holding the story refused — Jira for a story key, GitHub for an issue url |
-| `user-story-not-understood` | the tracker holding the story answered something unreadable |
-| `plan-issue-not-created` | `gh issue create` refused |
-| `plan-issue-not-named` | the created issue could not be identified |
-| `plan-issue-not-claimed` | the claim on the issue failed |
-| `dispatch-not-available` | the plugin selected no slice: none is ready in the milestone, or every ready one is held by an unmet dependency or an `area:`/`touches:` collision |
-| `dispatch-not-read` | the complete open/closed GitHub issue table could not be read |
-| `dispatch-not-understood` | the issue table or plugin dispatch result was ambiguous |
-| `plan-agent-never-launched` | definite pre-worker or worker-spawn failure; this start refusal alone does not authorize cleanup |
-| `plan-agent-not-launched` | durable call preparation, worker acceptance or execution failed |
-| `plan-agent-not-named` | durable call evidence was malformed or conflicted with immutable evidence |
-| `workspace-not-prepared` | the worktree could not be cut |
-| `workspace-not-cleaned` | compensation could not remove a workspace safely |
-| `workspace-not-read` | git refused when surveying |
-| `workspace-not-understood` | git answered something unreadable |
-
-The request itself can answer `start-milestone-malformed` (the body is not
-exactly `{"milestone":"name"}`), `start-milestone-no-session`,
-`start-milestone-mismatch`, `start-milestone-not-dispatchable`, or
-`start-plan-in-progress`. Application refusals answer 400 and carry their
-diagnostic in `detail`.
-
-```
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/start-plan \
-  -d '{"milestone":"Headless delivery"}'
-```
-
----
-
 ## `GET /work-progress/:issue?repo=owner/name`
 
 One current-progress query for recorded work, from planning through review and
@@ -588,7 +447,7 @@ inspect-only.
 Uses the same exact request body. It answers **200 OK** with the same `agent`
 shape only after checked workspace removal, checked issue requeue and durable
 retirement finish. Cleanup requires an immutable definite non-launch receipt;
-an absent worktree or `plan-agent-never-launched` response alone is not proof.
+an absent worktree or a failure that never launched the agent is not proof on its own.
 Retries reuse cleanup evidence and never force-remove a worktree or branch.
 Before changing the issue and again before retirement, cleanup freshly confirms
 the canonical repository, complete worktree registration, absent local branch,
@@ -610,7 +469,7 @@ are not converted into those categories and use the API's shared HTTP 400
 | `cleanup-plan-failed` | 400 | an operational record, status, git or claim call failed |
 | `cleanup-plan-unreadable` | 400 | durable or collaborator evidence is malformed |
 
-Both POSTs share the single-API repository reservation used by `/start-plan`.
+Both POSTs share one repository reservation with the starts of the dispatch relay.
 They require `Content-Type: application/json`, reject foreign origins, refuse
 oversized bodies, and expose only `POST` through the ordinary protocol codes.
 They need no gate key. The coordinating prompt discovers these endpoints from
@@ -982,19 +841,9 @@ From opening the conversation, once the body is well-formed:
 | `session-hooks-not-written` | the checkout's `.claude/settings.local.json` could not be written |
 | `session-hooks-not-understood` | that settings file exists but is not the JSON object the hooks are merged into |
 
-All ten answer 400 and carry the tool's own message in `detail`, the same
-convention `POST /start-plan`'s tool refusals follow. `story-spec-frozen` is
+All ten answer 400 and carry the tool's own message in `detail`. `story-spec-frozen` is
 checked right after the checkout is confirmed, so it is answered before the
 tracker is asked or anything is written or spawned.
-
-`PlanCollapse` (`backend/src/infrastructure/start-plan-route.ts`) also declares
-`conversation-not-understood`, the code for a conversation record that is on
-disk but cannot be parsed, including one that names no story or a story that
-is not a key nor an issue url. No endpoint answers it today: that record is only
-read by `records.recall()` at the backend's start-up, before this route or any
-other ever runs, and `ct-api.ts` awaits that recovery with nothing catching it
-— an unreadable record currently crashes the backend at start-up instead of
-being reported. That gap is open, not this task's to close.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -1983,53 +1832,6 @@ refusal is the same answer, later.
 curl -s -X POST 'http://127.0.0.1:8787/slices/460/message' \
   -H 'Content-Type: application/json' \
   -d '{"repo":"mercadona/control-tower","agent":"<conversation>","text":"rename the column"}'
-```
-
----
-
-## `GET /slices/:issue/escalation?root=<abs path>`
-
-What a slice asked that it cannot answer itself. Poll it. Only `root` is
-required: the read is on disk and never reaches GitHub, so no `repo` is asked
-for.
-
-The agent of a slice writes this itself, and its own kickoff tells it to: if it
-meets a doubt, or a gap in the spec that is not its to close, it writes
-`blocked: {reason, unblock}` into its worktree's `.agent/SLICE.md` and stops.
-This endpoint reads that file with the plugin's own `readBlocked`, so the shape
-of the field is the plugin's to decide and this backend never re-spells it.
-
-**Reading only.** It moves no label, frees no token and resumes nothing.
-
-**200 OK**
-
-```json
-{"state":"raised","reason":"the spec does not say which repository the row lands in",
- "unblock":"a decision from the coordinating session","notes":[],"detail":""}
-```
-
-`state` is one of three:
-
-| `state` | Meaning |
-|---|---|
-| `raised` | the agent declared itself blocked; `reason` and `unblock` are what it wrote, and `notes` carries what the plugin's reader has to say about a field written in an unexpected shape |
-| `none` | there is nothing raised — either the file says so, or no worktree for that issue exists here |
-| `unchecked` | the worktree exists and `.agent/SLICE.md` does not, so whether that agent is blocked **has not been looked at**; `detail` says why it could not be. It is deliberately not reported as `none`: that would assert something nobody checked |
-
-**Refusals**
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `malformed-escalation-issue` | 400 | `:issue` is not a positive whole number |
-| `malformed-escalation-root` | 400 | `root` is missing or is not an absolute path |
-| `slice-escalation-not-read` | 400 | the state file is there and could not be read; `detail` names the path and the system's own message |
-| `slice-escalation-not-understood` | 400 | the file's frontmatter is not valid YAML, or the reader cannot interpret it; `detail` names the path |
-
-A read that fails is never reported as "there is no block" — the same criterion
-`/ct-next` applies when it walks the same file.
-
-```
-curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/control-tower'
 ```
 
 ---

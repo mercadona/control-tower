@@ -17,7 +17,6 @@ type WireIssue = { readonly number: number, readonly url: string, readonly title
 export const EpicPromotionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_ISSUES: 'no-epic-issues',
   EPIC_PARTIALLY_GROOMED: 'epic-partially-groomed',
   ISSUES_UNCERTAIN: 'epic-issues-uncertain',
@@ -73,7 +72,6 @@ export class EpicPromotionRoute {
   static readonly METHOD = 'POST'
   static readonly RECORD = 'gate 2 promotion'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
-  static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to promote'
 
   static promoting(
     held: CoordinatingSessions, promote: PromoteEpic, key: GateKey, stderr: (line: string) => void

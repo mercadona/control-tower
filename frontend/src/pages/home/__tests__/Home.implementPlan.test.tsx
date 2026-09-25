@@ -76,7 +76,7 @@ describe('Home · automatic implementation', () => {
     expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
     expect(fetching.mock.calls.some(([input]) => (
-      input === '/recover-plan' || input === '/cleanup-plan' || input === '/start-plan'
+      input === '/recover-plan' || input === '/cleanup-plan'
     ))).toBe(false)
   })
 })

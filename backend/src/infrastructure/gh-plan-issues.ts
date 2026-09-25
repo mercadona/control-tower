@@ -1,42 +1,11 @@
-import {
-  MilestoneContextHeading,
-  INHERITED_CONTEXT_HEADING,
-  INHERITED_CONTEXT_PLACEHOLDER,
-  GATES_HEADING,
-  renderAcContent,
-  renderDescription,
-  renderGatesContent,
-  renderProtectedLine,
-} from '../../../plugin/scripts/groom.js'
-import { gatesOf, LOOP_STATUS_LABELS } from '../../../plugin/scripts/groom.js'
+import { LOOP_STATUS_LABELS } from '../../../plugin/scripts/groom.js'
 import { STATUS_LADDER } from '../../../plugin/scripts/harvest.js'
-import { gateLabels } from '../../../plugin/scripts/gates.js'
 import { PlanIssues } from '../domain/ports/plan-issues.ts'
-import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.ts'
 import type { PlanIssueStatusValue } from '../domain/value-objects/plan-issue-status.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import type { UserStory } from '../domain/value-objects/user-story.ts'
-import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
-import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
-import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
-import {
-  PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed,
-  PlanStatusNotRead, PlanStatusNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
-} from '../domain/exceptions.ts'
+import { PlanStatusNotRead, PlanStatusNotUnderstood } from '../domain/exceptions.ts'
 import { Gh } from './gh.ts'
-import { Projection } from './projection.ts'
-
-type PlanIssueRow = {
-  n: null,
-  name: string,
-  entrega: string,
-  type: string,
-  e2e: string,
-  ac: string[],
-  deps: string[],
-  protected: string,
-}
 
 export class GhPlanIssues extends PlanIssues {
   static STATUS_PREFIX = 'status:'
@@ -46,49 +15,13 @@ export class GhPlanIssues extends PlanIssues {
   static #STATUS_BY_LABEL: ReadonlyMap<string, PlanIssueStatusValue> =
     new Map(GhPlanIssues.#RUNGS.map((named, at) => [LOOP_STATUS_LABELS[at], named] as const))
   static BACKLOG_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.BACKLOG)!
-  static IN_PROGRESS_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_PROGRESS)!
-  static IN_REVIEW_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_REVIEW)!
   static READY_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.READY)!
-  static #REF = /\/issues\/([1-9]\d*)\s*$/
 
   readonly gh: Gh
-  readonly stderr: (line: string) => void
 
-  constructor({ gh, stderr }: { gh: Gh, stderr: (line: string) => void }) {
+  constructor({ gh }: { gh: Gh }) {
     super()
     this.gh = gh
-    this.stderr = stderr
-  }
-
-  static statusArgvFor({ issue, repository, adding, removing }: {
-    issue: PlanIssue,
-    repository: RepositoryName,
-    adding: string,
-    removing: string,
-  }): string[] {
-    return [
-      'issue', 'edit', String(issue.number),
-      '--repo', repository.text,
-      '--add-label', adding,
-      '--remove-label', removing,
-    ]
-  }
-
-  static argvFor({ story, repository }: {
-    story: UserStory,
-    repository: RepositoryName,
-  }): string[] {
-    return [
-      'issue', 'create',
-      '--repo', repository.text,
-      '--title', PlanIssueBody.titleFor({ story }),
-      '--body', PlanIssueBody.of({ story }),
-      ...PlanIssueBody.labels({ story }).flatMap((label) => ['--label', label]),
-    ]
-  }
-
-  static labelArgvFor(repository: RepositoryName, label: string): string[] {
-    return ['label', 'create', label, '--repo', repository.text, '--force']
   }
 
   static labelsArgvFor({ issueNumber, repository }: {
@@ -96,51 +29,6 @@ export class GhPlanIssues extends PlanIssues {
     repository: RepositoryName,
   }): string[] {
     return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'labels']
-  }
-
-  async open({ story, repository }: {
-    story: UserStory,
-    repository: RepositoryName,
-  }): Promise<PlanIssue> {
-    const outcome = await this.#sowing({
-      argv: GhPlanIssues.argvFor({ story, repository }),
-      ours: PlanIssueBody.labels({ story }),
-      repository,
-      safeToRepeat: false,
-    })
-    if (outcome.failed) {
-      throw new PlanIssueNotCreated(`${Gh.BIN} issue create failed: ${outcome.stderr.trim()}`)
-    }
-    const url = outcome.stdout.trim().split('\n').pop() ?? ''
-    const found = url.match(GhPlanIssues.#REF)
-    if (found === null) {
-      throw new PlanIssueNotNamed(
-        `${Gh.BIN} did not name the issue it created, it printed ${JSON.stringify(outcome.stdout)}`
-      )
-    }
-
-    return new PlanIssue({ number: Number(found[1]), url })
-  }
-
-  async claim({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
-    await this.#sowForTheRelease(repository)
-    const { outcome } = await this.#swapping({
-      issue, repository,
-      adding: GhPlanIssues.IN_PROGRESS_LABEL,
-      removing: GhPlanIssues.READY_LABEL,
-    })
-    if (outcome.failed) {
-      throw new PlanIssueNotClaimed(`${Gh.BIN} issue edit failed: ${outcome.stderr.trim()}`)
-    }
-  }
-
-  async requeue({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
-    const { argv, outcome } = await this.#swapping({
-      issue, repository,
-      adding: GhPlanIssues.READY_LABEL,
-      removing: GhPlanIssues.IN_PROGRESS_LABEL,
-    })
-    if (outcome.failed) this.#warn({ issue, argv, said: outcome.stderr.trim() })
   }
 
   static #statusIn(printed: string, issueNumber: number): PlanIssueStatusValue {
@@ -176,47 +64,6 @@ export class GhPlanIssues extends PlanIssues {
     return named
   }
 
-  static storyArgvFor({ issueNumber, repository }: {
-    issueNumber: number,
-    repository: RepositoryName,
-  }): string[] {
-    return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'body']
-  }
-
-  async storyOf({ issueNumber, repository }: {
-    issueNumber: number,
-    repository: RepositoryName,
-  }): Promise<UserStoryKey | UserStoryUrl | null> {
-    const outcome = await this.gh.run(
-      GhPlanIssues.storyArgvFor({ issueNumber, repository }), { safeToRepeat: true }
-    )
-    if (outcome.failed) {
-      throw new PlanStoryNotRead(
-        `${Gh.BIN} issue view --json body failed: ${outcome.stderr.trim()}`
-      )
-    }
-
-    return PlanIssueBody.storyIn(GhPlanIssues.#viewIn(outcome.stdout, issueNumber))
-  }
-
-  static #viewIn(printed: string, issueNumber: number): { body: string } {
-    let view
-    try {
-      view = JSON.parse(printed)
-    } catch {
-      throw new PlanStoryNotUnderstood(
-        `${Gh.BIN} issue view --json body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
-      )
-    }
-    if (view === null || typeof view.body !== 'string') {
-      throw new PlanStoryNotUnderstood(
-        `${Gh.BIN} issue view --json body printed no body for #${issueNumber}: ${JSON.stringify(printed)}`
-      )
-    }
-
-    return view
-  }
-
   async statusOf({ issueNumber, repository }: {
     issueNumber: number,
     repository: RepositoryName,
@@ -229,173 +76,5 @@ export class GhPlanIssues extends PlanIssues {
     }
 
     return GhPlanIssues.#statusIn(outcome.stdout, issueNumber)
-  }
-
-  async #sowForTheRelease(repository: RepositoryName): Promise<void> {
-    const argv = GhPlanIssues.labelArgvFor(repository, GhPlanIssues.IN_REVIEW_LABEL)
-    const outcome = await this.gh.run(argv, { safeToRepeat: true })
-    if (outcome.failed) {
-      throw new PlanIssueNotClaimed(
-        `${GhPlanIssues.IN_REVIEW_LABEL} could not be sown in ${repository.text}, and dispatch-check --release cannot create it when the agent delivers: ${outcome.stderr.trim()}`
-      )
-    }
-  }
-
-  async #swapping({ issue, repository, adding, removing }: {
-    issue: PlanIssue,
-    repository: RepositoryName,
-    adding: string,
-    removing: string,
-  }) {
-    const argv = GhPlanIssues.statusArgvFor({ issue, repository, adding, removing })
-    const outcome = await this.#sowing({ argv, ours: [adding], repository, safeToRepeat: true })
-
-    return { argv, outcome }
-  }
-
-  #warn({ issue, argv, said }: { issue: PlanIssue, argv: string[], said: string }): void {
-    this.stderr(
-      `gh plan issues: ${issue} stays claimed because it could not be put back in the queue: ${said}. Run it yourself: ${Gh.BIN} ${argv.join(' ')}\n`
-    )
-  }
-
-  async #sowing({ argv, ours, repository, safeToRepeat }: {
-    argv: string[],
-    ours: string[],
-    repository: RepositoryName,
-    safeToRepeat: boolean,
-  }) {
-    const sown = new Set<string>()
-    let outcome = await this.gh.run(argv, { safeToRepeat })
-    while (outcome.failed) {
-      const missing = Gh.labelMissingIn(outcome.stderr)
-      if (missing === null || !ours.includes(missing) || sown.has(missing)) break
-
-      sown.add(missing)
-      await this.gh.run(GhPlanIssues.labelArgvFor(repository, missing), { safeToRepeat: true })
-      outcome = await this.gh.run(argv, { safeToRepeat })
-    }
-
-    return outcome
-  }
-}
-
-export class PlanIssueBody {
-  static DESCRIPTION_HEADING = '## Descripción'
-  static PROTECTED_HEADING = '## Out of scope / Protected'
-  static AC_HEADING = '## Acceptance criteria (EARS, 1:1 con tests)'
-  static STORY_LINE = '> Historia de usuario: '
-  static ISSUE_LINE = '> Issue de GitHub: '
-  static #ACTIVE =
-    /((?<![\w])[\w.-]+\/[\w.-]+#\d+|(?<![\w])#\d+|(?<![\w.])@[A-Za-z0-9][A-Za-z0-9-]*|https?:\/\/\S*github\.com\/\S+)/g
-  static #CODE_SPAN = /(`[^`]*`)/
-
-  static #LINE_BY_KIND = new Projection('plan issue story line', [
-    [UserStoryKey, (key: UserStoryKey) => `${PlanIssueBody.STORY_LINE}${PlanIssueBody.quieted(key.text)}`],
-    [UserStoryUrl, (key: UserStoryUrl) => `${PlanIssueBody.ISSUE_LINE}${PlanIssueBody.quieted(key.text)}`],
-  ])
-
-  static #TITLE_BY_KIND = new Projection('plan issue title', [
-    [UserStoryKey, (story: UserStory) => `${story.key.text} ${story.summary}`],
-    [UserStoryUrl, (story: UserStory & { key: UserStoryUrl }) =>
-      `${story.key.repository.text}#${story.key.number} ${story.summary}`],
-  ])
-
-  static labels({ story }: {
-    story: UserStory,
-  }): string[] {
-    return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story })).gates), GhPlanIssues.READY_LABEL]
-  }
-
-  static storyIn({ body }: { body: string }): UserStoryKey | UserStoryUrl | null {
-    const [firstLine] = body.split('\n')
-    const marker = [PlanIssueBody.STORY_LINE, PlanIssueBody.ISSUE_LINE]
-      .find((candidate) => firstLine.startsWith(candidate))
-    if (marker === undefined) return null
-    const unfenced = PlanIssueBody.#unfenced(firstLine.slice(marker.length).trim())
-
-    return UserStoryReference.isWellFormed(unfenced) ? UserStoryReference.of(unfenced) : null
-  }
-
-  static #unfenced(text: string): string {
-    const found = text.match(/^`([^`]*)`$/)
-
-    return found === null ? text : found[1]
-  }
-
-  static titleFor({ story }: {
-    story: UserStory,
-  }): string {
-    return PlanIssueBody.#TITLE_BY_KIND.of(story.key.constructor)(story)
-  }
-
-  static rowFor({ story }: {
-    story: UserStory,
-  }): PlanIssueRow {
-    const name = story.summary
-
-    return {
-      n: null,
-      name,
-      entrega: PlanIssueBody.quieted(name),
-      type: '',
-      e2e: '',
-      ac: [],
-      deps: [],
-      protected: '',
-    }
-  }
-
-  static #EMPTY_EPIC_CONTEXT_BY_KIND = new Projection('plan issue empty epic context', [
-    [UserStoryKey, (story: UserStory) =>
-      `_${story.key.text} brings no description in Jira: the user story is unwritten._`],
-    [UserStoryUrl, (story: UserStory & { key: UserStoryUrl }) =>
-      `_Issue ${story.key.repository.text}#${story.key.number} brings no body and no comments: ` +
-      'there is nothing written to start from._'],
-  ])
-
-  static #epicContextOf(story: UserStory): string {
-    return story.hasDescription()
-      ? PlanIssueBody.quieted(story.description)
-      : PlanIssueBody.#EMPTY_EPIC_CONTEXT_BY_KIND.of(story.key.constructor)(story)
-  }
-
-  static quieted(text: string): string {
-    return text
-      .split(PlanIssueBody.#CODE_SPAN)
-      .map((piece: string, index: number) => (
-        index % 2 === 1 ? piece : piece.replace(PlanIssueBody.#ACTIVE, '`$1`')
-      ))
-      .join('')
-  }
-
-  static of({ story }: {
-    story: UserStory,
-  }): string {
-    const row = PlanIssueBody.rowFor({ story })
-
-    return [
-      PlanIssueBody.#LINE_BY_KIND.of(story.key.constructor)(story.key),
-      '',
-      PlanIssueBody.DESCRIPTION_HEADING,
-      renderDescription(row) ??
-        `_${story.key} brings no summary in Jira._`,
-      '',
-      MilestoneContextHeading.WRITTEN,
-      PlanIssueBody.#epicContextOf(story),
-      '',
-      INHERITED_CONTEXT_HEADING,
-      INHERITED_CONTEXT_PLACEHOLDER,
-      '',
-      PlanIssueBody.AC_HEADING,
-      renderAcContent(row.ac),
-      '',
-      GATES_HEADING,
-      renderGatesContent(row),
-      '',
-      PlanIssueBody.PROTECTED_HEADING,
-      renderProtectedLine(row),
-      '',
-    ].join('\n')
   }
 }

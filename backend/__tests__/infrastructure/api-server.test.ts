@@ -264,8 +264,7 @@ class RunningApi {
     RunningApi.spy = options.openCoordinatingSession instanceof OpenSessionSpy
       ? options.openCoordinatingSession
       : new OpenSessionSpy()
-    const sessions = options.sessions ?? new PlanSessions()
-    const activePlans = options.activePlans ?? new ActivePlans({ sessions })
+    const activePlans = options.activePlans ?? new ActivePlans({ sessions: new PlanSessions() })
 
     return new ApiServer({
       port: 0,
@@ -273,7 +272,6 @@ class RunningApi {
       coordinatingSessions: new CoordinatingSessions({
         liveSessions: new LiveSessionsDouble(OpenSessionSpy.SESSION), stderr: () => undefined,
       }),
-      sessions,
       activePlans,
       externalTools: options.externalTools ?? new ExternalToolsSpy(),
       frontendRoot: FrontendFixture.missing(),
@@ -953,15 +951,6 @@ describe('ApiServer', () => {
     expect(response.status).toBe(202)
   })
 
-  it('reading_start_plan_is_refused_because_starting_a_plan_claims_the_issue_and_cuts_a_worktree', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
-
-    expect(response.status).toBe(405)
-    expect(response.headers.get('allow')).toBe('POST')
-  })
-
   it('an_unknown_route_is_rejected_instead_of_answering_ok_to_anything', async () => {
     const port = await RunningApi.listening()
 
@@ -1072,10 +1061,10 @@ describe('ApiServer', () => {
     expect(api.status).toBe(202)
   })
 
-  it('serving_pages_does_not_open_start_plan_to_a_get_because_static_files_fall_through_to_the_routes', async () => {
+  it('serving_pages_does_not_open_a_post_only_route_to_a_get_because_static_files_fall_through_to_the_routes', async () => {
     const port = await RunningApi.listening({ frontendRoot: FrontendFixture.built() })
 
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
+    const response = await fetch(`http://127.0.0.1:${port}/recover-plan`)
 
     expect(response.status).toBe(405)
   })
@@ -1358,7 +1347,7 @@ describe('ApiServer', () => {
   it('active_plans_returns_the_exact_live_plan_the_sessions_watch', async () => {
     const sessions = new PlanSessions()
     sessions.remember(ActivePlanMother.WATCH)
-    const port = await RunningApi.listening({ sessions })
+    const port = await RunningApi.listening({ activePlans: new ActivePlans({ sessions }) })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
 
