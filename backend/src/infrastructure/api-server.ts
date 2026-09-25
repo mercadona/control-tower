@@ -59,6 +59,8 @@ import type { ActivePlans, ActivePlanRecovering, ActivePlanInspecting } from './
 import type { WorkRecoveryClock } from './work-recovery-clock.ts'
 import { WorkProgressRoute } from './work-progress-route.ts'
 import type { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
+import { MilestoneProgressRoute } from './milestone-progress-route.ts'
+import type { ReadMilestoneProgress } from '../application/queries/read-milestone-progress.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
@@ -128,6 +130,7 @@ export type ApiCollaborators = {
   inspection?: ActivePlanInspecting | null,
   maintenance?: WorkRecoveryClock | null,
   workProgress?: Pick<ReadWorkProgress, 'execute'> | null,
+  readMilestoneProgress?: Pick<ReadMilestoneProgress, 'execute'> | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
   askGroomReview?: AskGroomReview | null,
@@ -200,6 +203,7 @@ export class ApiServer {
   readonly inspection: ActivePlanInspecting | null
   readonly maintenance: WorkRecoveryClock | null
   readonly workProgress: Pick<ReadWorkProgress, 'execute'> | null
+  readonly readMilestoneProgress: Pick<ReadMilestoneProgress, 'execute'> | null | undefined
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
   readonly askGroomReview: AskGroomReview | null | undefined
@@ -228,6 +232,7 @@ export class ApiServer {
     port, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
     sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
+    readMilestoneProgress = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic, preparation,
@@ -251,6 +256,7 @@ export class ApiServer {
     this.inspection = inspection
     this.maintenance = maintenance
     this.workProgress = workProgress
+    this.readMilestoneProgress = readMilestoneProgress
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession
     this.askGroomReview = askGroomReview
@@ -444,6 +450,9 @@ export class ApiServer {
     app.post(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
       EpicGroomRoute.grooming(this.coordinatingSessions!, this.groomEpic!, this.gateKey!, this.epicGroomInFlight!, this.stderr!))
     app.all(EpicGroomRoute.PATH, EpicGroomRoute.refuseOtherMethods)
+    app.get(MilestoneProgressRoute.PATH, Browsers.turnAwayForeign,
+      MilestoneProgressRoute.reading(this.coordinatingSessions!, this.readMilestoneProgress!))
+    app.all(MilestoneProgressRoute.PATH, MilestoneProgressRoute.refuseOtherMethods)
     app.post(EpicPromotionRoute.PATH, Browsers.turnAwayForeign,
       EpicPromotionRoute.promoting(this.coordinatingSessions!, this.promoteEpic!, this.gateKey!, this.stderr!))
     app.all(EpicPromotionRoute.PATH, EpicPromotionRoute.refuseOtherMethods)

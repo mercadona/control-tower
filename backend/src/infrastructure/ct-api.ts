@@ -23,6 +23,8 @@ import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanSessions } from './plan-sessions.ts'
 import { StreamPlanningActivities } from './stream-planning-activities.ts'
+import { StreamImplementationActivities } from './stream-implementation-activities.ts'
+import { DiskSliceBaselines } from './disk-slice-baselines.ts'
 import { ReviewWatch } from './review-watch.ts'
 import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
@@ -111,6 +113,7 @@ import { RunPlanAgents, RunProvenance } from './run-plan-agents.ts'
 import { RunPlanRecovery } from './run-plan-recovery.ts'
 import { WorkRecoveryClock } from './work-recovery-clock.ts'
 import { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
+import { ReadMilestoneProgress } from '../application/queries/read-milestone-progress.ts'
 import { InspectedWorkInventory } from './inspected-work-inventory.ts'
 import { CheckedRunDelivery } from './checked-run-delivery.ts'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -728,6 +731,7 @@ class CtApi {
       delivery: runDelivery,
       isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
     })
+    const workInventory = new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery })
     const server = new ApiServer({
       preparation,
       port: asked.port,
@@ -739,10 +743,21 @@ class CtApi {
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       workProgress: new ReadWorkProgress({
-        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery }),
+        inventory: workInventory,
         plans: planProgress,
         activities: planningActivities,
         implementation: implementProgress,
+      }),
+      readMilestoneProgress: new ReadMilestoneProgress({
+        specs: epicSpecs,
+        issues: epicIssues,
+        inventory: workInventory,
+        implementation: implementProgress,
+        planning: planningActivities,
+        activities: new StreamImplementationActivities({ calls, files }),
+        history: metricsFileHistory,
+        baselines: new DiskSliceBaselines({ read: Disk.read }),
+        nowMs: Date.now,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       sliceEscalation: readSliceEscalation,
