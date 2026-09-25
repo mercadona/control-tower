@@ -645,6 +645,7 @@ describe('a run the judge closed', () => {
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2,
         findings: '- [high] uno.ts:1: mal', verdict: '.agent/run-7/task-2-verdict-3.json',
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -661,6 +662,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-global: task 3/3, 0 discard(s)',
       closure: {
         state: 'blocked-global', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -675,6 +677,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -688,6 +691,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 6 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -702,6 +706,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: new AnnouncementsSpy(true),
       stderr: (line) => written.push(line),
@@ -719,6 +724,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: AnnouncementsSpy.withNobodyListening(),
       stderr: (line) => written.push(line),
@@ -735,6 +741,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: new AnnouncementsSpy(),
       stderr: (line) => written.push(line),

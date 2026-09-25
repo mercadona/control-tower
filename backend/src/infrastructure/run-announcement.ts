@@ -4,7 +4,7 @@ import {
   INPUT_KINDS, MANDATORY_INPUT_ROLES_OF_STEP, RESPONSE_KIND_OF_STEP,
 } from '../../../plugin/scripts/step-announcement.js'
 import { OUTCOMES, RUN_STATES } from '../../../plugin/scripts/run-machine.js'
-import type { RunClosure } from '../domain/value-objects/run-instruction.ts'
+import type { RunClosure, RunFailure } from '../domain/value-objects/run-instruction.ts'
 
 export type { RunClosure }
 
@@ -116,6 +116,8 @@ export class RunAnnouncement {
       task: RunAnnouncement.#taskOf(record),
       findings: RunAnnouncement.#textOrNothing(record.findings),
       verdict: RunAnnouncement.#textOrNothing(record.verdict),
+      vetoed: RunAnnouncement.#textOrNothing(record.vetoed),
+      failure: RunAnnouncement.#failureOf(record.failure),
     })
   }
 
@@ -138,6 +140,17 @@ export class RunAnnouncement {
 
   static #textOrNothing(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null
+  }
+
+  static #failureOf(value: unknown): RunFailure | null {
+    if (!RunAnnouncement.#isRecord(value)) return null
+    const log = RunAnnouncement.#textOrNothing(value.log)
+    if (log === null) return null
+    return Object.freeze({
+      command: typeof value.command === 'string' ? value.command : null,
+      code: Number.isInteger(value.code) ? value.code as number : null,
+      log,
+    })
   }
 
   static #taskOf(record: Record<string, unknown>): number | null {

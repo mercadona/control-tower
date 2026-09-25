@@ -1567,7 +1567,7 @@ describe('RunPlanAgents', () => {
     tested.machine.inspection = new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
-      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null, vetoed: null, failure: null },
     })
     tested.machine.anotherRoundAnswer = new RunInstruction({
       kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
@@ -1639,7 +1639,7 @@ describe('RunPlanAgents', () => {
     tested.machine.inspection = new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
-      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null, vetoed: null, failure: null },
     })
     const detail = 'ct-step did not print an executable consuming verb'
     tested.machine.anotherRoundAnswer = new RunInstruction({ kind: 'refused', detail, closure: null })

@@ -18,6 +18,26 @@ class AnnouncementMother {
   static readonly VETOED_WITH_UNREADABLE_FINDINGS =
     AnnouncementMother.VETOED_WITH_FINDINGS.replace('"findings":"- [high] uno.txt:1: mal"', '"findings":42')
 
+  static readonly SLICE_REVIEW_VETOED =
+    '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+    + '"run":{"issue":9,"task":2,"tasksTotal":2,"step":"slice-judge","discards":0},'
+    + '"detail":"run blocked-judge: the review of the slice","vetoed":"the review of the slice"}'
+
+  static readonly CONTROLS_FAILED =
+    '{"version":1,"kind":"refusal","state":"blocked-controls","outcome":"failed","exit":1,'
+    + '"run":{"issue":7,"task":1,"tasksTotal":3,"step":"controls","discards":0},'
+    + '"detail":"run blocked-controls: task 1/3, 0 discard(s)",'
+    + '"failure":{"command":"npm test","code":1,"log":".agent/run-7/controls.log"}}'
+
+  static readonly GLOBAL_UNMEASURED =
+    '{"version":1,"kind":"refusal","state":"blocked-global","outcome":"indeterminate","exit":1,'
+    + '"run":{"issue":7,"task":3,"tasksTotal":3,"step":"global","discards":0},'
+    + '"detail":"run blocked-global: task 3/3, 0 discard(s)",'
+    + '"failure":{"command":null,"code":null,"log":".agent/run-7/global.log"}}'
+
+  static readonly CONTROLS_FAILED_WITH_NO_LOG =
+    AnnouncementMother.CONTROLS_FAILED.replace(',"log":".agent/run-7/controls.log"', '')
+
   static undeclaredTransitionState(): string {
     return JSON.stringify({
       version: 1,
@@ -349,6 +369,8 @@ describe('RunAnnouncement', () => {
       task: 1,
       findings: null,
       verdict: null,
+      vetoed: null,
+      failure: null,
     })
     expect(announcement?.diagnostic).toBe(
       'ct-step refused: the run is blocked-judge with outcome discarded (exit 3) — 6 discards',
@@ -503,5 +525,40 @@ describe('what the refusal says about the verdict that closed the run', () => {
 
     expect(announcement?.closure?.findings).toBeNull()
     expect(announcement?.closure?.verdict).toBe('.agent/run-9/task-1-verdict-3.json')
+  })
+})
+
+describe('what the refusal says about what was vetoed and what failed', () => {
+  it('reads the failing command, its exit and the log path of a blocked-controls refusal', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.CONTROLS_FAILED)
+
+    expect(announcement?.closure?.failure).toEqual({ command: 'npm test', code: 1, log: '.agent/run-7/controls.log' })
+  })
+
+  it('reads a blocked-global refusal that could not measure its command with a null exit', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.GLOBAL_UNMEASURED)
+
+    expect(announcement?.closure?.state).toBe('blocked-global')
+    expect(announcement?.closure?.failure).toEqual({ command: null, code: null, log: '.agent/run-7/global.log' })
+  })
+
+  it('a failure with no log is read as nothing, not as an unreadable announcement', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.CONTROLS_FAILED_WITH_NO_LOG)
+
+    expect(announcement?.closure?.state).toBe('blocked-controls')
+    expect(announcement?.closure?.failure).toBeNull()
+  })
+
+  it('reads what the judge vetoed when the plugin names it', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.SLICE_REVIEW_VETOED)
+
+    expect(announcement?.closure?.vetoed).toBe('the review of the slice')
+  })
+
+  it('a refusal from a plugin too old to name the failure or the veto reads both as null', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.BLOCKED_JUDGE_DISCARDED)
+
+    expect(announcement?.closure?.vetoed).toBeNull()
+    expect(announcement?.closure?.failure).toBeNull()
   })
 })

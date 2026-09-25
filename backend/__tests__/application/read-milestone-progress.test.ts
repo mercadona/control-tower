@@ -269,7 +269,7 @@ class Mother {
       phase: 'uncertain',
       diagnostic: 'the run closed at blocked-judge',
       recovery: { action: 'observe', detail: 'talk to the coordinating session' },
-      refusal: { state: DriveRun.BLOCKED_JUDGE, outcome: 'failed', exit: 1, task, findings, verdict },
+      refusal: { state: DriveRun.BLOCKED_JUDGE, outcome: 'failed', exit: 1, task, findings, verdict, vetoed: null, failure: null },
       execution: Mother.implementationStateOf({ task, totalTasks: 3, step: ImplementationStep.JUDGE }),
     })
   }

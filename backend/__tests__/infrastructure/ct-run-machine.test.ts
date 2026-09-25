@@ -686,7 +686,7 @@ describe('CtRunMachine', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
         + ' — run blocked-controls: task 1/3, 0 discard(s)',
-      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: 1, findings: null, verdict: null },
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: 1, findings: null, verdict: null, vetoed: null, failure: null },
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.controlsArgv(), cwd: OracleMother.WORKTREE }])
   })
@@ -720,7 +720,7 @@ describe('CtRunMachine', () => {
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome discarded (exit 3)'
         + ' — 6 discards in this run: it stops instead of going on asking for answers that cannot be read',
-      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 1, findings: null, verdict: null },
+      closure: { state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 1, findings: null, verdict: null, vetoed: null, failure: null },
     })
     expect(fixture.asked).toEqual([])
   })
@@ -1080,7 +1080,7 @@ describe('CtRunMachine', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-reconcile with outcome failed (exit 13)'
         + ' — run blocked-reconcile: task 3/3, 0 discard(s)',
-      closure: { state: 'blocked-reconcile', outcome: 'failed', exit: 13, task: 3, findings: null, verdict: null },
+      closure: { state: 'blocked-reconcile', outcome: 'failed', exit: 13, task: 3, findings: null, verdict: null, vetoed: null, failure: null },
     }))
     expect(fixture.asked).toEqual([
       { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
@@ -1851,7 +1851,7 @@ describe('CtRunMachine after a refusal (#504)', () => {
       kind: 'refused',
       detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)'
         + ' — run blocked-controls: task 1/3, 0 discard(s)',
-      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: 1, findings: null, verdict: null },
+      closure: { state: 'blocked-controls', outcome: 'failed', exit: 4, task: 1, findings: null, verdict: null, vetoed: null, failure: null },
     })
     expect(fixture.asked).toEqual([{ argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE }])
     expect(await fixture.journal.entries(OracleMother.watch())).toHaveLength(3)
