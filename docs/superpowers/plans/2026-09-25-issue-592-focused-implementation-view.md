@@ -559,27 +559,12 @@ Current state (frontend/vite.config.ts, lines 8-8):
 const API_PATHS = ['/recover-plan', '/cleanup-plan', '/work-progress', '/implement-history', '/active-plans', '/external-tools', '/sessions', '/slices', '/coordinating-session', '/groom-session', '/session-hooks', '/spec-freeze', '/spec-reslicing', '/epic-groom', '/epic-promotion']
 ```
 
-`API_PATHS` loses `/work-progress`, `/implement-history` and `/slices`. `SessionsClient.list` and
-`closedSessionIds` go.
+`API_PATHS` loses `/work-progress`, `/implement-history` and `/slices`. Every member, prop,
+style and type that loses its last reader goes. A type `contract.ts` imports stays.
 
-`StartPlanForm` loses `isLocked`, `request`, `isMutationBlocked`, the locked
-summary, `MUTATION_BLOCKED_HELP` and `.start-plan-form__summary*`. `TopBar` loses `breadcrumbs` and
-`actions`. `STEP_SHORT_LABELS` goes. Each type that loses its last reader goes. A type
-`contract.ts` imports stays.
-
-Amendment (additions only, this task's Files line, made while implementing): `HeadlessPlanMother.ts`
-is modified, not deleted — `active-plans/client.test.ts` and `Home.implementation.test.tsx`'s Task 6
-recovery tests still call `.empty`, `.uncertain`, `.awaitingObservation`, `.awaitingContinuation`,
-`.unlaunched`, `.uncertainAmong` and `.agentFor`; only the members `useAutomaticSliceSelection.test.ts`
-alone used are pruned. `frontend/src/app/active-plans/client.ts` also needed `isRecord`, `isRequest`
-and `isPlanForRequest` moved in from the deleted `workflow-snapshot/validation.ts`, its only other
-importer, following the module-that-was-already-there idiom already in that file. Also modified as
-the unavoidable companions of the listed changes: `frontend/src/app/sessions/client.test.ts` and
-`frontend/src/app/sessions/Sessions.types.ts` (the `SessionsClient.list` removal), `frontend/src/app/coordinating-session/useCoordinatingSession.test.ts`
-(the `closedSessionIds` removal), `frontend/src/pages/home/Home.tsx` (drops the `isLocked` prop
-`StartPlanForm` no longer declares), `frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.css`
-and `StartPlanForm.test.tsx`, `frontend/src/system-ui/top-bar/TopBar.css`, and
-`frontend/src/app/implement-progress/ImplementProgress.types.ts` (the `STEP_SHORT_LABELS` removal).
+Amendment: `HeadlessPlanMother.ts` stays, and loses only the members no kept test calls.
+`active-plans/client.ts` takes the three guards of the deleted `validation.ts`. The task also
+edits the tests, types and styles next to each removal.
 
 **TDD:** No TDD — deletion only; the suite and the build prove that nothing kept used them.
 
