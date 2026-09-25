@@ -1,0 +1,44 @@
+.gate-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+.gate-layout__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gate-layout__heading {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.gate-layout__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.gate-layout__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--foreground-secondary);
+}
+
+.gate-layout__notice {
+  margin: 0;
+  color: var(--foreground-secondary);
+}
+
+.gate-layout__link {
+  color: var(--foreground-brand-primary);
+}

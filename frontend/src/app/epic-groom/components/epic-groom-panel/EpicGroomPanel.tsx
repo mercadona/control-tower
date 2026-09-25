@@ -1,4 +1,3 @@
-import { ReactNode } from 'react'
 import { LiveAsk } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomOutcome, EpicIssue, EpicPullRequest, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
@@ -7,6 +6,7 @@ import { useAskRead } from 'app/epic-groom/useAskRead'
 import { useMergedReslicing } from 'app/epic-groom/useMergedReslicing'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
+import { GateLayout, GateLink, GateList, GateListItem, GateNotice } from 'system-ui/gate-layout'
 import { Tag } from 'system-ui/tag'
 import './EpicGroomPanel.css'
 
@@ -77,37 +77,19 @@ const EpicGroomPanelLabels = {
   issueItem,
 }
 
-type GateLayoutProps = {
-  heading: string
-  children?: ReactNode
-  actions?: ReactNode
-}
-
-const GateLayout = ({ heading, children, actions }: GateLayoutProps) => (
-  <div className="epic-groom-panel">
-    <div className="epic-groom-panel__body">
-      <p className="epic-groom-panel__heading lg-body-medium">{heading}</p>
-      {children}
-    </div>
-    {actions !== undefined && <div className="epic-groom-panel__actions">{actions}</div>}
-  </div>
-)
-
 const IssueList = ({ issues }: { issues: EpicIssue[] }) => (
-  <ul className="epic-groom-panel__issues">
+  <GateList>
     {issues.map((issue) => (
-      <li key={issue.number} className="epic-groom-panel__issue lg-footnote-regular">
-        <span className="epic-groom-panel__issue-title">{EpicGroomPanelLabels.issueItem(issue)}</span>
+      <GateListItem key={issue.number}>
+        <span>{EpicGroomPanelLabels.issueItem(issue)}</span>
         <Tag className="epic-groom-panel__issue-status">{issue.status}</Tag>
-      </li>
+      </GateListItem>
     ))}
-  </ul>
+  </GateList>
 )
 
 const PullRequestLink = ({ pullRequest }: { pullRequest: EpicPullRequest }) => (
-  <a className="epic-groom-panel__pull-request" href={pullRequest.url}>
-    {`${PULL_REQUEST} #${pullRequest.number}`}
-  </a>
+  <GateLink href={pullRequest.url}>{`${PULL_REQUEST} #${pullRequest.number}`}</GateLink>
 )
 
 type EpicGroomPanelProps = {
@@ -140,16 +122,12 @@ const EpicGroomPanel = ({
   if (acted === null && EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
   if (acted === null && read.kind === 'refused') {
     return (
-      <div className="epic-groom-panel">
-        <Banner type="error" role="alert" title={read.error} />
-      </div>
+      <Banner type="error" role="alert" title={read.error} />
     )
   }
   if (acted === null && read.kind === 'issues-uncertain') {
     return (
-      <div className="epic-groom-panel">
-        <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
-      </div>
+      <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
     )
   }
 
@@ -167,10 +145,10 @@ const EpicGroomPanel = ({
   const preparationBlocked = preparationRefused || preparationDetail !== null
 
   const gateNotice = gateKey === null && (
-    <p className="epic-groom-panel__notice epic-groom-panel__only-from-the-page lg-footnote-regular">{ONLY_FROM_THE_PAGE}</p>
+    <GateNotice>{ONLY_FROM_THE_PAGE}</GateNotice>
   )
   const sessionNeeded = target === null && (
-    <p className="epic-groom-panel__notice epic-groom-panel__no-session lg-footnote-regular">{NO_COORDINATING_SESSION}</p>
+    <GateNotice>{NO_COORDINATING_SESSION}</GateNotice>
   )
   const askBanner =
     refusal?.kind === 'refused' ? (
@@ -199,17 +177,17 @@ const EpicGroomPanel = ({
       />
     ) : null
   const askNotice = liveAsk === 'working' ? (
-    <p className="epic-groom-panel__notice epic-groom-panel__ask-blocked lg-footnote-regular">{SESSION_WORKING}</p>
+    <GateNotice>{SESSION_WORKING}</GateNotice>
   ) : liveAsk === 'awaiting-permission' ? (
-    <p className="epic-groom-panel__notice epic-groom-panel__ask-blocked lg-footnote-regular">{SESSION_AWAITING_PERMISSION}</p>
+    <GateNotice>{SESSION_AWAITING_PERMISSION}</GateNotice>
   ) : liveAsk === 'turn-not-finished' ? (
-    <p className="epic-groom-panel__notice epic-groom-panel__ask-blocked lg-footnote-regular">{SESSION_TURN_UNKNOWN}</p>
+    <GateNotice>{SESSION_TURN_UNKNOWN}</GateNotice>
   ) : null
   const sessionNotice =
     session?.kind === 'opened' ? (
-      <p className="epic-groom-panel__notice epic-groom-panel__session-opened lg-footnote-regular">{SESSION_OPENED}</p>
+      <GateNotice>{SESSION_OPENED}</GateNotice>
     ) : session?.kind === 'typed' ? (
-      <p className="epic-groom-panel__notice epic-groom-panel__ask-sent lg-footnote-regular">{askWasRead ? ASK_READ : ASK_SENT}</p>
+      <GateNotice>{askWasRead ? ASK_READ : ASK_SENT}</GateNotice>
     ) : session?.kind === 'refused' ? (
       <Banner type="error" role="alert" title={session.error} />
     ) : session?.kind === 'unconfirmed' ? (
@@ -232,9 +210,9 @@ const EpicGroomPanel = ({
         }
       >
         {reslicing?.kind === 'published' && (
-          <p className="epic-groom-panel__notice epic-groom-panel__reslicing-published lg-footnote-regular">
+          <GateNotice>
             <span>{RESLICING_PUBLISHED}</span> <PullRequestLink pullRequest={reslicing.pullRequest} />
-          </p>
+          </GateNotice>
         )}
         {gateNotice}
         {sessionNeeded}
@@ -263,17 +241,15 @@ const EpicGroomPanel = ({
           </>
         }
       >
-        <ul className="epic-groom-panel__plan">
+        <GateList>
           {plan.map((issue) => (
-            <li key={issue.order} className="epic-groom-panel__plan-item lg-footnote-regular">
-              {EpicGroomPanelLabels.planItem(issue, home)}
-            </li>
+            <GateListItem key={issue.order}>{EpicGroomPanelLabels.planItem(issue, home)}</GateListItem>
           ))}
-        </ul>
+        </GateList>
         {merged !== null && (
-          <p className="epic-groom-panel__notice epic-groom-panel__reslicing-merged lg-footnote-regular">
+          <GateNotice>
             <span>{RESLICING_MERGED}</span> <PullRequestLink pullRequest={merged} />
-          </p>
+          </GateNotice>
         )}
         {askNotice}
         {sessionNotice}
@@ -296,7 +272,7 @@ const EpicGroomPanel = ({
         }
       >
         <IssueList issues={issues} />
-        <p className="epic-groom-panel__notice epic-groom-panel__partial-notice lg-footnote-regular">{FINISH_GROOM_FIRST}</p>
+        <GateNotice>{FINISH_GROOM_FIRST}</GateNotice>
         {gateNotice}
         {sessionNeeded}
         {askBanner}
