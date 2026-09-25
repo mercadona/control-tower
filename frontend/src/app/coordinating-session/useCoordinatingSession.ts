@@ -50,6 +50,7 @@ type CoordinatingLifecycle = {
   open: (submission: StartPlanSubmission) => Promise<OpenOutcome>
   openGroom: (key: string, target: string) => Promise<GroomSessionOutcome>
   close: () => Promise<CloseOutcome | null>
+  reopen: () => Promise<OpenOutcome>
 }
 
 const useCoordinatingSession = (): CoordinatingLifecycle => {
@@ -246,6 +247,12 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
       ? EpicGroomClient.openSession(key, target)
       : runOpening(() => EpicGroomClient.openSession(key, target)), [askableNow, runOpening])
 
+  const reopen = useCallback((): Promise<OpenOutcome> => {
+    const target = heldRef.current?.outcome.target ?? null
+
+    return target === null ? Promise.resolve(BLOCKED_OPENING) : runOpening(() => CoordinatingSessionClient.reopen(target))
+  }, [runOpening])
+
   const close = useCallback(async (): Promise<CloseOutcome | null> => {
     const snapshot = heldRef.current
     if (snapshot === null || mutationRef.current || closingRef.current) return null
@@ -328,6 +335,7 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     open,
     openGroom,
     close,
+    reopen,
   }
 }
 

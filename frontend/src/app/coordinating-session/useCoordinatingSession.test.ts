@@ -484,6 +484,18 @@ describe('useCoordinatingSession', () => {
     expect(result.current.blocksOpening).toBe(false)
   })
 
+  it('reopen with no held session sends nothing', async () => {
+    const fetching = vi.fn(async (_input: string | URL | Request) => response(CoordinatingSessionMother.none()))
+    vi.stubGlobal('fetch', fetching)
+    const { result } = renderHook(() => useCoordinatingSession())
+    await waitFor(() => expect(result.current.blocksOpening).toBe(false))
+
+    const outcome = await result.current.reopen()
+
+    expect(outcome).toMatchObject({ kind: 'refused' })
+    expect(fetching.mock.calls.some(([input]) => input === '/coordinating-session/reopen')).toBe(false)
+  })
+
   it('captures the terminal ID before close so ended transitions cannot defeat cleanup', async () => {
     const acknowledgement = new Deferred<Response>()
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {

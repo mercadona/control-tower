@@ -10,6 +10,8 @@ const TIMELINE_EVENT_KINDS: readonly TimelineEventKind[] = [
 ]
 
 const PATH = '/coordinating-session'
+const REOPEN_PATH = `${PATH}/reopen`
+const TARGET_HEADER = 'x-coordinating-target'
 const OPENED = 202
 const CLOSED = 200
 const OPERATIONS: readonly CoordinatingOperation[] = ['idle', 'recovering', 'opening', 'closing', 'close-failed']
@@ -162,6 +164,26 @@ const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
   return { kind: 'refused', code: body.code, error: productError(body.code, body.detail) }
 }
 
+const reopen = async (target: string): Promise<OpenOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(REOPEN_PATH, { method: 'POST', headers: { [TARGET_HEADER]: target } })
+    body = await response.json()
+  } catch {
+    return { kind: 'backend-unreachable' }
+  }
+  if (response.status === OPENED) {
+    const opened = openedIn(body)
+
+    return opened === null ? { kind: 'backend-unreachable' } : { kind: 'opened', opened }
+  }
+  if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
+    return { kind: 'backend-unreachable' }
+  }
+  return { kind: 'refused', code: body.code, error: productError(body.code, body.detail) }
+}
+
 const close = async (conversation: string, target: string): Promise<CloseOutcome> => {
   let response: Response
   let body: unknown
@@ -188,6 +210,7 @@ const close = async (conversation: string, target: string): Promise<CloseOutcome
 export const CoordinatingSessionClient = {
   read,
   open,
+  reopen,
   close,
   openedIn,
 }

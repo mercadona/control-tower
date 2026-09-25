@@ -189,6 +189,41 @@ describe('CoordinatingSessionClient', () => {
     )).resolves.toEqual({ kind: 'backend-unreachable' })
   })
 
+  it('reopen posts the held target and adopts the session it answers', async () => {
+    const posting = vi.fn(async () => new Response(CoordinatingSessionMother.opened().body, { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    const outcome = await CoordinatingSessionClient.reopen(CoordinatingSessionMother.TARGET)
+
+    expect(posting).toHaveBeenCalledWith('/coordinating-session/reopen', {
+      method: 'POST',
+      headers: { 'x-coordinating-target': CoordinatingSessionMother.TARGET },
+    })
+    expect(outcome).toEqual({
+      kind: 'opened',
+      opened: {
+        target: CoordinatingSessionMother.TARGET,
+        conversation: CoordinatingSessionMother.CONVERSATION,
+        repo: CoordinatingSessionMother.REPO,
+        story: CoordinatingSessionMother.STORY,
+        root: CoordinatingSessionMother.ROOT,
+        session: CoordinatingSessionMother.SESSION,
+      },
+    })
+  })
+
+  it('reopen reads a refusal as product copy', async () => {
+    answerWith({ status: 409, body: '{"code":"coordinating-session-not-ended","detail":"still live"}' })
+
+    const outcome = await CoordinatingSessionClient.reopen(CoordinatingSessionMother.TARGET)
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'coordinating-session-not-ended',
+      error: 'La sesión coordinadora sigue viva: no hace falta reabrirla.',
+    })
+  })
+
   it('turns malformed opening and close bodies into transport uncertainty', async () => {
     const fetching = vi.fn()
       .mockResolvedValueOnce(new Response('{', { status: 202 }))
