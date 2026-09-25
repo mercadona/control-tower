@@ -19,6 +19,8 @@ import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { DispatchRelay } from './dispatch-relay.ts'
+import { SpecBranchReturns } from './spec-branch-returns.ts'
+import { ReturnFromMergedSpecBranch } from '../application/actions/return-from-merged-spec-branch.ts'
 import { HeldStoryMilestone } from './held-story-milestone.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
@@ -320,12 +322,13 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, records, environment, harvestTable, relay }: {
+  static #harvestClock({ workspace, checkouts, records, environment, harvestTable, specBranches, relay }: {
     workspace: GitWorkspace,
     checkouts: DiskCheckoutRegistry,
     records: DiskPlanRecords,
     environment: NodeJS.ProcessEnv,
     harvestTable: string | null,
+    specBranches: SpecBranchReturns,
     relay: DispatchRelay,
   }): HarvestClock {
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
@@ -348,7 +351,10 @@ class CtApi {
       survey: (root) => surveyWorkspaces.execute(new SurveyWorkspacesParams({ root })),
       harvest: (prepared, repository) =>
         harvestDelivery.execute(new HarvestDeliveryParams({ prepared, repository })),
-      relay: (root, repository) => relay.relay(root, repository),
+      relay: async (root, repository) => {
+        await specBranches.settle(root, repository)
+        await relay.relay(root, repository)
+      },
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_SWEEPS),
       stderr: (line) => process.stderr.write(line),
     })
@@ -803,7 +809,12 @@ class CtApi {
       await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
     )
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
-      workspace, checkouts, records, environment, harvestTable: asked.harvestTable, relay: dispatchRelay,
+      workspace, checkouts, records, environment, harvestTable: asked.harvestTable,
+      specBranches: new SpecBranchReturns({
+        returning: new ReturnFromMergedSpecBranch({ branch: epicBranch, pullRequests }),
+        stderr: (line) => process.stderr.write(line),
+      }),
+      relay: dispatchRelay,
     }))
   }
 }

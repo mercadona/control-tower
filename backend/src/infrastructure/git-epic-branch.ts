@@ -2,6 +2,8 @@ import { EpicBranch } from '../domain/ports/epic-branch.ts'
 import { EpicBranchNotPublished, EpicBranchNotUnderstood } from '../domain/exceptions.ts'
 import { GitWorkspace } from './git-workspace.ts'
 import type { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
+import { RemoteBranchFate } from '../domain/value-objects/remote-branch-fate.ts'
+import type { RemoteBranchFateValue } from '../domain/value-objects/remote-branch-fate.ts'
 import type { ToolLaunch } from './external-tool.ts'
 
 export class GitEpicBranch extends EpicBranch {
@@ -71,6 +73,18 @@ export class GitEpicBranch extends EpicBranch {
     return ['-C', root, 'switch', '--create', branch]
   }
 
+  static #fastForwardArgvFor(root: string, into: string): string[] {
+    return ['-C', root, 'merge', '--ff-only', `${GitEpicBranch.REMOTE}/${into}`]
+  }
+
+  static #deleteArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'branch', '-D', branch]
+  }
+
+  static #deleteRemoteArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'push', GitEpicBranch.REMOTE, '--delete', branch]
+  }
+
   async current(root: CheckoutRoot): Promise<string> {
     const asked = await this.run(GitEpicBranch.currentArgvFor(root.text))
     if (asked.failed) {
@@ -104,6 +118,48 @@ export class GitEpicBranch extends EpicBranch {
         `git switch could not start ${branch} again from ${GitEpicBranch.REMOTE}/${into}: ${restarted.stderr.trim()}`
       )
     }
+  }
+
+  async tipOf({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<string> {
+    const asked = await this.run(GitEpicBranch.#localRefArgvFor(root.text, branch))
+    const tip = asked.stdout.trim()
+    if (asked.failed || tip.length === 0) {
+      throw new EpicBranchNotPublished(`git could not name the commit ${branch} of ${root.text} points at: ${asked.stderr.trim()}`)
+    }
+
+    return tip
+  }
+
+  async returnToDefault({ root, branch, merged }: {
+    root: CheckoutRoot, branch: string, merged: string,
+  }): Promise<RemoteBranchFateValue> {
+    const into = await this.defaultBranch(root)
+    await this.#refresh(root)
+    await this.#switchTo(root, into)
+    await this.#runOrRefuse(GitEpicBranch.#fastForwardArgvFor(root.text, into), `git merge --ff-only of ${into}`)
+    await this.#runOrRefuse(GitEpicBranch.#deleteArgvFor(root.text, branch), `git branch -D of ${branch}`)
+
+    return await this.#deleteRemoteAt(root, branch, merged)
+  }
+
+  async #deleteRemoteAt(root: CheckoutRoot, branch: string, merged: string): Promise<RemoteBranchFateValue> {
+    const asked = await this.run(GitEpicBranch.#remoteBranchArgvFor(root.text, branch))
+    if (asked.failed) {
+      throw new EpicBranchNotPublished(
+        `${GitEpicBranch.REMOTE} could not say whether it still holds ${branch}: ${asked.stderr.trim()}`
+      )
+    }
+    const remoteTip = asked.stdout.trim().split(/\s+/)[0] ?? ''
+    if (remoteTip.length === 0) return RemoteBranchFate.ABSENT
+    if (remoteTip !== merged) return RemoteBranchFate.KEPT
+    await this.#runOrRefuse(GitEpicBranch.#deleteRemoteArgvFor(root.text, branch), `git push --delete of ${branch}`)
+
+    return RemoteBranchFate.REMOVED
+  }
+
+  async #runOrRefuse(argv: string[], what: string): Promise<void> {
+    const ran = await this.run(argv)
+    if (ran.failed) throw new EpicBranchNotPublished(`${what} failed: ${ran.stderr.trim()}`)
   }
 
   async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {

@@ -1,4 +1,5 @@
 import type { CheckoutRoot } from '../value-objects/checkout-root.ts'
+import type { RemoteBranchFateValue } from '../value-objects/remote-branch-fate.ts'
 
 export class EpicBranch {
   async current(root: CheckoutRoot): Promise<string> {
@@ -22,6 +23,22 @@ export class EpicBranch {
     throw new Error(
       `${this.constructor.name} must implement restartFromDefault({ root, branch }) and start ${branch} of ${root} ` +
       `again from the branch the remote calls default, carrying what is not committed yet`
+    )
+  }
+
+  async tipOf({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<string> {
+    throw new Error(
+      `${this.constructor.name} must implement tipOf({ root, branch }) and answer the commit ${branch} of ${root} points at`
+    )
+  }
+
+  async returnToDefault({ root, branch, merged }: {
+    root: CheckoutRoot, branch: string, merged: string,
+  }): Promise<RemoteBranchFateValue> {
+    throw new Error(
+      `${this.constructor.name} must implement returnToDefault({ root, branch, merged }): switch ${root} to the branch `
+      + `the remote calls default, bring it up to date, delete ${branch}, and delete it on the remote while it still `
+      + `points at ${merged}`
     )
   }
 
