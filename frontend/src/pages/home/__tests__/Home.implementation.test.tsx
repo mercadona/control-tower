@@ -23,6 +23,7 @@ type Backend = {
   recoverPlan?: () => Answer
   cleanupPlan?: () => Answer
   reopen?: () => Answer
+  close?: () => Answer
 }
 
 const settle = async () => {
@@ -39,12 +40,14 @@ class ImplementationBackend {
     recoverPlan,
     cleanupPlan,
     reopen,
+    close,
   }: Backend = {}) {
     const fetching = vi.fn(async (input: string | URL | Request) => {
       const path = String(input)
       const respond = (answer: Answer) => new Response(answer.body, { status: answer.status })
       if (path === '/coordinating-session') return respond(session())
       if (path === '/coordinating-session/reopen' && reopen !== undefined) return respond(reopen())
+      if (path === '/coordinating-session/close' && close !== undefined) return respond(close())
       if (path === '/external-tools') return respond(ExternalToolsMother.allReady())
       if (path === '/spec-freeze') return respond(specFreeze())
       if (path === '/epic-groom') return respond(epicGroom())
@@ -341,5 +344,63 @@ describe('Home is the start form with no session held, and the focused view for 
       method: 'POST',
       headers: { 'x-coordinating-target': CoordinatingSessionMother.TARGET },
     }))
+  })
+
+  it('every issue delivered shows Milestone completado and Cerrar la sesión y volver al inicio', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([
+        MilestoneProgressMother.delivered(590),
+        MilestoneProgressMother.delivered(591),
+      ]),
+    })
+
+    openHome()
+
+    expect(await screen.findByRole('heading', { name: 'Milestone completado' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerrar la sesión y volver al inicio' })).toBeInTheDocument()
+  })
+
+  it('one issue not delivered keeps the list', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([
+        MilestoneProgressMother.delivered(590),
+        MilestoneProgressMother.running(591),
+      ]),
+    })
+
+    openHome()
+    await screen.findByRole('region', { name: 'Issues del milestone' })
+
+    expect(screen.queryByRole('heading', { name: 'Milestone completado' })).not.toBeInTheDocument()
+  })
+
+  it('Cerrar la sesión y volver al inicio gives the start form back', async () => {
+    let closed = false
+    ImplementationBackend.with({
+      session: () => (closed ? CoordinatingSessionMother.none() : CoordinatingSessionMother.working()),
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.delivered(592)]),
+      close: () => {
+        closed = true
+        return {
+          status: 200,
+          body: JSON.stringify({
+            status: 'closed', conversation: CoordinatingSessionMother.CONVERSATION, target: CoordinatingSessionMother.TARGET,
+          }),
+        }
+      },
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Cerrar la sesión y volver al inicio' }))
+
+    expect(await screen.findByLabelText('Ticket')).toBeInTheDocument()
   })
 })
