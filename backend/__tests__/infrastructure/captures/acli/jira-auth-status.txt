@@ -1,0 +1,11 @@
+command: acli jira auth status
+version: acli version 1.3.36-stable
+date: 2026-09-25
+exit: 0
+--- stdout
+✓ Authenticated
+  Site: mercadona.atlassian.net
+  Email: jponzvan@mercadona.es
+  Authentication Type: oauth
+
+--- stderr

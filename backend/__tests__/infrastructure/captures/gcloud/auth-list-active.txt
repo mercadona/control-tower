@@ -1,0 +1,18 @@
+command: gcloud auth list --filter=status:ACTIVE --format=value(account)
+version: Google Cloud SDK 565.0.0
+date: 2026-09-25
+exit: 0
+--- stdout
+jponzvan@mercadona.es
+
+--- stderr
+WARNING:  Python 3.9.x is no longer officially supported by the Google Cloud CLI
+and may not function correctly. Please use Python version 3.10 and up.
+To reinstall gcloud, run:
+    $ gcloud components reinstall
+
+This will also prompt to install a compatible version of Python.
+
+If you have a compatible Python interpreter installed, you can use it by setting
+the CLOUDSDK_PYTHON environment variable to point to it.
+

@@ -1,0 +1,65 @@
+{
+  "issue": 553,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Every task's objective is produced by the diff. Task 1: CtApi.run(argv, environment, host) composes over an ApiHost; the static #PROCESSES field is gone; every helper that read it or wrote to process.stdout/stderr/exit takes the host; four startup cases run in process through InProcessApi. Task 2: the eight route cases are in ct-api.test.ts with the requests and assertions of their old cases. Task 3: GET /external-tools runs over a temporary PATH of empty executables and five real captures, and asserts the asked binaries. Task 4: ScriptedTerminals drives open/type/close/reopen/restart. Task 5: both recovery cases and both story cases (acli and gh) are there. Task 6: the sweep case is there, the old test file and ct-api-process.ts are deleted, and the ratchet list drops the old file.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Each named TDD test is in the diff and matches its sentence. T1 checks api.port > 0 and said() == JSON {port}+newline. T2 checks 404 and {code:'not-found',detail:'not found'} for POST and GET, then that go is absent. T3 sets the fixture BQ table and checks the tools order [gh,acli,claude,git,bq] and the asked binaries [gh,acli,claude,ssh,gcloud], keeping the session/fix/delivery assertions. T4 checks opened at 1/2/2/3, typed holds the input, the sentinel and untracked bytes kept, no destructive git token, and signalled a subset of opened pids. T5 checks the status is not unresumable, one opened terminal, and that its argv names the ID. T6 checks not 404 with malformed-repo, polls that every gh call carries query=issuesQueryFor(['OPEN']), checks that saidLater has neither 'could not survey' nor 'relay:', and that no terminal and no go directory exist.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The ApiHost type matches the Contract field by field: processes: ProcessRunner & ProcessTable, stdout, stderr, exit: never, wait. The signature is `static async run(argv, environment, host): Promise<ApiServer>` on an exported CtApi, and it returns the server. The main-lines Call site appears verbatim at the end of ct-api.ts, guarded by realpathSync(process.argv[1]) against fileURLToPath(import.meta.url). ClaudeCalls gets spawn: host.processes.launch.bind(host.processes). The Current state block over process-ratchet.ts lines 13-15 lost exactly its middle line.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The rows this diff bears on hold. The host row: only the main lines build the real host. The main-lines row: the guard is on the real path of argv[1]. Every wait: #waiting and the sleeps of ClaudeCalls and PtyLiveSessions go through host.wait, while WorkRecoveryClock keeps setTimeout. The answer of run: it resolves to the ApiServer. A restart: api1.stop() and then started over the same environment and HostProcesses. The environment: each case passes its env, and InProcessApi adds only CLAUDE_CONFIG_DIR when absent. Captures live under __tests__/infrastructure/captures/<tool>/. D-3: no spawn or git arrange is left in ct-api.test.ts. D-8: scripted conversation fed by headed captures. D-10: the two run-backend cases are recorded as deleted without substitute. #563 substitutes: state is written directly, with no POST arrange. Test-only code: the doubles stay in __tests__.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars. The main guard sits at the end of the file like headless-call-worker.ts; it compares realpaths rather than pathToFileURL because the plan's Call site block and closed decision say so, and the brief wins over the exemplar. InProcessApi and stopAll follow in-process-run.ts and servers.ts: build over doubles in a temporary root, stop every started server, then remove the directories. HostProcesses reuses ScriptedConversation and LivingProcessGroups. ScriptedTerminals doubles ProcessTable the way living-process-groups.ts does, adding no seam in src. Rules. this-repository.md and testing.md 'A double of a whole conversation answers by what it is asked, not by order' are honoured by ScriptedConversation.answering. ct-api.ts is a (modify) host module, and the diff follows its idiom; the only new concept in it is the ApiHost type the contract asks for. Boundaries: the host is injected at run, and nothing in the composition constructs SystemProcesses any more. Delivery shape: the plan names none and the documents are silent, so it complies as it stands. defects.md, rule by rule. Closed vocabulary: nothing new classifies by loose string or boolean; HostClock#stopped is lifecycle state, not a classification, and signal===0 is the POSIX signal value, not a dispatch. Raw map as the return value of logic: no subject, because the diff returns no new map (the clients map in #toolSessions is pre-existing and only re-threaded). Two fields that have to agree: InProcessApi#configDirectory is string|null, with the absence carried in the type rather than a sentinel, and no flag repeats another field. Errors named for where: ExitRequested names what happens, the entrypoint asking to exit. Side note, no finding: the new captures carry the author's real email and org id, as D-8's 'real captures' produces; no document of either yardstick speaks to it.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The only test file with - lines is the deleted ct-api-real-process.test.ts, and Task 6's Tests line accounts for it: 'Removed on purpose: the 21 cases of the deleted file'. The ledger maps each of them. The substitutes drop some old assertions of the restart case: the git status/diff snapshot and the process.kill(unrelated.pid, 0) liveness check. The plan's own TDD text for Task 4 replaces those with the sentinel/untracked bytes, the no-destructive-git check and the signalled-within-opened check, so the brief accounts for the change.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The behaviours come from production code. CtApi.run in src composes the real modules. The doubles stand only at the process border: ScriptedConversation for runAndWait/launch and ScriptedTerminals/LivingProcessGroups for the table. Every asserted HTTP answer, the asked argv and the opened terminals are produced by the composed ApiServer, so reverting the ct-api.ts host threading breaks every case, which cannot inject processes otherwise.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Paths: every touched path is named by some task's Files line, counting captures and the ledger as the tasks declare them, and every named path is touched, including the two deletions. There is no plan amendment in the diff. Nothing under plugin/ or frontend/ changes, and neither do the Makefile, vitest.config.ts or API routes. Inside the files, the ScriptedTerminals readTable adds a row for an unrelated pid 1 that the task's prose does not describe; reported low.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests in ct-api.test.ts are deterministic: the ports are ephemeral on loopback, every path lives under mkdtemp, the only real-clock uses are timeout guards and expect.poll rather than sleeps, the table's start time is fixed, and no randomness is asserted. They are isolated: each case builds its own dirs and removes them in finally, afterEach stops every InProcessApi and clears ExternalToolsProbe's static path list, and HostClock never wakes a stopped API. They assert real behaviour, since each one reads the HTTP answers or the requests the composition made. The retired-endpoint case keeps the old case's self-check of requireGoAbsent, which the plan ordered kept. Nothing is reported beyond the three blocking properties, so the ct-test-driven-development skill was not needed for a citation.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "alcance",
+        "severity": "low",
+        "what": "ScriptedTerminals.readTable prints an extra row for pid 1 besides the live terminals. Task 4's prose defines the table as one row per live terminal, so this row is behaviour no sentence of the task asks for. It is harmless, since it arguably keeps signalled-within-opened meaningful, but it is undeclared.",
+        "path": "backend/__tests__/infrastructure/fixtures/scripted-terminals.ts",
+        "line": 81,
+        "evidence": "rows.push(ScriptedTerminals.#rowFor(ScriptedTerminals.#UNRELATED_PID)) — against the brief: \"`readTable` prints one `pid pgid lstart` line per live terminal\""
+      }
+    ],
+    "review_token": "8bc7b95a1611ab803952cea32bb23945402c57943e5a3ed3dab8d8f13aa1a310"
+  }
+}
