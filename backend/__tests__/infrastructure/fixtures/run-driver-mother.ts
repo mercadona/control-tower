@@ -2,7 +2,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -25,32 +25,21 @@ import {
   VERDICT_RULES,
 } from '../../../../plugin/scripts/step-contracts.js'
 import { AgentDefinition } from '../../../../plugin/scripts/judge-agent-definition.js'
-import { RecoverPlan, RecoverPlanParams } from '../../../src/application/actions/recover-plan.ts'
 import { RunInstruction } from '../../../src/domain/value-objects/run-instruction.ts'
-import { RunCalls } from '../../../src/domain/ports/run-calls.ts'
-import { CheckoutRegistry } from '../../../src/domain/ports/checkout-registry.ts'
-import { PlanAgents } from '../../../src/domain/ports/plan-agents.ts'
-import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
 import { CallDescriptor, ClaudeCalls, type CallInvocation } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
 import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-calls.ts'
 import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
-import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
-import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
-import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
-import { DriveRun, DriveRunParams } from '../../../src/application/actions/drive-run.ts'
 import {
   ExecuteRunInstruction, ExecuteRunInstructionParams,
 } from '../../../src/application/actions/execute-run-instruction.ts'
 import { PlanIssue } from '../../../src/domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../../../src/domain/value-objects/plan-watch.ts'
-import { PlanBriefing } from '../../../src/domain/value-objects/plan-briefing.ts'
 import { RepositoryName } from '../../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
-import type { RegisteredCheckout } from '../../../src/domain/value-objects/registered-checkout.ts'
 import { CtRunMachine } from '../../../src/infrastructure/ct-run-machine.ts'
 import type { LaunchedProcess, LaunchOptions, ProcessRunner } from '../../../src/infrastructure/process-runner.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
@@ -58,15 +47,6 @@ import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import type { RunDispatch } from '../../../src/infrastructure/run-dispatch.ts'
 import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
 import { SystemProcesses } from '../../../src/infrastructure/process-border.ts'
-import { GhPlanPublication } from '../../../src/infrastructure/gh-plan-publication.ts'
-import { PlanContractProgress } from '../../../src/infrastructure/plan-contract-progress.ts'
-import { Gh } from '../../../src/infrastructure/gh.ts'
-import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
-import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
-import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
-import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
-import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
-import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 
 type CommandResult = { readonly code: number, readonly stdout: string, readonly stderr: string }
 export type ModelCapture = {
@@ -93,20 +73,6 @@ type RoleCrossing = {
   readonly consumer: ModelCapture,
   readonly requestId: string,
 }
-class QuietEscalations extends SliceEscalations {
-  static reader(): ReadSliceEscalation {
-    return new ReadSliceEscalation({ escalations: new QuietEscalations() })
-  }
-
-  override async of(): Promise<SliceEscalation> {
-    return SliceEscalation.none()
-  }
-
-  override async lift(): Promise<void> {
-    return undefined
-  }
-}
-
 class FixtureProcesses {
   readonly spawn: typeof spawn
   readonly #captures: string
@@ -288,31 +254,6 @@ class FixtureProcesses {
   }
 }
 
-class RecoveryReviews extends ReviewWatch {
-  started = 0
-  stopped = 0
-
-  constructor() {
-    super({
-      asked: async () => ({ changes: [] }), review: async () => {}, sleep: async () => {}, stderr: () => {},
-      label: 'real process recovery fixture', log: new ReviewLog(),
-    })
-  }
-
-  override startRecovered(): Promise<void> {
-    this.started += 1
-    return new Promise(() => {})
-  }
-
-  override stop(): void {
-    this.stopped += 1
-  }
-}
-
-class RecoveryCheckouts extends CheckoutRegistry {
-  override remember(_checkout: RegisteredCheckout): void {}
-}
-
 export class RunDriverMother {
   static measured(executor: ClaudeCalls, files: HeadlessFiles): MeasuredAgentCalls<CallInvocation, CallDescriptor> {
     return new MeasuredAgentCalls({
@@ -360,7 +301,6 @@ export class RunDriverMother {
   readonly state: string
   readonly bin: string
   readonly captures: string
-  readonly publication: string
   readonly files: HeadlessFiles
   readonly journal: RunJournal
   readonly watch: PlanWatch
@@ -376,7 +316,6 @@ export class RunDriverMother {
     state: string,
     bin: string,
     captures: string,
-    publication: string,
   }) {
     this.base = asked.base
     this.checkout = asked.checkout
@@ -384,7 +323,6 @@ export class RunDriverMother {
     this.state = asked.state
     this.bin = asked.bin
     this.captures = asked.captures
-    this.publication = asked.publication
     this.#processes = new FixtureProcesses(this.captures)
     this.files = new HeadlessFiles({ root: this.state, fs, newId: () => this.#identity() })
     this.journal = new RunJournal({
@@ -433,7 +371,6 @@ export class RunDriverMother {
       state: join(base, 'state'),
       bin: join(base, 'bin'),
       captures: join(base, 'captures'),
-      publication: join(base, 'publication.md'),
     })
     try {
       await fixture.#initialize(conflicting)
@@ -569,225 +506,6 @@ export class RunDriverMother {
         }
       }
       instruction = next
-    }
-  }
-
-  async recoverCompletedResponses(): Promise<ReadonlyArray<{
-    kind: string, publications: number, launches: number, consumptions: number,
-  }>> {
-    const outcomes: Array<{ kind: string, publications: number, launches: number, consumptions: number }> = []
-    for (const kind of ['rewritten-citation', 'dirty-scope-amendment'] as const) {
-      const fixture = await RunDriverMother.ready()
-      try {
-        await fixture.#modelExecutable()
-        const records = new DiskPlanRecords({
-          files: fixture.files, newId: () => fixture.#identity(), now: () => new Date().toISOString(),
-          exists: async (path) => existsSync(path),
-        })
-        const watch = await records.prepare(new PlanBriefing({
-          story: null, issue: fixture.watch.issue, located: fixture.watch.located,
-          repository: fixture.watch.repository,
-        }))
-        const initial = fixture.#graph({ files: fixture.files, records, machine: fixture.machine, scenario: 'pass' })
-        await fixture.journal.admit(watch)
-        const planner = await initial.planCalls.start(watch, 'plan', null)
-        await initial.planCalls.wait(planner)
-        let completedTicket = ''
-        const cutCalls = new class extends RunCalls {
-          override async perform(cutWatch: PlanWatch, instruction: RunInstruction): Promise<void> {
-            await initial.runCalls.perform(cutWatch, instruction)
-            if (instruction.work.kind === 'call') completedTicket = instruction.work.ticket
-            throw new Error('labelled fixture cut after completed role')
-          }
-        }()
-        const establishing = new DriveRun({
-          calls: initial.planCalls,
-          publication: fixture.#publication(fixture.files),
-          machine: fixture.machine,
-          delivery: new CompletedRunDelivery(),
-          step: new ExecuteRunInstruction({ machine: fixture.machine, calls: cutCalls }),
-          messages: new DeliverHeldMessages({
-            messages: fixture.journal,
-            calls: initial.planCalls,
-            escalations: new QuietEscalations(),
-          }),
-          escalations: QuietEscalations.reader(),
-        })
-        await establishing.execute(new DriveRunParams({ watch, planner })).catch((cause: unknown) => {
-          if (!(cause instanceof Error) || cause.message !== 'labelled fixture cut after completed role') throw cause
-        })
-        if (completedTicket.length === 0) throw new Error('recovery cut did not complete a role')
-        const callsDirectory = join(fixture.state, 'harness', watch.agent, 'calls')
-        const launchesBeforeRecovery = (await readdir(callsDirectory)).length
-        if (kind === 'rewritten-citation') {
-          await writeFile(join(fixture.checkout, 'AGENTS.md'), '# Rewritten cited source span\n')
-        } else {
-          const planPath = join(fixture.checkout, RunDriverMother.PLAN)
-          const plan = await readFile(planPath, 'utf8')
-          await writeFile(planPath, plan.replace(
-            '**Files:** `work.txt` (modify).',
-            '**Files:** `work.txt` (modify), `AGENTS.md` (modify).',
-          ))
-        }
-        const publicationsBefore = await fixture.#publicationCount()
-        const rebuiltFiles = new HeadlessFiles({ root: fixture.state, fs, newId: () => fixture.#identity() })
-        const rebuiltJournal = new RunJournal({
-          files: rebuiltFiles,
-          newId: () => fixture.#identity(),
-          now: () => { throw new Error('the journal clock is not asked') },
-        })
-        const rebuiltRecords = new DiskPlanRecords({
-          files: rebuiltFiles, newId: () => fixture.#identity(), now: () => new Date().toISOString(),
-          exists: async (path) => existsSync(path),
-        })
-        const rebuiltMachine = fixture.#machine(rebuiltFiles, rebuiltJournal)
-        const rebuilt = fixture.#graph({
-          files: rebuiltFiles, records: rebuiltRecords, machine: rebuiltMachine, scenario: 'pass',
-        })
-        const nextRoleGate = fixture.#processes.barrier()
-        const recoveryCalls = new class extends RunCalls {
-          override async perform(recoveryWatch: PlanWatch, instruction: RunInstruction): Promise<void> {
-            if (instruction.work.kind !== 'call' || instruction.work.ticket !== completedTicket) {
-              nextRoleGate.release()
-              throw new Error('labelled fixture cut before the next role')
-            }
-            await rebuilt.runCalls.perform(recoveryWatch, instruction)
-          }
-        }()
-        const driver = new DriveRun({
-          calls: rebuilt.planCalls,
-          publication: fixture.#publication(rebuiltFiles),
-          machine: rebuiltMachine,
-          delivery: new CompletedRunDelivery(),
-          step: new ExecuteRunInstruction({ machine: rebuiltMachine, calls: recoveryCalls }),
-          messages: new DeliverHeldMessages({
-            messages: rebuiltJournal,
-            calls: rebuilt.planCalls,
-            escalations: new QuietEscalations(),
-          }),
-          escalations: QuietEscalations.reader(),
-        })
-        const agents = new RunPlanAgents({
-          legacy: new PlanAgents(), records: rebuiltRecords, calls: rebuilt.planCalls,
-          transport: rebuilt.transport, driver, machine: rebuiltMachine, journal: rebuiltJournal,
-          delivery: new CompletedRunDelivery(),
-          newId: () => fixture.#identity(), nowMs: Date.now,
-          announcements: new SilentChangeAnnouncements(),
-          stderr: (line) => nextRoleGate.cancel(new Error(line.trim())),
-        })
-        const recover = new RecoverPlan({ agents })
-        const params = new RecoverPlanParams({ agent: watch.agent, issue: watch.issue.number, repository: watch.repository })
-        await recover.execute(params)
-        await recover.execute(params)
-        await nextRoleGate.reached
-        const entries = await rebuiltJournal.entries(watch)
-        const consumptions = entries.filter((entry) => {
-          const request = JSON.parse(entry.request) as { argv: string[] }
-          return request.argv[1] === 'report'
-        }).length
-        const launchesAfterRecovery = (await readdir(callsDirectory)).length
-        outcomes.push({
-          kind,
-          publications: await fixture.#publicationCount() - publicationsBefore,
-          launches: launchesAfterRecovery - launchesBeforeRecovery,
-          consumptions,
-        })
-      } finally {
-        await fixture.dispose()
-      }
-    }
-    return outcomes
-  }
-
-  #machine(files: HeadlessFiles, journal: RunJournal): CtRunMachine {
-    const oracle = new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
-    const git = new ToolRunner({ bin: 'git', budgetMs: 30_000, env: this.#isolatedStateEnvironment(), processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES) })
-    return new CtRunMachine({
-      journal,
-      node: oracle.runWholeOutput.bind(oracle), git: git.runWholeOutput.bind(git),
-      read: async (path) => readFile(path, 'utf8').catch((cause: unknown) => {
-        if (RunDriverMother.hasCode(cause, 'ENOENT')) return null
-        throw cause
-      }),
-      ctStep: RunDriverMother.#CT_STEP, dispatchCheck: RunDriverMother.#DISPATCH_CHECK,
-      pluginRoot: RunDriverMother.#PLUGIN,
-    })
-  }
-
-  #graph(asked: {
-    files: HeadlessFiles,
-    records: DiskPlanRecords,
-    machine: CtRunMachine,
-    scenario: 'veto' | 'reconcile' | 'pass',
-  }): {
-    transport: MeasuredAgentCalls<CallInvocation, CallDescriptor>,
-    planCalls: ClaudePlanCalls,
-    runCalls: ClaudeRunCalls,
-  } {
-    const transport = RunDriverMother.measured(new ClaudeCalls({
-      files: asked.files, binary: join(this.bin, 'claude'),
-      worker: join(RunDriverMother.#ROOT, 'backend', 'src', 'infrastructure', 'headless-call-worker.ts'),
-      spawn: this.#processes.launch.bind(this.#processes), env: {
-        CT_FIXTURE_CAPTURES: this.captures, CT_FIXTURE_SCENARIO: asked.scenario,
-        PATH: `${this.bin}:${process.env.PATH ?? '/usr/bin:/bin'}`,
-      }, newId: () => this.#identity(), now: () => new Date().toISOString(),
-      budgetMs: 30_000, killGraceMs: 1_000, acceptanceMs: 10_000, pollMs: 25,
-      sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    }), asked.files)
-    const planCalls = new ClaudePlanCalls({
-      calls: transport, records: asked.records,
-      brief: new PlanAgentBrief({
-        dispatchCheck: RunDriverMother.#DISPATCH_CHECK,
-        conventions: join(RunDriverMother.#PLUGIN, 'conventions'), ctStep: RunDriverMother.#CT_STEP,
-      }),
-      pluginRoot: RunDriverMother.#PLUGIN, resumable: async () => true, nowMs: Date.now,
-    })
-    return {
-      transport, planCalls,
-      runCalls: new ClaudeRunCalls({
-        calls: transport, machine: asked.machine,
-        files: asked.files, pluginRoot: RunDriverMother.#PLUGIN,
-      }),
-    }
-  }
-
-  #publication(files: HeadlessFiles): GhPlanPublication {
-    const environment = {
-      ...this.#isolatedStateEnvironment(),
-      CT_FIXTURE_CAPTURES: this.captures,
-      CT_FIXTURE_PUBLICATION: this.publication,
-    }
-    const node = new ToolRunner({
-      bin: process.execPath, budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
-    })
-    const git = new ToolRunner({
-      bin: 'git', budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
-    })
-    const ghRunner = new ToolRunner({
-      bin: join(this.bin, 'gh'), budgetMs: 30_000, env: environment, processes: RunDriverMother.#PROCESSES, signal: RunDriverMother.#PROCESSES.signal.bind(RunDriverMother.#PROCESSES),
-    })
-    const gh = new Gh({
-      launch: (argv) => ghRunner.run(argv),
-      policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
-      sleep: async () => {},
-    })
-    return new GhPlanPublication({
-      gh, git: git.run.bind(git),
-      progress: new PlanContractProgress({
-        node: node.run.bind(node), git: git.run.bind(git), dispatchCheck: RunDriverMother.#DISPATCH_CHECK,
-      }),
-      files, digest: (text) => createHash('sha256').update(text).digest('hex'),
-    })
-  }
-
-  async #publicationCount(): Promise<number> {
-    try {
-      const lines = (await readFile(join(this.captures, 'gh.jsonl'), 'utf8')).trim().split('\n').filter(Boolean)
-      return lines.map((line) => JSON.parse(line) as string[])
-        .filter((argv) => argv[0] === 'issue' && argv[1] === 'comment').length
-    } catch (cause) {
-      if (RunDriverMother.hasCode(cause, 'ENOENT')) return 0
-      throw cause
     }
   }
 

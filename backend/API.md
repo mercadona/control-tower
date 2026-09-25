@@ -1386,7 +1386,10 @@ milestone branch, pushes it and opens the pull request whose **merge** authorise
 the groom. It is gate 1's own path — `EpicBranch.publishing / committed / commit
 / pushed / push` and `PullRequests.openOfBranch / open`, the same two ports — in
 a use case of its own, so a correction never reaches the default branch by
-another door.
+another door. Before it resolves the branch, it takes the checkout back from a
+milestone branch whose pull request already merged, the same return the sweep
+makes, so a correction is always committed on a branch cut fresh from the
+default branch or on the one whose pull request is still open.
 
 The spec stays `CONGELADA`: **nothing is written into the spec**, neither its
 state line nor its freeze date. That is what makes this a correction and not a

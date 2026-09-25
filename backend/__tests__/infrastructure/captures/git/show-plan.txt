@@ -1,0 +1,77 @@
+command: git -C <checkout> show HEAD:docs/superpowers/plans/2026-09-17-issue-7-driver.md
+version: git version 2.50.1 (Apple Git-155)
+date: 2026-09-24
+exit: 0
+--- stdout
+# #7 - Finite run driver rehearsal
+
+> **Task-scoped subagents execute this plan. They arrive with no context.**
+
+### Desired end state
+
+- The real machine delivers the one task.
+
+### Out of scope
+
+- Network access.
+
+## 1. Context and goal
+
+Exercise the finite producer-consumer graph in process.
+
+## 2. Closed decisions (take as given)
+
+| Decision | Exact choice |
+|---|---|
+| Fixture | Use actual CT verbs. |
+
+## 3. Reference patterns
+
+Files to imitate:
+- `AGENTS.md`
+
+Rules to obey:
+- `AGENTS.md`
+
+## 4. Inventory
+
+- `work.txt` contains the fixture baseline.
+
+## 5. Interfaces
+
+N/A - no public interface.
+
+## 6. Test strategy
+
+The verification reads the produced bytes.
+
+## 7. Tasks
+
+### Task 1 — Produce fixture work
+
+**Objective:** Replace the fixture work.
+
+**Files:** `work.txt` (modify).
+
+**TDD:** No TDD - integration fixture.
+
+**Tests:** N/A - integration fixture.
+
+No code — the fixture task changes declared text only.
+
+**Verification:**
+```bash
+test "$(cat work.txt)" = 'synthetic model response'
+```
+
+## 8. Global verification
+
+```bash
+test "$(cat work.txt)" = 'synthetic model response'
+```
+
+## 9. Assumptions
+
+- Git and Node are available locally.
+
+--- stderr

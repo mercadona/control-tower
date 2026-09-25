@@ -73,6 +73,16 @@ export class GhPullRequests extends PullRequests {
     ]
   }
 
+  static mergedHeadArgvFor({ branch, repository, into }: {
+    branch: string, repository: RepositoryName, into: string,
+  }): string[] {
+    return [
+      'pr', 'list', '--repo', repository.text,
+      '--head', branch, '--base', into, '--state', 'merged',
+      '--json', 'headRefOid', '--limit', '1',
+    ]
+  }
+
   static createArgvFor({ repository, branch, title, body }: {
     repository: RepositoryName,
     branch: string,
@@ -125,6 +135,31 @@ export class GhPullRequests extends PullRequests {
     }
 
     return new OpenPullRequest({ number: found.number, url: found.url })
+  }
+
+  async mergedHeadOf({ branch, repository, into }: {
+    branch: string,
+    repository: RepositoryName,
+    into: string,
+  }): Promise<string | null> {
+    const printed = await this.#read(GhPullRequests.mergedHeadArgvFor({ branch, repository, into }))
+    const listed = GhPullRequests.#arrayIn(printed, `the merged pull requests of ${branch}`)
+    if (listed.length === 0) return null
+
+    const found = listed[0]
+    if (!GhPullRequests.#namesAHead(found)) {
+      throw new PullRequestNotUnderstood(
+        `${Gh.BIN} named a merged pull request without the head commit this reads, it printed ${JSON.stringify(printed)}`
+      )
+    }
+
+    return found.headRefOid
+  }
+
+  static #namesAHead(found: unknown): found is { headRefOid: string } {
+    return typeof found === 'object' && found !== null
+      && typeof (found as { headRefOid?: unknown }).headRefOid === 'string'
+      && (found as { headRefOid: string }).headRefOid.length > 0
   }
 
   async mergedReslicingOf({ branch, repository, approving, into }: {

@@ -1,4 +1,6 @@
 import { Reslicing } from '../../domain/value-objects/reslicing.ts'
+import { ReturnFromMergedSpecBranchParams } from './return-from-merged-spec-branch.ts'
+import type { ReturnFromMergedSpecBranch } from './return-from-merged-spec-branch.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { SpecRevision } from '../../domain/policies/spec-revision.ts'
 import type { EpicBranch } from '../../domain/ports/epic-branch.ts'
@@ -60,14 +62,20 @@ export class PublishReslicing {
   readonly branch: EpicBranch
   readonly pullRequests: PullRequests
   readonly revisions: SpecRevision
+  readonly returning: Pick<ReturnFromMergedSpecBranch, 'execute'>
 
-  constructor({ specs, branch, pullRequests, revisions }: {
-    specs: EpicSpecs, branch: EpicBranch, pullRequests: PullRequests, revisions: SpecRevision,
+  constructor({ specs, branch, pullRequests, revisions, returning }: {
+    specs: EpicSpecs,
+    branch: EpicBranch,
+    pullRequests: PullRequests,
+    revisions: SpecRevision,
+    returning: Pick<ReturnFromMergedSpecBranch, 'execute'>,
   }) {
     this.specs = specs
     this.branch = branch
     this.pullRequests = pullRequests
     this.revisions = revisions
+    this.returning = returning
   }
 
   async execute(params: PublishReslicingParams): Promise<ReslicingPublished> {
@@ -75,10 +83,11 @@ export class PublishReslicing {
     if (found === null) return ReslicingPublished.refused(ReslicingOutcome.NO_SPEC)
     if (!found.isFrozen()) return ReslicingPublished.refused(ReslicingOutcome.NOT_FROZEN)
 
+    await this.returning.execute(new ReturnFromMergedSpecBranchParams({ root: params.root, repository: params.repository }))
     const branch = await this.branch.publishing({ root: params.root, milestone: found.milestoneBranch() })
     const spec = await this.specs.of({ root: params.root, story: params.story }) ?? found
     const standing = await this.pullRequests.openOfBranch({ branch, repository: params.repository })
-    await this.#committed({ params, spec, branch, standing })
+    await this.#committed({ params, spec })
     if (!(await this.branch.pushed({ root: params.root, branch }))) {
       await this.branch.push({ root: params.root, branch })
     }
@@ -86,12 +95,9 @@ export class PublishReslicing {
     return ReslicingPublished.published(standing ?? await this.#opened({ params, spec, branch }))
   }
 
-  async #committed({ params, spec, branch, standing }: {
-    params: PublishReslicingParams, spec: EpicSpec, branch: string, standing: ReviewedPullRequest | null,
-  }): Promise<void> {
+  async #committed({ params, spec }: { params: PublishReslicingParams, spec: EpicSpec }): Promise<void> {
     if (await this.branch.committed({ root: params.root, paths: [spec.path] })) return
 
-    if (standing === null) await this.branch.restartFromDefault({ root: params.root, branch })
     await this.branch.commit({
       root: params.root,
       paths: [spec.path],

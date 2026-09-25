@@ -37,6 +37,10 @@ export class EpicSpec {
       : named
   }
 
+  static namesAMilestoneBranch(branch: string): boolean {
+    return branch.startsWith(EpicSpec.#MILESTONE_BRANCH_PREFIX)
+  }
+
   milestoneBranch(): string {
     const file = this.path.split('/').at(-1)!
 

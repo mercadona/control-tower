@@ -110,6 +110,10 @@ class GhDouble {
     })
   }
 
+  async mergedHeadOf(branch = GhDouble.MILESTONE_BRANCH) {
+    return this.pullRequests().mergedHeadOf({ branch, repository: GhDouble.REPOSITORY, into: GhDouble.DEFAULT_BRANCH })
+  }
+
   async open({ branch = 'feat/7', title = 'the epic pull request', body = 'the epic pull request body' } = {}) {
     return this.pullRequests().open({ repository: GhDouble.REPOSITORY, branch, title, body })
   }
@@ -493,5 +497,30 @@ describe('GhPullRequests', () => {
       new ChangeAsked({ id: '102', text: 'src/baz.js:9: esta linea sobra', askedAt: null }),
       new ChangeAsked({ id: '104', text: 'src/qux.js:3: y esto no se distingue', askedAt: null }),
     ])
+  })
+})
+
+describe('GhPullRequests naming the head a branch merged with', () => {
+  it('asks for the latest pull request of the branch merged into the default branch and answers its head commit', async () => {
+    const gh = GhDouble.answering('[{"headRefOid":"9f2c1d7a6b5e4c3d2a1f0e9d8c7b6a5f4e3d2c1b"}]\n')
+
+    const head = await gh.mergedHeadOf()
+
+    expect(gh.calls).toEqual([[
+      'pr', 'list', '--repo', 'josemerca/ct-loop-sandbox',
+      '--head', GhDouble.MILESTONE_BRANCH, '--base', GhDouble.DEFAULT_BRANCH, '--state', 'merged',
+      '--json', 'headRefOid', '--limit', '1',
+    ]])
+    expect(head).toBe('9f2c1d7a6b5e4c3d2a1f0e9d8c7b6a5f4e3d2c1b')
+  })
+
+  it('a branch with no merged pull request answers no head', async () => {
+    expect(await GhDouble.answering('[]\n').mergedHeadOf()).toBeNull()
+  })
+
+  it('a listing without a head commit is not understood', async () => {
+    const refusal = await GhDouble.answering('[{"number":42}]\n').mergedHeadOf().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(PullRequestNotUnderstood)
   })
 })
