@@ -630,6 +630,39 @@ describe('PtyLiveSessions', () => {
     expect(program.name).toBe('fish')
   })
 
+  it('closing one session leaves another session live and writable', async () => {
+    const processes = new ControlledProcesses()
+    const spawn = SpawnDouble.withPids(4101, 4102)
+    const sessions = Cabin.opening({
+      spawn,
+      inspectProcessTable: async () => ProcessTables.group(4101, new Map([[4101, 'original']])),
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const first = sessions.open(LoginProgram.default())
+    const second = sessions.open(LoginProgram.default())
+    const secondTerminal = spawn.terminals[1]
+    processes.alive.add(4101)
+    processes.alive.add(4102)
+    processes.onSignal = (_pid, signal) => {
+      if (signal === 'SIGTERM') {
+        processes.alive.delete(4101)
+        spawn.terminals[0].exits()
+      }
+    }
+
+    await Inspections.settle()
+    const evidence = await TerminationMother.prepared(sessions, first)
+    await sessions.terminate(evidence)
+    sessions.write({ session: second, text: 'still open\n' })
+
+    expect(sessions.find(first.id)).toBeNull()
+    expect(sessions.find(second.id)).toBe(second)
+    expect(secondTerminal.written).toEqual(['still open\n'])
+    expect(processes.signals.filter(({ signal }) => signal !== 0).map(({ pid }) => pid)).toEqual([-4101])
+  })
+
   it('waits for exit and group absence before confirming termination', async () => {
     const processes = new ControlledProcesses()
     const spawn = SpawnDouble.recording()
