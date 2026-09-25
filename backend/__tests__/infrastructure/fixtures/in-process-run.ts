@@ -338,7 +338,7 @@ export class InProcessRun {
     })
   }
 
-  async journaled(steps: readonly ScriptedStep[]): Promise<PlanWatch> {
+  async admitted(): Promise<PlanWatch> {
     const records = new DiskPlanRecords({
       files: this.#files,
       newId: () => this.#identities.next(),
@@ -355,6 +355,11 @@ export class InProcessRun {
       repository: new RepositoryName(InProcessRun.REPOSITORY),
     }))
     await this.#journal.admit(watch)
+    return watch
+  }
+
+  async journaled(steps: readonly ScriptedStep[]): Promise<PlanWatch> {
+    const watch = await this.admitted()
     await this.#recordCall(watch, {
       purpose: 'plan',
       requestId: null,
