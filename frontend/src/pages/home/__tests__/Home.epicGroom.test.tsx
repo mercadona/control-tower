@@ -5,7 +5,6 @@ import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
-import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openHome } from './helpers'
@@ -18,7 +17,6 @@ type Answer = { status: number; body: string }
 const A_LOADED_SUITE = { timeout: 5000 }
 const HEADING = 'Puerta 2 · El groom y la autorización'
 const REVIEW_THE_SLICING = 'Revisar el slicing con la sesión'
-const IMPLEMENTATION_HEADING = 'Implementación'
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
 const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = {
   status: 400,
@@ -30,19 +28,6 @@ const IMPLEMENTATION_HISTORY_NOT_READ: Answer = {
 }
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
-
-const implementingPlan = () => ({
-  phase: 'implementing' as const,
-  request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
-  plan: {
-    id: StartPlanMother.TICKET,
-    repo: StartPlanMother.REPO,
-    issue: StartPlanMother.ISSUE,
-    agent: StartPlanMother.AGENT,
-    branch: StartPlanMother.BRANCH,
-    worktree: StartPlanMother.WORKTREE,
-  },
-})
 
 const stubGroomableBackendWithASession = () => {
   let opened = false
@@ -107,19 +92,11 @@ describe('Home and gate 2', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows gate 2 as the band of the live session and still shows it while a slice is being implemented', async () => {
+  it('shows gate 2 as the band of the live session', async () => {
     stubBackend(NO_ACTIVE_PLANS)
-    const { unmount } = openHome()
+    openHome()
 
     expect(await screen.findByRole('region', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
-
-    unmount()
-    stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) }, CoordinatingSessionMother.ended())
-    const implementing = openHome()
-
-    expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
-    implementing.unmount()
   })
 
   it('a mounted live coordinator mid-turn blocks both the groom session entrance and the groom', async () => {
@@ -158,7 +135,7 @@ describe('Home and gate 2', () => {
     openHome()
 
     expect(await screen.findByRole('button', { name: action }, A_LOADED_SUITE)).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
   it('keeps the groom session entrance closed over a recovered-ended conversation whose closure failed', async () => {

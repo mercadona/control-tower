@@ -69,22 +69,20 @@ describe('Home and the coordinating session', () => {
     expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
   })
 
-  it('keeps an ended conversation visible while permitting replacement and offers explicit closure', async () => {
-    backendHolding(CoordinatingSessionMother.ended())
+  it('shows no start form while a session is live', async () => {
+    backendHolding(CoordinatingSessionMother.working())
 
     openHome()
-    await screen.findByRole('button', { name: 'Cerrar sesión' })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('La conversación coordinadora ha terminado')
-    expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    await screen.findByRole('heading', { level: 1 })
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
   it('reads the coordinating session through a single poller', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.working())
 
     openHome()
-    await screen.findByText(ALREADY_LIVE_HELP)
+    await screen.findByRole('heading', { level: 1 })
 
     expect(readsOfTheCoordinatingSession(fetching)).toHaveLength(1)
   })
@@ -237,27 +235,26 @@ describe('Home and the coordinating session', () => {
     openHome()
 
     expect(await screen.findByText(/El sistema no tiene permisos para verificar/)).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
     expect(await screen.findByText(/No hay identidad original suficiente para terminar/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
 
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
     expect(attempts).toBe(2)
   })
 
-  it('offers closure for an unresumable conversation without a terminal tab', async () => {
+  it('offers closure for an unresumable conversation with no start form underneath', async () => {
     backendHolding(CoordinatingSessionMother.unresumable())
 
     openHome()
 
-    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -274,9 +271,9 @@ describe('Home and the coordinating session', () => {
     })
     openHome()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
   })
 

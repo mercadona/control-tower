@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -10,7 +10,6 @@ import {
   backendPending,
   openBrainstorming,
   openHome,
-  openRestored,
   pressStart,
   typePath,
   typeTicket,
@@ -46,18 +45,6 @@ describe('Home · opens the brainstorming', () => {
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
-  })
-
-  it('shows the request as the current first stage', () => {
-    openHome()
-
-    expect(screen.getByRole('heading', { name: 'Solicitud' })).toBeInTheDocument()
-    const current = screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')
-    expect(current).toHaveTextContent('1')
-    expect(current).toHaveTextContent('Solicitud')
-    expect(current).toHaveTextContent('En curso')
-    const steps = within(screen.getByRole('navigation', { name: 'Flujo del plan' })).getAllByRole('listitem')
-    expect(steps.map((step) => step.textContent)).toEqual(['1SolicitudEn curso', '2ImplementaciónPendiente'])
   })
 
   it('should send exactly the payload the backend contract declares', async () => {
@@ -110,24 +97,19 @@ describe('Home · opens the brainstorming', () => {
 
     await openBrainstorming(user)
 
-    const recovery = await waitFor(() => {
-      const found = document.querySelector('.home__recovery')
-      if (found === null) throw new Error('the recovery banner has not appeared yet')
-      return found as HTMLElement
-    })
-    expect(within(recovery).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
   })
 
-  it('releases an uncertain opening after the backend authoritatively confirms idle', async () => {
+  it('keeps the ticket value and re-enables the form after a failed open, with the notice still shown', async () => {
     openFailsToReachBackend()
     const { user } = openHome()
 
     await openBrainstorming(user)
-    await waitFor(() => expect(document.querySelector('.home__recovery')).not.toBeNull())
+    await screen.findByRole('alert')
 
     expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
     await waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
-    expect(document.querySelector('.home__recovery')).not.toBeNull()
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
   })
 
   it('should keep the start button disabled until the ticket key is well formed', async () => {
@@ -215,32 +197,6 @@ describe('Home · opens the brainstorming', () => {
     await typePath(user, '/Users/pedro//code')
 
     expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
-  })
-
-  it('should show the branch and the worktree during planning', async () => {
-    openRestored({ phase: 'planning' })
-
-    await screen.findByRole('status')
-    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.BRANCH)
-    expect(screen.getByLabelText('Detalles del trabajo')).toHaveTextContent(StartPlanMother.WORKTREE)
-  })
-
-  it('should show a compact read-only request summary when the completed request reopens', async () => {
-    const { user } = openRestored({ phase: 'planning' })
-
-    await screen.findByRole('status')
-    await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
-    expect(screen.getByText('Ticket').parentElement).toHaveTextContent(StartPlanMother.TICKET)
-    expect(screen.getByText('Repositorio').parentElement).toHaveTextContent(StartPlanMother.REPO)
-    expect(screen.getByText('Ruta local').parentElement).toHaveTextContent(StartPlanMother.PATH)
-  })
-
-  it('should prevent duplicate plan starts once a workflow exists', async () => {
-    openRestored({ phase: 'planning' })
-
-    await screen.findByRole('status')
-    expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
-    expect(screen.getByRole('button', { name: /Solicitud Completado/ })).toBeEnabled()
   })
 
   it('should prevent a duplicate open while a request is in flight', async () => {

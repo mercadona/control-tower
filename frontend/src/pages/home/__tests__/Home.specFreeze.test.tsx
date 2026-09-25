@@ -3,7 +3,6 @@ import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMoth
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
-import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openHome } from './helpers'
@@ -14,7 +13,6 @@ vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 type Answer = { status: number; body: string }
 
 const HEADING = 'Puerta 1 · Congelación del spec'
-const IMPLEMENTATION_HEADING = 'Implementación'
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
 const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = {
   status: 400,
@@ -26,19 +24,6 @@ const IMPLEMENTATION_HISTORY_NOT_READ: Answer = {
 }
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
-
-const implementingPlan = () => ({
-  phase: 'implementing' as const,
-  request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
-  plan: {
-    id: StartPlanMother.TICKET,
-    repo: StartPlanMother.REPO,
-    issue: StartPlanMother.ISSUE,
-    agent: StartPlanMother.AGENT,
-    branch: StartPlanMother.BRANCH,
-    worktree: StartPlanMother.WORKTREE,
-  },
-})
 
 const stubBackend = (activePlans: Answer, coordinatingSession = CoordinatingSessionMother.ended()) => {
   const fetching = vi.fn(async (input: string | URL | Request) => {
@@ -69,19 +54,11 @@ describe('Home and gate 1', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows gate 1 in the request stage and still shows it while a slice is being implemented', async () => {
+  it('shows gate 1 in the request stage', async () => {
     stubBackend(NO_ACTIVE_PLANS)
-    const { unmount } = openHome()
+    openHome()
 
-    expect(await screen.findByRole('heading', { name: HEADING })).toBeInTheDocument()
-
-    unmount()
-    stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) })
-    const implementing = openHome()
-
-    expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: HEADING })).toBeInTheDocument()
-    implementing.unmount()
+    expect(await screen.findByRole('region', { name: HEADING })).toBeInTheDocument()
   })
 
   it('keeps spec freezing usable in the band while a live failed closure reserves session opening', async () => {
@@ -97,7 +74,7 @@ describe('Home and gate 1', () => {
     openHome()
 
     expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
 })

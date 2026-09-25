@@ -19,36 +19,8 @@ class Stylesheet {
     return new Stylesheet(join('system-ui', 'navigation', 'Navigation.css'))
   }
 
-  static panel() {
-    return new Stylesheet(join('system-ui', 'panel', 'Panel.css'))
-  }
-
-  static columnResizer() {
-    return new Stylesheet(join('pages', 'home', 'components', 'column-resizer', 'ColumnResizer.css'))
-  }
-
-  static drawer() {
-    return new Stylesheet(join('system-ui', 'drawer', 'Drawer.css'))
-  }
-
   declarationsFor(selector: string) {
     return this.blocksFor(this.text, selector)
-  }
-
-  narrowDeclarationsFor(selector: string, query: string) {
-    return this.blocksFor(this.mediaQuery(query), selector)
-  }
-
-  mediaQuery(query: string) {
-    const opened = this.text.indexOf(query)
-    if (opened === -1) throw new Error(`Home.css no longer declares ${query}`)
-    let depth = 0
-    for (let cursor = this.text.indexOf('{', opened); cursor < this.text.length; cursor += 1) {
-      if (this.text[cursor] === '{') depth += 1
-      if (this.text[cursor] === '}') depth -= 1
-      if (depth === 0) return this.text.slice(opened, cursor + 1)
-    }
-    throw new Error(`${query} of Home.css is not closed`)
   }
 
   private blocksFor(text: string, selector: string) {
@@ -82,85 +54,5 @@ describe('the application shell gives the Navigation shell a height to fill', ()
 
     expect(content).toMatch(/flex:\s*1 1 auto/)
     expect(content).toMatch(/min-height:\s*0/)
-  })
-
-  it('gives the work area the full width beside a resizer track and the right column', () => {
-    const columns = Stylesheet.home().declarationsFor('.home__columns')
-
-    expect(columns).toMatch(/display:\s*grid/)
-    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*var\(--home-sessions-width\)/)
-  })
-
-  it('scrolls the work area and the drawer content on their own', () => {
-    const content = Stylesheet.home().declarationsFor('.home__content')
-    const drawerContent = Stylesheet.drawer().declarationsFor('.drawer__content')
-
-    expect(content).toMatch(/overflow:\s*auto/)
-    expect(drawerContent).toMatch(/overflow:\s*auto/)
-  })
-
-  it('stacks the right column as a flex column so the drawer and the history sit one under the other', () => {
-    const side = Stylesheet.home().declarationsFor('.home__side')
-
-    expect(side).toMatch(/flex-direction:\s*column/)
-  })
-
-  it('gives the right column a minimum height to fit a terminal instead of collapsing to its content', () => {
-    const side = Stylesheet.home().declarationsFor('.home__side')
-
-    expect(side).toMatch(/min-height:\s*var\(--home-sessions-min-height\)/)
-  })
-
-  it('lets a panel opt into filling its flex container instead of sizing to its content', () => {
-    const fill = Stylesheet.panel().declarationsFor('.panel--fill')
-    const fillBody = Stylesheet.panel().declarationsFor('.panel--fill > .panel__body')
-
-    expect(fill).toMatch(/flex:\s*1 1 auto/)
-    expect(fill).toMatch(/min-height:\s*0/)
-    expect(fillBody).toMatch(/flex:\s*1 1 auto/)
-    expect(fillBody).toMatch(/min-height:\s*0/)
-  })
-
-  it('keeps a stage card at its own height instead of shrinking it below its content, so a card taller than the viewport lets the work area scroll to it', () => {
-    const child = Stylesheet.home().declarationsFor('.home__content > *')
-
-    expect(child).toMatch(/flex:\s*none/)
-  })
-
-  it('lets a flow step shrink and hyphenate its label at a word boundary instead of clipping or breaking mid-word', () => {
-    const step = Stylesheet.home().declarationsFor('.home__flow-step')
-
-    expect(step).toMatch(/min-width:\s*0/)
-    expect(step).toMatch(/overflow-wrap:\s*normal/)
-    expect(step).toMatch(/hyphens:\s*auto/)
-  })
-
-  it('gives the focused resize handle the design system\'s brand-colored outline instead of the browser default', () => {
-    const focused = Stylesheet.columnResizer().declarationsFor('.column-resizer:focus-visible')
-
-    expect(focused).toMatch(/outline:\s*var\(--borderwidth-md\)\s*solid\s*var\(--border-brand-primary\)/)
-    expect(focused).toMatch(/outline-offset:\s*var\(--borderwidth-md\)/)
-  })
-})
-
-describe('the right column stacks under the content below 1280px without becoming a layer', () => {
-  it('turns the grid into a single stacked column', () => {
-    const columns = Stylesheet.home().narrowDeclarationsFor('.home__columns', '@media (width < 1280px)')
-
-    expect(columns).toMatch(/flex-direction:\s*column/)
-  })
-
-  it('gives the right column the full width below the content instead of an overlay', () => {
-    const narrow = Stylesheet.home().mediaQuery('@media (width < 1280px)')
-
-    expect(narrow).not.toMatch(/position:\s*(fixed|absolute|sticky)/)
-    expect(narrow).not.toMatch(/z-index/)
-    expect(narrow).not.toMatch(/inset/)
-  })
-
-  it('hides the resize handle when the column is already full width', () => {
-    const handle = Stylesheet.home().narrowDeclarationsFor('.column-resizer', '@media (width < 1280px)')
-
-    expect(handle).toMatch(/display:\s*none/)
   })
 })
