@@ -1,6 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { INPUT_ROLES } from '../../../plugin/scripts/step-announcement.js'
+import { ADVICE_SCHEMA, ADVISOR_TOOLS, RECONCILER_TOOLS } from '../../../plugin/scripts/step-contracts.js'
 import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -42,6 +44,18 @@ class AwaitedDelivery extends CompletedRunDelivery {
   }
 }
 
+class Descriptors {
+  static async firstOfRole(run: InProcessRun, conversation: string, role: string): Promise<CallDescriptor> {
+    const callsRoot = join(run.state, 'harness', conversation, 'calls')
+    const callIds = await readdir(callsRoot)
+    for (const callId of callIds) {
+      const descriptor = CallDescriptor.from(await readFile(join(callsRoot, callId, CallDescriptor.FILE), 'utf8'))
+      if (descriptor.role === role) return descriptor
+    }
+    throw new Error(`no call descriptor was recorded for role ${role}`)
+  }
+}
+
 describe('a new admission drives the finite CT machine in process', () => {
   const runs: InProcessRun[] = []
 
@@ -78,5 +92,50 @@ describe('a new admission drives the finite CT machine in process', () => {
     expect(runRequests.every((descriptor) => descriptor.requestId !== null && descriptor.requestId.startsWith('run:'))).toBe(true)
     expect(measurements).toHaveLength(descriptors.length)
     expect(measurements.every((measurement) => measurement.execution.kind === 'success')).toBe(true)
+  })
+
+  it('an advise round reaches the advisor with the paths, tools and schema its dispatch announced', async () => {
+    const delivery = new AwaitedDelivery()
+    const run = await InProcessRun.create([
+      'implement', 'advise', 'implement', 'controls', 'judge', 'commit', 'reconcile-clean', 'global', 'slice-judge', 'delivered',
+    ], delivery)
+    runs.push(run)
+
+    const conversation = await run.agents().launch(Briefing.forInProcessRun(run.checkout))
+    await delivery.settled
+
+    const advisorRequests = run.claude.asked.filter((request) => request.role === 'ct-advisor')
+    expect(advisorRequests).toHaveLength(1)
+    const [advisor] = advisorRequests
+    expect(advisor.argv).toEqual(expect.arrayContaining([
+      '--tools', ADVISOR_TOOLS, '--allowedTools', ADVISOR_TOOLS, '--json-schema', JSON.stringify(ADVICE_SCHEMA),
+    ]))
+    expect(advisor.prompt.startsWith('Read the listed files.')).toBe(true)
+    expect(advisor.prompt).toContain(join(run.checkout, '.agent', `run-${InProcessRun.ISSUE}`, `${INPUT_ROLES.PACKAGE}.md`))
+
+    const descriptor = await Descriptors.firstOfRole(run, conversation, 'advise')
+    expect(descriptor.requestId).not.toBeNull()
+    expect(descriptor.requestId).toMatch(/^run:/)
+  })
+
+  it('a reconcile round reaches the reconciler with the package its dispatch announced', async () => {
+    const delivery = new AwaitedDelivery()
+    const run = await InProcessRun.create([
+      'implement', 'controls', 'judge', 'commit', 'reconcile', 'global', 'slice-judge', 'delivered',
+    ], delivery)
+    runs.push(run)
+
+    await run.agents().launch(Briefing.forInProcessRun(run.checkout))
+    await delivery.settled
+
+    const reconcilerRequests = run.claude.asked.filter((request) => request.role === 'ct-reconciler')
+    expect(reconcilerRequests).toHaveLength(1)
+    const [reconciler] = reconcilerRequests
+    expect(reconciler.argv).toEqual(expect.arrayContaining([
+      '--tools', RECONCILER_TOOLS, '--allowedTools', RECONCILER_TOOLS,
+    ]))
+    expect(reconciler.prompt).toContain(
+      join(run.checkout, '.agent', `run-${InProcessRun.ISSUE}`, `${INPUT_ROLES.RECONCILIATION_PACKAGE}.md`),
+    )
   })
 })

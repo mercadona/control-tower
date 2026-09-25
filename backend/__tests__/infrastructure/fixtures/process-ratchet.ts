@@ -13,7 +13,6 @@ export class ProcessRatchet {
     'infrastructure/claude-conversations-real-process.test.ts',
     'infrastructure/claude-run-calls.test.ts',
     'infrastructure/ct-api-real-process.test.ts',
-    'infrastructure/ct-run-machine-real-process.test.ts',
     'infrastructure/git-workspace-real-process.test.ts',
     'infrastructure/headless-dispatch-dry-run.test.ts',
     'infrastructure/headless-plan-agents.test.ts',
