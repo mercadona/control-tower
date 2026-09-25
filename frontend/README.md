@@ -161,7 +161,8 @@ The view holds, in order:
   Implementación);
 - a band with the gate that asks for something right now, the same
   `SpecFreezePanel` or `EpicGroomPanel` today's view shows, and nothing when no
-  gate asks for anything;
+  gate asks for anything. A frozen spec waiting for its merge asks for one: the
+  band names the pull request to merge;
 - the session itself in the centre (`CentredSession`), with no tabs.
 
 The step and the band are derived from gate 1 and gate 2 in

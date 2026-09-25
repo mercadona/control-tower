@@ -191,9 +191,20 @@ describe('Home while a coordinating session is live and no plan is in progress',
     expect(await within(band).findByRole('button', { name: 'Ejecutar el groom' })).toBeInTheDocument()
   })
 
+  it('says which pull request to merge in the band while the frozen spec waits for its publication', async () => {
+    FocusedBackend.with({ specFreeze: SpecFreezeMother.frozen(), epicGroom: EpicGroomMother.awaitingPublication() })
+
+    openHome()
+
+    const band = await screen.findByRole('region', { name: 'Puerta 2 · El groom y la autorización' })
+    expect(await within(band).findByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'))
+      .toBeInTheDocument()
+    expect(within(band).getByRole('link', { name: `Pull request #${EpicGroomMother.PULL_REQUEST.number}` })).toHaveAttribute('href', EpicGroomMother.PULL_REQUEST.url)
+    expect(within(band).queryByRole('button')).not.toBeInTheDocument()
+  })
+
   it.each([
     ['no spec yet', SpecFreezeMother.noSpec(), EpicGroomMother.noSpec(), 'Brainstorming'],
-    ['a spec waiting for its merge', SpecFreezeMother.frozen(), EpicGroomMother.awaitingPublication(), 'Groom y autorización'],
     ['authorised work', SpecFreezeMother.frozen(), EpicGroomMother.authorised(), 'Implementación'],
   ])('shows no band when no gate asks for anything, with %s', async (_, specFreeze, epicGroom, step) => {
     FocusedBackend.with({ specFreeze, epicGroom })

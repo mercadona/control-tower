@@ -64,6 +64,7 @@ export class SessionStage {
   static #gate2AsksSomething(epicGroom: EpicGroomRead): boolean {
     if (epicGroom.phase === 'connecting') return false
     switch (epicGroom.kind) {
+      case 'awaiting-publication':
       case 'resliced':
       case 'groomable':
       case 'partially-groomed':
@@ -76,7 +77,6 @@ export class SessionStage {
       case 'none':
       case 'no-spec':
       case 'draft':
-      case 'awaiting-publication':
       case 'unavailable':
         return false
     }
