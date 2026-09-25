@@ -1,0 +1,26 @@
+{
+  "issue": 555,
+  "tasks_total": 4,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Every sentence of the Desired end state holds in the accumulated diff. (1) ProcessRatchet.LISTED loses 'infrastructure/pty-live-sessions-real-process.test.ts', 'infrastructure/pty-live-sessions.test.ts' and 'infrastructure/session-channel-real-process.test.ts'. (2) Both real-process files are deleted and absent from the tree. (3) pty-live-sessions.test.ts has no process-border import, no SystemProcesses and no vi.mock of node:child_process. (4) session-channel.test.ts exists; its imports reach only ApiServer, PtyLiveSessions, the ProcessTable port and application/domain classes. It is not listed, and the ratchet test passes in the green suite, so the ratchet finds no process in it. (5) The ledger gains 10 rows for pty-live-sessions.test.ts, 12 for pty-live-sessions-real-process.test.ts and 3 for session-channel-real-process.test.ts, which brings the real-process count to 97. (6) typecheck and the whole backend suite (160 files, 3390 tests) passed in the inherited Global verification. No later task undoes an earlier promise.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The four task commits build on each other with no reversal. Task 1 takes pty-live-sessions.test.ts off the border and off LISTED. Task 2 adds 'closing one session leaves another session live and writable' to the same file, after the close cases, and leaves Task 1's doubles standing. Task 3 relies on that case: its ledger row maps 'closing an owned terminal stops its child process and leaves another terminal writable' to it, and the other nine substitutes it names already exist in the file. Task 4 builds its own EchoingTerminals ProcessTable double for the HTTP/SSE channel. That fits the plan's decision 'How the PTY sits behind the port', and it does not duplicate the per-session doubles, which answer a different question. No intermediate scaffolding is left behind: each task removes exactly its own LISTED line.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The review package's Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)'. The issue declared no signal, so there is nothing to measure it against.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "ebe451ea9e5a4a43325e630a8d3e3c1b9bd81c64098e0ca774dec81ef3b2051c"
+  }
+}
