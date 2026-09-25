@@ -46,6 +46,40 @@ export class RunClosure {
     }
   }
 
+  static wayOut({ run, issue, planPath, subject }) {
+    const grant = `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+    switch (run.closed) {
+      case RUN_STATES.BLOCKED_JUDGE:
+        return `the judge vetoed ${subject} of issue ${issue} three times and the run is closed. ${grant}`
+      case RUN_STATES.BLOCKED_CONTROLS:
+        return `the controls of ${subject} of issue ${issue} ${RunClosure.causeOf(run.lastFailure)} `
+          + `(log at ${run.lastFailure.log}) and the run is closed. ${grant}`
+      case RUN_STATES.BLOCKED_GLOBAL:
+        return `the Global verification of issue ${issue} ${RunClosure.causeOf(run.lastFailure)} `
+          + `(log at ${run.lastFailure.log}) and the run is closed. ${grant}`
+      default:
+        throw new Error(`a closure with no way out to explain: "${run.closed}"`)
+    }
+  }
+
+  static failureOf(run) {
+    if (!run.lastFailure) return null
+    const { command, code, log } = run.lastFailure
+    return Object.freeze({ command, code, log })
+  }
+
+  static causeOf({ outcome, command, code }) {
+    if (command === null) return 'are red: a check that runs no command failed'
+    switch (outcome) {
+      case OUTCOMES.FAILED:
+        return `are red: \`${command}\` exited ${code}`
+      case OUTCOMES.INDETERMINATE:
+        return `could not be measured: \`${command}\``
+      default:
+        throw new Error(`a failure with no cause to name: "${outcome}"`)
+    }
+  }
+
   static refusalOf(run) {
     return `the run of issue ${run.issue} is not closed at `
       + `${RUN_STATES.BLOCKED_JUDGE}, ${RUN_STATES.BLOCKED_CONTROLS} or ${RUN_STATES.BLOCKED_GLOBAL}: `

@@ -102,3 +102,48 @@ describe('the closures the run file keeps', () => {
       .map((state) => RunClosure.persists(state))).toEqual([false, false, false, false])
   })
 })
+
+describe('a closure explains its way out', () => {
+  it('the global closure names the failing command and the log path', () => {
+    const closed = ClosedRunMother.closedAtGlobal({
+      lastFailure: { outcome: OUTCOMES.FAILED, command: 'npm test', code: 1, log: '.agent/run-7/global.log' },
+    })
+
+    expect(RunClosure.wayOut({ run: closed, issue: 7, planPath: 'p.md', subject: 'the review' })).toBe(
+      'the Global verification of issue 7 are red: `npm test` exited 1 (log at .agent/run-7/global.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
+  it('the controls closure names the failing command and the log path', () => {
+    expect(RunClosure.wayOut({ run: ClosedRunMother.closedAtControls(), issue: 7, planPath: 'p.md', subject: 'task 2' })).toBe(
+      'the controls of task 2 of issue 7 are red: `npm test` exited 1 (log at .agent/run-7/controls-2.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
+  it('an unmeasured command says it could not be measured', () => {
+    expect(RunClosure.wayOut({ run: ClosedRunMother.closedAtGlobal(), issue: 7, planPath: 'p.md', subject: 'the review' })).toBe(
+      'the Global verification of issue 7 could not be measured: `make build` (log at .agent/run-7/global.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
+  it('a red check with no command says so instead of naming one', () => {
+    const closed = ClosedRunMother.closedAtControls({
+      lastFailure: { outcome: OUTCOMES.FAILED, command: null, code: null, log: '.agent/run-7/controls-2.log' },
+    })
+
+    expect(RunClosure.wayOut({ run: closed, issue: 7, planPath: 'p.md', subject: 'task 2' })).toBe(
+      'the controls of task 2 of issue 7 are red: a check that runs no command failed (log at .agent/run-7/controls-2.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
+  it('the judge way out reads as before this slice', () => {
+    expect(RunClosure.wayOut({ run: ClosedRunMother.closedAtJudge(), issue: 7, planPath: 'p.md', subject: 'task 2' })).toBe(
+      'the judge vetoed task 2 of issue 7 three times and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+})

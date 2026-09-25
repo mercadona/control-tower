@@ -163,7 +163,7 @@ export class StepAnnouncement {
     })
   }
 
-  static refusal({ issue, task, tasksTotal, step, discards, state, outcome, exit, detail, findings, verdict }) {
+  static refusal({ issue, task, tasksTotal, step, discards, state, outcome, exit, detail, findings, verdict, failure }) {
     StepAnnouncement.#requireDeclared(step, STEPS, 'step')
     StepAnnouncement.#requireDeclared(state, RUN_STATES, 'run state')
     StepAnnouncement.#requireDeclared(outcome, OUTCOMES, 'outcome')
@@ -181,6 +181,9 @@ export class StepAnnouncement {
     }
     if (typeof findings === 'string' && findings !== '') announcement.findings = findings
     if (typeof verdict === 'string' && verdict !== '') announcement.verdict = verdict
+    if (typeof failure === 'object' && failure !== null) {
+      announcement.failure = { command: failure.command, code: failure.code, log: failure.log }
+    }
     return new StepAnnouncement(announcement)
   }
 

@@ -11,6 +11,7 @@ import {
 } from '../scripts/step-announcement.js'
 import { RoleBytes } from '../scripts/role-bytes.js'
 import { STEPS, RUN_STATES, OUTCOMES } from '../scripts/run-machine.js'
+import { RunClosure } from '../scripts/run-closure.js'
 
 describe('the response channel each dispatch step answers through', () => {
   it('every dispatch step declares the channel its role answers through', () => {
@@ -164,6 +165,33 @@ describe('the announcement declares its whole shape', () => {
       '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
       + '"run":{"issue":42,"task":1,"tasksTotal":5,"step":"judge","discards":1},'
       + '"detail":"the judge vetoed three times"}\n'
+    )
+  })
+
+  it('a refusal prints the failing command its exit and the log after the verdict', () => {
+    const run = {
+      closed: RUN_STATES.BLOCKED_GLOBAL,
+      lastFailure: { outcome: OUTCOMES.FAILED, command: 'npm test', code: 1, log: '.agent/run-42/global.log' },
+    }
+    const announcement = StepAnnouncement.refusal({
+      issue: 42,
+      task: 5,
+      tasksTotal: 5,
+      step: STEPS.GLOBAL,
+      discards: 0,
+      state: RUN_STATES.BLOCKED_GLOBAL,
+      outcome: OUTCOMES.FAILED,
+      exit: 1,
+      detail: 'the Global verification is red',
+      verdict: '.agent/run-42/task-5-verdict-1.json',
+      failure: RunClosure.failureOf(run),
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"refusal","state":"blocked-global","outcome":"failed","exit":1,'
+      + '"run":{"issue":42,"task":5,"tasksTotal":5,"step":"global","discards":0},'
+      + '"detail":"the Global verification is red","verdict":".agent/run-42/task-5-verdict-1.json",'
+      + '"failure":{"command":"npm test","code":1,"log":".agent/run-42/global.log"}}\n'
     )
   })
 
