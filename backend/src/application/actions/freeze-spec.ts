@@ -1,21 +1,25 @@
 import { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
-import { EpicSpecNotUnderstood } from '../../domain/exceptions.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { EpicBranch } from '../../domain/ports/epic-branch.ts'
 import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { FreezeFinding } from '../../domain/value-objects/freeze-finding.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
+import { StoryDocuments } from '../../domain/value-objects/story-documents.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 export class FreezeSpecParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor(asked: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor(asked: { root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl }) {
     this.root = asked.root
     this.repository = asked.repository
+    this.story = asked.story
     Object.freeze(this)
   }
 }
@@ -65,7 +69,7 @@ export class FreezeSpec {
   }
 
   async execute(params: FreezeSpecParams): Promise<SpecFrozen> {
-    const found = await this.specs.mostRecent(params.root)
+    const found = await this.specs.of({ root: params.root, story: params.story })
     if (found === null) {
       return new SpecFrozen({ outcome: FreezeOutcome.NO_SPEC, findings: [], on: null, pullRequest: null })
     }
@@ -73,16 +77,11 @@ export class FreezeSpec {
     if (beforeMoving !== null) return beforeMoving
 
     const branch = await this.branch.publishing({ root: params.root, milestone: found.milestoneBranch() })
-    const spec = await this.specs.reread({ root: params.root, spec: found }) ?? found
+    const spec = await this.specs.of({ root: params.root, story: params.story }) ?? found
     const onThatBranch = FreezeSpec.#notFreezable(spec)
     if (onThatBranch !== null) return onThatBranch
 
-    const design = spec.design()
-    if (design === null) {
-      throw new EpicSpecNotUnderstood(
-        `${spec.path} does not name its design document under ${EpicSpec.HANDOFF_LINE}, so gate 1 cannot publish half the epic`
-      )
-    }
+    const design = new StoryDocuments(params.story).design
     const paths = [design, spec.path]
     if (await this.#delivered({ params, spec, branch })) {
       return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })

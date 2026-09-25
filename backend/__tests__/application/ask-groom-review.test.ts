@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { AskGroomReview, AskGroomReviewParams, GroomReviewAsk } from '../../src/application/actions/ask-groom-review.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
-import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { SlicingReviewContract } from '../slicing-review-contract.ts'
 import { GroomReviewAdmission, GroomReviewRefusal } from '../../src/domain/ports/groom-review-admission.ts'
 import type { GroomReviewRefusalValue } from '../../src/domain/ports/groom-review-admission.ts'
 
@@ -30,31 +29,18 @@ class Deferred<T> {
   }
 }
 
-class PendingSpecs extends EpicSpecs {
+class PendingSpecs extends EpicSpecsDouble {
   readonly reading = new Deferred<void>()
-  readonly answer = new Deferred<EpicSpec | null>()
+  readonly pending = new Deferred<EpicSpec | null>()
 
-  async mostRecent(): Promise<EpicSpec | null> {
+  constructor() {
+    super(null)
+  }
+
+  override async of(): Promise<EpicSpec | null> {
     this.reading.resolve()
 
-    return this.answer.promise
-  }
-}
-
-class EpicSpecsDouble extends EpicSpecs {
-  readonly asked: CheckoutRoot[]
-  readonly answer: EpicSpec | null
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.asked = []
-    this.answer = answer
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.asked.push(root)
-
-    return this.answer
+    return this.pending.promise
   }
 }
 
@@ -66,14 +52,13 @@ class LiveSessionsDouble extends LiveSessions {
     this.typed = []
   }
 
-  write({ session, text }: { session: LiveSession, text: string }): void {
+  async submit({ session, text }: { session: LiveSession, text: string }): Promise<void> {
     this.typed.push({ session, text })
   }
 }
 
 class Mother {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
-  static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly SESSION = new LiveSession({ id: 'session-9', name: 'brainstorming' })
   static readonly MILESTONE = 'The loop enters through brainstorming'
@@ -87,14 +72,12 @@ class Mother {
   }
 
   static asking(): AskGroomReviewParams {
-    return new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
-    })
+    return new AskGroomReviewParams({ root: Mother.ROOT, story: EpicSpecsDouble.STORY, session: Mother.SESSION, target: Mother.TARGET })
   }
 }
 
 describe('AskGroomReview', () => {
-  it('types the groom prompt of the frozen spec into the live session as one line it submits', async () => {
+  it('submits to the live session only the review of the slicing of the frozen spec, on one line', async () => {
     const sessions = new LiveSessionsDouble()
     const ask = new AskGroomReview({
       specs: new EpicSpecsDouble(Mother.spec()), liveSessions: sessions, admission: new AdmissionDouble(),
@@ -103,15 +86,14 @@ describe('AskGroomReview', () => {
     const asked = await ask.execute(Mother.asking())
 
     expect(asked.outcome).toBe(GroomReviewAsk.ASKED)
-    expect(sessions.typed).toHaveLength(1)
-    expect(sessions.typed[0].session).toBe(Mother.SESSION)
-    const typed = sessions.typed[0].text
-    expect(typed.endsWith(AskGroomReview.SUBMIT)).toBe(true)
-    expect(typed.slice(0, -AskGroomReview.SUBMIT.length)).not.toContain('\n')
-    expect(typed).toContain(PhasePrompt.GROOM_SKILL)
-    expect(typed).toContain(Mother.MILESTONE)
-    expect(typed).toContain(Mother.SPEC_PATH)
-    expect(typed).toContain(PhasePrompt.ISSUES_ARE_NOT_YOURS)
+    expect(sessions.typed).toEqual([{
+      session: Mother.SESSION,
+      text: [
+        SlicingReviewContract.review({ milestone: Mother.MILESTONE, spec: Mother.SPEC_PATH }),
+        SlicingReviewContract.ISSUES_ARE_NOT_YOURS,
+        SlicingReviewContract.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+      ].join(' '),
+    }])
   })
 
   it('types nothing when the checkout carries no execution spec', async () => {
@@ -137,7 +119,7 @@ describe('AskGroomReview', () => {
       await specs.reading.promise
       expect(admission.asked).toEqual([])
       admission.refusal = refusal
-      specs.answer.resolve(Mother.spec())
+      specs.pending.resolve(Mother.spec())
       const asked = await pending
 
       expect(asked.outcome).toBe(GroomReviewAsk.REFUSED)
@@ -147,7 +129,7 @@ describe('AskGroomReview', () => {
     }
   )
 
-  it('writes in the same synchronous turn as the final admission check', async () => {
+  it('submits in the same synchronous turn as the final admission check', async () => {
     const sessions = new LiveSessionsDouble()
     const admission = new AdmissionDouble()
     admission.refusalFor = (asked) => {
@@ -156,7 +138,7 @@ describe('AskGroomReview', () => {
 
       return null
     }
-    sessions.write = ({ session, text }) => {
+    sessions.submit = async ({ session, text }) => {
       expect(admission.asked).toEqual([{ target: Mother.TARGET, session: Mother.SESSION }])
       expect(admission.refusal).toBe(null)
       sessions.typed.push({ session, text })

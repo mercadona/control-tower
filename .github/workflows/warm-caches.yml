@@ -1,0 +1,61 @@
+name: Warm caches
+
+# `actions/cache` scopes a cache to the ref that wrote it, and only the default
+# branch's caches are readable from every pull request. Continuous Integration
+# no longer runs on `main` — the queue build measures the tree before it lands,
+# and a run after it measured the same tree again — so nothing else writes a
+# cache every pull request can read. This does, and only that: it installs,
+# and it tests nothing. A cold install was measured at 1m01s to over 5m
+# (continuous-integration.yml says where and when).
+#
+# The cache key is the hash of each lockfile (`cache-dependency-path`), so a
+# warm cache only goes stale when a lockfile changes. It runs on exactly those
+# pushes, which include every release: a release bumps the version recorded in
+# all three lockfiles. `workflow_dispatch` is for a cache that was evicted.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - plugin/package-lock.json
+      - backend/package-lock.json
+      - frontend/package-lock.json
+      - .github/workflows/warm-caches.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [plugin, backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      # Pinned by SHA and with the version beside it, like the actions of
+      # continuous-integration.yml: a tag can be moved, a SHA cannot.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install
+        run: npm ci

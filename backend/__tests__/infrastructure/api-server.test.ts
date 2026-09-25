@@ -56,7 +56,7 @@ import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -75,7 +75,7 @@ import { UnusedWorkspace } from '../../src/domain/value-objects/unused-workspace
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 
 class OpenSessionSpy extends OpenCoordinatingSession {
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('3c2b7d3f-9a3b-4c9c-8b4f-7a3c2b7d3f9a'),
     repository: new RepositoryName('owner/name'),
     root: new CheckoutRoot('/repo/checkout'),
@@ -94,6 +94,7 @@ class OpenSessionSpy extends OpenCoordinatingSession {
       sessionHooks: new SessionHooks(),
       records: new ConversationRecords(),
       checkouts: new CheckoutRegistry(),
+      specs: new EpicSpecs(),
     })
     this.asked = []
     this.roots = []
@@ -101,9 +102,7 @@ class OpenSessionSpy extends OpenCoordinatingSession {
   }
 
   static opened(): CoordinatingSessionOpened {
-    return new CoordinatingSessionOpened({
-      conversation: OpenSessionSpy.CONVERSATION, session: OpenSessionSpy.SESSION, timeline: [],
-    })
+    return CoordinatingSessionOpened.opened(OpenSessionSpy.CONVERSATION, OpenSessionSpy.SESSION, [])
   }
 
   static failingWith(cause: Error): OpenSessionSpy {
@@ -265,8 +264,7 @@ class RunningApi {
     RunningApi.spy = options.openCoordinatingSession instanceof OpenSessionSpy
       ? options.openCoordinatingSession
       : new OpenSessionSpy()
-    const sessions = options.sessions ?? new PlanSessions()
-    const activePlans = options.activePlans ?? new ActivePlans({ sessions })
+    const activePlans = options.activePlans ?? new ActivePlans({ sessions: new PlanSessions() })
 
     return new ApiServer({
       port: 0,
@@ -274,7 +272,6 @@ class RunningApi {
       coordinatingSessions: new CoordinatingSessions({
         liveSessions: new LiveSessionsDouble(OpenSessionSpy.SESSION), stderr: () => undefined,
       }),
-      sessions,
       activePlans,
       externalTools: options.externalTools ?? new ExternalToolsSpy(),
       frontendRoot: FrontendFixture.missing(),
@@ -374,7 +371,7 @@ class LiveSessionsDouble extends LiveSessions {
 
 class CoordinatingSessionFixture {
   static readonly TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
     repository: new RepositoryName('owner/name'),
     root: new CheckoutRoot('/repo/checkout'),
@@ -954,15 +951,6 @@ describe('ApiServer', () => {
     expect(response.status).toBe(202)
   })
 
-  it('reading_start_plan_is_refused_because_starting_a_plan_claims_the_issue_and_cuts_a_worktree', async () => {
-    const port = await RunningApi.listening()
-
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
-
-    expect(response.status).toBe(405)
-    expect(response.headers.get('allow')).toBe('POST')
-  })
-
   it('an_unknown_route_is_rejected_instead_of_answering_ok_to_anything', async () => {
     const port = await RunningApi.listening()
 
@@ -1073,10 +1061,10 @@ describe('ApiServer', () => {
     expect(api.status).toBe(202)
   })
 
-  it('serving_pages_does_not_open_start_plan_to_a_get_because_static_files_fall_through_to_the_routes', async () => {
+  it('serving_pages_does_not_open_a_post_only_route_to_a_get_because_static_files_fall_through_to_the_routes', async () => {
     const port = await RunningApi.listening({ frontendRoot: FrontendFixture.built() })
 
-    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
+    const response = await fetch(`http://127.0.0.1:${port}/recover-plan`)
 
     expect(response.status).toBe(405)
   })
@@ -1359,7 +1347,7 @@ describe('ApiServer', () => {
   it('active_plans_returns_the_exact_live_plan_the_sessions_watch', async () => {
     const sessions = new PlanSessions()
     sessions.remember(ActivePlanMother.WATCH)
-    const port = await RunningApi.listening({ sessions })
+    const port = await RunningApi.listening({ activePlans: new ActivePlans({ sessions }) })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
 

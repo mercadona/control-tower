@@ -105,7 +105,7 @@ describe('Home · restore workflow', () => {
     vi.useRealTimers()
   })
 
-  it('an initially empty held coordinator discovers a later dispatched plan', async () => {
+  it('a plan dispatched later while the brainstorming is live does not take the page over', async () => {
     vi.useFakeTimers()
     const fetching = vi.fn()
       .mockResolvedValueOnce(new Response(HeadlessPlanMother.empty().body))
@@ -129,8 +129,9 @@ describe('Home · restore workflow', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
     await act(async () => vi.advanceTimersByTimeAsync(2000))
 
-    expect(screen.getByLabelText('Implementación', { selector: 'section' })).toBeInTheDocument()
     expect(fetching).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('navigation', { name: 'Pasos de la sesión' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Implementación', { selector: 'section' })).not.toBeInTheDocument()
   })
 
   it.each([
@@ -155,7 +156,7 @@ describe('Home · restore workflow', () => {
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
   })
 
-  it('late discovery cannot replace a newer workflow or coordinator', async () => {
+  it('late discovery cannot replace the live coordinator', async () => {
     vi.useFakeTimers()
     const changes = HeadlessPlanMother.deferredChanges()
     const coordinating = CoordinatingSessionMother.working()
@@ -171,12 +172,12 @@ describe('Home · restore workflow', () => {
     openHome()
     expect(changes.activeReadCount()).toBe(1)
 
-    fireEvent.change(screen.getByLabelText('Ticket'), { target: { value: StartPlanMother.TICKET } })
     await act(async () => vi.advanceTimersByTimeAsync(0))
     await act(async () => changes.answerWith(HeadlessPlanMother.planning()))
 
-    expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
+    expect(screen.getByRole('navigation', { name: 'Pasos de la sesión' })).toBeInTheDocument()
     expect(screen.queryByText('Plan arrancado')).toBeNull()
+    expect(WorkflowSnapshotStorage.load()).toBeNull()
   })
 
   it('polling stops on unmount and cannot readopt a discarded plan', async () => {
@@ -508,7 +509,6 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
-    expect(calls).not.toContain('POST /start-plan')
   })
 
   it('finishes an earlier observation before recovering and then reads fresh state', async () => {
@@ -632,7 +632,6 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
     expect(calls).toEqual(['GET /active-plans', 'POST /cleanup-plan', 'GET /active-plans'])
-    expect(calls).not.toContain('POST /start-plan')
   })
 
   it('late recovery cannot replace the selected workflow', async () => {
@@ -809,6 +808,7 @@ describe('Home · restore workflow', () => {
     await act(async () => vi.advanceTimersByTimeAsync(2000))
     expect(changes.activeReadCount()).toBe(2)
 
+    await act(async () => vi.advanceTimersByTimeAsync(0))
     expect(screen.getByRole('button', { name: 'Revisar el slicing con la sesión' })).toBeDisabled()
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => input === '/groom-session')).toHaveLength(0)
     expect(screen.queryByText('Plan arrancado')).toBeNull()

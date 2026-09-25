@@ -5,17 +5,20 @@ import { PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse } from './st
 import {
   HeldCoordinatingSession, CoordinatingOperation, CoordinatingSessionState, OpeningReservation,
 } from './coordinating-sessions.ts'
-import { OpenCoordinatingSessionParams } from '../application/actions/open-coordinating-session.ts'
+import { CoordinatingSessionOpening, OpenCoordinatingSessionParams } from '../application/actions/open-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import type { CoordinatingSessions, OpeningReservationValue, ReservedOpening } from './coordinating-sessions.ts'
 import type { CoordinatingSessionOpened, OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { SessionTimelineEvent } from '../domain/value-objects/session-timeline-event.ts'
+import type { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 
 export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
+  STORY_SPEC_FROZEN: 'story-spec-frozen',
 } as const)
 
 export type CoordinatingSessionOutcomeValue = (typeof CoordinatingSessionOutcome)[keyof typeof CoordinatingSessionOutcome]
@@ -86,6 +89,7 @@ export class CoordinatingSessionRoute {
           ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
+          story: holding.conversation.story.text,
           root: holding.conversation.root.text,
           session: { id: holding.session!.id, name: holding.session!.name },
           attention: { status: holding.attention!.status, question: holding.attention!.question },
@@ -98,6 +102,7 @@ export class CoordinatingSessionRoute {
           ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
+          story: holding.conversation.story.text,
           root: holding.conversation.root.text,
           detail: CoordinatingSessionRoute.#UNRESUMABLE_DETAIL,
           timeline: CoordinatingSessionRoute.#timelineOf(timeline),
@@ -109,6 +114,7 @@ export class CoordinatingSessionRoute {
           ...lifecycle,
           conversation: holding.conversation.id.text,
           repo: holding.conversation.repository.text,
+          story: holding.conversation.story.text,
           root: holding.conversation.root.text,
           detail: CoordinatingSessionRoute.#ENDED_DETAIL,
           timeline: CoordinatingSessionRoute.#timelineOf(timeline),
@@ -145,23 +151,42 @@ export class CoordinatingSessionRoute {
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
       }
+      switch (opened.outcome) {
+        case CoordinatingSessionOpening.STORY_SPEC_FROZEN:
+          held.release()
+          Answer.refuse(
+            response, 400, CoordinatingSessionOutcome.STORY_SPEC_FROZEN, CoordinatingSessionRoute.#frozenDetail(asked.story!, opened)
+          )
+          return
+        case CoordinatingSessionOpening.OPENED:
+          break
+        default: {
+          const exhaustive: never = opened.outcome
+          throw new Error(`no answer declared for the opening outcome ${exhaustive}`)
+        }
+      }
       const sessionTarget = held.mintTarget()
       held.remember(new HeldCoordinatingSession({
         target: sessionTarget,
         state: CoordinatingSessionState.LIVE,
-        conversation: opened.conversation,
-        session: opened.session,
+        conversation: opened.conversation!,
+        session: opened.session!,
         attention: SessionAttention.working(),
       }), opened.timeline)
       Answer.send(response, 202, {
         status: 'brainstorming',
-        conversation: opened.conversation.id.text,
+        conversation: opened.conversation!.id.text,
         target: sessionTarget,
-        repo: opened.conversation.repository.text,
-        root: opened.conversation.root.text,
-        session: { id: opened.session.id, name: opened.session.name },
+        repo: opened.conversation!.repository.text,
+        story: opened.conversation!.story.text,
+        root: opened.conversation!.root.text,
+        session: { id: opened.session!.id, name: opened.session!.name },
       })
     }
+  }
+
+  static #frozenDetail(story: UserStoryKey | UserStoryUrl, opened: CoordinatingSessionOpened): string {
+    return `${story.text} already has its execution spec frozen at ${opened.frozen!.path}: its brainstorming is over, continue with the groom`
   }
 
   static readonly #OUTCOME_BY_RESERVATION: Projection<CoordinatingSessionOutcomeValue, OpeningReservationValue> =

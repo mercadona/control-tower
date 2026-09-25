@@ -21,7 +21,6 @@ import type { GroomSessionOpened, OpenGroomSession } from '../application/action
 export const GroomSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
@@ -69,8 +68,6 @@ export class GroomSessionRoute {
   static readonly #NOT_LIVE_DETAIL =
     'the coordinating conversation is no longer live: nothing was typed into it'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
-  static readonly #NO_COORDINATING_SESSION_DETAIL =
-    'no coordinating session is held: there is no checkout to open the groom conversation in'
   static readonly #NO_EPIC_SPEC_DETAIL = 'no execution spec exists in this checkout to talk about'
 
   static opening(
@@ -107,8 +104,8 @@ export class GroomSessionRoute {
     let asked: GroomReviewAsked
     try {
       asked = await ask.execute(new AskGroomReviewParams({
-        repository: holding.conversation.repository,
         root: holding.conversation.root,
+        story: holding.conversation.story,
         session: holding.session!,
         target: holding.target,
       }))
@@ -134,6 +131,7 @@ export class GroomSessionRoute {
       target: holding.target,
       conversation: holding.conversation.id.text,
       repo: holding.conversation.repository.text,
+      story: holding.conversation.story.text,
       root: holding.conversation.root.text,
       session: { id: holding.session!.id, name: holding.session!.name },
     })
@@ -176,6 +174,7 @@ export class GroomSessionRoute {
       opened = await open.execute(new OpenGroomSessionParams({
         repository: holding.conversation.repository,
         root: holding.conversation.root,
+        story: holding.conversation.story,
       }))
     } catch (cause) {
       held.release()
@@ -200,6 +199,7 @@ export class GroomSessionRoute {
       target: held.held()!.target,
       conversation: opened.conversation!.id.text,
       repo: opened.conversation!.repository.text,
+      story: opened.conversation!.story.text,
       root: opened.conversation!.root.text,
       session: { id: opened.session!.id, name: opened.session!.name },
     })

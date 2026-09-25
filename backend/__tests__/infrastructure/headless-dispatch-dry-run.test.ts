@@ -11,30 +11,14 @@ import { PreparationMother } from '../preparation-mother.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import { ContinuePlan } from '../../src/application/actions/continue-plan.ts'
 import { RecoverPlan } from '../../src/application/actions/recover-plan.ts'
-import { StartMilestonePlan } from '../../src/application/actions/start-milestone-plan.ts'
-import {
-  EpicGroomRead, EpicGroomState, ReadEpicGroom,
-} from '../../src/application/queries/read-epic-groom.ts'
+import { StartMilestonePlan, StartMilestonePlanParams } from '../../src/application/actions/start-milestone-plan.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
-import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
-import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
-import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
-import { LiveSessions, type LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
-import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
-import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
-import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
-import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
-import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
-import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
@@ -44,9 +28,6 @@ import {
   CallDescriptor, ClaudeCalls, StoredCompletion,
 } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
-import {
-  CoordinatingSessions, CoordinatingSessionState, HeldCoordinatingSession,
-} from '../../src/infrastructure/coordinating-sessions.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { DispatchCheckClaims } from '../../src/infrastructure/dispatch-check-claims.ts'
@@ -116,44 +97,6 @@ class RememberingCheckouts extends CheckoutRegistry {
 
   known(): RegisteredCheckout[] {
     return [...this.remembered]
-  }
-}
-
-class CoordinatingLiveSessions extends LiveSessions {
-  static readonly SESSION = new LiveSession({ id: 'coordinator', name: 'coordinator' })
-
-  find(id: string): LiveSession | null {
-    return id === CoordinatingLiveSessions.SESSION.id ? CoordinatingLiveSessions.SESSION : null
-  }
-
-  watch(): LiveSessionStream {
-    return { printed: '', stop: (): void => {} }
-  }
-}
-
-class AuthorisedGroom extends ReadEpicGroom {
-  constructor() {
-    super({
-      specs: new EpicSpecs(),
-      published: new PublishedSpecs(),
-      issues: new EpicIssues(),
-      groom: new EpicGroom(),
-      branch: new EpicBranch(),
-      pullRequests: new PullRequests(),
-      fingerprint: new PlanFingerprint({ digest: (text) => text }),
-      revisions: new SpecRevision({ digest: (text) => text }),
-    })
-  }
-
-  override async execute(): Promise<EpicGroomRead> {
-    return new EpicGroomRead({
-      state: EpicGroomState.AUTHORISED,
-      spec: null,
-      milestone: Rehearsal.MILESTONE,
-      plan: null,
-      planFingerprint: null,
-      issues: [],
-    })
   }
 }
 
@@ -615,34 +558,7 @@ describe('headless dispatch dry run', () => {
       records,
       checkouts,
     })
-    const coordinating = new CoordinatingSessions({
-      liveSessions: new CoordinatingLiveSessions(), stderr: () => {},
-    })
-    coordinating.remember(new HeldCoordinatingSession({
-      target: '6d13bc52-740f-49f8-b128-15e597674f3a',
-      state: CoordinatingSessionState.LIVE,
-      conversation: new CoordinatingConversation({
-        id: new ConversationId('44444444-4444-4444-8444-444444444444'),
-        repository: new RepositoryName(Rehearsal.REPOSITORY),
-        root: new CheckoutRoot(boundaries.checkoutRoot),
-      }),
-      session: CoordinatingLiveSessions.SESSION,
-      attention: SessionAttention.working(),
-    }))
     if (!needsRecovery) {
-      const sessions = new PlanSessions()
-      const activePlans = new ActivePlans({ sessions })
-      const server = new ApiServer({
-        port: 0,
-        startMilestonePlan: start,
-        sessions,
-        activePlans,
-        coordinatingSessions: coordinating,
-        readEpicGroom: new AuthorisedGroom(),
-        frontendRoot: join(root, 'frontend-not-built'),
-      })
-      servers.push(server)
-      const port = await server.start()
       const obligation = {
         release: releasePendingWait,
         completed: initialSupervisorCompleted,
@@ -651,30 +567,30 @@ describe('headless dispatch dry run', () => {
       }
       pending.push(obligation)
       initialRegistrations.push(obligation)
-      const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ milestone: Rehearsal.MILESTONE }),
-      })
-      expect(response.status).toBe(202)
+      const dispatched = await start.execute(new StartMilestonePlanParams({
+        repository: new RepositoryName(Rehearsal.REPOSITORY),
+        root: new CheckoutRoot(boundaries.checkoutRoot),
+        milestone: Rehearsal.MILESTONE,
+      }))
       await BoundedDrain.wait(implementationAccepted.promise, 1_000)
-      expect(await response.json()).toEqual({
-        status: 'started',
-        started: [{
-          id: null,
-          repo: Rehearsal.REPOSITORY,
-          issue: {
-            number: Rehearsal.ISSUE,
-            url: `https://github.com/${Rehearsal.REPOSITORY}/issues/${Rehearsal.ISSUE}`,
-          },
-          agent: Rehearsal.CONVERSATION,
-          branch: `feat/${Rehearsal.ISSUE}`,
-          worktree: boundaries.worktree,
-          root: boundaries.checkoutRoot,
-          baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
-        }],
-        failed: [],
-      })
+      expect(dispatched.failed).toEqual([])
+      expect(dispatched.started.map((started) => ({
+        repo: started.watch.repository.text,
+        issue: started.watch.issue.number,
+        agent: started.agent,
+        branch: started.watch.located.branch,
+        worktree: started.watch.located.path,
+        root: started.watch.located.root,
+        baseline: started.baseline.seedField,
+      }))).toEqual([{
+        repo: Rehearsal.REPOSITORY,
+        issue: Rehearsal.ISSUE,
+        agent: Rehearsal.CONVERSATION,
+        branch: `feat/${Rehearsal.ISSUE}`,
+        worktree: boundaries.worktree,
+        root: boundaries.checkoutRoot,
+        baseline: { outcome: 'verde', command: 'npm test', summary: 'exit 0 · passed' },
+      }])
       expect(trace).toEqual(['claim', 'seed-slice', 'spawn-plan', 'publish', 'spawn-implementation'])
       expect(spawnedDescriptors).toHaveLength(2)
       const plannerDescriptor = JSON.parse(await readFile(spawnedDescriptors[0], 'utf8')) as Record<string, unknown>

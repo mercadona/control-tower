@@ -1,41 +1,7 @@
-import type { PlanIssue } from '../value-objects/plan-issue.ts'
 import type { PlanIssueStatusValue } from '../value-objects/plan-issue-status.ts'
 import type { RepositoryName } from '../value-objects/repository-name.ts'
-import type { UserStory } from '../value-objects/user-story.ts'
-import type { UserStoryKey } from '../value-objects/user-story-key.ts'
-import type { UserStoryUrl } from '../value-objects/user-story-url.ts'
 
 export class PlanIssues {
-  async open({ story, repository }: {
-    story: UserStory,
-    repository: RepositoryName,
-  }): Promise<PlanIssue> {
-    throw new Error(
-      `${this.constructor.name} must implement open({ story, repository }), asked for ${story.key} in ${repository}`
-    )
-  }
-
-  async claim({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement claim({ issue, repository }), asked for ${issue?.number} in ${repository}`
-    )
-  }
-
-  async requeue({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement requeue({ issue, repository }), asked for ${issue?.number} in ${repository}`
-    )
-  }
-
-  async storyOf({ issueNumber, repository }: {
-    issueNumber: number,
-    repository: RepositoryName,
-  }): Promise<UserStoryKey | UserStoryUrl | null> {
-    throw new Error(
-      `${this.constructor.name} must implement storyOf({ issueNumber, repository }), asked for ${issueNumber} in ${repository}`
-    )
-  }
-
   async statusOf({ issueNumber, repository }: {
     issueNumber: number,
     repository: RepositoryName,

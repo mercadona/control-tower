@@ -5,9 +5,10 @@ import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
   OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened,
 } from '../../src/application/actions/open-coordinating-session.ts'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
-  CoordinatingOperation,
+  CoordinatingOperation, OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
@@ -20,11 +21,12 @@ import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { ConversationNotStarted } from '../../src/domain/exceptions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
-import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
+import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 
 class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   readonly asked: OpenCoordinatingSessionParams[]
@@ -38,6 +40,7 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
       sessionHooks: new SessionHooks(),
       records: new ConversationRecords(),
       checkouts: new CheckoutRegistry(),
+      specs: new EpicSpecs(),
     })
     this.asked = []
     this.answer = answer
@@ -45,6 +48,10 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
 
   static opening(): OpenCoordinatingSessionSpy {
     return new OpenCoordinatingSessionSpy(async () => Mother.opened())
+  }
+
+  static findingItFrozen(frozen: CoordinatingSessionOpened): OpenCoordinatingSessionSpy {
+    return new OpenCoordinatingSessionSpy(async () => frozen)
   }
 
   static refusing(cause: Error): OpenCoordinatingSessionSpy {
@@ -71,7 +78,7 @@ class LiveSessionsDouble extends LiveSessions {
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
     repository: Mother.REPOSITORY,
     root: Mother.ROOT,
@@ -88,9 +95,7 @@ class Mother {
   ]
 
   static opened(): CoordinatingSessionOpened {
-    return new CoordinatingSessionOpened({
-      conversation: Mother.CONVERSATION, session: Mother.SESSION, timeline: Mother.TIMELINE,
-    })
+    return CoordinatingSessionOpened.opened(Mother.CONVERSATION, Mother.SESSION, Mother.TIMELINE)
   }
 
   static registry(): CoordinatingSessions {
@@ -223,6 +228,7 @@ describe('CoordinatingSessionRoute', () => {
       conversation: Mother.CONVERSATION.id.text,
       target: Mother.TARGET,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
@@ -320,6 +326,25 @@ describe('CoordinatingSessionRoute', () => {
     })
     expect(next.status).toBe(400)
     expect(open.asked).toHaveLength(2)
+  })
+
+  it('a story whose spec is already frozen is refused with story-spec-frozen and frees the next opening', async () => {
+    const frozen = CoordinatingSessionOpened.storySpecFrozen(new EpicSpec({
+      path: 'docs/superpowers/specs/ABC-1-execution.md',
+      text: `# Frozen epic${EpicSpec.TITLE_SUFFIX}\n${EpicSpec.STATE_LINE} ${EpicSpec.FROZEN}\n`,
+    }))
+    const held = Mother.registry()
+    const port = await RunningApi.listening(OpenCoordinatingSessionSpy.findingItFrozen(frozen), held)
+
+    const refused = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toEqual({
+      code: 'story-spec-frozen',
+      detail: 'ABC-1 already has its execution spec frozen at docs/superpowers/specs/ABC-1-execution.md: its brainstorming is over, continue with the groom',
+    })
+    expect(held.held()).toBeNull()
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
 
   it('an opening that broke frees the next one', async () => {
@@ -441,6 +466,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
       attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
@@ -460,6 +486,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       detail: 'the terminal of this coordinating session exited and no other one was opened',
       timeline: Mother.timelineJson(),
@@ -478,6 +505,24 @@ describe('CoordinatingSessionRoute', () => {
     expect(held.held()?.state).toBe('live')
   })
 
+  it('answers the story of a conversation opened for a GitHub issue exactly as it was given', async () => {
+    const held = Mother.registry()
+    held.remember(new HeldCoordinatingSession({
+      target: Mother.TARGET,
+      state: CoordinatingSessionState.LIVE,
+      conversation: CoordinatingConversationMother.of({
+        id: Mother.CONVERSATION.id, repository: Mother.REPOSITORY, root: Mother.ROOT,
+        story: CoordinatingConversationMother.ISSUE_STORY,
+      }),
+      session: Mother.SESSION,
+      attention: SessionAttention.working(),
+    }), Mother.TIMELINE)
+
+    const answered = await (await RunningApi.get(held)).json() as { story: string }
+
+    expect(answered.story).toBe('https://github.com/owner/name/issues/12')
+  })
+
   it('answers unresumable for a conversation Claude Code no longer holds', async () => {
     const held = Mother.unresumable()
 
@@ -490,6 +535,7 @@ describe('CoordinatingSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       detail: 'claude code no longer holds this conversation: the coordinating session was not resumed',
       timeline: Mother.timelineJson(),

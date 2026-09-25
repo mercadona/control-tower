@@ -43,12 +43,32 @@ describe('SpecFreezePanel', () => {
     expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
   })
 
-  it('lets the freeze go once no finding remains', async () => {
+  it('lets the freeze go once no finding remains, saying the spec is ready and naming its file', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftReady().body, { status: 200 })))
 
     renderPanel()
 
     expect(await screen.findByRole('button', FREEZE_BUTTON)).toBeEnabled()
+    expect(screen.getByText('El spec está listo para congelar')).toBeInTheDocument()
+    expect(screen.getByText(SpecFreezeMother.SPEC)).toBeInTheDocument()
+  })
+
+  it('a blocked spec names its file and how many findings stand between it and the freeze', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithMarker().body, { status: 200 })))
+
+    renderPanel()
+
+    expect(await screen.findByText('La vara todavía no deja congelar')).toBeInTheDocument()
+    expect(screen.getByText(`${SpecFreezeMother.SPEC} · 2 hallazgos por resolver`)).toBeInTheDocument()
+    expect(screen.queryByText('El spec está listo para congelar')).not.toBeInTheDocument()
+  })
+
+  it('a single finding is counted in the singular', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithoutScope().body, { status: 200 })))
+
+    renderPanel()
+
+    expect(await screen.findByText(`${SpecFreezeMother.SPEC} · 1 hallazgo por resolver`)).toBeInTheDocument()
   })
 
   it('a spec with no hypothesis shows that finding and keeps the button disabled', async () => {

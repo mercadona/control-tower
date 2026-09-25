@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import * as fs from 'node:fs/promises'
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
@@ -19,10 +19,13 @@ import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { DispatchRelay } from './dispatch-relay.ts'
+import { HeldStoryMilestone } from './held-story-milestone.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanSessions } from './plan-sessions.ts'
 import { StreamPlanningActivities } from './stream-planning-activities.ts'
+import { StreamImplementationActivities } from './stream-implementation-activities.ts'
+import { DiskSliceBaselines } from './disk-slice-baselines.ts'
 import { ReviewWatch } from './review-watch.ts'
 import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
@@ -60,6 +63,7 @@ import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { AskGroomReview } from '../application/actions/ask-groom-review.ts'
 import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
+import { ReopenCoordinatingSession } from '../application/actions/reopen-coordinating-session.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
@@ -111,6 +115,7 @@ import { RunPlanAgents, RunProvenance } from './run-plan-agents.ts'
 import { RunPlanRecovery } from './run-plan-recovery.ts'
 import { WorkRecoveryClock } from './work-recovery-clock.ts'
 import { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
+import { ReadMilestoneProgress } from '../application/queries/read-milestone-progress.ts'
 import { InspectedWorkInventory } from './inspected-work-inventory.ts'
 import { CheckedRunDelivery } from './checked-run-delivery.ts'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -220,15 +225,6 @@ class Disk {
       throw failure
     }
   }
-
-  static async list(path: string): Promise<string[] | null> {
-    try {
-      return await readdir(path)
-    } catch (failure) {
-      if (Disk.#isMissing(failure)) return null
-      throw failure
-    }
-  }
 }
 
 class CtApi {
@@ -317,7 +313,7 @@ class CtApi {
   }
 
   static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
-    const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
+    const probes = ProbedToolSessions.PROBES.map((row) => row.probe)
     const clients = Object.fromEntries(
       probes.map((bin): [string, ExternalTool] => [bin, CtApi.#talkingTo(bin, ExternalTool)])
     )
@@ -476,10 +472,7 @@ class CtApi {
       nowMs: Date.now,
     })
     const userStories = CtApi.#userStories(gh)
-    const planIssues = new GhPlanIssues({
-      gh,
-      stderr: (line) => process.stderr.write(line),
-    })
+    const planIssues = new GhPlanIssues({ gh })
     const pullRequests = new GhPullRequests({ gh })
     const workbench = new DispatchCheckWorkbench({
       node: CtApi.#tool(process.execPath),
@@ -644,6 +637,7 @@ class CtApi {
       newId: randomUUID,
       now: () => new Date().toISOString(),
     })
+    const epicSpecs = new DiskEpicSpecs({ read: Disk.read, write: Disk.write })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
       workspace,
@@ -651,6 +645,7 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
       checkouts,
+      specs: epicSpecs,
     })
     const recoverCoordinatingSession = new RecoverCoordinatingSession({
       conversations: claudeConversations,
@@ -666,7 +661,6 @@ class CtApi {
       records: conversationRecords,
       liveSessions,
     })
-    const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
     const openGroomSession = new OpenGroomSession({
       specs: epicSpecs,
       conversations: claudeConversations,
@@ -688,6 +682,16 @@ class CtApi {
     })
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
+    const reopenCoordinatingSession = new ReopenCoordinatingSession({
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+      specs: epicSpecs,
+      issues: epicIssues,
+      userStories,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+    })
     const groomRunner = new ToolRunner({
       bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
@@ -712,17 +716,23 @@ class CtApi {
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues, preparation })
     const startsInFlight = new WorkInFlight()
+    const dispatchCandidates = new GhDispatchCandidates({ gh })
     const startMilestonePlan = new StartMilestonePlan({
       preparation,
-      candidates: new GhDispatchCandidates({ gh }),
+      candidates: dispatchCandidates,
       claims,
       workspace,
       agents: planAgents,
       records,
       checkouts,
     })
+    const heldStoryMilestone = new HeldStoryMilestone({
+      held: () => coordinatingSessions.held()?.conversation ?? null,
+      specs: epicSpecs,
+    })
     const dispatchRelay = new DispatchRelay({
-      spec: (root) => epicSpecs.mostRecent(root),
+      milestones: (repository) => dispatchCandidates.authorisedMilestones({ repository }),
+      ownMilestone: (asked) => heldStoryMilestone.of(asked),
       dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),
@@ -735,10 +745,10 @@ class CtApi {
       delivery: runDelivery,
       isDriver: async (watch) => await planAgents.provenance(watch) === RunProvenance.DRIVER,
     })
+    const workInventory = new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery })
     const server = new ApiServer({
       preparation,
       port: asked.port,
-      startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       sliceHeldChange: (changed) => planAgents.hold(changed),
@@ -746,14 +756,23 @@ class CtApi {
       recoverPlan: new RecoverPlan({ agents: planAgents }),
       cleanupPlan: new CleanupPlan({ records, workspace, claims, planIssues }),
       workProgress: new ReadWorkProgress({
-        inventory: new InspectedWorkInventory({ inspection: recovery, plans: activePlans, records, delivery: runDelivery }),
+        inventory: workInventory,
         plans: planProgress,
         activities: planningActivities,
         implementation: implementProgress,
       }),
+      readMilestoneProgress: new ReadMilestoneProgress({
+        specs: epicSpecs,
+        issues: epicIssues,
+        inventory: workInventory,
+        implementation: implementProgress,
+        planning: planningActivities,
+        activities: new StreamImplementationActivities({ calls, files }),
+        history: metricsFileHistory,
+        baselines: new DiskSliceBaselines({ read: Disk.read }),
+        nowMs: Date.now,
+      }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
-      sliceEscalation: readSliceEscalation,
-      sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
         toolSessions: CtApi.#toolSessions(environment),
@@ -776,6 +795,7 @@ class CtApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
+      reopenCoordinatingSession,
       openGroomSession,
       askGroomReview,
       closeCoordinatingSession,

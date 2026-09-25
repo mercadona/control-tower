@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 
@@ -27,6 +27,52 @@ describe('useEpicGroom', () => {
     const { result } = renderHook(() => useEpicGroom(false, null))
 
     await vi.waitFor(() => expect(result.current).toEqual({ phase: 'read', kind: 'none' }))
+  })
+
+  it('forgets the read of the previous coordinating target as soon as it watches another one', async () => {
+    let answer: (response: Response) => void = () => undefined
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve })))
+    const { result, rerender } = renderHook(({ target }) => useEpicGroom(false, target), {
+      initialProps: { target: EpicGroomMother.TARGET as string | null },
+    })
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    rerender({ target: 'another-target' })
+
+    expect(result.current).toEqual({ phase: 'connecting' })
+    answer(responseFor(EpicGroomMother.groomable()))
+  })
+
+  it('keeps the read it has when only what it watches for changes, so the panel does not blank out', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined)))
+    const { result, rerender } = renderHook(({ reviewing }) => useEpicGroom(reviewing, EpicGroomMother.TARGET), {
+      initialProps: { reviewing: false },
+    })
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    rerender({ reviewing: true })
+
+    expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' })
+  })
+
+  it('keeps what it last read of the same target while the backend cannot be reached', async () => {
+    vi.useFakeTimers()
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(responseFor(EpicGroomMother.groomable()))
+      .mockRejectedValue(new TypeError('offline'))
+    vi.stubGlobal('fetch', fetching)
+    const { result } = renderHook(() => useEpicGroom(true, EpicGroomMother.TARGET))
+    await vi.waitFor(() => expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' }))
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+
+    expect(result.current).toMatchObject({ phase: 'read', kind: 'groomable' })
   })
 
   it('drops a read that names no coordinating target while it watches one', async () => {

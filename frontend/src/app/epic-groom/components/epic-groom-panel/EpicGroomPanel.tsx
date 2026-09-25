@@ -1,11 +1,13 @@
 import { LiveAsk } from 'app/coordinating-session/CoordinatingSession.types'
-import { EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
+import { EpicGroomOutcome, EpicIssue, EpicPullRequest, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 import { useGatePresses } from 'app/epic-groom/useGatePresses'
 import { useAskRead } from 'app/epic-groom/useAskRead'
 import { useMergedReslicing } from 'app/epic-groom/useMergedReslicing'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
+import { GateLayout, GateLink, GateList, GateListItem, GateNotice } from 'system-ui/gate-layout'
+import { Tag } from 'system-ui/tag'
 import './EpicGroomPanel.css'
 
 const EPIC_GROOM_GATE_HEADING = 'Puerta 2 · El groom y la autorización'
@@ -63,19 +65,32 @@ const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = [
 
 const dispatchedCount = (count: number): string =>
   count === 1 ? 'Trabajo en marcha: 1 slice despachado.' : `Trabajo en marcha: ${count} slices despachados.`
-const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
 const planItem = (issue: GroomPlanIssue, home: string): string =>
-  issue.repo === home ? `#${issue.order} · ${issue.title}` : `#${issue.order} · ${issue.title} · ${issue.repo}`
+  issue.repo === home ? issue.title : `${issue.title} · ${issue.repo}`
 const issueItem = (issue: EpicIssue): string => `#${issue.number} · ${issue.title}`
 
 const EpicGroomPanelLabels = {
   dispatchedCount,
-  planCount,
   partialCount,
   planItem,
   issueItem,
 }
+
+const IssueList = ({ issues }: { issues: EpicIssue[] }) => (
+  <GateList>
+    {issues.map((issue) => (
+      <GateListItem key={issue.number}>
+        <span>{EpicGroomPanelLabels.issueItem(issue)}</span>
+        <Tag className="epic-groom-panel__issue-status">{issue.status}</Tag>
+      </GateListItem>
+    ))}
+  </GateList>
+)
+
+const PullRequestLink = ({ pullRequest }: { pullRequest: EpicPullRequest }) => (
+  <GateLink href={pullRequest.url}>{`${PULL_REQUEST} #${pullRequest.number}`}</GateLink>
+)
 
 type EpicGroomPanelProps = {
   target: string | null
@@ -89,7 +104,8 @@ type EpicGroomPanelProps = {
 const EpicGroomPanel = ({
   target, liveAsk, openingBlocked, operationBusy, openSession, dispatched = 0,
 }: EpicGroomPanelProps) => {
-  const askBlocked = liveAsk === null ? openingBlocked : liveAsk !== 'ready'
+  const sessionMidTurn = liveAsk !== null && liveAsk !== 'ready'
+  const askBlocked = liveAsk === null ? openingBlocked : sessionMidTurn
   const presses = useGatePresses({ target, askBlocked, operationBusy, openSession })
   const { acted, refusal, session, reslicing } = presses
   const preparationRefused = refusal?.kind === 'refused' && refusal.code === 'repository-preparation-required'
@@ -98,38 +114,29 @@ const EpicGroomPanel = ({
     session?.kind === 'opened' || session?.kind === 'typed' || refusal?.kind === 'unconfirmed'
   const read = useEpicGroom(isReviewingTheSlicing, target, true)
   const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key ?? null : null
-  useMergedReslicing({ read, operationBusy, press: (planFingerprint) => presses.groom(gateKey, planFingerprint) })
+  useMergedReslicing({
+    read, held: operationBusy || sessionMidTurn, press: (planFingerprint) => presses.groom(gateKey, planFingerprint),
+  })
 
   if (read.phase === 'connecting') return null
   if (acted === null && EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
   if (acted === null && read.kind === 'refused') {
     return (
-      <div className="epic-groom-panel">
-        <Banner type="error" role="alert" title={read.error} />
-      </div>
+      <Banner type="error" role="alert" title={read.error} />
     )
   }
   if (acted === null && read.kind === 'issues-uncertain') {
     return (
-      <div className="epic-groom-panel">
-        <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
-      </div>
+      <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
     )
   }
 
   if (acted === null && read.kind === 'awaiting-publication') {
     const { pullRequest } = read
     return (
-      <div className="epic-groom-panel">
-        <p className="epic-groom-panel__awaiting">
-          {pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}
-        </p>
-        {pullRequest !== null && (
-          <a className="epic-groom-panel__pull-request" href={pullRequest.url}>
-            {`${PULL_REQUEST} #${pullRequest.number}`}
-          </a>
-        )}
-      </div>
+      <GateLayout heading={pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}>
+        {pullRequest !== null && <PullRequestLink pullRequest={pullRequest} />}
+      </GateLayout>
     )
   }
 
@@ -138,10 +145,10 @@ const EpicGroomPanel = ({
   const preparationBlocked = preparationRefused || preparationDetail !== null
 
   const gateNotice = gateKey === null && (
-    <p className="epic-groom-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>
+    <GateNotice>{ONLY_FROM_THE_PAGE}</GateNotice>
   )
   const sessionNeeded = target === null && (
-    <p className="epic-groom-panel__no-session">{NO_COORDINATING_SESSION}</p>
+    <GateNotice>{NO_COORDINATING_SESSION}</GateNotice>
   )
   const askBanner =
     refusal?.kind === 'refused' ? (
@@ -170,17 +177,17 @@ const EpicGroomPanel = ({
       />
     ) : null
   const askNotice = liveAsk === 'working' ? (
-    <p className="epic-groom-panel__ask-blocked">{SESSION_WORKING}</p>
+    <GateNotice>{SESSION_WORKING}</GateNotice>
   ) : liveAsk === 'awaiting-permission' ? (
-    <p className="epic-groom-panel__ask-blocked">{SESSION_AWAITING_PERMISSION}</p>
+    <GateNotice>{SESSION_AWAITING_PERMISSION}</GateNotice>
   ) : liveAsk === 'turn-not-finished' ? (
-    <p className="epic-groom-panel__ask-blocked">{SESSION_TURN_UNKNOWN}</p>
+    <GateNotice>{SESSION_TURN_UNKNOWN}</GateNotice>
   ) : null
   const sessionNotice =
     session?.kind === 'opened' ? (
-      <p className="epic-groom-panel__session-opened">{SESSION_OPENED}</p>
+      <GateNotice>{SESSION_OPENED}</GateNotice>
     ) : session?.kind === 'typed' ? (
-      <p className="epic-groom-panel__ask-sent">{askWasRead ? ASK_READ : ASK_SENT}</p>
+      <GateNotice>{askWasRead ? ASK_READ : ASK_SENT}</GateNotice>
     ) : session?.kind === 'refused' ? (
       <Banner type="error" role="alert" title={session.error} />
     ) : session?.kind === 'unconfirmed' ? (
@@ -194,88 +201,82 @@ const EpicGroomPanel = ({
 
   if (acted === null && read.kind === 'resliced') {
     return (
-      <div className="epic-groom-panel">
-        <p className="epic-groom-panel__resliced">{RESLICED}</p>
-        <Button onClick={() => void presses.publishReslicing(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
-          {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
-        </Button>
+      <GateLayout
+        heading={RESLICED}
+        actions={
+          <Button onClick={() => void presses.publishReslicing(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
+            {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
+          </Button>
+        }
+      >
         {reslicing?.kind === 'published' && (
-          <>
-            <p className="epic-groom-panel__reslicing-published">{RESLICING_PUBLISHED}</p>
-            <a className="epic-groom-panel__pull-request" href={reslicing.pullRequest.url}>
-              {`${PULL_REQUEST} #${reslicing.pullRequest.number}`}
-            </a>
-          </>
+          <GateNotice>
+            <span>{RESLICING_PUBLISHED}</span> <PullRequestLink pullRequest={reslicing.pullRequest} />
+          </GateNotice>
         )}
         {gateNotice}
         {sessionNeeded}
         {reslicingBanner}
-      </div>
+      </GateLayout>
     )
   }
 
   if (acted === null && read.kind === 'groomable') {
-    const { milestone, plan, home, planFingerprint, reslicing: merged } = read
+    const { plan, home, planFingerprint, reslicing: merged } = read
     return (
-      <div className="epic-groom-panel">
-        <p className="epic-groom-panel__milestone">{milestone}</p>
-        <p className="epic-groom-panel__will-create">{WILL_CREATE}</p>
-        <p className="epic-groom-panel__count">{EpicGroomPanelLabels.planCount(plan.length)}</p>
-        <ul className="epic-groom-panel__plan">
-          {plan.map((issue) => (
-            <li key={issue.order} className="epic-groom-panel__plan-item">
-              <span className="epic-groom-panel__plan-title">{EpicGroomPanelLabels.planItem(issue, home)}</span>
-              <span className="epic-groom-panel__plan-labels">{issue.labels.join(', ')}</span>
-            </li>
-          ))}
-        </ul>
-        {merged !== null && (
+      <GateLayout
+        heading={WILL_CREATE}
+        actions={
           <>
-            <p className="epic-groom-panel__reslicing-merged">{RESLICING_MERGED}</p>
-            <a className="epic-groom-panel__pull-request" href={merged.url}>
-              {`${PULL_REQUEST} #${merged.number}`}
-            </a>
+            {presses.pressed !== 'groom' && (
+              <Button variant="secondary" onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || target === null || isPressing || askBlocked || operationBusy}>
+                {presses.pressed === 'session'
+                  ? (liveAsk === null ? OPENING_SESSION : SENDING_ASK)
+                  : OPEN_SESSION}
+              </Button>
+            )}
+            <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy || sessionMidTurn}>
+              {presses.pressed === 'groom' ? GROOMING : GROOM}
+            </Button>
           </>
+        }
+      >
+        <GateList>
+          {plan.map((issue) => (
+            <GateListItem key={issue.order}>{EpicGroomPanelLabels.planItem(issue, home)}</GateListItem>
+          ))}
+        </GateList>
+        {merged !== null && (
+          <GateNotice>
+            <span>{RESLICING_MERGED}</span> <PullRequestLink pullRequest={merged} />
+          </GateNotice>
         )}
-        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || target === null || isPressing || askBlocked || operationBusy}>
-          {presses.pressed === 'session'
-            ? (liveAsk === null ? OPENING_SESSION : SENDING_ASK)
-            : OPEN_SESSION}
-        </Button>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
-          {presses.pressed === 'groom' ? GROOMING : GROOM}
-        </Button>
         {askNotice}
         {sessionNotice}
         {gateNotice}
         {sessionNeeded}
         {askBanner}
-      </div>
+      </GateLayout>
     )
   }
 
   if (acted === null && read.kind === 'partially-groomed') {
-    const { milestone, plan, issues, planFingerprint } = read
+    const { plan, issues, planFingerprint } = read
     return (
-      <div className="epic-groom-panel">
-        <p className="epic-groom-panel__milestone">{milestone}</p>
-        <p className="epic-groom-panel__partial-count">{EpicGroomPanelLabels.partialCount(issues.length, plan.length)}</p>
-        <ul className="epic-groom-panel__issues">
-          {issues.map((issue) => (
-            <li key={issue.number} className="epic-groom-panel__issue">
-              <span className="epic-groom-panel__issue-title">{EpicGroomPanelLabels.issueItem(issue)}</span>
-              <span className="epic-groom-panel__issue-status">{issue.status}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
-          {presses.pressed === 'groom' ? GROOMING : GROOM}
-        </Button>
+      <GateLayout
+        heading={EpicGroomPanelLabels.partialCount(issues.length, plan.length)}
+        actions={
+          <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || target === null || isPressing || operationBusy || sessionMidTurn}>
+            {presses.pressed === 'groom' ? GROOMING : GROOM}
+          </Button>
+        }
+      >
+        <IssueList issues={issues} />
+        <GateNotice>{FINISH_GROOM_FIRST}</GateNotice>
         {gateNotice}
         {sessionNeeded}
         {askBanner}
-      </div>
+      </GateLayout>
     )
   }
 
@@ -288,23 +289,19 @@ const EpicGroomPanel = ({
 
   if (groomedIssues !== null) {
     return (
-      <div className="epic-groom-panel">
-        <p className="epic-groom-panel__created">{CREATED}</p>
-        <ul className="epic-groom-panel__issues">
-          {groomedIssues.map((issue) => (
-            <li key={issue.number} className="epic-groom-panel__issue">
-              <span className="epic-groom-panel__issue-title">{EpicGroomPanelLabels.issueItem(issue)}</span>
-              <span className="epic-groom-panel__issue-status">{issue.status}</span>
-            </li>
-          ))}
-        </ul>
-        <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
-          {presses.pressed === 'promote' ? PROMOTING : preparationBlocked ? 'Volver a comprobar y autorizar' : PROMOTE}
-        </Button>
+      <GateLayout
+        heading={CREATED}
+        actions={
+          <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
+            {presses.pressed === 'promote' ? PROMOTING : preparationBlocked ? 'Volver a comprobar y autorizar' : PROMOTE}
+          </Button>
+        }
+      >
+        <IssueList issues={groomedIssues} />
         {gateNotice}
         {sessionNeeded}
         {askBanner}
-      </div>
+      </GateLayout>
     )
   }
 
@@ -317,25 +314,17 @@ const EpicGroomPanel = ({
 
   if (authorisedIssues !== null) {
     return (
-      <div className="epic-groom-panel">
-        <ul className="epic-groom-panel__issues">
-          {authorisedIssues.map((issue) => (
-            <li key={issue.number} className="epic-groom-panel__issue">
-              <span className="epic-groom-panel__issue-title">{EpicGroomPanelLabels.issueItem(issue)}</span>
-              <span className="epic-groom-panel__issue-status">{issue.status}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="epic-groom-panel__authorised">
-          {preparationBlocked ? 'Despacho pendiente de corregir la preparación del repositorio.' : dispatched === 0 ? AWAITING_DISPATCH : EpicGroomPanelLabels.dispatchedCount(dispatched)}
-        </p>
-        {preparationBlocked && (
+      <GateLayout
+        heading={preparationBlocked ? 'Despacho pendiente de corregir la preparación del repositorio.' : dispatched === 0 ? AWAITING_DISPATCH : EpicGroomPanelLabels.dispatchedCount(dispatched)}
+        actions={preparationBlocked ? (
           <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || target === null || isPressing || operationBusy}>
             {presses.pressed === 'promote' ? 'Comprobando la preparación' : 'Volver a comprobar'}
           </Button>
-        )}
+        ) : undefined}
+      >
+        <IssueList issues={authorisedIssues} />
         {askBanner}
-      </div>
+      </GateLayout>
     )
   }
 

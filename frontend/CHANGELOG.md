@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.0](https://github.com/mercadona/control-tower/compare/frontend-v0.7.0...frontend-v0.8.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* the groom box shows only the issue titles, with its actions side by side ([#579](https://github.com/mercadona/control-tower/issues/579)) ([d77d219](https://github.com/mercadona/control-tower/commit/d77d219b37b62b1c0cdffa258721cea900b32c13))
+* the spec freeze box names its spec and puts the freeze beside it, like the groom box ([#580](https://github.com/mercadona/control-tower/issues/580)) ([f7fdeaa](https://github.com/mercadona/control-tower/commit/f7fdeaa973560592973ba601ba49503caab9d478))
+
+
+### Correcciones
+
+* the focused view names the pull request to merge while the frozen spec awaits publication ([#575](https://github.com/mercadona/control-tower/issues/575)) ([049e2c5](https://github.com/mercadona/control-tower/commit/049e2c53e7e57ddcdd1bc364d61850c25497aef2))
+
+
+### Refactorizaciones
+
+* remove the refusal codes nothing can send, and the dead code behind them ([#595](https://github.com/mercadona/control-tower/issues/595)) ([9d4cdab](https://github.com/mercadona/control-tower/commit/9d4cdab2e77927ec0371c25270b6e8a1be524427))
+
+## [0.7.0](https://github.com/mercadona/control-tower/compare/frontend-v0.6.0...frontend-v0.7.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* a live coordinating session takes the whole page, showing only its current step ([#570](https://github.com/mercadona/control-tower/issues/570)) ([bed2385](https://github.com/mercadona/control-tower/commit/bed238598d772f1a2c2b13f12832cb8d1a9bb12f))
+* read the repository from the checkout and drop the loose start-plan entrance ([#563](https://github.com/mercadona/control-tower/issues/563)) ([3e12075](https://github.com/mercadona/control-tower/commit/3e120759c675331eac536b099cdef638ee63e60a))
+* tell a finished slice apart from a lost one ([#562](https://github.com/mercadona/control-tower/issues/562)) ([e31f370](https://github.com/mercadona/control-tower/commit/e31f37064bc487f8cfecaab1749496872bd0d0e7))
+* the execution spec's path is derived from the conversation's story ([#568](https://github.com/mercadona/control-tower/issues/568)) ([48737cd](https://github.com/mercadona/control-tower/commit/48737cdd7a14f1cd35934c603be16917f95501b9))
+
+
+### Correcciones
+
+* preserve work progress during tracking failures ([#547](https://github.com/mercadona/control-tower/issues/547)) ([aafee10](https://github.com/mercadona/control-tower/commit/aafee1064e1edac7dcab2ae0861bb441033ad2f3))
+* review the slicing without executing the groom, paste it whole, and hold the groom mid-turn ([#567](https://github.com/mercadona/control-tower/issues/567)) ([c32deb7](https://github.com/mercadona/control-tower/commit/c32deb744e62b944ca16e483b5c4009358aee1a8))
+
 ## [0.6.0](https://github.com/mercadona/control-tower/compare/frontend-v0.5.0...frontend-v0.6.0) (2026-09-24)
 
 

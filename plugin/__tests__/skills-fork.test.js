@@ -99,6 +99,13 @@ describe('seam 1 — brainstorming ends in an execution spec + freeze, not in wr
     expect(skill()).toContain('CONGELADA')
   })
 
+  it('both documents are named after the story the phase prompt gives, with no date that could hide them from gate 1', () => {
+    const s = skill()
+    expect(s).toContain('docs/superpowers/specs/<story>-execution.md')
+    expect(s).toContain('docs/superpowers/specs/<story>-design.md')
+    expect(s).not.toContain('YYYY-MM-DD-<topic>')
+  })
+
   it('every frozen decision carries provenance and a "propuesta" is not frozen', () => {
     const s = skill()
     for (const p of ['hablada', 'deducida', 'propuesta']) expect(s).toContain(p)

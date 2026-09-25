@@ -1,6 +1,6 @@
 # <Milestone name> — Execution spec
 
-**Handoff origen:** `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+**Handoff origen:** `docs/superpowers/specs/<story>-design.md`
 **Fecha de congelación:** —
 **Estado:** DRAFT
 

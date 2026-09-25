@@ -132,10 +132,36 @@ describe('Home and the coordinating session', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
     expect(await screen.findByRole('button', { name: 'Cancelando…' })).toBeDisabled()
-    expect(screen.getByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'zsh' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
+    expect(screen.getByRole('region', { name: 'brainstorming' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
+
+    await act(async () => confirm(new Response(JSON.stringify({
+      status: 'closed',
+      conversation: CoordinatingSessionMother.CONVERSATION,
+      target: CoordinatingSessionMother.TARGET,
+    }))))
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelando…' })).not.toBeInTheDocument())
+  })
+  it('keeps the freeze of a draft spec out of reach while durable cancellation is pending', async () => {
+    let confirm: (response: Response) => void = () => undefined
+    const pending = new Promise<Response>((resolve) => { confirm = resolve })
+    const fetching = backendHolding(CoordinatingSessionMother.working())
+    fetching.mockImplementation((input: string | URL | Request) => {
+      if (input === '/coordinating-session/close') return pending
+      if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
+      if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
+      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
+      if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
+      if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
+      if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.draft()))
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    openHome()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
+
+    expect(await screen.findByRole('button', { name: 'Cancelando…' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeDisabled()
 
     await act(async () => confirm(new Response(JSON.stringify({
       status: 'closed',
@@ -254,7 +280,7 @@ describe('Home and the coordinating session', () => {
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
   })
 
-  it('preserves every request field while an externally discovered session is closed', async () => {
+  it('gives way to an externally discovered session and comes back once it is closed', async () => {
     vi.useFakeTimers()
     let reads = 0
     let closed = false
@@ -285,14 +311,15 @@ describe('Home and the coordinating session', () => {
     fireEvent.change(screen.getByLabelText(/Ruta local/), { target: { value: '/repo' } })
 
     await act(async () => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' })))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
 
-    expect(screen.getByLabelText('Ticket')).toHaveValue('ABC-123')
-    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('/repo')
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
   })
 
-  it('gate 2 offers no ask while the live conversation is working, and says what to wait for', async () => {
+  it('gate 2 offers neither the ask nor the groom while the live conversation is working, and says what to wait for', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.working())
     fetching.mockImplementation((input: string | URL | Request) => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
@@ -309,7 +336,7 @@ describe('Home and the coordinating session', () => {
     expect(screen.getByText(
       'La sesión está trabajando: espera a que termine el turno para pedirle que revise el slicing.',
     )).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Ejecutar el groom' })).toBeDisabled()
   })
 
   it('gate 2 offers no ask while a permission prompt that carried no message is on screen', async () => {
@@ -353,7 +380,7 @@ describe('Home and the coordinating session', () => {
 
     expect(await screen.findByText('Petición enviada a la sesión. Aún no se ha confirmado que la haya leído.'))
       .toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'brainstorming' })).toBeInTheDocument()
   })
 
   it('reads both gates of the checkout with no coordinating session held', async () => {

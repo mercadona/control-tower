@@ -16,6 +16,7 @@ import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-statu
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { createHash } from 'node:crypto'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 
 type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryName, milestone: string }
 
@@ -57,6 +58,7 @@ class EpicGroomDouble extends EpicGroom {
 }
 
 class Mother {
+  static readonly STORY = CoordinatingConversationMother.STORY
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly HOME = Mother.REPOSITORY.text
@@ -182,7 +184,7 @@ class Flow {
 
   async run({ fingerprint = Mother.PLAN_FINGERPRINT }: { fingerprint?: string | null } = {}) {
     return new GroomEpic(this).execute(
-      new GroomEpicParams({ root: Mother.ROOT, repository: Mother.REPOSITORY, fingerprint })
+      new GroomEpicParams({ root: Mother.ROOT, repository: Mother.REPOSITORY, story: Mother.STORY, fingerprint })
     )
   }
 }

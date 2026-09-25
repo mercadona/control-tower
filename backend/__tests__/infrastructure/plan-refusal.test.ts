@@ -6,7 +6,6 @@ import { SliceMessageCollapse } from '../../src/infrastructure/slice-message-rou
 import { AnotherRoundCollapse } from '../../src/infrastructure/another-round-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
-import { PlanNonLaunch } from '../../src/domain/value-objects/plan-non-launch.ts'
 
 describe('PlanRefusal', () => {
   it('every_refusable_outcome_has_an_answer_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
@@ -34,11 +33,17 @@ describe('PlanRefusal', () => {
 describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
-    'PlanProgressFailure', 'PlanningActivityFailure', 'PlanStatusFailure', 'HarvestFailure', 'PlanStoryFailure',
+    'PlanProgressFailure', 'PlanningActivityFailure', 'PlanStatusFailure', 'HarvestFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
     'EpicIssuesFailure', 'DispatchFailure', 'PlanRecoveryFailure', 'PlanCleanupFailure', 'SessionClosureFailure',
-    'RunFailure', 'EscalationFailure', 'WorkProgressFailure',
+    'RunFailure', 'EscalationFailure', 'WorkProgressFailure', 'SliceBaselineFailure', 'ImplementationActivityFailure',
+  ]
+
+  const RAISED_ONLY_BY_THE_DISPATCH_RELAY_OR_STARTUP_RECOVERY = [
+    'PlanIssueNotClaimed', 'DispatchNotAvailable', 'DispatchWaitsBehind', 'DispatchNotRead', 'DispatchNotUnderstood',
+    'PlanAgentNeverLaunched', 'PlanAgentNotLaunched', 'PlanAgentNotNamed',
+    'WorkspaceNotPrepared', 'WorkspaceNotCleaned', 'ConversationNotUnderstood',
   ]
 
   const ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE = SliceMessageCollapse.declaredFailures()
@@ -47,13 +52,13 @@ describe('PlanCollapse', () => {
   const startingAPlan = ([name, thrown]: [string, { prototype: object }]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&
     !FAMILIES.includes(name) &&
+    !RAISED_ONLY_BY_THE_DISPATCH_RELAY_OR_STARTUP_RECOVERY.includes(name) &&
     !ANSWERED_BY_THE_SLICE_MESSAGE_ROUTE.includes(name) &&
     !ANSWERED_BY_THE_ANOTHER_ROUND_ROUTE.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PlanningActivityFailure) &&
     !(thrown.prototype instanceof exceptions.WorkProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStatusFailure) &&
-    !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationHistoryFailure) &&
@@ -62,7 +67,9 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.PlanCleanupFailure) &&
     !(thrown.prototype instanceof exceptions.SessionClosureFailure) &&
     !(thrown.prototype instanceof exceptions.RunFailure) &&
-    !(thrown.prototype instanceof exceptions.EscalationFailure)
+    !(thrown.prototype instanceof exceptions.EscalationFailure) &&
+    !(thrown.prototype instanceof exceptions.SliceBaselineFailure) &&
+    !(thrown.prototype instanceof exceptions.ImplementationActivityFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)
@@ -83,10 +90,11 @@ describe('PlanCollapse', () => {
       .toThrow(/no refusal declared/)
   })
 
-  it('a_failure_of_reading_which_story_a_plan_came_from_has_no_refusal_declared_here_because_the_plan_is_recovered_without_it', () => {
-    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStoryNotRead')
-    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStoryNotUnderstood')
-    expect(() => PlanCollapse.of(new exceptions.PlanStoryNotRead('gh: not authenticated')))
+  it('a_failure_only_the_dispatch_relay_or_startup_recovery_raises_has_no_refusal_declared_here_because_neither_answers_a_request', () => {
+    for (const name of RAISED_ONLY_BY_THE_DISPATCH_RELAY_OR_STARTUP_RECOVERY) {
+      expect(PlanCollapse.declaredFailures()).not.toContain(name)
+    }
+    expect(() => PlanCollapse.of(new exceptions.DispatchNotAvailable('no issue is eligible')))
       .toThrow(/no refusal declared/)
   })
 
@@ -113,19 +121,9 @@ describe('PlanCollapse', () => {
   it('every_way_the_plan_can_collapse_answers_400_because_the_code_carries_the_distinction_now', () => {
     const causes = [
       new exceptions.UserStoryNotRead('acli is not authenticated'),
-      new exceptions.PlanIssueNotCreated('nope'),
-      new exceptions.PlanIssueNotClaimed('gh issue edit failed: nope'),
-      new exceptions.DispatchNotAvailable('no issue is eligible'),
-      new exceptions.DispatchNotRead('dispatch-check refused'),
-      new exceptions.DispatchNotUnderstood('dispatch-check changed'),
-      new exceptions.PlanAgentNotLaunched('nope'),
-      new exceptions.WorkspaceNotPrepared('branch is taken'),
-      new exceptions.WorkspaceNotCleaned('worktree removal failed'),
       new exceptions.WorkspaceNotRead('no such remote'),
       new exceptions.CheckoutNotConfirmed('owner/name: /repo holds someone/else'),
       new exceptions.UserStoryNotUnderstood('nope'),
-      new exceptions.PlanIssueNotNamed('nope'),
-      new exceptions.PlanAgentNotNamed('nope'),
       new exceptions.WorkspaceNotUnderstood('nope'),
     ]
 
@@ -148,24 +146,8 @@ describe('PlanCollapse', () => {
     expect(collapse.detail).toBe('path must be a git checkout of owner/name: /repo holds someone/else')
   })
 
-  it('an_issue_that_could_not_be_claimed_names_what_gh_said', () => {
-    const collapse = PlanCollapse.of(new exceptions.PlanIssueNotClaimed('gh issue edit failed: nope'))
-
-    expect(collapse.code).toBe('plan-issue-not-claimed')
-    expect(collapse.detail).toBe('gh issue edit failed: nope')
-  })
-
-  it('dispatch_and_cleanup_failures_keep_distinct_boundary_codes', () => {
-    expect(PlanCollapse.of(new exceptions.DispatchNotAvailable('none')).code).toBe('dispatch-not-available')
-    expect(PlanCollapse.of(new exceptions.DispatchNotRead('refused')).code).toBe('dispatch-not-read')
-    expect(PlanCollapse.of(new exceptions.DispatchNotUnderstood('changed')).code).toBe('dispatch-not-understood')
-    expect(PlanCollapse.of(new exceptions.WorkspaceNotCleaned('not removed')).code).toBe('workspace-not-cleaned')
-  })
-
   it('a_tool_that_answered_something_we_cannot_read_has_its_own_code_too', () => {
     expect(PlanCollapse.of(new exceptions.UserStoryNotUnderstood('nope')).code).toBe('user-story-not-understood')
-    expect(PlanCollapse.of(new exceptions.PlanIssueNotNamed('nope')).code).toBe('plan-issue-not-named')
-    expect(PlanCollapse.of(new exceptions.PlanAgentNotNamed('nope')).code).toBe('plan-agent-not-named')
     expect(PlanCollapse.of(new exceptions.WorkspaceNotUnderstood('nope')).code).toBe('workspace-not-understood')
   })
 
@@ -196,22 +178,6 @@ describe('PlanCollapse', () => {
 
     expect(startingAPlan(['RunPublicProbe', RunPublicProbe])).toBe(true)
     expect(() => PlanCollapse.of(new RunPublicProbe('public probe'))).toThrow(/no refusal declared/)
-  })
-
-  it('definite non-launch keeps its start refusal', () => {
-    const proof = new PlanNonLaunch({
-      conversation: '11111111-1111-4111-8111-111111111111',
-      callId: null,
-      source: 'before-worker',
-      diagnostic: 'worker spawn was refused',
-      observedAt: '2026-09-16T10:00:00.000Z',
-    })
-
-    expect(PlanCollapse.of(new exceptions.PlanAgentNeverLaunched(proof))).toEqual(new Refusal({
-      status: 400,
-      code: 'plan-agent-never-launched',
-      detail: 'worker spawn was refused',
-    }))
   })
 
   it('an unknown launch subtype has no inherited refusal', () => {

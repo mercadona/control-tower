@@ -117,13 +117,13 @@ const reslicingPublished = () => ({
 
 const groomSessionOpened = () => ({
   status: 202,
-  body: `{"status":"grooming","target":"${GROOM_TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+  body: `{"status":"grooming","target":"${GROOM_TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","story":"STAFF-128","root":"/repo",` +
     `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 
 const groomAskTyped = () => ({
   status: 202,
-  body: `{"status":"typed","target":"${TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+  body: `{"status":"typed","target":"${TARGET}","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","story":"STAFF-128","root":"/repo",` +
     `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 

@@ -55,8 +55,34 @@ class Surveyed {
   }
 }
 
+class ClaudeAuthStatus {
+  static subscribed() {
+    return new ProcessOutput({ code: 0, stderr: '', stdout: JSON.stringify({
+      loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', analyticsDisabled: false,
+      projectsDirectory: '/Users/someone/.claude/projects', configDirectory: '/Users/someone/.claude',
+      email: 'someone@example.com', orgId: '00000000-0000-4000-8000-000000000000', orgName: 'Example',
+      subscriptionType: 'team',
+    }, null, 2) + '\n' })
+  }
+
+  static withAnApiKey() {
+    return new ProcessOutput({ code: 0, stderr: '', stdout: JSON.stringify({
+      loggedIn: true, authMethod: 'api_key', apiProvider: 'firstParty', analyticsDisabled: false,
+      projectsDirectory: '/Users/someone/.claude/projects', configDirectory: '/Users/someone/.claude',
+      apiKeySource: 'ANTHROPIC_API_KEY',
+    }, null, 2) + '\n' })
+  }
+
+  static loggedOut() {
+    return new ProcessOutput({ code: 1, stderr: '', stdout: JSON.stringify({
+      loggedIn: false, authMethod: 'none', apiProvider: 'firstParty', analyticsDisabled: false,
+      projectsDirectory: '/Users/someone/.claude/projects', configDirectory: '/Users/someone/.claude',
+    }, null, 2) + '\n' })
+  }
+}
+
 class ClientsDouble {
-  static #BINS = ['gh', 'acli', 'ssh', 'gcloud']
+  static #BINS = ['gh', 'acli', 'claude', 'ssh', 'gcloud']
 
   answers: Record<string, ProcessOutput>
   readonly calls: RecordedCall[]
@@ -70,6 +96,7 @@ class ClientsDouble {
     return new ClientsDouble()
       .saying('gh', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
       .saying('acli', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
+      .saying('claude', ClaudeAuthStatus.subscribed())
       .saying('ssh', new ProcessOutput({
         code: 1, stdout: '',
         stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.\n",
@@ -138,6 +165,7 @@ describe('ProbedToolSessions', () => {
     expect(clients.calls).toEqual([
       { bin: 'gh', argv: ['auth', 'status'], options: { safeToRepeat: true } },
       { bin: 'acli', argv: ['jira', 'auth', 'status'], options: { safeToRepeat: true } },
+      { bin: 'claude', argv: ['auth', 'status'], options: { safeToRepeat: true } },
       {
         bin: 'ssh',
         argv: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-T', 'git@github.com'],
@@ -182,7 +210,7 @@ describe('ProbedToolSessions', () => {
 
     await clients.sessions(LookUpDouble.missing('gcloud')).all()
 
-    expect(clients.calls.map((call) => call.bin)).toEqual(['gh', 'acli', 'ssh'])
+    expect(clients.calls.map((call) => call.bin)).toEqual(['gh', 'acli', 'claude', 'ssh'])
   })
 
   it('a_tool_that_is_not_installed_is_missing_even_when_the_binary_it_probes_with_is_missing_too', async () => {
@@ -222,28 +250,48 @@ describe('ProbedToolSessions', () => {
     expect(bq.fix).toBeNull()
   })
 
-  it('claude_is_always_unknown_and_says_where_to_log_in', async () => {
+  it('claude_is_ready_when_it_is_logged_in_with_an_account', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
     const claude = Surveyed.of(sessions).about('claude')
 
-    expect(claude.state).toBe(SessionState.UNKNOWN)
-    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(claude.state).toBe(SessionState.READY)
+    expect(claude.fix).toBeNull()
   })
 
-  it('claude_is_unknown_even_when_its_binary_is_missing_because_its_login_is_never_observable', async () => {
-    const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('claude')).all()
+  it('claude_logged_in_with_an_api_key_is_ready_too', async () => {
+    const sessions = await ClientsDouble.allHappy().saying('claude', ClaudeAuthStatus.withAnApiKey()).sessions().all()
 
     const claude = Surveyed.of(sessions).about('claude')
 
+    expect(claude.state).toBe(SessionState.READY)
+    expect(claude.fix).toBeNull()
+  })
+
+  it('claude_that_is_not_logged_in_is_missing_and_says_how_to_log_in', async () => {
+    const sessions = await ClientsDouble.allHappy().saying('claude', ClaudeAuthStatus.loggedOut()).sessions().all()
+
+    const claude = Surveyed.of(sessions).about('claude')
+
+    expect(claude.state).toBe(SessionState.MISSING)
+    expect(claude.fix).toBe('claude auth login')
+  })
+
+  it('claude_missing_from_PATH_is_not_installed_and_is_never_probed', async () => {
+    const clients = ClientsDouble.allHappy()
+
+    const sessions = await clients.sessions(LookUpDouble.missing('claude')).all()
+
+    const claude = Surveyed.of(sessions).about('claude')
     expect(claude.installed).toBe(false)
-    expect(claude.state).toBe(SessionState.UNKNOWN)
-    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(claude.state).toBe(SessionState.MISSING)
+    expect(clients.calls.map((call) => call.bin)).not.toContain('claude')
   })
 
   it('a_tool_missing_from_PATH_is_not_installed_and_is_never_probed', async () => {
     const clients = new ClientsDouble()
       .saying('acli', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
+      .saying('claude', ClaudeAuthStatus.subscribed())
       .saying('ssh', new ProcessOutput({
         code: 1, stdout: '',
         stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.\n",

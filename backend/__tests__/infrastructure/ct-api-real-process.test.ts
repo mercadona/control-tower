@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { Entrypoint, TheCoordinatingSession } from './fixtures/ct-api-process.ts'
 
 type Failure = { code: string, detail: string }
@@ -223,6 +224,7 @@ class LifecycleFixture {
 class ARecordedConversation {
   static readonly ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
   static readonly REPOSITORY = 'acme/widget'
+  static readonly STORY = 'STAFF-128'
 
   static async withATranscriptUnder(config: string): Promise<{ config: string, checkout: string }> {
     const checkout = await ARecordedConversation.#recordedUnder(config)
@@ -246,6 +248,7 @@ class ARecordedConversation {
       conversation: ARecordedConversation.ID,
       repo: ARecordedConversation.REPOSITORY,
       root: checkout,
+      story: ARecordedConversation.STORY,
     }, null, 2)}\n`)
 
     return checkout
@@ -318,24 +321,28 @@ class TheCoordinatingSessionEndpoint {
   }
 }
 
-class ADraftSpecCheckout {
-  static readonly REPOSITORY = 'acme/draft-widget'
-  static readonly SPEC_PATH = 'docs/superpowers/specs/2026-09-18-draft-fixture-execution.md'
+class ACheckoutWithNothingReady {
+  static readonly REPOSITORY = 'acme/idle-widget'
+  static readonly STORY = 'IDLE-1'
 
   static async prepared(): Promise<{ base: string, root: string, state: string, bin: string, ghCalls: string }> {
-    const base = await mkdtemp(join(tmpdir(), 'ct-api-draft-sweep-'))
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-idle-sweep-'))
     const root = join(base, 'checkout')
     const state = join(base, 'config')
     const bin = join(base, 'bin')
     await Promise.all([mkdir(root), mkdir(state), mkdir(bin)])
-    ADraftSpecCheckout.#git(root, 'init', '-q')
-    ADraftSpecCheckout.#git(root, 'config', 'user.email', 'draft@example.test')
-    ADraftSpecCheckout.#git(root, 'config', 'user.name', 'Draft Fixture')
-    ADraftSpecCheckout.#git(root, 'remote', 'add', 'origin', `https://github.com/${ADraftSpecCheckout.REPOSITORY}.git`)
+    ACheckoutWithNothingReady.#git(root, 'init', '-q')
+    ACheckoutWithNothingReady.#git(root, 'config', 'user.email', 'idle@example.test')
+    ACheckoutWithNothingReady.#git(root, 'config', 'user.name', 'Idle Fixture')
+    ACheckoutWithNothingReady.#git(root, 'remote', 'add', 'origin', `https://github.com/${ACheckoutWithNothingReady.REPOSITORY}.git`)
+    await writeFile(join(root, 'README.md'), '# Idle fixture\n')
     await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
-    await writeFile(join(root, ADraftSpecCheckout.SPEC_PATH), ADraftSpecCheckout.#spec())
-    ADraftSpecCheckout.#git(root, 'add', '.')
-    ADraftSpecCheckout.#git(root, 'commit', '-q', '-m', 'draft fixture baseline')
+    await writeFile(
+      join(root, 'docs', 'superpowers', 'specs', `${ACheckoutWithNothingReady.STORY}-execution.md`),
+      '# The idle milestone — Execution spec\n',
+    )
+    ACheckoutWithNothingReady.#git(root, 'add', '.')
+    ACheckoutWithNothingReady.#git(root, 'commit', '-q', '-m', 'idle fixture baseline')
     const ghCalls = join(base, 'gh-calls.ndjson')
     await writeFile(join(bin, 'gh'), [
       '#!/usr/bin/env node',
@@ -347,10 +354,23 @@ class ADraftSpecCheckout {
     const controlTower = join(state, 'control-tower')
     await mkdir(controlTower, { recursive: true })
     await writeFile(join(controlTower, 'checkouts.json'), `${JSON.stringify({
-      checkouts: [{ repo: ADraftSpecCheckout.REPOSITORY, path: root }],
+      checkouts: [{ repo: ACheckoutWithNothingReady.REPOSITORY, path: root }],
+    }, null, 2)}\n`)
+    await mkdir(join(controlTower, 'coordinating-session'), { recursive: true })
+    await writeFile(join(controlTower, 'coordinating-session', 'conversation.json'), `${JSON.stringify({
+      conversation: '0f3c2a8e-5b1d-4c6e-9a7f-2d8b4e1c9a30',
+      repo: ACheckoutWithNothingReady.REPOSITORY,
+      root,
+      story: ACheckoutWithNothingReady.STORY,
     }, null, 2)}\n`)
 
     return { base, root, state, bin, ghCalls }
+  }
+
+  static openIssueReadsIn(ghCalls: string): boolean {
+    const calls = readFileSync(ghCalls, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[])
+
+    return calls.length > 0 && calls.every((argv) => argv.includes(`query=${issuesQueryFor(['OPEN'])}`))
   }
 
   static environment({ state, bin }: { state: string, bin: string }): NodeJS.ProcessEnv {
@@ -368,24 +388,6 @@ class ADraftSpecCheckout {
 
   static #git(cwd: string, ...argv: string[]): void {
     execFileSync('git', argv, { cwd, stdio: 'ignore' })
-  }
-
-  static #spec(): string {
-    return [
-      '# Draft fixture milestone — Execution spec',
-      '',
-      '**Fecha de congelación:** —',
-      '**Estado:** DRAFT',
-      '',
-      '## Hipótesis del experimento',
-      '',
-      '**The bet:** the draft spec dispatches nothing.',
-      '',
-      '**How we will know it failed:** the sweep asks gh for issues.',
-      '',
-      '**Anti-scope — what this epic does NOT do:** no dispatch while draft.',
-      '',
-    ].join('\n')
   }
 }
 
@@ -582,8 +584,7 @@ describe('ct-api entrypoint', () => {
     expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
-    expect(claude.session).toBe('unknown')
-    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(claude.fix).toBe(claude.session === 'ready' ? null : 'claude auth login')
     expect(body.metricsDelivery).toEqual({
       enabled: true,
       variable: 'CT_HARVEST_BQ_TABLE',
@@ -710,10 +711,10 @@ describe('ct-api entrypoint', () => {
     }
   })
 
-  it('the runtime sweeps every registered checkout and mounts the slice message path', async () => {
-    const fixture = await ADraftSpecCheckout.prepared()
+  it('the runtime sweeps the checkout of its held story and mounts the slice message path', async () => {
+    const fixture = await ACheckoutWithNothingReady.prepared()
     try {
-      const started = await Entrypoint.started(ADraftSpecCheckout.environment(fixture))
+      const started = await Entrypoint.started(ACheckoutWithNothingReady.environment(fixture))
 
       const response = await fetch(`http://127.0.0.1:${started.port}/slices/42/message`, {
         method: 'POST',
@@ -724,10 +725,11 @@ describe('ct-api entrypoint', () => {
       expect(response.status).not.toBe(404)
       expect(await response.json()).toMatchObject({ code: 'malformed-repo' })
       await new Promise((resolve) => setTimeout(resolve, 1000))
-      expect(existsSync(fixture.ghCalls)).toBe(false)
+      expect(ACheckoutWithNothingReady.openIssueReadsIn(fixture.ghCalls)).toBe(true)
       expect(started.saidLater()).not.toContain('could not survey')
+      expect(started.saidLater()).not.toContain('relay:')
     } finally {
-      await ADraftSpecCheckout.remove(fixture)
+      await ACheckoutWithNothingReady.remove(fixture)
     }
   }, 30_000)
 

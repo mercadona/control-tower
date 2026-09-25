@@ -13,6 +13,13 @@ class GitEpicBranchDouble {
   static readonly MESSAGE = 'freeze the execution spec'
   static readonly SHA = '9f2c1d7a6b5e4c3d2a1f0e9d8c7b6a5f4e3d2c1b'
   static readonly NO_LOCAL_HEAD = 'fatal: ref refs/remotes/origin/HEAD is not a symbolic ref'
+  static readonly CORRECTION_IN_THE_WAY = [
+    'error: Your local changes to the following files would be overwritten by checkout:',
+    '\tdocs/superpowers/specs/2026-09-14-the-loop-execution.md',
+    'Please commit your changes or stash them before you switch branches.',
+    'Aborting',
+  ].join('\n')
+  static readonly REMOTE_UNREACHABLE = 'fatal: Could not read from remote repository.'
   static readonly PATHS = [
     'docs/superpowers/specs/2026-09-14-the-loop-execution.md',
     'docs/superpowers/specs/2026-09-14-the-loop-design.md',
@@ -24,19 +31,21 @@ class GitEpicBranchDouble {
   localBranch: ProcessOutput
   remoteBranch: ProcessOutput
   fetch: ProcessOutput
+  refresh: ProcessOutput
   switched: ProcessOutput
   add: ProcessOutput
   commit: ProcessOutput
   push: ProcessOutput
   calls: string[][]
 
-  constructor({ current, symbolicRef, remoteHead, localBranch, remoteBranch, fetch, switched, add, commit, push }: {
+  constructor({ current, symbolicRef, remoteHead, localBranch, remoteBranch, fetch, refresh, switched, add, commit, push }: {
     current?: ProcessOutput,
     symbolicRef?: ProcessOutput,
     remoteHead?: ProcessOutput,
     localBranch?: ProcessOutput,
     remoteBranch?: ProcessOutput,
     fetch?: ProcessOutput,
+    refresh?: ProcessOutput,
     switched?: ProcessOutput,
     add?: ProcessOutput,
     commit?: ProcessOutput,
@@ -49,6 +58,7 @@ class GitEpicBranchDouble {
     this.localBranch = localBranch ?? GitEpicBranchDouble.refused('')
     this.remoteBranch = remoteBranch ?? GitEpicBranchDouble.printing('')
     this.fetch = fetch ?? GitEpicBranchDouble.ok()
+    this.refresh = refresh ?? GitEpicBranchDouble.ok()
     this.switched = switched ?? GitEpicBranchDouble.ok()
     this.add = add ?? GitEpicBranchDouble.ok()
     this.commit = commit ?? GitEpicBranchDouble.ok()
@@ -103,6 +113,7 @@ class GitEpicBranchDouble {
     if (argv.includes('symbolic-ref')) return this.symbolicRef
     if (argv.includes('ls-remote') && argv.includes('--symref')) return this.remoteHead
     if (argv.includes('ls-remote')) return this.remoteBranch
+    if (argv.includes('fetch') && argv.includes('--prune')) return this.refresh
     if (argv.includes('fetch')) return this.fetch
     if (argv.includes('switch')) return this.switched
     if (argv.includes('add')) return this.add
@@ -121,6 +132,13 @@ class GitEpicBranchDouble {
     await epic.push({ root: GitEpicBranchDouble.CHECKOUT, branch })
 
     return branch
+  }
+
+  async restarted(): Promise<void> {
+    await this.branch().restartFromDefault({
+      root: GitEpicBranchDouble.CHECKOUT,
+      branch: GitEpicBranchDouble.MILESTONE_BRANCH,
+    })
   }
 
   cut(): boolean {
@@ -151,7 +169,7 @@ describe('GitEpicBranch', () => {
       '-C', GitEpicBranchDouble.ROOT, 'switch', '--create', GitEpicBranchDouble.MILESTONE_BRANCH,
     ])
     expect(git.calls).toContainEqual([
-      '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE,
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE,
       GitEpicBranchDouble.MILESTONE_BRANCH,
     ])
     expect(git.calls.some((argv) => argv.includes(GitEpicBranchDouble.DEFAULT_BRANCH))).toBe(false)
@@ -230,9 +248,57 @@ describe('GitEpicBranch', () => {
       '-C', GitEpicBranchDouble.ROOT, 'commit', '-m', GitEpicBranchDouble.MESSAGE, '--', ...GitEpicBranchDouble.PATHS,
     ])
     expect(git.calls).toContainEqual([
-      '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE, GitEpicBranchDouble.EPIC_BRANCH,
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE, GitEpicBranchDouble.EPIC_BRANCH,
     ])
     expect(git.cut()).toBe(false)
+  })
+
+  it('a milestone branch started again is refreshed from the remote and reset onto the default branch, carrying the uncommitted correction', async () => {
+    const git = new GitEpicBranchDouble()
+
+    await git.restarted()
+
+    expect(git.calls.slice(-2)).toEqual([
+      ['-C', GitEpicBranchDouble.ROOT, 'fetch', '--prune', GitEpicBranch.REMOTE],
+      [
+        '-C', GitEpicBranchDouble.ROOT, 'switch', '--no-track', '--force-create',
+        GitEpicBranchDouble.MILESTONE_BRANCH, `${GitEpicBranch.REMOTE}/${GitEpicBranchDouble.DEFAULT_BRANCH}`,
+      ],
+    ])
+  })
+
+  it('a push leases the remote branch, so a milestone branch started again replaces its squashed history instead of being refused', async () => {
+    const git = new GitEpicBranchDouble()
+
+    await git.branch().push({ root: GitEpicBranchDouble.CHECKOUT, branch: GitEpicBranchDouble.MILESTONE_BRANCH })
+
+    expect(git.calls).toEqual([[
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE,
+      GitEpicBranchDouble.MILESTONE_BRANCH,
+    ]])
+  })
+
+  it('a correction the default branch would overwrite refuses the restart in git\'s own words', async () => {
+    const git = new GitEpicBranchDouble({
+      switched: GitEpicBranchDouble.refused(GitEpicBranchDouble.CORRECTION_IN_THE_WAY),
+    })
+
+    const refusal = await git.restarted().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect((refusal as Error).message).toContain(GitEpicBranchDouble.CORRECTION_IN_THE_WAY)
+  })
+
+  it('a remote that cannot be refreshed refuses the restart before the branch is touched', async () => {
+    const git = new GitEpicBranchDouble({
+      refresh: GitEpicBranchDouble.refused(GitEpicBranchDouble.REMOTE_UNREACHABLE),
+    })
+
+    const refusal = await git.restarted().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect((refusal as Error).message).toContain(GitEpicBranchDouble.REMOTE_UNREACHABLE)
+    expect(git.calls.some((argv) => argv.includes('switch'))).toBe(false)
   })
 
   it('current answers the branch the checkout is on', async () => {

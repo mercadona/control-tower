@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
@@ -24,22 +24,6 @@ type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryNa
 type PullRequestAsked = { branch: string, repository: RepositoryName }
 type ReslicingAsked = { branch: string, repository: RepositoryName, approving: Reslicing, into: string }
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
-
-class EpicSpecsDouble extends EpicSpecs {
-  answer: EpicSpec | null
-  asked: CheckoutRoot[]
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.answer = answer
-    this.asked = []
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.asked.push(root)
-    return this.answer
-  }
-}
 
 class PublishedSpecsDouble extends PublishedSpecs {
   answer: boolean
@@ -304,7 +288,7 @@ class Flow {
 
   async run() {
     return new ReadEpicGroom(this).execute(new ReadEpicGroomParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: EpicSpecsDouble.STORY,
     }))
   }
 }

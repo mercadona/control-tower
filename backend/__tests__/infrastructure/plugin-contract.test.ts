@@ -3,18 +3,16 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BigQueryTable } from '../../../plugin/scripts/bigquery-load.js'
-import { LOOP_STATUS_LABELS } from '../../../plugin/scripts/groom.js'
+import { LOOP_STATUS_LABELS, buildIssueBody } from '../../../plugin/scripts/groom.js'
 import { STATUS_LADDER } from '../../../plugin/scripts/harvest.js'
 import {
   STEPS, RUN_STATES, OUTCOMES, DEFAULT_BUDGETS, newRun, after, deliveredRun,
 } from '../../../plugin/scripts/run-machine.js'
 import { StepSeal } from '../../../plugin/scripts/dispatch-gate.js'
 import { extractTasks } from '../../../plugin/scripts/plan-tasks.js'
-import { GhPlanIssues, PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
+import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RunFileProgress } from '../../src/infrastructure/run-file-progress.ts'
-import { UserStory } from '../../src/domain/value-objects/user-story.ts'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.ts'
 import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
@@ -29,8 +27,8 @@ class PluginRunMachine {
 }
 
 describe('the status labels this backend writes and the plugin reads', () => {
-  it('both_ends_of_the_claim_are_labels_the_loop_declares_instead_of_names_invented_here', () => {
-    expect(LOOP_STATUS_LABELS).toContain(GhPlanIssues.IN_PROGRESS_LABEL)
+  it('both_ends_of_the_promotion_are_labels_the_loop_declares_instead_of_names_invented_here', () => {
+    expect(LOOP_STATUS_LABELS).toContain(GhPlanIssues.BACKLOG_LABEL)
     expect(LOOP_STATUS_LABELS).toContain(GhPlanIssues.READY_LABEL)
   })
 
@@ -74,14 +72,15 @@ describe('the harvest table this backend hands the plugin', () => {
 })
 
 describe('the sections the errand sends the agent to read', () => {
-  const body = () => PlanIssueBody.of({
-    story: new UserStory({
-      key: new UserStoryKey('XOP-4909'), summary: 'la métrica de los campeones', description: 'como analista quiero',
-    }),
-  })
+  const withEpicContext = buildIssueBody as unknown as (slice: object, specRef: null, epicContext: string) => string
+  const body = (): string => withEpicContext(
+    { n: 1, name: 'la métrica de los campeones', entrega: '', type: '', e2e: '', ac: [], deps: [], protected: '' },
+    null,
+    'como analista quiero',
+  )
 
-  it('the_two_it_names_are_headings_the_plugin_really_renders_in_the_body_we_write', () => {
-    const headings = body().split('\n').filter((line) => line.startsWith('## '))
+  it('the_two_it_names_are_headings_the_plugin_really_renders_in_every_issue_body', () => {
+    const headings = body().split('\n').filter((line: string) => line.startsWith('## '))
 
     expect(headings).toContain(`## ${PlanAgentBrief.MILESTONE_CONTEXT}`)
     expect(headings).toContain(`## ${PlanAgentBrief.INHERITED_CONTEXT}`)
@@ -237,13 +236,12 @@ class ExecutionSpecTemplate {
 }
 
 describe('the execution spec the plugin seeds, as this backend reads and freezes it', () => {
-  it('the execution spec template the plugin seeds reads here as a draft that names its design document', async () => {
+  it('the execution spec template the plugin seeds reads here as a draft', async () => {
     const spec = await ExecutionSpecTemplate.read()
 
     expect(spec.isFrozen()).toBe(false)
     expect(spec.frozenOn()).toBe(null)
     expect(spec.title()).toBe('<Milestone name>')
-    expect(spec.design()).toBe('docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md')
   })
 
   it('freezing that template rewrites the two header lines the plugin left blank and nothing else', async () => {

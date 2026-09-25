@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   PublishReslicing, PublishReslicingParams, ReslicingOutcome,
 } from '../../src/application/actions/publish-reslicing.ts'
-import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicSpecsDouble } from '../epic-specs-double.ts'
 import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -17,48 +17,14 @@ type RereadAsked = { root: CheckoutRoot, spec: EpicSpec }
 type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 type CommittedAsked = { root: CheckoutRoot, paths: string[] }
 type PublishingAsked = { root: CheckoutRoot, milestone: string }
+type RestartAsked = { root: CheckoutRoot, branch: string }
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
-class EpicSpecsDouble extends EpicSpecs {
-  answer: EpicSpec | null
-  held: EpicSpec | null
-  mostRecentAsked: CheckoutRoot[]
-  rereadAsked: RereadAsked[]
-  rewriteAsked: number
-
-  constructor(answer: EpicSpec | null) {
-    super()
-    this.answer = answer
-    this.held = answer
-    this.mostRecentAsked = []
-    this.rereadAsked = []
-    this.rewriteAsked = 0
-  }
-
-  static withTheBranchHolding(answer: EpicSpec, held: EpicSpec): EpicSpecsDouble {
-    const double = new EpicSpecsDouble(answer)
-    double.held = held
-
-    return double
-  }
-
-  async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
-    this.mostRecentAsked.push(root)
-    return this.answer
-  }
-
-  async reread(subject: RereadAsked): Promise<EpicSpec | null> {
-    this.rereadAsked.push(subject)
-    return this.held
-  }
-
-  async rewrite(): Promise<void> {
-    this.rewriteAsked += 1
-  }
-}
-
 class EpicBranchDouble extends EpicBranch {
+  checkedOut: () => void = () => {}
   publishingAsked: PublishingAsked[]
+  restartAsked: RestartAsked[]
+  steps: string[]
   committedAsked: CommittedAsked[]
   commitAsked: CommitAsked[]
   pushAsked: string[]
@@ -68,6 +34,8 @@ class EpicBranchDouble extends EpicBranch {
   constructor({ isCommitted = false, isPushed = false }: { isCommitted?: boolean, isPushed?: boolean } = {}) {
     super()
     this.publishingAsked = []
+    this.restartAsked = []
+    this.steps = []
     this.committedAsked = []
     this.commitAsked = []
     this.pushAsked = []
@@ -79,9 +47,19 @@ class EpicBranchDouble extends EpicBranch {
     return new EpicBranchDouble({ isCommitted: true, isPushed: true })
   }
 
+  static withTheCorrectionCommittedAndNotPushed(): EpicBranchDouble {
+    return new EpicBranchDouble({ isCommitted: true, isPushed: false })
+  }
+
   async publishing(subject: PublishingAsked): Promise<string> {
     this.publishingAsked.push(subject)
+    this.checkedOut()
     return Mother.BRANCH
+  }
+
+  async restartFromDefault(subject: RestartAsked): Promise<void> {
+    this.restartAsked.push(subject)
+    this.steps.push('restart')
   }
 
   async committed(subject: CommittedAsked): Promise<boolean> {
@@ -91,6 +69,7 @@ class EpicBranchDouble extends EpicBranch {
 
   async commit(subject: CommitAsked): Promise<void> {
     this.commitAsked.push(subject)
+    this.steps.push('commit')
   }
 
   async pushed(): Promise<boolean> {
@@ -198,6 +177,7 @@ class Flow {
     this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? PullRequestsDouble.withNoneOpen()
     this.revisions = Mother.REVISIONS
+    this.branch.checkedOut = () => this.specs.checkOutTheMilestoneBranch()
   }
 
   static reading(spec: EpicSpec | null): Flow {
@@ -206,7 +186,7 @@ class Flow {
 
   async run() {
     return new PublishReslicing(this).execute(new PublishReslicingParams({
-      root: Mother.ROOT, repository: Mother.REPOSITORY,
+      root: Mother.ROOT, repository: Mother.REPOSITORY, story: EpicSpecsDouble.STORY,
     }))
   }
 }
@@ -233,7 +213,7 @@ describe('PublishReslicing', () => {
     expect(opened.title).toBe(announced.titleOf(Mother.MILESTONE))
     expect(opened.body).toBe(announced.bodyFor(Mother.MILESTONE))
     expect(Reslicing.announcedIn(opened.body)).toEqual(announced)
-    expect(flow.specs.rewriteAsked).toBe(0)
+    expect(flow.specs.rewriteAsked).toEqual([])
   })
 
   it('the revision it announces is the very text it publishes, so a later edit cannot inherit this approval', async () => {
@@ -270,9 +250,41 @@ describe('PublishReslicing', () => {
 
     await flow.run()
 
-    expect(flow.specs.rereadAsked).toEqual([{ root: Mother.ROOT, spec: flow.specs.answer }])
+    expect(flow.specs.asked).toEqual([
+      { root: Mother.ROOT, story: EpicSpecsDouble.STORY }, { root: Mother.ROOT, story: EpicSpecsDouble.STORY },
+    ])
     expect(flow.branch.commitAsked[0].paths).toEqual([held.path])
     expect(flow.branch.committedAsked).toEqual([{ root: Mother.ROOT, paths: [held.path] }])
+  })
+
+  it('a correction whose branch has no pull request open starts again from the default branch before committing, so the squashed freeze does not travel with it', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([{ root: Mother.ROOT, branch: Mother.BRANCH }])
+    expect(flow.branch.steps).toEqual(['restart', 'commit'])
+  })
+
+  it('a correction made while the previous re-slicing is still open keeps growing that pull request instead of starting again', async () => {
+    const flow = new Flow({ pullRequests: PullRequestsDouble.withOneAlreadyOpen() })
+
+    const published = await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([])
+    expect(flow.branch.commitAsked).toHaveLength(1)
+    expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
+    expect(published.pullRequest).toEqual(Mother.STANDING)
+  })
+
+  it('a correction already committed and not yet pushed is resumed where it stands, never rebuilt from the default branch', async () => {
+    const flow = new Flow({ branch: EpicBranchDouble.withTheCorrectionCommittedAndNotPushed() })
+
+    const published = await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([])
+    expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
+    expect(published.pullRequest).toEqual(Mother.OPENED)
   })
 
   it('a spec that is not frozen is refused and nothing is committed, pushed or opened', async () => {
@@ -283,6 +295,7 @@ describe('PublishReslicing', () => {
     expect(published.outcome).toBe(ReslicingOutcome.NOT_FROZEN)
     expect(published.pullRequest).toBeNull()
     expect(flow.branch.publishingAsked).toEqual([])
+    expect(flow.branch.restartAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.branch.pushAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])

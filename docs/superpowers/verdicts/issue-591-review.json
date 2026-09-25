@@ -1,0 +1,73 @@
+{
+  "issue": 591,
+  "tasks_total": 10,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Each of the ten objectives is produced by the diff: DiskSliceBaselines reads the SLICE.md baseline (Task 1); StreamImplementationActivities picks the latest implementation call by startedAt and reads its stream (Task 2); ReadMilestoneProgress answers pending, running, needs-person and delivered lines with step, task X of Y, step start, attention and tasks (Tasks 3-4); GET /milestone-progress answers them in snake case (Task 5); ReopenCoordinatingSession resumes or opens with the brainstorming, groom or implementation prompt chosen by StoryStepPolicy (Tasks 6-7); POST /coordinating-session/reopen remembers the reopened session live under a minted target (Task 8); the layer census test exists (Task 9); API.md carries both sections (Task 10). The fix round changes none of these behaviours; it only hardens the baseline read.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Every TDD line of Tasks 1-9 is matched by the test it names, over the input it names, against the value it names. Task 9's twin now feeds the matcher the plan's literal '../../infrastructure/gh-epic-issues.ts' next to 'node:fs' and asserts both offend, which closes the previous round's finding; the two isolating specifiers stay as extra assertions. Task 10 is No TDD.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Every Contract block matches the diff name by name, as in the previous round; the fix keeps DiskSliceBaselines' public contract (constructor({ read }), isRed({ root, issue }): Promise<boolean>) and only adds private statics. The api-server call site, the ct-api wiring and both API.md Final text blocks are unchanged and verbatim.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The rows the diff bears on keep their values: D-12, D-13, D-13a, D-17, Milestone source, Line state, the three attention rows, Step start, Unreadable activity, Other read failures and Reopen admission. The fix to the baseline read makes a malformed baseline a SliceBaselineNotUnderstood, a PlanFailure that the route answers as 400 milestone-progress-not-read, exactly what the 'Other read failures' row prescribes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars followed as before (DiskSliceEscalations, StreamPlanningActivities, EpicGroomRoute.reading, GroomSessionRoute). The previous high finding is closed: plan-refusal.test.ts now lists SliceBaselineFailure and ImplementationActivityFailure among the families and excludes their subtrees, the same way it already treats PlanningActivityFailure and WorkProgressFailure, so the exhaustive-refusal guard covers every PlanFailure again and the suite is green. The previous medium finding is closed: DiskSliceBaselines no longer casts the frontmatter; #outcomeOf narrows with a type guard and raises SliceBaselineNotUnderstood for a baseline that is not a mapping (including a list) or an outcome that is not text, while null and absent values still read as not red, as boundaries.md asks ('A key we declared that arrives missing or wrongly typed still breaks the read'). defects.md, rule by rule: closed vocabulary - conforme, the states, statuses, steps and attention kinds are closed and dispatched without a catch-all. Raw map as the return value of logic - conforme, untyped objects exist only as the last snake-case projection before the wire; #outcomeOf returns a string or null, not a map. Two fields that have to agree - conforme, total, delivered and a task's findings are derived and absences are null. Errors named for where - conforme, the new raises reuse SliceBaselineNotUnderstood, named for what happened. One low remains from the previous round: the adapter test still names no capture for its SLICE.md shape.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Two pre-existing test files are touched. refusal-codes.test.ts only adds two vocabularies, which is stricter. plan-refusal.test.ts extends the FAMILIES list and the instanceof exclusions of startingAPlan; that narrows which exceptions the guard demands a PlanCollapse refusal for, and it is accounted for: the two excluded families are born in this slice, are answered without PlanCollapse (ImplementationActivityFailure is swallowed by ReadMilestoneProgress per the 'Unreadable activity' row, SliceBaselineFailure is answered by MilestoneProgressRoute per the 'Other read failures' row), and no pre-existing exception leaves the guard.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Every promised behaviour, including the hardened baseline read, is produced by production lines; the doubles only answer ports and the fixtures only supply SLICE.md text.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every path of the ten tasks is named by some task's Files line and frontend/ is untouched. The fix round touches four paths; three belong to Task 1 and Task 9. backend/__tests__/infrastructure/plan-refusal.test.ts is named by no task's Files line, and it is the change the previous veto asked for: the slice's own new exception families broke that guard, so the fix could land nowhere else. Reported as a low for the record rather than a defect. The plan file is not amended.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The five tests the fix round adds to disk-slice-baselines.test.ts are deterministic (literal markdown through a scripted read that raises on an unscripted path), isolated (each builds its own read double and adapter) and assert on what the adapter answers: each fails if its guard in #outcomeOf is removed, since the old cast answered false in every case. The added matcher assertion in layer-imports.test.ts calls the real matcher. No finer finding is reported, so the skill was not needed to quote.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "Carried over from the previous round: the adapter test declares the SLICE.md frontmatter shape it parses but does not name where that shape was captured.",
+        "path": "backend/__tests__/infrastructure/disk-slice-baselines.test.ts",
+        "line": 10,
+        "evidence": "conventions/testing.md: \"the shape it declares comes from a real capture, never from imagination ... so the test names where its capture came from.\""
+      },
+      {
+        "rule": "alcance",
+        "severity": "low",
+        "what": "plan-refusal.test.ts is touched by no task's Files line. The change is the one the previous veto required, because the slice's new PlanFailure families broke that guard, so it is justified; recorded so the path outside the plan is visible.",
+        "path": "backend/__tests__/infrastructure/plan-refusal.test.ts",
+        "line": 41,
+        "evidence": "\"'RunFailure', 'EscalationFailure', 'WorkProgressFailure', 'SliceBaselineFailure', 'ImplementationActivityFailure',\""
+      }
+    ],
+    "review_token": "3e2665682151f444b63f811c900f512ec817188ff2a9c6192ee14efbbb592a36"
+  }
+}

@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
@@ -78,7 +77,6 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       externalTools: spy,
-      sessions: new PlanSessions(),
       activePlans: undefined,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,

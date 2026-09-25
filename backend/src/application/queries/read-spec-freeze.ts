@@ -5,16 +5,22 @@ import type { EpicBranch } from '../../domain/ports/epic-branch.ts'
 import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
 import type { FreezeFinding } from '../../domain/value-objects/freeze-finding.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 export class ReadSpecFreezeParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor({ root, repository, story }: {
+    root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl,
+  }) {
     this.root = root
     this.repository = repository
+    this.story = story
     Object.freeze(this)
   }
 }
@@ -62,7 +68,7 @@ export class ReadSpecFreeze {
   }
 
   async execute(params: ReadSpecFreezeParams): Promise<SpecFreezeRead> {
-    const spec = await this.specs.mostRecent(params.root)
+    const spec = await this.specs.of({ root: params.root, story: params.story })
     if (spec === null) {
       return new SpecFreezeRead({ state: SpecFreezeState.NO_SPEC, spec: null, findings: [], frozenOn: null, pullRequest: null })
     }

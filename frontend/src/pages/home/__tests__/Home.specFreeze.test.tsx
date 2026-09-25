@@ -84,15 +84,21 @@ describe('Home and gate 1', () => {
     implementing.unmount()
   })
 
-  it.each([
-    ['live', CoordinatingSessionMother.liveCloseFailed],
-    ['recovered-ended', CoordinatingSessionMother.endedCloseFailed],
-  ])('keeps spec freezing usable while a %s failed closure reserves session opening', async (_state, failed) => {
-    stubBackend(NO_ACTIVE_PLANS, failed())
+  it('keeps spec freezing usable in the band while a live failed closure reserves session opening', async () => {
+    stubBackend(NO_ACTIVE_PLANS, CoordinatingSessionMother.liveCloseFailed())
+    openHome()
+
+    expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeEnabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
+  })
+
+  it('keeps spec freezing usable while a recovered-ended failed closure reserves session opening', async () => {
+    stubBackend(NO_ACTIVE_PLANS, CoordinatingSessionMother.endedCloseFailed())
     openHome()
 
     expect(await screen.findByRole('button', { name: 'Congelar el spec' })).toBeEnabled()
     expect(screen.getByLabelText('Ticket')).toBeDisabled()
   })
+
 })
 import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

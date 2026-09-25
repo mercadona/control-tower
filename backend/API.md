@@ -59,147 +59,6 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 
 ---
 
-## `POST /start-plan`
-
-Milestone dispatch checks repository preparation before claiming any candidate.
-A `repository-preparation-required` refusal carries the repository, the inspected
-remote commit, affected paths and proposed corrections in `detail`. The same
-diagnostic is sent to the matching coordinating session. No plan agent is launched
-on a failed check.
-
-For the Playground/Catalog layout, each freshly cut worktree receives an ignored
-`docker-compose.local.yml` with a worktree-specific project name and resets for
-the base configuration's published ports. Existing overrides are inspected, not
-overwritten. Make resolves `DOCKER_COMMAND`; the checker asks that Compose
-invocation for `config --no-env-resolution --format json`, then verifies the
-project name and `/app` bind mount before baseline execution. When Make declares
-`env-start`, `collectstatic` and `compilemessages`, those targets then run in that
-order before the baseline or agent can start. A failed target returns the existing
-preparation refusal with the command and its diagnostic. Repositories without all
-three targets retain configuration-only preparation. Credential files are not
-copied and live mounts are not inspected. Normal workspace preparation cleanup
-still applies when preparation fails.
-
-Starts headless plan agents for a milestone. The request selects **every**
-admissible ready issue with the
-plugin's ordering, dependency and token rules — there is no cap — claims each of
-them through `dispatch-check`, prepares its worktree and starts planning in a
-newly minted conversation. A slice whose `touches` collide with work that is not
-merged yet waits for that merge, and a slice that fails to start stops none of
-the others.
-
-```json
-{"milestone":"Headless delivery"}
-```
-
-The body contains exactly that one field. It uses the repository and checkout
-held by the coordinating session. The held milestone must match and gate 2 must
-already have left the work groomed or authorised.
-
-### 202 Accepted
-
-The answer covers the whole batch: `started` holds one object per plan that
-started — with `id` always `null` — and `failed` names each slice that did not,
-with the issue it was, and the `code` and `detail` that refusal would have
-answered on its own.
-
-```json
-{"status":"started",
- "started":[{"id":null,"repo":"owner/name",
-             "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
-             "agent":"11111111-1111-4111-8111-111111111111","branch":"feat/7",
-             "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
-             "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],
- "failed":[{"issue":{"number":8,"url":"https://github.com/owner/name/issues/8"},
-            "repo":"owner/name","code":"workspace-not-prepared",
-            "detail":"the worktree could not be cut"}]}
-```
-
-When nothing in the batch started, the request refuses with the first failure
-instead, exactly as it did when it dispatched one slice at a time.
-
-`agent` is the durable Claude conversation UUID. Every new admission writes
-machine provenance before planning. After a successful
-committed plan is published to the issue, the backend drives the plugin's run
-sequencer in that same conversation. There is no feature flag, toggle,
-environment variable or alternate activation path for new admissions. `root` is
-git's canonical checkout path.
-
-The plugin remains the sequencing authority: its real `ct-step next` output
-chooses each call, command, retry, discard, reconciliation and terminal result.
-For each supported model dispatch the backend makes one recorded `--resume
-<agent>` call, identified by `run:<oracle-ticket>`, with the exact prepared file
-paths. The implementer receives the plugin's report schema and declared model
-and tools. Judge, advisor, slice-judge and reconciler calls receive the plugin's
-role files. Implementer, judge, advisor and slice-judge calls receive their
-response schema. Reconciler calls return edits without a response schema.
-Judge roles receive their parsed plugin agent definition through `--agents` and `--agent`.
-Commands run through the dedicated tool adapter and do not create model calls.
-
-The currently supported model roles are implementer, task judge, advisor,
-slice judge and `ct-reconciler`. The plugin's current E2E dispatch has no role in
-`RoleBytes`, and slice-agent reconciliation fallbacks have no prepared role
-package. Both are refused as unsupported material rather than run with invented
-context. A malformed or ambiguous consuming command, changed sealed input, or
-missing prepared file is also a refusal.
-
-`baseline` is what the target repository's suite answered in the worktree that
-was just cut, **the same measurement that is sown into `.agent/SLICE.md`** for
-the agent to read — one measurement, two readers, so the page and the agent
-cannot disagree about it.
-
-| `outcome` | Meaning | What the UI does |
-|---|---|---|
-| `verde` | the suite ran and passed | nothing |
-| `rojo` | the suite ran and failed | say so: the agent will build on a broken repository and cannot tell its own failures from the ones already there |
-| `no-verificado` | there was nothing to run | say so: the repository declares no test command |
-
-`command` is the literal command that ran, `null` when there was none. `summary`
-is capped at 240 characters by the measuring code.
-
-The three values are the plugin's vocabulary, in Spanish, because they are what
-`.agent/SLICE.md` carries and what the agent reads; they move when that
-vocabulary does. **A plan starts whatever the outcome** — whether to work on a
-baseline that is not green is a person's decision, and until now that person was
-never told: the verdict went to the backend's error channel and the page said
-the request had completed.
-
-### Refusals
-
-From a tool refusing:
-
-| `code` | Meaning |
-|---|---|
-| `user-story-not-read` | the tracker holding the story refused — Jira for a story key, GitHub for an issue url |
-| `user-story-not-understood` | the tracker holding the story answered something unreadable |
-| `plan-issue-not-created` | `gh issue create` refused |
-| `plan-issue-not-named` | the created issue could not be identified |
-| `plan-issue-not-claimed` | the claim on the issue failed |
-| `dispatch-not-available` | the plugin selected no slice: none is ready in the milestone, or every ready one is held by an unmet dependency or an `area:`/`touches:` collision |
-| `dispatch-not-read` | the complete open/closed GitHub issue table could not be read |
-| `dispatch-not-understood` | the issue table or plugin dispatch result was ambiguous |
-| `plan-agent-never-launched` | definite pre-worker or worker-spawn failure; this start refusal alone does not authorize cleanup |
-| `plan-agent-not-launched` | durable call preparation, worker acceptance or execution failed |
-| `plan-agent-not-named` | durable call evidence was malformed or conflicted with immutable evidence |
-| `workspace-not-prepared` | the worktree could not be cut |
-| `workspace-not-cleaned` | compensation could not remove a workspace safely |
-| `workspace-not-read` | git refused when surveying |
-| `workspace-not-understood` | git answered something unreadable |
-
-The request itself can answer `start-milestone-malformed` (the body is not
-exactly `{"milestone":"name"}`), `start-milestone-no-session`,
-`start-milestone-mismatch`, `start-milestone-not-dispatchable`, or
-`start-plan-in-progress`. Application refusals answer 400 and carry their
-diagnostic in `detail`.
-
-```
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/start-plan \
-  -d '{"milestone":"Headless delivery"}'
-```
-
----
-
 ## `GET /work-progress/:issue?repo=owner/name`
 
 One current-progress query for recorded work, from planning through review and
@@ -588,7 +447,7 @@ inspect-only.
 Uses the same exact request body. It answers **200 OK** with the same `agent`
 shape only after checked workspace removal, checked issue requeue and durable
 retirement finish. Cleanup requires an immutable definite non-launch receipt;
-an absent worktree or `plan-agent-never-launched` response alone is not proof.
+an absent worktree or a failure that never launched the agent is not proof on its own.
 Retries reuse cleanup evidence and never force-remove a worktree or branch.
 Before changing the issue and again before retirement, cleanup freshly confirms
 the canonical repository, complete worktree registration, absent local branch,
@@ -610,7 +469,7 @@ are not converted into those categories and use the API's shared HTTP 400
 | `cleanup-plan-failed` | 400 | an operational record, status, git or claim call failed |
 | `cleanup-plan-unreadable` | 400 | durable or collaborator evidence is malformed |
 
-Both POSTs share the single-API repository reservation used by `/start-plan`.
+Both POSTs share one repository reservation with the starts of the dispatch relay.
 They require `Content-Type: application/json`, reject foreign origins, refuse
 oversized bodies, and expose only `POST` through the ordinary protocol codes.
 They need no gate key. The coordinating prompt discovers these endpoints from
@@ -636,8 +495,9 @@ whether a merged slice's metrics have anywhere to go. No parameters. It exists
 to be asked **before** starting work: until now each of these failed at the
 moment it was used, mid-flow, in the tool's own words.
 
-Four are asked about a credential. Claude's login remains unobservable from
-this process, so its session is `unknown` when the binary is installed.
+All five are asked about a credential. `claude` counts as logged in with any
+account `claude auth status` reports, a subscription or an API key. That check
+is local: it says a credential is configured, not that the server accepts it.
 
 **200 OK**
 
@@ -645,8 +505,7 @@ this process, so its session is `unknown` when the binary is installed.
 {"ready":true,"tools":[
   {"tool":"gh","installed":true,"session":"ready","fix":null},
   {"tool":"acli","installed":true,"session":"ready","fix":null},
-  {"tool":"claude","installed":true,"session":"unknown",
-    "fix":"claude, then /login \u2014 not observable from this process"},
+  {"tool":"claude","installed":true,"session":"ready","fix":null},
   {"tool":"git","installed":true,"session":"ready","fix":null},
    {"tool":"bq","installed":true,"session":"ready","fix":null}],
  "metricsDelivery":{"enabled":true,"variable":"CT_HARVEST_BQ_TABLE",
@@ -728,7 +587,7 @@ How each one is asked:
 |---|---|---|
 | `gh` | `gh auth status` | it exited 0 |
 | `acli` | `acli jira auth status` | it exited 0 |
-| `claude` | nothing | never: its login is not observable from another process |
+| `claude` | `claude auth status` | it exited 0 |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
 
@@ -927,12 +786,20 @@ The required user story hydrates the conversation: the coordinating session
 starts knowing its summary and description. Additional context and feedback
 are entered directly in that conversation.
 
+The story also names the conversation's two documents:
+`docs/superpowers/specs/<story>-design.md` and
+`docs/superpowers/specs/<story>-execution.md`, where `<story>` is the key, or
+`<owner>__<repo>-<number>` for a GitHub issue. The phase prompt gives both
+paths, and every gate reads the spec at that path and nowhere else. A spec
+already there as a draft is continued by the new conversation; a frozen one
+refuses the opening, because that story's brainstorming is over.
+
 **202 Accepted**
 
 ```json
 {"status":"brainstorming","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
@@ -963,6 +830,9 @@ From opening the conversation, once the body is well-formed:
 
 | `code` | Meaning |
 |---|---|
+| `story-spec-frozen` | the checkout already holds this story's execution spec frozen: `detail` names the story and the path |
+| `epic-spec-not-read` | this story's execution spec exists but could not be read |
+| `epic-spec-not-understood` | this story's execution spec carries no title |
 | `user-story-not-read` | the tracker holding the story refused |
 | `user-story-not-understood` | the tracker holding the story answered something unreadable |
 | `workspace-not-understood` | git answered something unreadable while resolving the checkout's canonical root |
@@ -971,16 +841,9 @@ From opening the conversation, once the body is well-formed:
 | `session-hooks-not-written` | the checkout's `.claude/settings.local.json` could not be written |
 | `session-hooks-not-understood` | that settings file exists but is not the JSON object the hooks are merged into |
 
-All seven answer 400 and carry the tool's own message in `detail`, the same
-convention `POST /start-plan`'s tool refusals follow.
-
-`PlanCollapse` (`backend/src/infrastructure/start-plan-route.ts`) also declares
-`conversation-not-understood`, the code for a conversation record that is on
-disk but cannot be parsed. No endpoint answers it today: that record is only
-read by `records.recall()` at the backend's start-up, before this route or any
-other ever runs, and `ct-api.ts` awaits that recovery with nothing catching it
-— an unreadable record currently crashes the backend at start-up instead of
-being reported. That gap is open, not this task's to close.
+All ten answer 400 and carry the tool's own message in `detail`. `story-spec-frozen` is
+checked right after the checkout is confirmed, so it is answered before the
+tracker is asked or anything is written or spawned.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -1010,7 +873,7 @@ A conversation is live:
 ```json
 {"status":"live","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
  "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"},
  "timeline":[
@@ -1020,6 +883,11 @@ A conversation is live:
     "detail":"should the button read Arrancar brainstorming?"}
  ]}
 ```
+
+`story` is the user story the conversation was opened for, exactly as
+`POST /coordinating-session` accepted it: a key (`ABC-123`) or a GitHub issue
+url. `unresumable` and `ended` carry it too, and so does every answer that
+opens a conversation, so the page names the story from the first paint.
 
 `attention.status` is `working` or `waiting`, moved by `POST /session-hooks`.
 `attention.question` carries the live question while `waiting`, and is `null`
@@ -1043,7 +911,7 @@ start-up:
 ```json
 {"status":"unresumable","operation":"idle","target":"6d13bc52-740f-49f8-b128-15e597674f3a",
  "conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "detail":"claude code no longer holds this conversation: the coordinating session was not resumed",
  "timeline":[{"id":"3f1c...","kind":"opened","at":"2026-09-15T09:00:00.000Z","detail":null}]}
 ```
@@ -1128,23 +996,39 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ---
 
+## `POST /coordinating-session/reopen`
+
+Reopens the held coordinating session after it ended by itself. The request carries no body and
+the `x-coordinating-target` header of the held session. When the conversation's transcript
+exists, it resumes that conversation with `claude --resume <id>`. Otherwise it opens a new one
+with the prompt of the story's step: `brainstorming` for a draft spec, `groom` for a frozen spec
+that gate 2 did not authorise, `implementation` for an authorised milestone. It answers `202`
+with `status` (`resumed` or `opened`), `step`, `target`, `conversation`, `repo`, `story`, `root`
+and `session`. A live session answers `409 coordinating-session-not-ended`. An open, a recovery
+or a reopen already under way answers `400 coordinating-session-busy`, and a
+session whose close failed answers `409 coordinating-session-close-failed` until
+that close is finished.
+
+---
+
 ## `POST /groom-session`
 
-Gate 2's way into the conversation, by either of two roads. The prompt is the
-same on both: `PhasePrompt.groom` invokes the plugin's own
-`control-tower-loop:ct-groom` skill, names the milestone and its frozen spec,
-and tells the session that the issues are not its to create and that a change
-to the slicing is an edit of §9 which this program publishes. No worktree is
-cut and no branch is created.
+Gate 2's way into the conversation, by either of two roads. Both ask the
+session to review the slicing: they name the milestone and its frozen spec, and
+tell the session that the issues are not its to create and that a change to
+the slicing is an edit of §9 which this program publishes. Neither points the
+session at `ct-groom`, which is the command that creates the issues. No
+worktree is cut and no branch is created.
 
 Which road depends on the conversation this backend holds:
 
 - **no live conversation** — an `ended` or `unresumable` one, or a failed
   closure — opens a new conversation in the groom phase and answers
   `status: grooming` with the target it minted;
-- **a live conversation** is asked instead: the prompt is typed into its
-  terminal as one line and submitted, and the answer is `status: typed`. No
-  second conversation is opened and the held target does not change.
+- **a live conversation** is asked instead: only the review of the slicing,
+  `PhasePrompt.groomReview`, is pasted into its terminal as one bracketed paste
+  and submitted by an Enter sent on its own, and the answer is `status: typed`.
+  No second conversation is opened and the held target does not change.
 
 **Request** — no body. The checkout and the repository are the ones the
 coordinating session this backend holds already names, so nothing is sent.
@@ -1157,7 +1041,7 @@ conversation supplies the checkout; it is never silently retargeted.
 ```json
 {"status":"grooming","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
  "target":"69d8d78f-1f6f-47db-98c5-3a13b1710691",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
@@ -1171,7 +1055,7 @@ already held:
 ```json
 {"status":"typed","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "repo":"owner/name","root":"/repo/checkout",
+ "repo":"owner/name","story":"STAFF-128","root":"/repo/checkout",
  "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
 ```
 
@@ -1300,7 +1184,9 @@ curl -s -X POST -H 'Content-Type: application/json' \
 ## `GET /spec-freeze`
 
 Gate 1's own state for the checkout the held coordinating session sits in,
-derived from the execution spec on disk and nothing stored. No parameters.
+derived from the execution spec on disk and nothing stored. The spec is the one
+at `docs/superpowers/specs/<story>-execution.md` for the conversation's story:
+specs of other stories in the same checkout are never read. No parameters.
 The cabin polls it to draw gate 1's panel.
 
 **200 OK** — four shapes, told apart by `status`.
@@ -1313,8 +1199,8 @@ in another checkout:
 {"status":"none"}
 ```
 
-The checkout is known, but it carries no execution spec under
-`docs/superpowers/specs/`:
+The checkout is known, but it carries no execution spec at the path the
+conversation's story names:
 
 ```json
 {"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
@@ -1325,7 +1211,7 @@ A spec exists and is not frozen yet:
 ```json
 {"status":"draft",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "spec":"docs/superpowers/specs/STAFF-128-execution.md",
  "findings":[
    {"code":"clarification-marker","line":42,"detail":"[NEEDS CLARIFICATION: which button?]"},
    {"code":"hypothesis-absent","line":null,"detail":null}
@@ -1353,7 +1239,7 @@ The spec is frozen:
 ```json
 {"status":"frozen",
  "target":"6d13bc52-740f-49f8-b128-15e597674f3a",
- "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "spec":"docs/superpowers/specs/STAFF-128-execution.md",
  "on":"2026-09-14",
  "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
@@ -1377,8 +1263,8 @@ started in another checkout forgets that closed one, and the read goes back to
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a
 foreign `Origin` — and, with a 400 and its own `{code, detail}`, every tool
-refusal this read can meet. Reading the spec runs on disk, so a specs directory
-it cannot list is `epic-spec-not-read` and a file carrying no title is
+refusal this read can meet. Reading the spec runs on disk, so a spec file it
+cannot read is `epic-spec-not-read` and a file carrying no title is
 `epic-spec-not-understood`; and on the frozen branch alone it also runs
 `git rev-parse` and `gh pr list`, so a logged-out `gh` or a checkout git cannot
 read surface here rather than as a generic failure. The cabin polls this route,
@@ -1473,8 +1359,8 @@ time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
 
 | `code` | Meaning |
 |---|---|
-| `epic-spec-not-read` | the execution spec could not be listed or read back from disk |
-| `epic-spec-not-understood` | the spec carries no title, or names no design document under `**Handoff origen:**` |
+| `epic-spec-not-read` | the execution spec could not be read back from disk |
+| `epic-spec-not-understood` | the spec carries no title |
 | `epic-spec-not-written` | the state line and its date could not be written back to disk |
 | `epic-branch-not-published` | `git` failed to resolve, cut, switch to, fetch, add, commit or push the branch gate 1 publishes on, or neither the checkout nor the remote could say which branch is default — the branch is resolved before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
 | `epic-branch-not-understood` | `git` printed something this backend cannot read while resolving the branch or the remote's default |
@@ -1573,8 +1459,9 @@ in another checkout:
 conversation. The read is the same; the presses of gate 2 refuse with
 `coordinating-session-target-changed`, because they have no target to carry.
 
-The checkout is known, but it carries no execution spec — the same absence `GET
-/spec-freeze` answers with `no-spec`:
+The checkout is known, but it carries no execution spec at the path the
+conversation's story names — the same absence `GET /spec-freeze` answers with
+`no-spec`:
 
 ```json
 {"status":"no-spec","target":"6d13bc52-740f-49f8-b128-15e597674f3a"}
@@ -1918,6 +1805,24 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
 
 ---
 
+## `GET /milestone-progress`
+
+One read of the held coordinating session's milestone, from the spec and issues `GET /epic-groom`
+reads. No held session answers `{"status":"none"}`, and so does a session closed with
+**Cancelar la sesión**; no frozen spec answers `no-milestone`.
+Else it answers `status` `milestone`, `target`, `milestone`, `delivered`, `total` and `issues`.
+Each issue carries `number`, `url`, `title`, `state` (`pending`, `running`, `needs-person`,
+`delivered`), `step`, `task`, `total_tasks`, `step_started_at`, `last_tool`, `last_text`,
+`pull_request`, `attention` (`veto`, `uncertain`, `partial`, `unreadable` or null), `baseline_red` and
+`tasks`. Each task carries `number`, `name`, `status`, `ruling` and `findings`. An issue whose
+own work cannot be read does not blank the others: an open one answers `needs-person` with the
+`unreadable` attention and its `detail`, a closed one is still `delivered`, and an uncertain one
+keeps its recovery action with no tasks. Only a spec or an issue list that cannot be read answers
+`400 milestone-progress-not-read`. Every call reads GitHub for each issue in review, so a page
+polling it keeps a long interval while any issue is in review.
+
+---
+
 ## `POST /slices/:issue/message`
 
 A change asked of a slice that is already implementing. **The coordinating
@@ -1960,53 +1865,6 @@ refusal is the same answer, later.
 curl -s -X POST 'http://127.0.0.1:8787/slices/460/message' \
   -H 'Content-Type: application/json' \
   -d '{"repo":"mercadona/control-tower","agent":"<conversation>","text":"rename the column"}'
-```
-
----
-
-## `GET /slices/:issue/escalation?root=<abs path>`
-
-What a slice asked that it cannot answer itself. Poll it. Only `root` is
-required: the read is on disk and never reaches GitHub, so no `repo` is asked
-for.
-
-The agent of a slice writes this itself, and its own kickoff tells it to: if it
-meets a doubt, or a gap in the spec that is not its to close, it writes
-`blocked: {reason, unblock}` into its worktree's `.agent/SLICE.md` and stops.
-This endpoint reads that file with the plugin's own `readBlocked`, so the shape
-of the field is the plugin's to decide and this backend never re-spells it.
-
-**Reading only.** It moves no label, frees no token and resumes nothing.
-
-**200 OK**
-
-```json
-{"state":"raised","reason":"the spec does not say which repository the row lands in",
- "unblock":"a decision from the coordinating session","notes":[],"detail":""}
-```
-
-`state` is one of three:
-
-| `state` | Meaning |
-|---|---|
-| `raised` | the agent declared itself blocked; `reason` and `unblock` are what it wrote, and `notes` carries what the plugin's reader has to say about a field written in an unexpected shape |
-| `none` | there is nothing raised — either the file says so, or no worktree for that issue exists here |
-| `unchecked` | the worktree exists and `.agent/SLICE.md` does not, so whether that agent is blocked **has not been looked at**; `detail` says why it could not be. It is deliberately not reported as `none`: that would assert something nobody checked |
-
-**Refusals**
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `malformed-escalation-issue` | 400 | `:issue` is not a positive whole number |
-| `malformed-escalation-root` | 400 | `root` is missing or is not an absolute path |
-| `slice-escalation-not-read` | 400 | the state file is there and could not be read; `detail` names the path and the system's own message |
-| `slice-escalation-not-understood` | 400 | the file's frontmatter is not valid YAML, or the reader cannot interpret it; `detail` names the path |
-
-A read that fails is never reported as "there is no block" — the same criterion
-`/ct-next` applies when it walks the same file.
-
-```
-curl -s 'http://127.0.0.1:8787/slices/460/escalation?root=/Users/me/checkouts/control-tower'
 ```
 
 ---

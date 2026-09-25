@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { join } from 'node:path'
 import { Loopback, RunningServers } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { ResizeSession, ResizeSessionParams } from '../../src/application/actions/resize-session.ts'
 import { LiveSessions, LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
@@ -62,7 +61,6 @@ class RunningApi {
       listLiveSessions: undefined,
       liveSessions,
       resizeSession,
-      sessions: new PlanSessions(),
       activePlans: undefined,
       stderr: undefined,
       frontendRoot: Loopback.FRONTEND_NEVER_BUILT,

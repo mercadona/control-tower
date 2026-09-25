@@ -15,9 +15,8 @@ is the one the clone's `origin` names, read by the backend —
 current progress arrives over `GET /work-progress/:issue`, polled. It combines
 plan readiness, planning-agent activity and execution progress. The page shows the
 panels of gates 1 and 2, and the live terminals of the sessions the backend
-owns. `POST /start-plan` accepts only a milestone command: it selects and starts
-the next eligible slice; after the committed plan is published, the
-backend resumes the same headless conversation automatically. `POST
+owns. The backend dispatches authorised slices by itself; after the committed
+plan is published, it resumes the same headless conversation automatically. `POST
 /implement-plan` is not routed, so the page offers no implementation button.
 Each area has its own directory under `src/app/`, and the endpoint it consumes
 is named in the sections below. Additional context and feedback are entered
@@ -149,6 +148,31 @@ fixed 680px, because the 280 px navigation rail already takes its own share of
 a 1440 px viewport and a fixed column left the work area too narrow for its own
 flow bar; below 1280 px the column stacks under the work area with no overlay.
 
+**The focused view.** While a coordinating session is live and no plan of its
+story is in progress, `Home` renders `FocusedSession`
+(`app/focused-session`) in place of everything above: no request form, no slice
+cards, no gate sequence, no drawer. The navigation rail and the top bar stay.
+The view holds, in order:
+
+- a header with the name of the current step, the story and repository the
+  session was opened for, **Cancelar la sesión** as a secondary action, and the
+  four steps (Brainstorming, Congelación del spec, Groom y autorización,
+  Implementación);
+- a band with the gate that asks for something right now, the same
+  `SpecFreezePanel` or `EpicGroomPanel` today's view shows, and nothing when no
+  gate asks for anything. A frozen spec waiting for its merge asks for one: the
+  band names the pull request to merge;
+- the session itself in the centre (`CentredSession`), with no tabs.
+
+The step and the band are derived from gate 1 and gate 2 in
+`SessionStage.of`; no phase is stored. `FocusedMode.of` decides whether the page
+is focused: a plan the page adopted on its own stops the focus only when gate 2
+names its issue among this story's issues, so a plan of another story never
+takes the page over. A single **Sin conexión con el backend** replaces the
+per-poll warnings while the coordinating session poll fails. When the session
+ends or a plan of its story starts, today's view comes back as it was, and the
+banners of `CoordinatingSessionStatus` say why.
+
 The coordinating session remains available and recoverable while a headless
 plan conversation plans and implements. They have different roles: expanding
 the drawer exposes the coordinating session as the interactive entrance in its
@@ -164,7 +188,7 @@ An uncertain entry carries a diagnostic, its original repo/issue/agent identity
 and one recovery action. `observe` and `continue` render **Recuperar trabajo**;
 `cleanup` renders **Limpiar arranque fallido**. A press sends the exact identity
 to `POST /recover-plan` or `POST /cleanup-plan` and then reads active plans
-again; it never calls `/start-plan`. The button is disabled while that request
+again; it never starts new work. The button is disabled while that request
 is pending, and late replies cannot replace a newer workflow or coordinating
 conversation. `inspect` stays read-only and offers **Reintentar recuperación**,
 which only repeats the GET. **Descartar estado** clears this page's local state
@@ -242,7 +266,12 @@ keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
 conversation can still change. The panel says so while the groom conversation it
 opened is on screen or while a press it could not confirm is outstanding, and
 passing that flag re-arms the read at once, so the §9 table the session edits
-reaches the page without a reload. At `groomed` and `authorised` it rests
+reaches the page without a reload. `Home` reads the same checkout once more for
+the focused view and keeps asking at those two rungs, and at `groomed` and
+`authorised` too, while a live session holds no plan: that read is what tells the
+step and the band, and what recognises this story's plans once they start. A
+read that fails keeps the last answer for the same target instead of blanking
+the view. At `groomed` and `authorised` the panel's read rests
 whatever the review is doing: there is nothing left for a conversation to
 change there. It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
@@ -284,8 +313,10 @@ it created, `CoordinatingSessionClient.openedIn` reads that payload — one read
 for the two doors that answer it — and the adopted session appears and is
 selected without waiting for the next `GET /sessions`. A delayed old listing
 cannot remove that adoption or resurrect a terminal after confirmed closure.
-`GateSequence` is keyed by the current target, so old gate reads, confirmation
-fallbacks and automatic reslicing presses cannot repaint a replacement target.
+Both gate reads answer `connecting` in the very render a new target appears,
+and `GateSequence` is keyed by the current target, so old gate reads,
+confirmation fallbacks and automatic reslicing presses cannot repaint a
+replacement target.
 
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a
@@ -304,7 +335,7 @@ worst move available when nobody can tell what was created.
 - **`backend/` serves it, from the same origin.** `ct-api.ts` serves `dist/` at
   `/` when it exists, so page and API share `http://127.0.0.1:<port>`.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
-  `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
+  `Host`: a foreign page cannot call `POST /coordinating-session`, and ours can, with no
   CORS and no preflight.
 - **The client is `fetch`** (`src/app/coordinating-session/client.ts`,
   `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
@@ -388,3 +419,11 @@ that `__tests__/yardstick.test.ts` measures on every file: names in English,
 zero prose in comments, no `export default` other than the one Vite demands in
 its config, and no import that climbs with `../`. The interface's labels are in
 Spanish; everything else, in English.
+
+A backend refusal reaches the screen through `src/app/product-error.ts`, which
+turns its `code` into Spanish copy. The protocol codes every endpoint can answer
+(`not-found`, `foreign-origin`, `unsupported-media-type`, `unknown-field` and
+the like) are left out on purpose: only a defect of this page can cause them,
+so they show the backend's own `detail`, which is what makes the defect
+traceable. So does `repository-preparation-required`, whose `detail` is the
+list of what the repository lacks and is shown under a Spanish title.

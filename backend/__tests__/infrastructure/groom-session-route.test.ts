@@ -28,6 +28,7 @@ import { ConversationNotStarted } from '../../src/domain/exceptions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { CoordinatingConversationMother } from '../coordinating-conversation-mother.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
@@ -134,7 +135,7 @@ class Mother {
   static readonly NEXT_TARGET = 'f910a470-13f7-4956-b750-bef89f55dd6d'
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
-  static readonly CONVERSATION = new CoordinatingConversation({
+  static readonly CONVERSATION = CoordinatingConversationMother.of({
     id: new ConversationId('9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f'),
     repository: Mother.REPOSITORY,
     root: Mother.ROOT,
@@ -313,11 +314,12 @@ describe('GroomSessionRoute', () => {
       target: Mother.NEXT_TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
     expect(open.asked).toEqual([new OpenGroomSessionParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT,
+      repository: Mother.REPOSITORY, root: Mother.ROOT, story: Mother.CONVERSATION.story,
     })])
     expect(held.held()?.state).toBe(CoordinatingSessionState.LIVE)
     expect(held.held()?.attention).toEqual(SessionAttention.working())
@@ -382,11 +384,12 @@ describe('GroomSessionRoute', () => {
       target: Mother.TARGET,
       conversation: Mother.CONVERSATION.id.text,
       repo: Mother.REPOSITORY.text,
+      story: Mother.CONVERSATION.story.text,
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
     })
     expect(ask.asked).toEqual([new AskGroomReviewParams({
-      repository: Mother.REPOSITORY, root: Mother.ROOT, session: Mother.SESSION, target: Mother.TARGET,
+      root: Mother.ROOT, story: Mother.CONVERSATION.story, session: Mother.SESSION, target: Mother.TARGET,
     })])
     expect(open.asked).toEqual([])
     expect(held.held()?.target).toBe(Mother.TARGET)

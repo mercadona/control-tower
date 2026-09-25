@@ -3,6 +3,7 @@ import { CoordinatingSessionRead } from 'app/coordinating-session/useCoordinatin
 const CONVERSATION = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
 const TARGET = '6d13bc52-740f-49f8-b128-15e597674f3a'
 const REPO = 'owner/name'
+const STORY = 'STAFF-128'
 const ROOT = '/Users/pedro/code/name'
 const SESSION = { id: 'session-1', name: 'brainstorming' }
 const QUESTION = 'the button should read Arrancar brainstorming, right?'
@@ -50,6 +51,7 @@ const workingRead = (): CoordinatingSessionRead => ({
   target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
+  story: STORY,
   root: ROOT,
   session: SESSION,
   attention: { status: 'working', question: null },
@@ -64,6 +66,7 @@ const waitingRead = (): CoordinatingSessionRead => ({
   target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
+  story: STORY,
   root: ROOT,
   session: SESSION,
   attention: { status: 'waiting', question: QUESTION },
@@ -78,6 +81,7 @@ const repeatedWaitingRead = (): CoordinatingSessionRead => ({
   target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
+  story: STORY,
   root: ROOT,
   session: SESSION,
   attention: { status: 'waiting', question: THIRD_QUESTION },
@@ -92,6 +96,7 @@ const unresumableRead = (): CoordinatingSessionRead => ({
   target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
+  story: STORY,
   root: ROOT,
   detail: UNRESUMABLE_DETAIL,
   timeline: WORKING_TIMELINE,
@@ -101,7 +106,7 @@ const unresumableRead = (): CoordinatingSessionRead => ({
 const working = () => ({
   status: 200,
   body:
-    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"working","question":null},` +
     `"timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
@@ -109,7 +114,7 @@ const working = () => ({
 const completed = () => ({
   status: 200,
   body:
-    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"waiting","question":null},` +
     `"timeline":${JSON.stringify(COMPLETED_TIMELINE)}}`,
 })
@@ -117,7 +122,7 @@ const completed = () => ({
 const awaitingPermissionWithNoMessage = () => ({
   status: 200,
   body:
-    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},"attention":{"status":"waiting","question":null},` +
     `"timeline":${JSON.stringify(SILENT_WAITING_TIMELINE)}}`,
 })
@@ -125,7 +130,7 @@ const awaitingPermissionWithNoMessage = () => ({
 const waiting = () => ({
   status: 200,
   body:
-    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"live","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"},` +
     `"attention":{"status":"waiting","question":"${QUESTION}"},` +
     `"timeline":${JSON.stringify(WAITING_TIMELINE)}}`,
@@ -134,18 +139,18 @@ const waiting = () => ({
 const unresumable = () => ({
   status: 200,
   body:
-    `{"status":"unresumable","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"unresumable","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"detail":"${UNRESUMABLE_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
 const ended = () => ({
   status: 200,
   body:
-    `{"status":"ended","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"ended","operation":"idle","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"detail":"${ENDED_DETAIL}","timeline":${JSON.stringify(WORKING_TIMELINE)}}`,
 })
 
-const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof ended>) => ({
+const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof completed> | ReturnType<typeof ended>) => ({
   ...answer,
   body: JSON.stringify({
     ...JSON.parse(answer.body),
@@ -159,6 +164,8 @@ const closeFailed = (answer: ReturnType<typeof working> | ReturnType<typeof ende
 
 const liveCloseFailed = () => closeFailed(working())
 
+const completedCloseFailed = () => closeFailed(completed())
+
 const endedCloseFailed = () => closeFailed(ended())
 
 const endedRead = (): CoordinatingSessionRead => ({
@@ -168,6 +175,7 @@ const endedRead = (): CoordinatingSessionRead => ({
   target: TARGET,
   conversation: CONVERSATION,
   repo: REPO,
+  story: STORY,
   root: ROOT,
   detail: ENDED_DETAIL,
   timeline: WORKING_TIMELINE,
@@ -177,7 +185,7 @@ const endedRead = (): CoordinatingSessionRead => ({
 const opened = () => ({
   status: 202,
   body:
-    `{"status":"brainstorming","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","root":"${ROOT}",` +
+    `{"status":"brainstorming","target":"${TARGET}","conversation":"${CONVERSATION}","repo":"${REPO}","story":"${STORY}","root":"${ROOT}",` +
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
@@ -188,10 +196,30 @@ const alreadyLive = () => ({
     `"conversation":"${CONVERSATION}","session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
+const checkoutOffTheDefaultBranch = () => ({
+  status: 400,
+  body:
+    '{"code":"checkout-not-on-default-branch","detail":"/repo is on milestone/STAFF-129-execution, ' +
+    'and a session starts from master: run git switch master in that checkout and open the session again"}',
+})
+
+const bodyNotDeclaredAsJson = () => ({
+  status: 415,
+  body: '{"code":"unsupported-media-type","detail":"the body must be declared as application/json"}',
+})
+
+const storySpecFrozen = () => ({
+  status: 400,
+  body:
+    '{"code":"story-spec-frozen","detail":"STAFF-128 already has its execution spec frozen at ' +
+    'docs/superpowers/specs/STAFF-128-execution.md: its brainstorming is over, continue with the groom"}',
+})
+
 export const CoordinatingSessionMother = {
   CONVERSATION,
   TARGET,
   REPO,
+  STORY,
   ROOT,
   SESSION,
   QUESTION,
@@ -215,7 +243,11 @@ export const CoordinatingSessionMother = {
   unresumable,
   ended,
   liveCloseFailed,
+  completedCloseFailed,
   endedCloseFailed,
   opened,
   alreadyLive,
+  storySpecFrozen,
+  checkoutOffTheDefaultBranch,
+  bodyNotDeclaredAsJson,
 }

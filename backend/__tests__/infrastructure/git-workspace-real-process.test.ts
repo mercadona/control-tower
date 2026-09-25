@@ -188,7 +188,6 @@ describe('GitWorkspace real cleanup', () => {
             policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
             sleep: async () => {},
           }),
-          stderr: () => {},
         })
         return new CleanupPlan({ records: records(), workspace, claims, planIssues })
       }
@@ -338,7 +337,6 @@ describe('GitWorkspace real cleanup', () => {
         policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
         sleep: async () => {},
       }),
-      stderr: () => {},
     })
     const runner = new ToolRunner({ bin: 'git', budgetMs: 5_000, processes, signal: processes.signal.bind(processes) })
     const workspace = new GitWorkspace({

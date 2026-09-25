@@ -6,16 +6,22 @@ import type { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
 import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { PullRequests } from '../../domain/ports/pull-requests.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 export class PublishReslicingParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly story: UserStoryKey | UserStoryUrl
 
-  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor({ root, repository, story }: {
+    root: CheckoutRoot, repository: RepositoryName, story: UserStoryKey | UserStoryUrl,
+  }) {
     this.root = root
     this.repository = repository
+    this.story = story
     Object.freeze(this)
   }
 }
@@ -65,23 +71,27 @@ export class PublishReslicing {
   }
 
   async execute(params: PublishReslicingParams): Promise<ReslicingPublished> {
-    const found = await this.specs.mostRecent(params.root)
+    const found = await this.specs.of({ root: params.root, story: params.story })
     if (found === null) return ReslicingPublished.refused(ReslicingOutcome.NO_SPEC)
     if (!found.isFrozen()) return ReslicingPublished.refused(ReslicingOutcome.NOT_FROZEN)
 
     const branch = await this.branch.publishing({ root: params.root, milestone: found.milestoneBranch() })
-    const spec = await this.specs.reread({ root: params.root, spec: found }) ?? found
-    await this.#committed({ params, spec })
+    const spec = await this.specs.of({ root: params.root, story: params.story }) ?? found
+    const standing = await this.pullRequests.openOfBranch({ branch, repository: params.repository })
+    await this.#committed({ params, spec, branch, standing })
     if (!(await this.branch.pushed({ root: params.root, branch }))) {
       await this.branch.push({ root: params.root, branch })
     }
 
-    return ReslicingPublished.published(await this.#pullRequest({ params, spec, branch }))
+    return ReslicingPublished.published(standing ?? await this.#opened({ params, spec, branch }))
   }
 
-  async #committed({ params, spec }: { params: PublishReslicingParams, spec: EpicSpec }): Promise<void> {
+  async #committed({ params, spec, branch, standing }: {
+    params: PublishReslicingParams, spec: EpicSpec, branch: string, standing: ReviewedPullRequest | null,
+  }): Promise<void> {
     if (await this.branch.committed({ root: params.root, paths: [spec.path] })) return
 
+    if (standing === null) await this.branch.restartFromDefault({ root: params.root, branch })
     await this.branch.commit({
       root: params.root,
       paths: [spec.path],
@@ -89,12 +99,9 @@ export class PublishReslicing {
     })
   }
 
-  async #pullRequest({ params, spec, branch }: {
+  async #opened({ params, spec, branch }: {
     params: PublishReslicingParams, spec: EpicSpec, branch: string,
   }): Promise<ReviewedPullRequest> {
-    const standing = await this.pullRequests.openOfBranch({ branch, repository: params.repository })
-    if (standing !== null) return standing
-
     const reslicing = new Reslicing({ path: spec.path, revision: this.revisions.of(spec.text) })
 
     return await this.pullRequests.open({

@@ -70,7 +70,7 @@ describe('useExternalTools', () => {
   it('reads an installed tool with an unknown session as ready on its own, never as attention', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ready: true,
-      tools: [{ tool: 'claude', installed: true, session: 'unknown', fix: 'claude, then /login' }],
+      tools: [{ tool: 'git', installed: true, session: 'unknown', fix: 'install ssh, then add an SSH key to your GitHub account' }],
       metricsDelivery: DISABLED,
     }))))
 

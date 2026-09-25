@@ -35,6 +35,7 @@ export type CoordinatingSessionOutcome =
       target: string
       conversation: string
       repo: string
+      story: string
       root: string
       session: LiveSessionRef
       attention: Attention
@@ -43,11 +44,11 @@ export type CoordinatingSessionOutcome =
     }
   | {
       kind: 'unresumable'; operation: CoordinatingOperation; target: string; conversation: string
-      repo: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
+      repo: string; story: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
     }
   | {
       kind: 'ended'; operation: CoordinatingOperation; target: string; conversation: string
-      repo: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
+      repo: string; story: string; root: string; detail: string; timeline: TimelineEvent[]; closureError: ClosureError | null
     }
   | { kind: 'unavailable' }
 
@@ -55,6 +56,7 @@ export type OpenedCoordinatingSession = {
   target: string
   conversation: string
   repo: string
+  story: string
   root: string
   session: LiveSessionRef
 }

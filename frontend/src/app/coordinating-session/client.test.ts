@@ -24,12 +24,20 @@ describe('CoordinatingSessionClient', () => {
       target: CoordinatingSessionMother.TARGET,
       conversation: CoordinatingSessionMother.CONVERSATION,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
       session: CoordinatingSessionMother.SESSION,
       attention: { status: 'waiting', question: CoordinatingSessionMother.QUESTION },
       timeline: CoordinatingSessionMother.WAITING_TIMELINE,
       closureError: null,
     })
+  })
+
+  it('reads a live answer that names no story as unavailable, because the header could not say which story it is', async () => {
+    const withoutStory = CoordinatingSessionMother.working().body.replace(`"story":"${CoordinatingSessionMother.STORY}",`, '')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(withoutStory, { status: 200 })))
+
+    expect(await CoordinatingSessionClient.read()).toEqual({ kind: 'unavailable' })
   })
 
   it('reads a conversation whose terminal exited as ended', async () => {
@@ -43,6 +51,7 @@ describe('CoordinatingSessionClient', () => {
       target: CoordinatingSessionMother.TARGET,
       conversation: CoordinatingSessionMother.CONVERSATION,
       repo: CoordinatingSessionMother.REPO,
+      story: CoordinatingSessionMother.STORY,
       root: CoordinatingSessionMother.ROOT,
       detail: CoordinatingSessionMother.ENDED_DETAIL,
       timeline: CoordinatingSessionMother.WORKING_TIMELINE,
@@ -69,6 +78,7 @@ describe('CoordinatingSessionClient', () => {
         target: CoordinatingSessionMother.TARGET,
         conversation: CoordinatingSessionMother.CONVERSATION,
         repo: CoordinatingSessionMother.REPO,
+        story: CoordinatingSessionMother.STORY,
         root: CoordinatingSessionMother.ROOT,
         session: CoordinatingSessionMother.SESSION,
       },
@@ -84,6 +94,42 @@ describe('CoordinatingSessionClient', () => {
       kind: 'refused',
       code: 'coordinating-session-already-live',
       error: 'Ya hay una sesión coordinadora en marcha.',
+    })
+  })
+
+  it('tells in Spanish that a story whose spec is frozen has finished its brainstorming', async () => {
+    answerWith(CoordinatingSessionMother.storySpecFrozen())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'story-spec-frozen',
+      error: 'Este ticket ya tiene su spec congelado, así que su brainstorming ha terminado. Sigue con el groom.',
+    })
+  })
+
+  it('tells in Spanish that the checkout has to be on the default branch to open a session', async () => {
+    answerWith(CoordinatingSessionMother.checkoutOffTheDefaultBranch())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'checkout-not-on-default-branch',
+      error: 'La ruta local no está en la rama principal. Cámbiala a la rama principal y vuelve a abrir la sesión.',
+    })
+  })
+
+  it('shows a protocol refusal as the backend wrote it, so the defect behind it can be traced', async () => {
+    answerWith(CoordinatingSessionMother.bodyNotDeclaredAsJson())
+
+    const outcome = await CoordinatingSessionClient.open(submission())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'unsupported-media-type',
+      error: 'the body must be declared as application/json',
     })
   })
 
