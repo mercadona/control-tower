@@ -6,12 +6,12 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { renderState } from '../../../../plugin/scripts/state.js'
+import { ContinuePlan } from '../../../src/application/actions/continue-plan.ts'
 import { DriveRun } from '../../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../../src/application/actions/execute-run-instruction.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
 import { CheckoutRegistry } from '../../../src/domain/ports/checkout-registry.ts'
-import { PlanAgents } from '../../../src/domain/ports/plan-agents.ts'
 import { PlanPublication } from '../../../src/domain/ports/plan-publication.ts'
 import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
 import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
@@ -33,6 +33,7 @@ import { CtRunMachine } from '../../../src/infrastructure/ct-run-machine.ts'
 import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
 import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
+import { HeadlessPlanAgents } from '../../../src/infrastructure/headless-plan-agents.ts'
 import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-calls.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../../src/infrastructure/plan-sessions.ts'
@@ -273,9 +274,10 @@ export class InProcessRun {
       files: this.#files,
       pluginRoot: InProcessRun.#PLUGIN,
     })
+    const publication = new RecordingPublication(this.published)
     const driver = new DriveRun({
       calls: planCalls,
-      publication: new RecordingPublication(this.published),
+      publication,
       machine: this.#machine,
       delivery: this.delivery,
       step: new ExecuteRunInstruction({ machine: this.#machine, calls: runCalls }),
@@ -286,8 +288,15 @@ export class InProcessRun {
       }),
       escalations: QuietEscalations.reader(),
     })
+    const legacy = new HeadlessPlanAgents({
+      records,
+      calls: planCalls,
+      continuation: new ContinuePlan({ calls: planCalls, publication }),
+      newId: () => this.#identities.next(),
+      stderr: (line) => { throw new Error(line) },
+    })
     return new RunPlanAgents({
-      legacy: new PlanAgents(),
+      legacy,
       records,
       calls: planCalls,
       transport,
@@ -325,6 +334,7 @@ export class InProcessRun {
       argv: ['--session-id', watch.agent],
       execution: { kind: 'success' },
       cost: { kind: 'reported', totalUsd: 0.1, attribution: 'initial-invocation' },
+      startedAt: InProcessRun.#EPOCH,
     })
     const plan = await readFile(join(this.checkout, InProcessRun.PLAN), 'utf8')
     await this.#journal.establish(watch, `${JSON.stringify({
@@ -356,19 +366,34 @@ export class InProcessRun {
     return watch
   }
 
-  async recorded(call: { readonly watch: PlanWatch, readonly execution: CallExecution }): Promise<void> {
-    await this.#recordCall(call.watch, {
-      purpose: 'fix',
-      requestId: 'fix:after-delivery',
-      argv: ['--resume', call.watch.agent],
+  async recorded(call: {
+    readonly watch: PlanWatch,
+    readonly execution: CallExecution | null,
+    readonly purpose?: PlanCallPurpose,
+    readonly requestId?: string | null,
+    readonly argv?: readonly string[],
+    readonly startedAt?: string,
+  }): Promise<StartedPlanCall> {
+    const argv = call.argv ?? ['--resume', call.watch.agent]
+    return this.#recordCall(call.watch, {
+      purpose: call.purpose ?? 'fix',
+      requestId: call.requestId === undefined ? 'fix:after-delivery' : call.requestId,
+      argv,
       execution: call.execution,
-      cost: { kind: 'reported', totalUsd: 0.5, attribution: 'unverified-resume' },
+      startedAt: call.startedAt ?? InProcessRun.#EPOCH,
+      cost: {
+        kind: 'reported',
+        totalUsd: 0.5,
+        attribution: argv.includes('--session-id') ? 'initial-invocation' : 'unverified-resume',
+      },
     })
   }
 
-  recovery(): { readonly recovery: RunPlanRecovery, readonly activePlans: ActivePlans, readonly reviews: CountingReviewWatch } {
+  recovery(): { readonly recovery: RunPlanRecovery, readonly activePlans: ActivePlans, readonly reviews: CountingReviewWatch }
+  recovery(reviews: ReviewWatch): { readonly recovery: RunPlanRecovery, readonly activePlans: ActivePlans, readonly reviews: ReviewWatch }
+  recovery(reviews?: ReviewWatch): { readonly recovery: RunPlanRecovery, readonly activePlans: ActivePlans, readonly reviews: ReviewWatch } {
     const agents = this.agents()
-    const reviews = new CountingReviewWatch()
+    const watched = reviews ?? new CountingReviewWatch()
     const activePlans = new ActivePlans({ sessions: new PlanSessions() })
     const legacy = new RecordedPlanRecovery({
       records: agents.records,
@@ -376,7 +401,7 @@ export class InProcessRun {
       ownership: agents.transport,
       checkouts: new UnregisteredCheckouts(),
       activePlans,
-      reviews,
+      reviews: watched,
     })
     const recovery = new RunPlanRecovery({
       legacy,
@@ -389,10 +414,10 @@ export class InProcessRun {
       delivery: agents.delivery,
       checkouts: new UnregisteredCheckouts(),
       activePlans,
-      reviews,
+      reviews: watched,
       nowMs: Date.now,
     })
-    return { recovery, activePlans, reviews }
+    return { recovery, activePlans, reviews: watched }
   }
 
   async remove(): Promise<void> {
@@ -404,9 +429,10 @@ export class InProcessRun {
     purpose: PlanCallPurpose,
     requestId: string | null,
     argv: readonly string[],
-    execution: CallExecution,
+    execution: CallExecution | null,
     cost: CallCost,
-  }): Promise<void> {
+    startedAt: string,
+  }): Promise<StartedPlanCall> {
     const call = new StartedPlanCall({ conversation: watch.agent, id: this.#identities.next() })
     const directory = this.#files.callDirectory(call)
     const descriptor = new CallDescriptor({
@@ -417,27 +443,31 @@ export class InProcessRun {
       cwd: watch.located.path,
       binary: 'claude',
       argv: asked.argv,
-      startedAt: InProcessRun.#EPOCH,
+      startedAt: asked.startedAt,
       budgetMs: 7_200_000,
       killGraceMs: 5_000,
     })
-    const completed = new CompletedPlanCall({
-      call,
-      code: asked.execution.kind === 'success' ? 0 : null,
-      signal: null,
-      finishedAt: InProcessRun.#EPOCH,
-      wallDurationMs: 60_000,
-      execution: asked.execution,
-      measurement: { cost: asked.cost, turns: 2, durationMs: 55_000, unavailable: [] },
-    })
     await mkdir(directory, { recursive: true })
-    await Promise.all([
+    const writes = [
       writeFile(join(directory, CallDescriptor.FILE), descriptor.text()),
       writeFile(join(directory, CallDescriptor.PROMPT), 'Labelled synthetic call.\n'),
       writeFile(join(directory, CallDescriptor.STREAM), ''),
       writeFile(join(directory, CallDescriptor.STDERR), ''),
-      writeFile(join(directory, CallDescriptor.COMPLETION), StoredCompletion.text(completed)),
-    ])
+    ]
+    if (asked.execution !== null) {
+      const completed = new CompletedPlanCall({
+        call,
+        code: asked.execution.kind === 'success' ? 0 : null,
+        signal: null,
+        finishedAt: asked.startedAt,
+        wallDurationMs: 60_000,
+        execution: asked.execution,
+        measurement: { cost: asked.cost, turns: 2, durationMs: 55_000, unavailable: [] },
+      })
+      writes.push(writeFile(join(directory, CallDescriptor.COMPLETION), StoredCompletion.text(completed)))
+    }
+    await Promise.all(writes)
+    return call
   }
 
   static #digest(text: string): string {
