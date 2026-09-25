@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.0](https://github.com/mercadona/control-tower/compare/backend-v0.6.0...backend-v0.7.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* a live coordinating session takes the whole page, showing only its current step ([#570](https://github.com/mercadona/control-tower/issues/570)) ([bed2385](https://github.com/mercadona/control-tower/commit/bed238598d772f1a2c2b13f12832cb8d1a9bb12f))
+* read the repository from the checkout and drop the loose start-plan entrance ([#563](https://github.com/mercadona/control-tower/issues/563)) ([3e12075](https://github.com/mercadona/control-tower/commit/3e120759c675331eac536b099cdef638ee63e60a))
+* tell a finished slice apart from a lost one ([#562](https://github.com/mercadona/control-tower/issues/562)) ([e31f370](https://github.com/mercadona/control-tower/commit/e31f37064bc487f8cfecaab1749496872bd0d0e7))
+* the execution spec's path is derived from the conversation's story ([#568](https://github.com/mercadona/control-tower/issues/568)) ([48737cd](https://github.com/mercadona/control-tower/commit/48737cdd7a14f1cd35934c603be16917f95501b9))
+
+
+### Correcciones
+
+* check published ports in the effective Compose configuration ([#558](https://github.com/mercadona/control-tower/issues/558)) ([bb750f9](https://github.com/mercadona/control-tower/commit/bb750f925ad38a7c79b2e5cffc0b7ba24540f7b3))
+* prepare Django assets before the worktree baseline ([#561](https://github.com/mercadona/control-tower/issues/561)) ([772d857](https://github.com/mercadona/control-tower/commit/772d85722728ef7d10ed0e22f399c7a5471ddf21))
+* preserve work progress during tracking failures ([#547](https://github.com/mercadona/control-tower/issues/547)) ([aafee10](https://github.com/mercadona/control-tower/commit/aafee1064e1edac7dcab2ae0861bb441033ad2f3))
+* review the slicing without executing the groom, paste it whole, and hold the groom mid-turn ([#567](https://github.com/mercadona/control-tower/issues/567)) ([c32deb7](https://github.com/mercadona/control-tower/commit/c32deb744e62b944ca16e483b5c4009358aee1a8))
+
+
+### Refactorizaciones
+
+* the backend reaches the operating system through one declared border, with a coverage baseline, a ledger and a ratchet ([#569](https://github.com/mercadona/control-tower/issues/569)) ([586570b](https://github.com/mercadona/control-tower/commit/586570baf720580f6093d19e3f470f9cef93a393))
+
 ## [0.6.0](https://github.com/mercadona/control-tower/compare/backend-v0.5.0...backend-v0.6.0) (2026-09-24)
 
 
