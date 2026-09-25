@@ -395,8 +395,7 @@ the groom then presses itself.
 dispatches the slices that dependencies and shared-file constraints allow to run
 together. Every minute it looks for milestones with an open issue at
 `status:ready` and dispatches each, so an authorised epic keeps going while the
-next one is being brainstormed in the same clone. `POST /start-plan` is the explicit dispatch entrance: a milestone
-request selects eligible existing issues. Each dispatched slice gets its own worktree and agent
+next one is being brainstormed in the same clone. Each dispatched slice gets its own worktree and agent
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.
 
@@ -479,7 +478,6 @@ response and refusal contracts.
 | `GET /epic-groom` | Read the proposed issue creation, publication prerequisites and current groom/authorization state |
 | `POST /epic-groom` | Create the milestone and its issues from the published specification |
 | `POST /epic-promotion` | Perform the person's authorization action by promoting eligible issues to `status:ready` |
-| `POST /start-plan` | Dispatch authorized milestone work |
 
 The `epic-*` path names are existing contracts; they operate on the milestone.
 Freeze, groom and authorization controls enforce their own admission rules. A
@@ -496,7 +494,6 @@ progress read never performs those actions, and no route merges a pull request.
 | `POST /cleanup-plan` | Explicitly clean up an eligible failed start; it does not start replacement work |
 | `POST /slices/:issue/message` | Deliver a requested change through the coordinator; a running driver holds it until a step boundary |
 | `POST /slices/:issue/held-change` | Record a change for delivery at a later step boundary and return its ticket |
-| `GET /slices/:issue/escalation` | Read a slice's declared block and the decision it needs; this read uses `root` and resumes nothing |
 | `POST /slices/:issue/another-round` | Apply the coordinator's explicit instruction to grant an eligible run another round after a judge veto |
 
 #### Terminal and environment

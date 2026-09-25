@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Loopback } from '../servers.ts'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import {
   HistoryRequestOutcome, HistoryRefusal, HistoryCollapse,
 } from '../../src/infrastructure/implement-history-route.ts'
@@ -77,7 +76,6 @@ class RunningApi {
     const server = new ApiServer({
       port: 0,
       implementHistory: spy,
-      sessions: new PlanSessions(),
       activePlans: null,
       externalTools: null,
       stderr: null,

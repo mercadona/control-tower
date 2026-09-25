@@ -15,7 +15,6 @@ import type {
 export const SpecReslicingOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_NOT_FROZEN: 'spec-not-frozen',
   IN_PROGRESS: 'reslicing-in-progress',
@@ -50,8 +49,6 @@ export class SpecReslicingRoute {
   static readonly METHODS = 'POST'
   static readonly #STATUS = 'published'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
-  static readonly #NO_COORDINATING_SESSION_DETAIL =
-    'no coordinating session is held: there is no checkout whose slicing could be published'
   static readonly #IN_PROGRESS_DETAIL =
     'a publication of this slicing is under way: wait for it to answer before pressing again'
 

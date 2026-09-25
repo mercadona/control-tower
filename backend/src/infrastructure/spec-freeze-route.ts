@@ -18,7 +18,6 @@ type WireFinding = { readonly code: string, readonly line: number | null, readon
 export const SpecFreezeOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_ALREADY_FROZEN: 'spec-already-frozen',
   SPEC_NOT_FREEZABLE: 'spec-not-freezable',
@@ -71,7 +70,6 @@ export class SpecFreezeRoute {
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 1 answers only a request carrying the key the page was given'
   static readonly #FREEZE_IN_PROGRESS_DETAIL =
     'a freeze of this checkout is under way: wait for it to answer before pressing again'
-  static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to freeze'
 
   static reading(held: CoordinatingSessions, read: ReadSpecFreeze, key: GateKey): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {

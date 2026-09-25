@@ -509,7 +509,6 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByText('Escribiendo el plan…')).toBeInTheDocument()
     expect(calls).toEqual(['GET /active-plans', 'POST /recover-plan', 'GET /active-plans'])
-    expect(calls).not.toContain('POST /start-plan')
   })
 
   it('finishes an earlier observation before recovering and then reads fresh state', async () => {
@@ -633,7 +632,6 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El trabajo incierto ya no figura como activo')
     expect(calls).toEqual(['GET /active-plans', 'POST /cleanup-plan', 'GET /active-plans'])
-    expect(calls).not.toContain('POST /start-plan')
   })
 
   it('late recovery cannot replace the selected workflow', async () => {
