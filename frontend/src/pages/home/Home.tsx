@@ -19,9 +19,9 @@ const BRAINSTORMING_UNREACHABLE_DETAIL = 'No se pudo abrir el brainstorming. Int
 const Home = () => {
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const coordinatingSession = useCoordinatingSession()
-  const isSessionLive = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live'
+  const isSessionHeld = coordinatingSession.target !== null
   const specFreezeRead = useSpecFreeze(coordinatingSession.target)
-  const epicGroomRead = useEpicGroom(isSessionLive, coordinatingSession.target, isSessionLive)
+  const epicGroomRead = useEpicGroom(isSessionHeld, coordinatingSession.target, isSessionHeld)
   const stage = SessionStage.of(specFreezeRead, epicGroomRead)
   const milestoneProgress = useMilestoneProgress(stage.step === 'implementation', coordinatingSession.target)
 
@@ -47,6 +47,7 @@ const Home = () => {
             lifecycle={coordinatingSession}
             closing={coordinatingSessionClosing}
             milestoneProgress={milestoneProgress.read}
+            milestoneUnavailable={milestoneProgress.unavailable}
             onRereadMilestone={milestoneProgress.reread}
           />
         </Navigation>
@@ -58,6 +59,9 @@ const Home = () => {
     <div className="home">
       <Navigation navbar={<ToolsNavbar />} topBar={<TopBar productName="Control Tower" />}>
         <main className="home__start">
+          {coordinatingSession.connection === 'unreachable' && (
+            <Banner type="error" role="alert" title="Sin conexión con el backend" description="Reintentamos cada pocos segundos." />
+          )}
           {brainstormingUnreachable && (
             <Banner type="warning" role="alert" title={BRAINSTORMING_UNREACHABLE_TITLE} description={BRAINSTORMING_UNREACHABLE_DETAIL} />
           )}
@@ -66,6 +70,7 @@ const Home = () => {
             onUnreachable={sessionUnreachable}
             onInteraction={formInteracted}
             isCoordinatingSessionLive={coordinatingSession.occupied}
+            isSessionStateUnknown={coordinatingSession.connection === 'unreachable'}
             openSession={coordinatingSession.open}
           />
         </main>

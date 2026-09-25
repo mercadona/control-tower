@@ -29,11 +29,12 @@ type FocusedSessionProps = {
   >
   closing: boolean
   milestoneProgress: MilestoneProgressOutcome | null
+  milestoneUnavailable: boolean
   onRereadMilestone: () => void
 }
 
 const FocusedSession = ({
-  held, terminal, stage, lifecycle, closing, milestoneProgress, onRereadMilestone,
+  held, terminal, stage, lifecycle, closing, milestoneProgress, milestoneUnavailable, onRereadMilestone,
 }: FocusedSessionProps) => {
   const [talking, setTalking] = useState(false)
   const isImplementation = stage.step === IMPLEMENTATION_STEP
@@ -43,6 +44,10 @@ const FocusedSession = ({
     <main className="focused-session">
       {lifecycle.connection === 'unreachable' && (
         <Banner type="error" role="alert" title={BACKEND_UNREACHABLE} description={BACKEND_UNREACHABLE_DETAIL} />
+      )}
+      {milestoneUnavailable && lifecycle.connection !== 'unreachable' && (
+        <Banner type="warning" role="alert" title="No se ha podido actualizar el milestone"
+          description="Reintentamos cada pocos segundos. La información visible corresponde a la última lectura disponible." />
       )}
       <FocusedSessionHeader
         step={stage.step}

@@ -36,11 +36,18 @@ const AttentionBlock = ({ attention, onTalk, repo, issue, onReread }: AttentionB
   const copy = SliceLineCopy.attention(attention)
 
   const recover = async (action: RecoveryAction) => {
+    if (action === 'inspect') {
+      onReread()
+      return
+    }
     setPending(true)
     setRefusal(null)
     const outcome = await SliceRecovery.run({ repo, issue, action })
     setPending(false)
     if (outcome.kind === 'refused') setRefusal(outcome.detail)
+    if (outcome.kind === 'unavailable') {
+      setRefusal('No se ha podido confirmar la operación. Estamos consultando su estado; compruébalo antes de reintentar.')
+    }
     onReread()
   }
 

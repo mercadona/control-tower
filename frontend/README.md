@@ -99,11 +99,20 @@ one line per issue from `GET /milestone-progress`, polled every 3 s, or 15 s
 while an issue is in review or being fixed. The list retains its last successful
 read through an outage for the same target and discards it when the held session
 target changes; the session owner supplies the single connection notice.
+If only the milestone read fails, its own warning explains that the displayed
+information is the last available reading. A successful read clears that warning.
 **Hablar con la sesión** opens the terminal in a panel over the list, keeping the
 header and steps visible. A session that ended shows **Reabrir la sesión**, which
 calls `POST /coordinating-session/reopen`. Its step-4 list remains visible.
 When every issue is delivered, **Milestone completado** offers **Cerrar la sesión
 y volver al inicio**.
+
+Recovery first reads the current plan and checks that its permitted action still
+matches the button pressed. A changed action requires a new decision; `inspect`
+only refreshes the milestone. A lost recovery or cleanup response is reported as
+unconfirmed while a fresh milestone read reconciles the display. Initial session
+read failures also show a connection notice, with the start form explaining that
+the session state is unknown rather than claiming that another session exists.
 
 `app/spec-freeze` (`SpecFreezePanel`, rendered inside `GateBand`,
 `app/focused-session`, while step 2 asks for it) is gate 1's panel.
@@ -127,12 +136,12 @@ opened is on screen or while a press it could not confirm is outstanding, and
 passing that flag re-arms the read at once, so the §9 table the session edits
 reaches the page without a reload. `Home` reads the same checkout once more for
 the focused view and keeps asking at those two rungs, and at `groomed` and
-`authorised` too, while a live session holds no plan: that read is what tells the
-step and the band, and what recognises this story's plans once they start. A
+`authorised` too, while a session is held, including ended and unresumable
+sessions: that read determines the step and band, so authorisation advances to
+implementation even when the coordinating terminal has ended. A
 read that fails keeps the last answer for the same target instead of blanking
-the view. At `groomed` and `authorised` the panel's read rests
-whatever the review is doing: there is nothing left for a conversation to
-change there. It answers one of the ten states `EpicGroom.types.ts`
+the view. The panel also watches preparation at `groomed` and `authorised`.
+It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
 already says what is missing; `resliced` says the coordinating session changed
 the slicing and offers **Publicar el nuevo slicing**, which calls

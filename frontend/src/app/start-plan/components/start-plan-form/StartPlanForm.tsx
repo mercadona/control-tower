@@ -20,11 +20,12 @@ type StartPlanFormProps = {
   onUnreachable: () => void
   onInteraction: () => void
   isCoordinatingSessionLive?: boolean
+  isSessionStateUnknown?: boolean
   openSession?: (submission: StartPlanSubmission) => Promise<OpenOutcome>
 }
 
 const StartPlanForm = ({
-  onOpened, onUnreachable, onInteraction, isCoordinatingSessionLive = false, openSession,
+  onOpened, onUnreachable, onInteraction, isCoordinatingSessionLive = false, isSessionStateUnknown = false, openSession,
 }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [path, setPath] = useState('')
@@ -43,7 +44,9 @@ const StartPlanForm = ({
     !isSending &&
     !isCoordinatingSessionLive
 
-  const helpText = isCoordinatingSessionLive ? ALREADY_LIVE_HELP : INCOMPLETE_HELP
+  const helpText = isSessionStateUnknown
+    ? 'No se ha podido confirmar si hay una sesión en marcha. Espera a que se restablezca la conexión.'
+    : isCoordinatingSessionLive ? ALREADY_LIVE_HELP : INCOMPLETE_HELP
 
   const openBrainstorming = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

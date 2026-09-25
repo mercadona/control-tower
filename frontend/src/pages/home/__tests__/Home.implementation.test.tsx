@@ -24,6 +24,7 @@ type Backend = {
   cleanupPlan?: () => Answer
   reopen?: () => Answer
   close?: () => Answer
+  promote?: () => Answer
 }
 
 const settle = async () => {
@@ -41,6 +42,7 @@ class ImplementationBackend {
     cleanupPlan,
     reopen,
     close,
+    promote,
   }: Backend = {}) {
     const fetching = vi.fn(async (input: string | URL | Request) => {
       const path = String(input)
@@ -51,6 +53,7 @@ class ImplementationBackend {
       if (path === '/external-tools') return respond(ExternalToolsMother.allReady())
       if (path === '/spec-freeze') return respond(specFreeze())
       if (path === '/epic-groom') return respond(epicGroom())
+      if (path === '/epic-promotion' && promote !== undefined) return respond(promote())
       if (path === '/milestone-progress') return respond(await milestone())
       if (path === '/active-plans') return respond(activePlans())
       if (path === '/recover-plan' && recoverPlan !== undefined) return respond(recoverPlan())
@@ -89,6 +92,81 @@ describe('Home is the start form with no session held, and the focused view for 
     openHome()
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Brainstorming')
+  })
+
+  it('an initial connection failure explains the unknown session state and recovers automatically', async () => {
+    vi.useFakeTimers()
+    let reachable = false
+    ImplementationBackend.with({
+      session: () => {
+        if (!reachable) throw new TypeError('network unavailable')
+        return CoordinatingSessionMother.none()
+      },
+    })
+    openHome()
+    await settle()
+
+    expect(screen.getByText('Sin conexión con el backend')).toBeInTheDocument()
+    expect(screen.getByText('No se ha podido confirmar si hay una sesión en marcha. Espera a que se restablezca la conexión.')).toBeInTheDocument()
+    expect(screen.queryByText('Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
+
+    reachable = true
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.queryByText('Sin conexión con el backend')).not.toBeInTheDocument()
+  })
+
+  it('authorisation advances an ended session to implementation', async () => {
+    vi.useFakeTimers()
+    let authorised = false
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.ended,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: () => authorised ? EpicGroomMother.authorised() : EpicGroomMother.groomed(),
+      promote: () => {
+        authorised = true
+        return EpicGroomMother.promoted()
+      },
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.pending(592)]),
+    })
+    openHome()
+    await settle()
+
+    await act(async () => screen.getByRole('button', { name: 'Autorizar el trabajo' }).click())
+    await act(async () => vi.advanceTimersByTimeAsync(10000))
+    await settle()
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Implementación')
+    expect(screen.getByRole('region', { name: 'Issues del milestone' })).toBeInTheDocument()
+  })
+
+  it.each([false, true])('a milestone-only failure is visible and clears after recovery, with a previous read: %s', async (previousRead) => {
+    vi.useFakeTimers()
+    let reachable = previousRead
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => reachable
+        ? MilestoneProgressMother.answer([MilestoneProgressMother.pending(592)])
+        : { status: 400, body: '{"code":"milestone-progress-not-read","detail":"GitHub could not be read"}' },
+    })
+    openHome()
+    await settle()
+    reachable = false
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+
+    expect(screen.getByText('No se ha podido actualizar el milestone')).toBeInTheDocument()
+    expect(screen.queryByText('Sin conexión con el backend')).not.toBeInTheDocument()
+    if (previousRead) expect(screen.getByText('Slice #592')).toBeInTheDocument()
+
+    reachable = true
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+
+    expect(screen.queryByText('No se ha podido actualizar el milestone')).not.toBeInTheDocument()
+    expect(screen.getByText('Slice #592')).toBeInTheDocument()
   })
 
   it('a running line shows its step, Tarea X de Y and a time in step that ticks', async () => {
@@ -193,6 +271,7 @@ describe('Home is the start form with no session held, and the focused view for 
 
     expect(screen.getByText('0 de 1 entregadas')).toBeInTheDocument()
     expect(screen.getAllByText('Sin conexión con el backend')).toHaveLength(1)
+    expect(screen.queryByText('No se ha podido actualizar el milestone')).not.toBeInTheDocument()
 
     reachable = true
     delivered = true
@@ -433,6 +512,62 @@ describe('Home is the start form with no session held, and the focused view for 
 
     expect(await screen.findByText('No se ha podido consultar el trabajo. Reintenta cuando vuelva la conexión.')).toBeInTheDocument()
     expect(screen.queryByText('El backend ya no informa de este trabajo.')).not.toBeInTheDocument()
+  })
+
+  it('inspection refreshes the milestone without sending a recovery mutation', async () => {
+    let inspected = false
+    const fetching = ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([
+        inspected ? MilestoneProgressMother.running(592) : MilestoneProgressMother.uncertain(592, 'inspect'),
+      ]),
+      activePlans: () => HeadlessPlanMother.uncertainAmong(592, 'inspect'),
+      recoverPlan: () => ({ status: 202, body: JSON.stringify({ agent: HeadlessPlanMother.agentFor(592) }) }),
+    })
+    const { user } = openHome()
+    const inspect = await screen.findByRole('button', { name: 'Reintentar recuperación' })
+    inspected = true
+
+    await user.click(inspect)
+
+    expect(await screen.findByRole('button', { name: 'Ver tareas' })).toBeInTheDocument()
+    expect(fetching.mock.calls.some(([path]) => String(path) === '/recover-plan')).toBe(false)
+  })
+
+  it.each(['continue', 'inspect'] as const)('a stale cleanup action never mutates a plan now requiring %s', async (action) => {
+    const fetching = ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.uncertain(592, 'cleanup')]),
+      activePlans: () => HeadlessPlanMother.uncertainAmong(592, action),
+      cleanupPlan: () => ({ status: 200, body: JSON.stringify({ agent: HeadlessPlanMother.agentFor(592) }) }),
+    })
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: 'Limpiar arranque fallido' }))
+
+    expect(await screen.findByText('El estado del trabajo ha cambiado. Revisa la acción actual antes de continuar.')).toBeInTheDocument()
+    expect(fetching.mock.calls.some(([path]) => ['/recover-plan', '/cleanup-plan'].includes(String(path)))).toBe(false)
+  })
+
+  it.each(['continue', 'cleanup'] as const)('a lost %s response explains the uncertainty', async (action) => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.uncertain(592, action)]),
+      activePlans: () => HeadlessPlanMother.uncertainAmong(592, action),
+      recoverPlan: () => { throw new TypeError('network unavailable') },
+      cleanupPlan: () => { throw new TypeError('network unavailable') },
+    })
+    const { user } = openHome()
+
+    await user.click(await screen.findByRole('button', { name: action === 'cleanup' ? 'Limpiar arranque fallido' : 'Recuperar trabajo' }))
+
+    expect(await screen.findByText('No se ha podido confirmar la operación. Estamos consultando su estado; compruébalo antes de reintentar.')).toBeInTheDocument()
   })
 
   it('Hablar con la sesión opens the terminal in a panel over the list', async () => {

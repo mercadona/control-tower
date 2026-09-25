@@ -490,6 +490,8 @@ response and refusal contracts.
 | `POST /coordinating-session` | Open the coordinating conversation from a ticket, repository and local checkout |
 | `GET /coordinating-session` | Read its identity, current lifecycle operation, status and attention/history information |
 | `POST /coordinating-session/close` | Close or cancel the identified coordinating session |
+| `POST /coordinating-session/reopen` | Resume an ended coordinating conversation, or open its current-step replacement when it cannot be resumed |
+| `GET /milestone-progress` | Read the held milestone's issues, progress, activity and attention |
 | `POST /groom-session` | Open or resume the coordinating conversation for reviewing the proposed slice breakdown |
 | `GET /spec-freeze` | Read the specification's state and the findings that determine whether it can be frozen |
 | `POST /spec-freeze` | Perform the person's freeze action and publish the specification in a pull request |

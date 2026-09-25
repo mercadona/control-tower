@@ -22,6 +22,13 @@ export class SliceRecovery {
       return { kind: 'refused', code: 'slice-recovery-not-found', detail: SliceRecovery.NOT_FOUND }
     }
 
+    if (plan.recovery.action !== asked.action) {
+      return {
+        kind: 'refused', code: 'slice-recovery-changed',
+        detail: 'El estado del trabajo ha cambiado. Revisa la acción actual antes de continuar.',
+      }
+    }
+
     return asked.action === 'cleanup' ? ActivePlansClient.cleanup(plan) : ActivePlansClient.recover(plan)
   }
 

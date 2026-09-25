@@ -5,11 +5,14 @@ import type { MilestoneProgressOutcome } from 'app/milestone-progress/MilestoneP
 
 type MilestoneProgressLifecycle = {
   read: MilestoneProgressOutcome | null
+  unavailable: boolean
   reread: () => void
 }
 
 export const useMilestoneProgress = (enabled: boolean, target: string | null): MilestoneProgressLifecycle => {
-  const [held, setHeld] = useState<{ target: string | null; read: MilestoneProgressOutcome | null }>({ target, read: null })
+  const [held, setHeld] = useState<{
+    target: string | null; read: MilestoneProgressOutcome | null; unavailable: boolean
+  }>({ target, read: null, unavailable: false })
   const timerRef = useRef<number | undefined>(undefined)
   const generationRef = useRef(0)
 
@@ -18,8 +21,8 @@ export const useMilestoneProgress = (enabled: boolean, target: string | null): M
       if (generationRef.current !== generation) return
       const read: MilestoneProgressOutcome = 'target' in outcome && outcome.target !== target ? { kind: 'none' } : outcome
       setHeld((previous) => read.kind === 'unavailable' && previous.target === target
-        ? previous
-        : { target, read })
+        ? { ...previous, unavailable: true }
+        : { target, read, unavailable: read.kind === 'unavailable' })
       timerRef.current = window.setTimeout(() => poll(generation), MilestonePolling.intervalFor(outcome))
     })
   }, [target])
@@ -44,5 +47,9 @@ export const useMilestoneProgress = (enabled: boolean, target: string | null): M
     timerRef.current = window.setTimeout(() => poll(generation), 0)
   }, [enabled, poll])
 
-  return { read: enabled && held.target === target ? held.read : null, reread }
+  return {
+    read: enabled && held.target === target ? held.read : null,
+    unavailable: enabled && held.target === target && held.unavailable,
+    reread,
+  }
 }
