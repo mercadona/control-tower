@@ -119,3 +119,9 @@ same way, or reads `deleted without substitute — decided`. Every slice appends
 | `__tests__/infrastructure/git-workspace-real-process.test.ts > durable cleanup retries preserve evidence and finish retirement after checked requeue` | `__tests__/infrastructure/git-workspace.test.ts > durable cleanup retries preserve evidence and finish retirement after checked requeue` |
 | `__tests__/infrastructure/git-workspace-real-process.test.ts > durable cleanup retries preserve evidence and finish retirement after archive rename` | `__tests__/infrastructure/git-workspace.test.ts > durable cleanup retries preserve evidence and finish retirement after archive rename` |
 | `__tests__/infrastructure/git-workspace-real-process.test.ts > invalid checkout queries never prove absence` | `__tests__/infrastructure/git-workspace.test.ts > invalid checkout queries never prove absence` |
+| `__tests__/yardstick-real-process.test.ts > the_census_matches_what_git_sees_so_neither_a_new_file_nor_a_deleted_one_goes_unnoticed` | `__tests__/yardstick.test.ts > the_guard_finds_its_subjects_by_walking_so_a_new_file_is_covered_without_anyone_listing_it` |
+| `__tests__/infrastructure/makefile-local-env.test.ts > passes the harvest table from the local env file to the backend` | deleted without substitute — decided |
+| `__tests__/infrastructure/makefile-local-env.test.ts > starts with no local env file present` | deleted without substitute — decided |
+| `__tests__/infrastructure/makefile-local-env.test.ts > lets the local env file override the default port` | deleted without substitute — decided |
+| `__tests__/infrastructure/makefile-local-env.test.ts > ignores .env and every .env.* file except .env.example in the real checkout` | deleted without substitute — decided |
+| `__tests__/infrastructure/state-directory-real-process.test.ts > passes_the_local_env_value_to_child_processes_without_shell_splitting` | deleted without substitute — decided |

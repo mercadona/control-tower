@@ -6,11 +6,7 @@ export class ProcessRatchet {
   static readonly SPAWNING: readonly string[] = ['node:child_process', 'child_process', 'node-pty']
   static readonly BORDER = '/process-border.ts'
 
-  static readonly LISTED: readonly string[] = [
-    'infrastructure/makefile-local-env.test.ts',
-    'infrastructure/state-directory-real-process.test.ts',
-    'yardstick-real-process.test.ts',
-  ]
+  static readonly LISTED: readonly string[] = []
 
   static spawningUnder(tests: string): string[] {
     const spawning = new Map<string, boolean>()
