@@ -2,32 +2,12 @@
    is a column of this layout and declares `height: 100%`, which only resolves
    against a containing block that has a height to give. */
 .home {
-  /* clamp(min, preferred, max): the 280px navigation rail already takes its
-     own share of the viewport, so the column's preferred width is relative
-     to the viewport rather than a fixed 680px that starves the work area. */
-  --home-sessions-width: clamp(480px, 40vw, 680px);
-  --home-sessions-min-height: 480px;
-  --home-sessions-stacked-height: 60vh;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-/* The columns of the Navigation content: the work area, and a right column
-   that always holds the sessions panel and, once an implementation is
-   running, the history stacked under it. Neither is a layer over the other. */
-.home__columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto var(--home-sessions-width);
-  height: 100%;
-  min-height: 0;
-}
-
-.home__columns--resizing {
-  user-select: none;
-}
-
-.home__content {
+.home__start {
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -38,7 +18,7 @@
   gap: 24px;
 }
 
-.home__content > * {
+.home__start > * {
   box-sizing: border-box;
   width: 100%;
   max-width: var(--layout-container-md);
@@ -46,203 +26,8 @@
   flex: none;
 }
 
-.home__side {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  min-height: var(--home-sessions-min-height);
-  min-width: 0;
-}
-
-.home__columns--sessions-collapsed .column-resizer {
-  display: none;
-}
-
-.home__history {
-  flex: none;
-  overflow: auto;
-}
-
-/* The terminal takes the drawer's free height and the history sits under it
-   at its natural height, so xterm gets a real box to fit into instead of
-   only the rows it asks for. */
-.home__session-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  height: 100%;
-  min-height: 0;
-}
-
-.home__terminal-pane {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 240px;
-}
-
-.home__flow ol {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.home__flow-step {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 8px;
-  align-items: center;
-  min-width: 0;
-  padding: 12px;
-  color: var(--foreground-secondary);
-  border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
-  overflow-wrap: normal;
-  hyphens: auto;
-}
-
-.home__flow-step > :last-child {
-  grid-column: 2;
-}
-
-.home__flow-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: var(--size-icon-md);
-  height: var(--size-icon-md);
-  color: var(--foreground-secondary);
-  border: var(--borderwidth-md) solid var(--border-secondary);
-  border-radius: var(--shape-button-full);
-}
-
-.home__flow-step--active {
-  color: var(--foreground-brand-primary);
-  border-color: var(--border-brand-primary);
-}
-
-.home__flow-step--active .home__flow-number {
-  color: var(--foreground-ondark);
-  background-color: var(--background-brand-primary);
-  border-color: var(--border-brand-primary);
-}
-
-.home__flow-step--completed .home__flow-number {
-  color: var(--foreground-ondark);
-  background-color: var(--background-brand-primary);
-  border-color: var(--border-brand-primary);
-}
-
-.home__plan-link {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.home__issue-link {
-  align-self: flex-start;
-  color: var(--foreground-brand-primary);
-}
-
-.home__completed {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.home__recovery {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.home__recovery-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.home__discard {
-  align-self: flex-start;
-  margin-top: 12px;
-}
-
-.home__pending {
-  margin: 0;
-  color: var(--foreground-secondary);
-}
-
-.home__slices {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.home__slices .slice-session {
-  padding: 16px;
-  border: var(--borderwidth-sm) solid var(--border-primary);
-  border-radius: var(--shape-container-sm);
-  background: var(--background-primary);
-}
-
-/* Under 1280px the right column stacks below the content: it stays a column
-   of the layout, not a layer over it, so it never becomes an overlay. */
-@media (width < 1280px) {
-  /* `height: 100%` and not `auto`, and the two are not interchangeable here:
-     `overflow: auto` only produces a scrollbar when the box is SHORTER than
-     its content, and a box of automatic height never is. With `auto` this
-     column grew to its content —measured at 1976px against a 738px
-     viewport— while `.home` above stayed at `100dvh` with `overflow: hidden`,
-     so everything past the first screen was clipped with nothing left to
-     scroll: on a window narrower than this breakpoint the entrance's own
-     button could not be reached. `.home` keeps its definite height because
-     `Navigation` resolves `height: 100%` against it, so the scrolling has to
-     happen here. */
-  .home__columns {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: auto;
-  }
-
-  .home__content {
-    overflow: visible;
-  }
-
-  .home__side {
-    min-height: 0;
-  }
-
-  .home__side .drawer {
-    width: 100%;
-    height: auto;
-    box-shadow: none;
-    border-top: var(--borderwidth-sm) solid var(--border-primary);
-    border-left: none;
-  }
-
-  .home__side .drawer:not(.drawer--collapsed) {
-    flex: none;
-    height: var(--home-sessions-stacked-height);
-    min-height: 360px;
-  }
-
-  .column-resizer {
-    display: none;
-  }
-}
-
 @media (width < 768px) {
-  .home__content {
+  .home__start {
     padding: 16px;
-  }
-
-  .home__flow ol {
-    grid-template-columns: 1fr;
-    gap: 4px;
   }
 }

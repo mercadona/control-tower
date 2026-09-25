@@ -1,7 +1,5 @@
 import {
-  LiveSession,
   SessionFailure,
-  SessionsOutcome,
   SessionStreamListener,
   SessionStreamSubscription,
   TerminalSize,
@@ -17,26 +15,10 @@ const WRITE_TIMEOUT_MS = 2_000
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const isLiveSession = (value: unknown): value is LiveSession =>
-  isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
-
 const isSessionFailure = (value: unknown): value is SessionFailure =>
   isRecord(value) && typeof value.code === 'string' && typeof value.detail === 'string'
 
 const carriesData = (event: Event): event is MessageEvent<string> => 'data' in event
-
-const list = async (): Promise<SessionsOutcome> => {
-  try {
-    const response = await fetch(PATH)
-    const body: unknown = response.ok ? await response.json() : null
-    if (!isRecord(body) || !Array.isArray(body.sessions) || !body.sessions.every(isLiveSession)) {
-      return { kind: 'unavailable' }
-    }
-    return { kind: 'loaded', sessions: body.sessions }
-  } catch {
-    return { kind: 'unavailable' }
-  }
-}
 
 const watch = (id: string, listener: SessionStreamListener): SessionStreamSubscription => {
   const source = new EventSource(`${PATH}/${encodeURIComponent(id)}/stream`)
@@ -119,7 +101,6 @@ const sendResize = async (id: string, size: TerminalSize): Promise<void> => {
 const resize = (id: string, size: TerminalSize): Promise<void> => chained(id, () => sendResize(id, size))
 
 export const SessionsClient = {
-  list,
   watch,
   type,
   resize,

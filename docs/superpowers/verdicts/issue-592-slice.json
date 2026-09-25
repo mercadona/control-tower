@@ -1,0 +1,35 @@
+{
+  "issue": 592,
+  "tasks_total": 11,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Each sentence of ### Desired end state exists in the accumulated diff:\n(1) Home.implementation.test.tsx pins the boards, and Home.tsx renders only StartPlanForm inside main.home__start when FocusedMode.of answers start, which happens when no live, ended or unresumable session is held.\n(2) A running line shows SliceLineCopy.runningLabel (step label, `Tarea ${task} de ${totalTasks}`, ElapsedTime.since), with `now` from useSecondTick in MilestoneBoard.\n(3) The Ver tareas expansion in SliceLineRow lists tasks with SliceLineCopy.taskStatusLabel, the judge's finding, `Última herramienta` and `Último mensaje`.\n(4) The needs-person AttentionBlock renders exactly one button: SliceRecovery.LABELS[action] for uncertain, Hablar con la sesión otherwise.\n(5) MilestoneBoard shows the BASELINE_TITLE banner only when `progress.issues.some((line) => line.baselineRed)`.\n(6) FocusedSession renders SessionPanel when talking and a terminal exists.\n(7) SessionEndedNotice renders for ended and unresumable in every step, with IN_IMPLEMENTATION or BEFORE_IMPLEMENTATION copy, verbatim D-8a.\n(8) MilestoneBoard renders Milestone completado and Cerrar la sesión y volver al inicio when delivered === total.\n(9) The classic view's modules, styles, mirrors, mothers and README sections are deleted, and no later commit restores any of them.\nNo promise is delivered by one task and undone by a later one. The one visual doubt on the panel's placement is reported as low.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The eleven task commits build on each other without contradiction. T3 made Home the start form or the focused view and left CentredSession in step 4, then T4 replaced it with MilestoneBoard, as T4's objective asked. T5 and T6 extend SliceLineRow and T7 adds the panel over it. T8's notice and T9's completed board sit beside the board rather than replacing it. T10 removes what the classic view alone used, including useWorkProgress, which T4's poll only imitated and never imported. The review fixes then moved SliceLineRow's helpers into SliceLineCopy without changing behaviour. No scaffolding of an intermediate state survives: FocusedMode.of no longer carries the 'no plan runs' condition the classic branch needed. The commit range also carries #605, #606 and the merge of origin/main, which account for every backend/ path in ## Files changed. Those are main's commits, not tasks of this slice, so they do not contradict its Out of scope.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "Does not apply: ## Señal reads 'N/A — frontend only; this repository instruments no product telemetry in the page', a reasoned exemption approved at groom time.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "estado-final",
+        "severity": "low",
+        "what": "SessionPanel lays itself out with position:absolute and inset:0, but no ancestor declares a position: no CSS file in frontend/src sets position on .focused-session, the navigation or the home shell. The panel therefore covers the viewport, top bar and rail included, rather than sitting over the list inside the focused view. It is over the list, so the promise holds, but the visual gate is where its placement will show.",
+        "path": "frontend/src/app/focused-session/components/session-panel/SessionPanel.css",
+        "line": 2,
+        "evidence": "Desired end state: \"`Hablar con la sesión` opens the terminal in a panel over the list.\" — SessionPanel.css: \"position: absolute;\" \"inset: 0;\""
+      }
+    ],
+    "review_token": "634257f4e56b300c557b6496df92fdada07cfa7e9a31dd5f2700690f5bb820f5"
+  }
+}

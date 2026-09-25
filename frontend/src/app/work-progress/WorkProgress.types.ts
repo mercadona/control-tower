@@ -17,20 +17,4 @@ export type WorkProgress =
 
 export type DeliveredPullRequest = { number: number; url: string }
 
-export type WorkIdentity = { repo: string; issue: number; agent: string }
-export type WorkSnapshot = WorkIdentity & { progress: WorkProgress }
-export type WorkProgressOutcome =
-  | { kind: 'read'; snapshot: WorkSnapshot }
-  | { kind: 'not-found'; detail: string }
-  | { kind: 'unavailable'; detail: string }
-
-export type WorkProgressRead =
-  | { kind: 'connecting' }
-  | { kind: 'read'; snapshot: WorkSnapshot }
-  | { kind: 'stale'; snapshot: WorkSnapshot; detail: string }
-  | { kind: 'unavailable'; detail: string }
-
-export type WorkConclusion =
-  | { kind: 'checking' }
-  | { kind: 'finished'; pullRequest: DeliveredPullRequest | null }
-  | { kind: 'not-found' }
+export type WorkSnapshot = { repo: string; issue: number; agent: string; progress: WorkProgress }

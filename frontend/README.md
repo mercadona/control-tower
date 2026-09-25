@@ -11,48 +11,12 @@ start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
 
 Vite + React 19 + TypeScript. One screen — `pages/home` — over most of the API:
 the required ticket and local path open a coordinating session — the repository
-is the one the clone's `origin` names, read by the backend —
-current progress arrives over `GET /work-progress/:issue`, polled. It combines
-plan readiness, planning-agent activity and execution progress. The page shows the
-panels of gates 1 and 2, and the live terminals of the sessions the backend
-owns. The backend dispatches authorised slices by itself; after the committed
-plan is published, it resumes the same headless conversation automatically. `POST
-/implement-plan` is not routed, so the page offers no implementation button.
-Each area has its own directory under `src/app/`, and the endpoint it consumes
-is named in the sections below. Additional context and feedback are entered
-directly in the coordinating conversation.
-
-The main workflow has two stages: **Solicitud → Implementación**. Planning and
-the ready-plan wait are internal phases of Implementation, with plan state,
-agent activity, failures and environment details visible there. Saved planning,
-ready and implementing workflows all restore into that stage; old saved ready
-states become planning hints until fresh evidence confirms readiness. One progress
-owner per displayed work supplies both its panel and automatic selection. The
-progress appears first; the issue link,
-environment details and copy action remain in a disclosure closed by default. There
-is no separate plan-review stage or completed plan-review summary.
-
-`app/work-progress` checks the full `{repo, issue, agent}` identity on each answer,
-rejects unknown payload fields and retries failed reads. Last-known progress stays
-visible with an explicit stale warning, but never drives automatic selection.
-Planning state and agent activity may be independently unavailable; a failed
-delivery check preserves local execution as a partial reading without claiming a
-published pull request. Polls wait three seconds after the previous response, or
-fifteen seconds for confirmed delivered/review/fixing states. Unmounting aborts the
-request and timer. The old three progress routes and their clients are retired.
-
-If inventory confirmation fails, the selected identity and its last progress stay
-on screen as stale while progress polling is paused. Confirmation returning
-resumes polling without clearing that last reading; it becomes fresh only when a
-new progress answer arrives. Discarding or switching identities clears the view.
-A pending automatic handoff also waits while the selected work is stale, partial
-or unreadable, even if its candidate is fresh. A previously reviewed work leaving
-the confirmed inventory remains a separate, supported handoff case.
-
-Publication uncertainty can carry proven local completion with recovery
-information. The panel says **Implementación terminada; publicación sin confirmar**
-and retains the diagnostic and permitted recovery controls; that reading cannot
-authorize an automatic handoff or imply a verified pull request.
+is the one the clone's `origin` names, read by the backend. The backend
+dispatches authorised slices by itself; after the committed plan is published,
+it resumes the same headless conversation automatically. Each area has its own
+directory under `src/app/`, and the endpoint it consumes is named in the
+sections below. Additional context and feedback are entered directly in the
+coordinating conversation.
 
 `app/external-tools` (`ToolsNavbar`) surveys `GET /external-tools` and renders it
 as the design system's **Navbar**: the shell's left rail, 280 px open and 72 px
@@ -66,7 +30,7 @@ back to expanded when the accessor throws.
 **The page owes the rail a height.** `Navigation` declares `height: 100%`, so
 `Home` is an application shell exactly one viewport tall (`height: 100dvh`,
 `overflow: hidden`), with the top bar across the top and a bounded work-area row
-below it; `main` and the right column each scroll on their own inside it. A shell
+below it; `main` scrolls on its own inside it. A shell
 with only `min-height` is not a height a percentage can resolve against.
 `Home.shell.test.ts` pins every declaration that keeps the shell bounded.
 
@@ -80,8 +44,7 @@ change it — the value is an option of the backend's start-up, so no endpoint
 writes it. The footer is one button, **Reintentar comprobación**, which asks
 `GET /external-tools` again and is disabled while a check is in flight.
 
-`app/sessions` (`SessionsPanel`, rendered by `Home`) consumes four session
-endpoints: `GET /sessions` lists what the backend owns, `GET /sessions/:id/stream`
+`app/sessions` consumes three session endpoints: `GET /sessions/:id/stream`
 streams the chosen one's bytes over Server-Sent Events, `POST
 /sessions/:id/input` carries every keystroke back, and `POST /sessions/:id/resize`
 carries the terminal's fitted size so the pty agrees with what the page shows.
@@ -97,156 +60,62 @@ settle. A resize failure is swallowed — it is not user-actionable and never
 shows a banner. **The backend owns the session, not the page**: it is opened
 once at the backend's start-up, so the page is a window onto it and never its
 owner — closing the tab ends only the subscription and disposes the on-screen
-terminal, while the process, its scrollback and its row in `GET /sessions`
-survive; reopening it replays the scrollback the backend kept, as if nothing
-had been watching in between. That process does not outlive whatever ends
-the shell itself, though: an `exit` or a `Ctrl-D` typed into it — the same
-keystrokes `POST /sessions/:id/input` carries there — closes it for good, and
-nothing reopens one, so `GET /sessions` answers empty for the rest of the
-backend's run and the other two endpoints refuse that id with
-`session-not-live`.
+terminal, while the process and its scrollback survive; reopening the panel
+replays the scrollback the backend kept. An `exit` or a `Ctrl-D` typed into it
+ends that terminal, and input and resize requests then refuse its identifier
+with `session-not-live`. The held coordinating conversation remains visible and
+offers **Reabrir la sesión** through its dedicated lifecycle endpoint. The page
+gets the terminal identifier from the coordinating session, not `GET /sessions`.
 
-`app/coordinating-session` (`CoordinatingSessionStatus`, rendered by `Home`
-beside `SessionsPanel`) is the page's single owner of coordinating-session
+`app/coordinating-session` is the page's single owner of coordinating-session
 opening, polling and closure. It polls `GET /coordinating-session` every two
 seconds (`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`). The backend's
 `timeline` field carries the session's chronological history (opened,
 resumed, working, waiting for a permission prompt, completed, ended); the
 page does not render it — `askStateOf` reads only `timeline.at(-1).kind` to
-derive `liveAsk`, which feeds `GateSequence`. `CoordinatingSessionStatus`
-itself renders nothing for a live session: it shows a banner only for
-`unresumable` or `ended`, the only two states the UI needs to say the
-conversation could not be recovered or has ended. Both the request form and
-gate 2 delegate their opening to that owner. Its synchronous mutation guard
-blocks both entrances before either request settles; an uncertain response
-stays occupied until a later authoritative read confirms the slot idle. Every
-held response carries an opaque target, and mutation generations prevent
-reads started before an open or close from repainting an older target.
+derive `liveAsk`, which feeds the gate band. An `ended` or `unresumable`
+session shows `SessionEndedNotice` (`app/focused-session`) with **Reabrir la
+sesión** instead. Both the request form and gate 2 delegate their opening to
+that owner. Its synchronous mutation guard blocks both entrances before
+either request settles; an uncertain response stays occupied until a later
+authoritative read confirms the slot idle. Every held response carries an
+opaque target, and mutation generations prevent reads started before an open
+or close from repainting an older target.
 
-The session header offers **Cancelar la sesión** for a live target and **Cerrar
-sesión** for ended or unresumable state. Closure sends the exact conversation
-and target to `POST /coordinating-session/close`; **Cancelando…** remains visible
-until a matching durable acknowledgement arrives. A refusal or unreadable
-answer retains the target and an actionable retry. Confirmed closure removes
-only that target's terminal presentation and gates.
+The header offers **Cancelar la sesión** as a secondary action, live or not.
+Closure sends the exact conversation and target to `POST
+/coordinating-session/close`; **Cancelando…** remains visible until a matching
+durable acknowledgement arrives. A refusal or unreadable answer retains the
+target and an actionable retry. Confirmed closure returns the page to the
+start form.
 
-`Home` lays out a right column (`home__side`), a sibling of `main` rather than
-an overlay, that holds a `Drawer` titled **Sesión coordinadora** with
-`CoordinatingSessionStatus`, `SessionsPanel` and, while implementation runs,
-`ImplementHistory` inside it. The drawer starts collapsed to a 48 px rail and
-persists the person's choice under `ct.sessions-column-collapsed`; a newly
-discovered coordinating target expands it once and selects that target's
-terminal, including after reload. A later manual selection or collapse is not
-undone by another poll for the same target. Its toggle is available in every
-phase. Collapsing applies the native `hidden` attribute to
-the content instead of unmounting it, so the terminal keeps its xterm scrollback
-and SSE subscription. `useLiveSessions` polls `GET /sessions` every three
-seconds, so the list discovers a session opened outside the page without
-requiring the drawer to be open. Above 1280 px the open column sits beside
-`main` at `clamp(480px, 40vw, 680px)` (`--home-sessions-width`) rather than a
-fixed 680px, because the 280 px navigation rail already takes its own share of
-a 1440 px viewport and a fixed column left the work area too narrow for its own
-flow bar; below 1280 px the column stacks under the work area with no overlay.
+**The focused view.** While a coordinating session is held — live, ended or
+unresumable — `Home` renders `FocusedSession` (`app/focused-session`); with no
+session held it renders only the start form. The view holds a header with the
+step, the story and repository, **Cancelar la sesión**, and the four steps; the
+band of the gate that asks for something; and the centre. In steps 1 to 3 the
+centre is the session. In step 4 it is `MilestoneBoard` (`app/milestone-progress`),
+one line per issue from `GET /milestone-progress`, polled every 3 s, or 15 s
+while an issue is in review or being fixed. The list retains its last successful
+read through an outage for the same target and discards it when the held session
+target changes; the session owner supplies the single connection notice.
+If only the milestone read fails, its own warning explains that the displayed
+information is the last available reading. A successful read clears that warning.
+**Hablar con la sesión** opens the terminal in a panel over the list, keeping the
+header and steps visible. A session that ended shows **Reabrir la sesión**, which
+calls `POST /coordinating-session/reopen`. Its step-4 list remains visible.
+When every issue is delivered, **Milestone completado** offers **Cerrar la sesión
+y volver al inicio**.
 
-**The focused view.** While a coordinating session is live and no plan of its
-story is in progress, `Home` renders `FocusedSession`
-(`app/focused-session`) in place of everything above: no request form, no slice
-cards, no gate sequence, no drawer. The navigation rail and the top bar stay.
-The view holds, in order:
+Recovery first reads the current plan and checks that its permitted action still
+matches the button pressed. A changed action requires a new decision; `inspect`
+only refreshes the milestone. A lost recovery or cleanup response is reported as
+unconfirmed while a fresh milestone read reconciles the display. Initial session
+read failures also show a connection notice, with the start form explaining that
+the session state is unknown rather than claiming that another session exists.
 
-- a header with the name of the current step, the story and repository the
-  session was opened for, **Cancelar la sesión** as a secondary action, and the
-  four steps (Brainstorming, Congelación del spec, Groom y autorización,
-  Implementación);
-- a band with the gate that asks for something right now, the same
-  `SpecFreezePanel` or `EpicGroomPanel` today's view shows, and nothing when no
-  gate asks for anything. A frozen spec waiting for its merge asks for one: the
-  band names the pull request to merge;
-- the session itself in the centre (`CentredSession`), with no tabs.
-
-The step and the band are derived from gate 1 and gate 2 in
-`SessionStage.of`; no phase is stored. `FocusedMode.of` decides whether the page
-is focused: a plan the page adopted on its own stops the focus only when gate 2
-names its issue among this story's issues, so a plan of another story never
-takes the page over. A single **Sin conexión con el backend** replaces the
-per-poll warnings while the coordinating session poll fails. When the session
-ends or a plan of its story starts, today's view comes back as it was, and the
-banners of `CoordinatingSessionStatus` say why.
-
-The coordinating session remains available and recoverable while a headless
-plan conversation plans and implements. They have different roles: expanding
-the drawer exposes the coordinating session as the interactive entrance in its
-PTY, while durable headless call records drive the selected slice without
-replacing that entrance.
-
-History queries pause while the drawer is collapsed and refresh immediately when
-it opens. The terminal remains mounted and connected throughout; pausing history
-does not stop the coordinating conversation.
-
-`app/active-plans` reads `GET /active-plans` on load and while following work.
-An uncertain entry carries a diagnostic, its original repo/issue/agent identity
-and one recovery action. `observe` and `continue` render **Recuperar trabajo**;
-`cleanup` renders **Limpiar arranque fallido**. A press sends the exact identity
-to `POST /recover-plan` or `POST /cleanup-plan` and then reads active plans
-again; it never starts new work. The button is disabled while that request
-is pending, and late replies cannot replace a newer workflow or coordinating
-conversation. `inspect` stays read-only and offers **Reintentar recuperación**,
-which only repeats the GET. **Descartar estado** clears this page's local state
-and does not mutate backend work. The coordinating drawer and its live session
-remain mounted throughout recovery.
-
-Slice cards offer **Ver detalle** to select the slice shown by the main panel,
-breadcrumbs and task history, with the choice persisted across reloads.
-When the selected slice transitions to **En revisión** (`IN_REVIEW`), the page
-automatically selects the sole confirmed running slice in the same repository and checkout.
-`DELIVERED` alone does not trigger a handoff: execution ending does not confirm
-that the work is available for review. The handoff waits if that slice appears
-later, including after the slice in review leaves active plans. Ambiguous or
-unreadable candidates prevent a jump.
-Manual selection cancels the pending handoff; restoring or opening an already
-in-review slice does not trigger one. Returning to fixes cancels the pending handoff.
-`useAutomaticSliceSelection.ts` consumes the cards' existing progress reads
-rather than starting another polling loop.
-
-When the saved workflow leaves active plans, the page asks `/work-progress` what
-became of it (`useWorkConclusion`) instead of assuming it was lost. The backend
-decides: `finished` — its harvest is recorded — renders an informative
-**Slice #N entregado**, naming the slices still running in the same repository
-and checkout (or saying none are), linking the pull request when the backend
-names one, and offering **Cerrar** to clear the saved workflow. `work-not-found`
-keeps the warning, whose copy no longer names cmux. Until the first of those
-answers arrives the page says it is still checking and warns nobody; after it, a
-read that fails keeps the last answer on screen. The question is repeated every
-three seconds and stops once the answer is `finished`, so a warning read in the
-instant before the harvest is recorded turns into the announcement on the next
-poll, and a slice the backend reports in flight again withdraws the warning.
-
-The mutation owns the active-plan read barrier from the click until its fresh
-GET completes. It first drains a GET that predates the click; timer and manual
-polls that wake while POST is pending start no read. After an accepted or
-refused answer, the mutation alone bypasses its barrier for exactly one new GET,
-so pre-operation state cannot stand in for post-operation reconciliation.
-
-A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
-`main` and the column as its own 8 px grid track, draggable and keyboard-
-operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
-to reset), clamped to `[360px, columnsWidth - 600px]` so the work area always
-keeps at least 600 px for the flow bar and work details. Its focus
-ring is the design system's, not the browser default:
-`.column-resizer:focus-visible` matches `Button`'s
-`outline: var(--borderwidth-md) solid var(--border-brand-primary)`. The flow
-step labels hyphenate at a word boundary (`hyphens: auto`, `overflow-wrap:
-normal`, and `<html lang="es">` in `index.html` so the browser hyphenates
-Spanish) instead of breaking mid-word.
-`useSessionsColumnWidth` (`pages/home/`) owns the
-clamp and persists the chosen width per browser in `localStorage` under
-`ct.sessions-column-width` — a convenience for that browser alone, restored
-on mount and re-clamped to the viewport; it is never sent to the backend and
-the handle is disabled while the drawer is collapsed and hidden below 1280 px,
-where the column is already full width.
-
-`app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
-the workspace, outside every `currentStage` branch) is gate 1's panel.
+`app/spec-freeze` (`SpecFreezePanel`, rendered inside `GateBand`,
+`app/focused-session`, while step 2 asks for it) is gate 1's panel.
 `GET /spec-freeze` polls the checkout's execution spec (`useSpecFreeze.ts`) and
 answers `none`, `no-spec`, `draft` — with the yardstick's findings and the
 one-time gate key — or `frozen`, with the freeze date and the pull request.
@@ -257,9 +126,8 @@ in `x-coordinating-target` to freeze it. Under
 the backend, so no gate key is ever minted for it: the button can only be
 pressed from the page the backend itself serves.
 
-`app/epic-groom` (`EpicGroomPanel`, rendered by `Home` right after
-`SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
-the groom and the authorisation. `GET /epic-groom` polls the same checkout
+`app/epic-groom` (`EpicGroomPanel`, rendered inside the same `GateBand` while
+step 3 or step 4 asks for it) is gate 2's panel: the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
 `groomed` or `authorised` — **unless the slicing is being reviewed**, and then it
 keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
@@ -268,12 +136,12 @@ opened is on screen or while a press it could not confirm is outstanding, and
 passing that flag re-arms the read at once, so the §9 table the session edits
 reaches the page without a reload. `Home` reads the same checkout once more for
 the focused view and keeps asking at those two rungs, and at `groomed` and
-`authorised` too, while a live session holds no plan: that read is what tells the
-step and the band, and what recognises this story's plans once they start. A
+`authorised` too, while a session is held, including ended and unresumable
+sessions: that read determines the step and band, so authorisation advances to
+implementation even when the coordinating terminal has ended. A
 read that fails keeps the last answer for the same target instead of blanking
-the view. At `groomed` and `authorised` the panel's read rests
-whatever the review is doing: there is nothing left for a conversation to
-change there. It answers one of the ten states `EpicGroom.types.ts`
+the view. The panel also watches preparation at `groomed` and `authorised`.
+It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
 already says what is missing; `resliced` says the coordinating session changed
 the slicing and offers **Publicar el nuevo slicing**, which calls
@@ -311,12 +179,12 @@ The conversation **Revisar el slicing con la sesión** opens through the same
 lifecycle owner as the request form. `POST /groom-session` answers the session
 it created, `CoordinatingSessionClient.openedIn` reads that payload — one reader
 for the two doors that answer it — and the adopted session appears and is
-selected without waiting for the next `GET /sessions`. A delayed old listing
-cannot remove that adoption or resurrect a terminal after confirmed closure.
-Both gate reads answer `connecting` in the very render a new target appears,
-and `GateSequence` is keyed by the current target, so old gate reads,
-confirmation fallbacks and automatic reslicing presses cannot repaint a
-replacement target.
+selected directly from that answer, with no further round trip. Both gate
+reads answer `connecting` in the very render a new target appears, because
+`useSpecFreeze.ts` and `useEpicGroom.ts` each hold their own `{ target, read }`
+pair and return `connecting` until an answer for the new target settles it, so
+old gate reads, confirmation fallbacks and automatic reslicing presses cannot
+repaint a replacement target.
 
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a
@@ -338,8 +206,8 @@ worst move available when nobody can tell what was created.
   `Host`: a foreign page cannot call `POST /coordinating-session`, and ours can, with no
   CORS and no preflight.
 - **The client is `fetch`** (`src/app/coordinating-session/client.ts`,
-  `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
-  `EventSource` remains for the coordinating terminal stream, not work progress.
+  `src/app/active-plans/client.ts`, `src/app/milestone-progress/client.ts`). Native
+  `EventSource` remains for the coordinating terminal stream.
   The in-house libraries are waiting for CI to have access to the private
   registry.
 
@@ -352,36 +220,12 @@ the repo moves to the organisation:
 - `src/system-ui/theme/` is a **literal copy** of the package's theme (tokens,
   Open Sans, `lg-*` classes). It is not edited; `VENDORED.md` says how to
   refresh it.
-- the other directories under `src/system-ui/` — `banner`, `breadcrumbs`,
-  `button`, `collapsable-card`, `drawer`, `form-field`, `icons`, `input`,
+- the other directories under `src/system-ui/` — `banner`,
+  `button`, `form-field`, `icons`, `input`,
   `loading`, `menu-item`, `menu-section`, `nav-header`, `navbar`, `navigation`,
-  `panel`, `tabs`, `tag`, `text-area`, `top-bar` and `workflow-step`
+  `tag` and `top-bar`
   — are **mirrors** of `logistics-ui`'s components, with the same tokens and a
-  subset of their props. The day the package arrives, the import changes. The `tabs` one traces
-  `packages/logistics-ui/src/components/Tabs` at `4d946b4`: the ARIA tabs
-  pattern (`tablist` / `tab`, one tab stop for the whole bar, `ArrowLeft` /
-  `ArrowRight` / `Home` / `End` walking it with disabled tabs skipped), the
-  underlined active tab in `--foreground-primary` against
-  `--foreground-secondary`, and the label-ghost technique that reserves the
-  active tab's width so the bar does not shift when the selection moves.
-  Upstream's `focus-visible` outline reaches for `--border-brand`, which the
-  vendored theme does not carry; the mirror uses `--border-brand-primary`
-  instead, the closest token that exists.
-- The `drawer` one traces `packages/logistics-ui/src/components/Drawer` at
-  `4d946b4`: the persistent side panel that compresses the work area when open
-  and gives the space back when collapsed, never a layer over the content —
-  the `aside` region named by its own title, the 48px-wide collapsed rail with
-  only the toggle, the visually-hidden title that survives collapsing because
-  it is the region's accessible name, and the `Button` `tertiary` toggle
-  (`aria-expanded`, `aria-controls`) instead of a hand-rolled one. The mirror's
-  CSS module became plain BEM; every comment was stripped, matching every
-  other mirror in this tree; the scroll-ramp mask, its `@property` registrations
-  and the `animation-timeline` keyframes were left out, since no other mirror
-  here carries them and they are not what this component's use in Control Tower
-  is about. Upstream hardcodes a 390px open width; this repository's Home page
-  drives that width itself through `--home-sessions-width` (the same variable
-  `ColumnResizer` already wrote), so the mirror declares no width at all except
-  the 48px collapsed rail.
+  subset of their props. The day the package arrives, the import changes.
 - The tokens live under `[data-ds='logistics']`; the `<html>` carries that
   attribute and `data-theme`, which `Theme.followSystemPreference()` sets from
   the system preference (light or dark) and keeps following if it changes.
@@ -397,7 +241,7 @@ make test-frontend
 Or inside `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
 
 `vite.config.ts`'s proxy forwards every API path the page calls — the list is
-`API_PATHS` in that file, sixteen of them today, including `/recover-plan` and
+`API_PATHS` in that file, thirteen of them today, including `/recover-plan` and
 `/cleanup-plan` — and strips the `Origin` header
 from what it forwards: without it the backend refuses the call as a foreign
 origin. **A new endpoint has to be added to `API_PATHS`**, or the dev server

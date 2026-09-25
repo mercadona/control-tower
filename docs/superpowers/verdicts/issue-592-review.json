@@ -1,0 +1,65 @@
+{
+  "issue": 592,
+  "tasks_total": 11,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Every task's objective is produced by production lines: MilestoneProgressClient.read (T1), CoordinatingSessionClient.reopen and the hook's reopen (T2), Home/FocusedMode start-or-focused (T3), MilestoneBoard/SliceLineRow/SliceLineCopy/useMilestoneProgress/MilestonePolling/ElapsedTime/useSecondTick (T4), the Ver tareas expansion (T5), the attention block with SliceRecovery and the baseline notice (T6), SessionPanel (T7), SessionEndedNotice (T8), the completed board (T9), the deletions (T10), the README rewrite (T11). The previous round's medium README finding is closed. The spec-freeze panel is now said to render while step 2 asks for it, and the epic-groom panel while step 3 or step 4 asks for it, which is what SessionStage.#bandFor returns ('brainstorming' → none, 'spec-freeze' → spec-freeze when gate 1 asks, 'groom'/'implementation' → epic-groom when gate 2 asks). The protection against a stale gate read is now attributed to useSpecFreeze.ts and useEpicGroom.ts holding their own { target, read } pair and returning connecting while it names another target (`return held.target === target ? held.read : CONNECTING`). The remaining 'mutation generations' sentence belongs to the coordinating-session paragraph and describes that hook's own reads, which is accurate.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Every test the plan names is in the diff and asserts what its TDD line wrote (T1 camelCase read and unknown-state unavailable; T2 reopen header and adopted session; T3 start form only / ended stays focused; T4 01:05 then 01:06; T5 Hecha, finding, last tool, last message; T6 one button per attention kind and the baseline notice; T7 dialog with the session region over the list; T8 the four steps; T9 Milestone completado and its twin). T10 and T11 declare No TDD, and the last fix round touched only frontend/README.md. The controls log review-controls-3.log shows every control at exit 0 and 991/991 tests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "MilestoneProgress.types.ts, MilestoneProgressClient.PATH, MilestonePolling, ElapsedTime.since, SliceRecovery, SessionPanel and SessionEndedNotice props, FocusedMode.of, reopen and the two product-error entries match the plan literally; SliceLineRow's props and export are unchanged by the extraction of SliceLineCopy. Plan self-contradiction left out of findings: T4 types useMilestoneProgress as returning `MilestoneProgressOutcome | null` while the same task says 'The hook also returns reread()'; the diff returns {read, reread}, the only shape honouring both sentences.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-1..D-14 and D-17 are implemented with their stated values: 3000/15000 ms polling with REVIEW_STEPS, read only at step implementation, Preparando el plan, mm:ss uncapped, disabled Hablar con la sesión with no terminal, fetch doubles by path. D-11 is honoured. No test double scripts /work-progress/ or /implement-history/, and the three progress mothers and the four reader-less types are gone. work-progress/contract.ts stays, as Out of scope and T10 require.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars opened: GateBand.tsx and SessionEndedNotice.tsx (module-level string constants, no module-level functions), ElapsedTime.ts and SliceRecovery.ts (logic on a static class), epic-groom/client.ts (literal === membership checks, no cast), SliceSession.tsx (copy ported verbatim). Precedence taken as the block states it, rule by rule. Pre-existing modules (active-plans/client.ts, sessions/client.ts, useCoordinatingSession.ts, StartPlanForm.tsx) follow their host idiom. The new modules conform to style.md and boundaries.md: SliceLineRow.tsx hangs its helpers off SliceLineCopy, and MilestoneProgressClient has no forced cast. The one `as` in SliceLineCopy widens a constant of this module, not a value from outside. defects.md, rule by rule:\n- Closed vocabulary: SliceLineState, SliceTaskStatus, SliceAttention.kind and RecoveryAction are closed unions dispatched by exhaustive switches with no default.\n- Raw map as return of logic: none.\n- Two fields that have to agree: SliceLine carries both `state: 'needs-person'` and `attention | null`, which the T1 contract and the backend wire fix, so it is a plan defect left out of findings.\n- Error named for where: slice-recovery-not-found names what happened.\nsimplicity.md: one low remark carried from the previous round and still present, SliceLineCopy's unused export and needlessly public method.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Every removed or relaxed assertion is accounted for by a task sentence. T3 lists the deleted Home.*.test files and the trimmed classic-view cases. T10 removes the tests of every deleted folder, the deleted mirrors' system-ui tests, SessionsClient.list's tests and the closedSessionIds assertions. The fix rounds removed only fetch-double branches for paths no production code requests, and each double still throws on an unscripted path.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviours come from production lines: the client's parsing, MilestonePolling.intervalFor, ElapsedTime, SliceLineCopy's labels, SliceRecovery's lookup and dispatch, the board, row, panel and notice components and FocusedSession's wiring. The doubles only answer wire payloads by path.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "backend/ is untouched and work-progress/contract.ts is kept, as Out of scope demands. The T10 plan amendment was read line by line, and each addition is forced by the task's own sentences. The fix rounds touched only what the findings named, and the last one touched only frontend/README.md.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "New tests are deterministic, using fake timers with vi.setSystemTime wherever a time is asserted, and isolated: each stubs fetch per test and afterEach unstubs globals. They assert rendered DOM and literal request payloads produced by production code, and none would pass with the production lines reverted. No finer-grained remark reported, so the skill text was not needed as a citation.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "SliceLineCopy exports the type AttentionCopy, which no module imports, and makes stepWithTime public although its only caller is taskStatusLabel inside the same class.",
+        "path": "frontend/src/app/milestone-progress/components/slice-line-row/SliceLineCopy.ts",
+        "line": 72,
+        "evidence": "conventions/simplicity.md: \"A field, a parameter with a default, a branch for a state, a method made public, an export: each is justified by a caller that exists today and by nothing else.\" — diff: \"export type { AttentionCopy }\" and \"static stepWithTime(line: SliceLine, now: number): string {\""
+      }
+    ],
+    "review_token": "a278feeab2fbc5cd2ecb3adbfdbb25d1d8bf100444b3c1709fbd8091155b6a8b"
+  }
+}

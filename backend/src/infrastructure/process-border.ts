@@ -3,9 +3,21 @@ import { spawn as ptySpawn } from 'node-pty'
 import { ProcessRunner } from './process-runner.ts'
 import type { LaunchedProcess, LaunchOptions, RunAndWaitOptions, RunOutcome } from './process-runner.ts'
 import { ProcessTable } from './process-table.ts'
+import { ProcProcessTable } from './proc-process-table.ts'
 import type { TableRead, Terminal, TerminalOptions } from './process-table.ts'
 
 export class SystemProcesses extends ProcessRunner implements ProcessTable {
+  readonly #procTable: ProcProcessTable | null
+
+  constructor({ procTable = null }: { procTable?: ProcProcessTable | null } = {}) {
+    super()
+    this.#procTable = procTable
+  }
+
+  static forThisHost(): SystemProcesses {
+    return new SystemProcesses({ procTable: process.platform === 'linux' ? new ProcProcessTable({ root: '/proc' }) : null })
+  }
+
   runAndWait(binary: string, argv: readonly string[], options: RunAndWaitOptions): Promise<RunOutcome> {
     return new Promise((resolve) => {
       execFile(binary, [...argv], { cwd: options.cwd, env: options.env, timeout: options.timeoutMs }, (failure, stdout, stderr) => {
@@ -38,6 +50,8 @@ export class SystemProcesses extends ProcessRunner implements ProcessTable {
   }
 
   readTable(read: TableRead): Promise<string> {
+    if (this.#procTable !== null) return this.#procTable.read(read)
+
     return new Promise((resolve, reject) => {
       let callbackSettled = false
       let childClosed = false

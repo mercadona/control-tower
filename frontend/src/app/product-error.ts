@@ -7,6 +7,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'coordinating-session-not-live': 'La sesión coordinadora ya no está viva. Abre otra para seguir.',
   'coordinating-session-busy': 'La sesión coordinadora está realizando otra operación. Inténtalo de nuevo cuando termine.',
   'coordinating-session-target-changed': 'La sesión coordinadora ha cambiado. Actualiza la página antes de volver a intentarlo.',
+  'coordinating-session-not-ended': 'La sesión coordinadora sigue viva: no hace falta reabrirla.',
+  'coordinating-session-close-failed': 'El cierre de la sesión coordinadora falló. Termina de cerrarla antes de reabrirla.',
   'story-spec-frozen': 'Este ticket ya tiene su spec congelado, así que su brainstorming ha terminado. Sigue con el groom.',
   'malformed-id': 'El ticket no tiene un formato válido.',
   'malformed-path': 'La ruta local debe ser una ruta absoluta válida.',

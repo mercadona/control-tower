@@ -33,10 +33,3 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-
-.top-bar__actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}

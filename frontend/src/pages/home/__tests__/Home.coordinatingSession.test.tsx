@@ -2,7 +2,6 @@ import { act, cleanup, fireEvent, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -25,7 +24,6 @@ const backendHolding = (coordinatingSession: Answer, closeAnswer?: Answer | (() 
       return responseFor(typeof closeAnswer === 'function' ? closeAnswer() : closeAnswer)
     }
     if (input === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-    if (input === '/sessions') return responseFor(SessionsMother.noSessions())
     if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (input === '/spec-freeze') return responseFor(SpecFreezeMother.none())
     if (input === '/epic-groom') return responseFor(EpicGroomMother.none())
@@ -69,22 +67,20 @@ describe('Home and the coordinating session', () => {
     expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
   })
 
-  it('keeps an ended conversation visible while permitting replacement and offers explicit closure', async () => {
-    backendHolding(CoordinatingSessionMother.ended())
+  it('shows no start form while a session is live', async () => {
+    backendHolding(CoordinatingSessionMother.working())
 
     openHome()
-    await screen.findByRole('button', { name: 'Cerrar sesión' })
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('La conversación coordinadora ha terminado')
-    expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    await screen.findByRole('heading', { level: 1 })
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
   it('reads the coordinating session through a single poller', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.working())
 
     openHome()
-    await screen.findByText(ALREADY_LIVE_HELP)
+    await screen.findByRole('heading', { level: 1 })
 
     expect(readsOfTheCoordinatingSession(fetching)).toHaveLength(1)
   })
@@ -121,7 +117,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session/close') return pending
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -150,7 +145,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session/close') return pending
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.draft()))
@@ -237,27 +231,26 @@ describe('Home and the coordinating session', () => {
     openHome()
 
     expect(await screen.findByText(/El sistema no tiene permisos para verificar/)).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toBeDisabled()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
     expect(await screen.findByText(/No hay identidad original suficiente para terminar/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    expect(screen.getByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar la sesión' }))
 
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
     expect(attempts).toBe(2)
   })
 
-  it('offers closure for an unresumable conversation without a terminal tab', async () => {
+  it('offers closure for an unresumable conversation with no start form underneath', async () => {
     backendHolding(CoordinatingSessionMother.unresumable())
 
     openHome()
 
-    expect(await screen.findByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-    expect(screen.queryByRole('tab', { name: 'brainstorming' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cancelar la sesión' })).toBeEnabled()
+    expect(screen.queryByLabelText('Ticket')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -274,9 +267,9 @@ describe('Home and the coordinating session', () => {
     })
     openHome()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar la sesión' }))
 
-    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Cancelar la sesión' })).not.toBeInTheDocument())
     await vi.waitFor(() => expect(screen.getByLabelText('Ticket')).toBeEnabled())
   })
 
@@ -299,7 +292,6 @@ describe('Home and the coordinating session', () => {
       }
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-      if (input === '/sessions') return responseFor(SessionsMother.noSessions())
       if (input === '/spec-freeze') return responseFor(SpecFreezeMother.none())
       if (input === '/epic-groom') return responseFor(EpicGroomMother.none())
       throw new Error(`unexpected fetch to ${String(input)}`)
@@ -324,7 +316,6 @@ describe('Home and the coordinating session', () => {
     fetching.mockImplementation((input: string | URL | Request) => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -346,7 +337,6 @@ describe('Home and the coordinating session', () => {
         return Promise.resolve(responseFor(CoordinatingSessionMother.awaitingPermissionWithNoMessage()))
       }
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -366,7 +356,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.completed()))
       if (input === '/groom-session') return Promise.resolve(responseFor(EpicGroomMother.groomAskTyped()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))

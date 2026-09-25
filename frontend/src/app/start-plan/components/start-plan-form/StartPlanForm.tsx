@@ -1,7 +1,7 @@
 import { FormEvent, useRef, useState } from 'react'
 import { OpenedCoordinatingSession, OpenOutcome } from 'app/coordinating-session/CoordinatingSession.types'
 import { LocalPath } from 'app/start-plan/LocalPath'
-import { StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
+import { StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 import { TicketKey } from 'app/start-plan/TicketKey'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
@@ -12,7 +12,6 @@ import './StartPlanForm.css'
 
 type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>
 
-const MUTATION_BLOCKED_HELP = 'No puedes arrancar otro plan hasta confirmar el estado del backend.'
 const ALREADY_LIVE_HELP = 'Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.'
 const INCOMPLETE_HELP = 'Da un ticket válido y la ruta local del repositorio.'
 
@@ -20,16 +19,13 @@ type StartPlanFormProps = {
   onOpened: (opened: OpenedCoordinatingSession) => void
   onUnreachable: () => void
   onInteraction: () => void
-  isLocked: boolean
-  isMutationBlocked?: boolean
   isCoordinatingSessionLive?: boolean
+  isSessionStateUnknown?: boolean
   openSession?: (submission: StartPlanSubmission) => Promise<OpenOutcome>
-  request?: StartPlanRequest
 }
 
 const StartPlanForm = ({
-  onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false,
-  isCoordinatingSessionLive = false, openSession, request,
+  onOpened, onUnreachable, onInteraction, isCoordinatingSessionLive = false, isSessionStateUnknown = false, openSession,
 }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [path, setPath] = useState('')
@@ -46,17 +42,15 @@ const StartPlanForm = ({
     hasWellFormedTicket &&
     LocalPath.isWellFormed(path) &&
     !isSending &&
-    !isLocked && !isMutationBlocked && !isCoordinatingSessionLive
+    !isCoordinatingSessionLive
 
-  const helpText = isCoordinatingSessionLive
-    ? ALREADY_LIVE_HELP
-    : isMutationBlocked
-      ? MUTATION_BLOCKED_HELP
-      : INCOMPLETE_HELP
+  const helpText = isSessionStateUnknown
+    ? 'No se ha podido confirmar si hay una sesión en marcha. Espera a que se restablezca la conexión.'
+    : isCoordinatingSessionLive ? ALREADY_LIVE_HELP : INCOMPLETE_HELP
 
   const openBrainstorming = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isSendingRef.current || isLocked || isMutationBlocked || isCoordinatingSessionLive) return
+    if (isSendingRef.current || isCoordinatingSessionLive) return
     onInteraction()
     isSendingRef.current = true
     setIsSending(true)
@@ -82,31 +76,6 @@ const StartPlanForm = ({
     setRefusal(outcome)
   }
 
-  if (isLocked) {
-    const shownTicket = request?.id ?? (ticketKey !== '' ? ticketKey : null)
-
-    return (
-      <dl className="start-plan-form__summary">
-        {shownTicket !== null && (
-          <div>
-            <dt className="lg-caption1-regular">Ticket</dt>
-            <dd>{shownTicket}</dd>
-          </div>
-        )}
-        {request?.repo !== undefined && (
-          <div>
-            <dt className="lg-caption1-regular">Repositorio</dt>
-            <dd><code>{request.repo}</code></dd>
-          </div>
-        )}
-        <div>
-          <dt className="lg-caption1-regular">Ruta local</dt>
-          <dd><code>{request?.path ?? LocalPath.normalize(path)}</code></dd>
-        </div>
-      </dl>
-    )
-  }
-
   return (
     <form className="start-plan-form" onSubmit={openBrainstorming}>
       <FormField
@@ -123,7 +92,7 @@ const StartPlanForm = ({
           aria-label="Ticket"
           placeholder={TicketKey.EXAMPLE}
           value={ticketKey}
-          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
+          disabled={isSending || isCoordinatingSessionLive}
           autoComplete="off"
           onBlur={() => setTouched((current) => ({ ...current, ticket: true }))}
           onChange={(event) => {
@@ -136,7 +105,7 @@ const StartPlanForm = ({
         <Input
           placeholder={LocalPath.EXAMPLE}
           value={path}
-          disabled={isSending || isLocked || isMutationBlocked || isCoordinatingSessionLive}
+          disabled={isSending || isCoordinatingSessionLive}
           autoComplete="off"
           onBlur={() => setTouched((current) => ({ ...current, path: true }))}
           onChange={(event) => {
