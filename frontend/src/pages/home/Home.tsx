@@ -5,6 +5,7 @@ import { FocusedSession } from 'app/focused-session/components/focused-session'
 import { SessionStage } from 'app/focused-session/SessionStage'
 import { FocusedMode } from 'pages/home/FocusedMode'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
+import { useMilestoneProgress } from 'app/milestone-progress/useMilestoneProgress'
 import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { Banner } from 'system-ui/banner'
@@ -21,6 +22,8 @@ const Home = () => {
   const isSessionLive = coordinatingSession.read.phase === 'read' && coordinatingSession.read.kind === 'live'
   const specFreezeRead = useSpecFreeze(coordinatingSession.target)
   const epicGroomRead = useEpicGroom(isSessionLive, coordinatingSession.target, isSessionLive)
+  const stage = SessionStage.of(specFreezeRead, epicGroomRead)
+  const milestoneProgress = useMilestoneProgress(stage.step === 'implementation')
 
   const formInteracted = useCallback(() => setBrainstormingUnreachable(false), [])
   const sessionOpened = useCallback(() => setBrainstormingUnreachable(false), [])
@@ -40,9 +43,11 @@ const Home = () => {
           <FocusedSession
             held={focusedMode.held}
             terminal={focusedMode.terminal}
-            stage={SessionStage.of(specFreezeRead, epicGroomRead)}
+            stage={stage}
             lifecycle={coordinatingSession}
             closing={coordinatingSessionClosing}
+            milestoneProgress={milestoneProgress.read}
+            onRereadMilestone={milestoneProgress.reread}
           />
         </Navigation>
       </div>

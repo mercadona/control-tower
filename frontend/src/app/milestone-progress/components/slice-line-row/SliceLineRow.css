@@ -1,0 +1,18 @@
+.slice-line-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
+}
+
+.slice-line-row__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.slice-line-row__status {
+  flex: none;
+  color: var(--foreground-secondary);
+}
