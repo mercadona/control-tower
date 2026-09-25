@@ -21,7 +21,6 @@ type WireIssue = { readonly number: number, readonly url: string, readonly title
 export const EpicGroomOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
-  NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_NOT_FROZEN: 'spec-not-frozen',
   SPEC_RESLICED: 'spec-resliced',
@@ -85,7 +84,6 @@ export class EpicGroomRoute {
   static readonly NO_PLAN_ON_THIS_PRESS = 'no plan on this press'
   static readonly PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
-  static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to groom'
   static readonly #GROOM_IN_PROGRESS_DETAIL =
     'a groom of this checkout is under way: wait for it to answer before pressing again'
   static readonly #PLAN_CHANGED_DETAIL =

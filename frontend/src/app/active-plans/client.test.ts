@@ -93,14 +93,14 @@ describe('ActivePlansClient', () => {
     })
   })
 
-  it('cleanup preserves a typed refusal', async () => {
+  it('cleanup keeps the code of a refusal and tells it in Spanish', async () => {
     const plan = { ...uncertainPlan(), recovery: { action: 'cleanup' as const, detail: 'cleanup available' } }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       '{"code":"cleanup-plan-conflict","detail":"workspace changed"}', { status: 400 },
     )))
 
     expect(await ActivePlansClient.cleanup(plan)).toEqual({
-      kind: 'refused', code: 'cleanup-plan-conflict', detail: 'workspace changed',
+      kind: 'refused', code: 'cleanup-plan-conflict', detail: 'El estado actual del trabajo no permite limpiarlo sin riesgo.',
     })
   })
 

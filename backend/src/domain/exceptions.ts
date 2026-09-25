@@ -18,10 +18,6 @@ export class UserStoryNotUnderstood extends UserStoryFailure {}
 
 export class PlanIssueFailure extends PlanFailure {}
 
-export class PlanIssueNotCreated extends PlanIssueFailure {}
-
-export class PlanIssueNotNamed extends PlanIssueFailure {}
-
 export class PlanIssueNotClaimed extends PlanIssueFailure {}
 
 export class DispatchFailure extends PlanFailure {}
@@ -30,15 +26,18 @@ export class RepositoryPreparationRequired extends PlanFailure {}
 
 export class DispatchNotAvailable extends DispatchFailure {}
 
+export class DispatchWaitsBehind extends DispatchNotAvailable {
+  readonly wait: import('./value-objects/dispatch-wait.ts').DispatchWait
+
+  constructor(wait: import('./value-objects/dispatch-wait.ts').DispatchWait) {
+    super(wait.describe())
+    this.wait = wait
+  }
+}
+
 export class DispatchNotRead extends DispatchFailure {}
 
 export class DispatchNotUnderstood extends DispatchFailure {}
-
-export class PlanStoryFailure extends PlanFailure {}
-
-export class PlanStoryNotRead extends PlanStoryFailure {}
-
-export class PlanStoryNotUnderstood extends PlanStoryFailure {}
 
 export class PlanAgentFailure extends PlanFailure {}
 

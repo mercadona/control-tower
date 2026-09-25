@@ -61,9 +61,6 @@ import { SystemProcesses } from '../../../src/infrastructure/process-border.ts'
 import { GhPlanPublication } from '../../../src/infrastructure/gh-plan-publication.ts'
 import { PlanContractProgress } from '../../../src/infrastructure/plan-contract-progress.ts'
 import { Gh } from '../../../src/infrastructure/gh.ts'
-import { GhPlanIssues } from '../../../src/infrastructure/gh-plan-issues.ts'
-import { UserStory } from '../../../src/domain/value-objects/user-story.ts'
-import { UserStoryUrl } from '../../../src/domain/value-objects/user-story-url.ts'
 import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
@@ -944,13 +941,6 @@ export class RunDriverMother {
 
   async #executables(): Promise<void> {
     const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim()
-    const issueCreate = GhPlanIssues.argvFor({
-      story: new UserStory({
-        key: new UserStoryUrl('https://github.com/acme/widget/issues/1'),
-        summary: 'Run the finite offline driver fixture', description: '',
-      }),
-      repository: new RepositoryName(RunDriverMother.REPOSITORY),
-    })
     await writeFile(join(this.bin, 'git'), [
       '#!/bin/sh',
       'if [ "$3" = "remote" ] && [ "$4" = "get-url" ]; then printf "%s\\n" "git@github.com:acme/widget.git"; exit 0; fi',
@@ -961,12 +951,10 @@ export class RunDriverMother {
       "const fs = require('node:fs')",
       "const path = require('node:path')",
       'const argv = process.argv.slice(2)',
-      `const issueCreate = ${JSON.stringify(issueCreate)}`,
       "const equal = (expected) => JSON.stringify(argv) === JSON.stringify(expected)",
       "const page = (nodes) => JSON.stringify([{ data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } }])",
       "fs.appendFileSync(path.join(process.env.CT_FIXTURE_CAPTURES, 'gh.jsonl'), JSON.stringify(argv) + '\\n')",
-      "if (equal(issueCreate)) console.log('https://github.com/acme/widget/issues/7')",
-      "else if (equal(['issue', 'view', 'https://github.com/acme/widget/issues/1', '--json', 'title,body,comments'])) console.log(JSON.stringify({ title: 'Run the finite offline driver fixture', body: '', comments: [] }))",
+      "if (equal(['issue', 'view', 'https://github.com/acme/widget/issues/1', '--json', 'title,body,comments'])) console.log(JSON.stringify({ title: 'Run the finite offline driver fixture', body: '', comments: [] }))",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'labels', '-q', '[.labels[].name]'])) console.log(JSON.stringify(['status:in-progress']))",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'body', '-q', '.body'])) console.log('<!-- ct-order:1 -->')",
       "else if (equal(['issue', 'view', '7', '--repo', 'acme/widget', '--json', 'number,title,body,labels,milestone'])) console.log(JSON.stringify({ number: 7, title: 'Finite fixture', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }], milestone: null }))",

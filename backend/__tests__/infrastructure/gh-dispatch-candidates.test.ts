@@ -4,7 +4,8 @@ import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../../src/domain/exceptions.ts'
+import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood, DispatchWaitsBehind } from '../../src/domain/exceptions.ts'
+import { DispatchWait } from '../../src/domain/value-objects/dispatch-wait.ts'
 import { TOKEN_HOLDING_STATUSES } from '../../../plugin/scripts/dispatch.js'
 import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 
@@ -193,9 +194,8 @@ describe('GhDispatchCandidates', () => {
     const refusal = await colliding.admissible().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(DispatchNotAvailable)
-    expect(refusal.message).toContain('"reason":"collision"')
-    expect(refusal.message).toContain('"token":"api"')
-    expect(refusal.message).not.toContain('cap-full')
+    expect(refusal).toBeInstanceOf(DispatchWaitsBehind)
+    expect(refusal.wait).toEqual(new DispatchWait({ waiting: 12, token: 'api', holder: 11, holderStatus: 'in-progress' }))
     await expect(free.numbers()).resolves.toEqual([12])
   })
 
@@ -208,6 +208,7 @@ describe('GhDispatchCandidates', () => {
     const refusal = await gh.admissible().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(DispatchNotAvailable)
+    expect(refusal).not.toBeInstanceOf(DispatchWaitsBehind)
     expect(refusal.message).toContain('NOT_PLANNED')
   })
 

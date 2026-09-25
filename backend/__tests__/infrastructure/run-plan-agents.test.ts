@@ -46,7 +46,6 @@ import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
 import { ChangeAnnouncements } from '../../src/domain/ports/change-announcements.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents, RunProvenance } from '../../src/infrastructure/run-plan-agents.ts'
-import { PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { DeliverHeldMessages } from '../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../src/application/queries/read-slice-escalation.ts'
@@ -1284,7 +1283,7 @@ describe('RunPlanAgents', () => {
     expect(await tested.journal.entries(AgentMother.WATCH)).toHaveLength(2)
   })
 
-  it('real run boundaries retain declared refusal mappings', async () => {
+  it('real run boundaries raise their declared failures', async () => {
     const writeRefusal = Object.assign(new Error('admission write refused'), { code: 'EIO' })
     const unreadableLaunch = await sourceScenario(
       false,
@@ -1296,10 +1295,6 @@ describe('RunPlanAgents', () => {
     const launchNotRead = await unreadableLaunch.agents.launch(AgentMother.BRIEFING).catch((cause) => cause)
     expect(launchNotRead.constructor).toBe(PlanAgentNotLaunched)
     expect(launchNotRead.message).toBe(internalWrite.message)
-    const failedLaunch = PlanCollapse.of(launchNotRead)
-    expect(failedLaunch.status).toBe(400)
-    expect(failedLaunch.code).toBe('plan-agent-not-launched')
-    expect(failedLaunch.detail).toBe(internalWrite.message)
     expect(unreadableLaunch.calls.starts).toEqual([])
     expect(unreadableLaunch.evidence.calls).toBe(0)
 
@@ -1313,10 +1308,6 @@ describe('RunPlanAgents', () => {
     const launchNotNamed = await conflictingLaunch.agents.launch(AgentMother.BRIEFING).catch((cause) => cause)
     expect(launchNotNamed.constructor).toBe(PlanAgentNotNamed)
     expect(launchNotNamed.message).toBe(internalConflict.message)
-    const malformedLaunch = PlanCollapse.of(launchNotNamed)
-    expect(malformedLaunch.status).toBe(400)
-    expect(malformedLaunch.code).toBe('plan-agent-not-named')
-    expect(malformedLaunch.detail).toBe(internalConflict.message)
     expect(conflictingLaunch.calls.starts).toEqual([])
     expect(conflictingLaunch.evidence.calls).toBe(0)
 

@@ -13,8 +13,16 @@ class Workflow {
     dirname(fileURLToPath(import.meta.url)), '..', '..', '.github', 'workflows', 'continuous-integration.yml',
   )
 
+  static WARM_CACHES_PATH = join(
+    dirname(fileURLToPath(import.meta.url)), '..', '..', '.github', 'workflows', 'warm-caches.yml',
+  )
+
   static text() {
     return readFileSync(Workflow.PATH, 'utf8')
+  }
+
+  static warmCaches() {
+    return readFileSync(Workflow.WARM_CACHES_PATH, 'utf8')
   }
 
   static triggers() {
@@ -29,8 +37,24 @@ describe('the events the checks answer to', () => {
     expect(Workflow.triggers(), 'the merge queue stalls without a merge_group trigger').toContain('merge_group')
   })
 
-  it('a_pull_request_and_main_keep_reporting_as_they_did', () => {
-    expect(Workflow.triggers()).toEqual(['pull_request', 'push', 'merge_group'])
+  it('a_pull_request_and_the_queue_are_the_only_two_places_the_checks_report_from', () => {
+    expect(Workflow.triggers()).toEqual(['pull_request', 'merge_group'])
+  })
+
+  it('a_merged_change_is_not_measured_a_second_time_on_main', () => {
+    expect(
+      Workflow.triggers(),
+      'a push run on main measures the tree the queue build already measured',
+    ).not.toContain('push')
+  })
+
+  it('every_pull_request_still_reads_a_warm_cache_written_on_main', () => {
+    const text = Workflow.warmCaches()
+
+    expect(text).toMatch(/push:\n\s+branches: \[main\]/)
+    for (const lockfile of ['plugin/package-lock.json', 'backend/package-lock.json', 'frontend/package-lock.json']) {
+      expect(text, `a change to ${lockfile} invalidates its cache, so it must warm it again`).toContain(lockfile)
+    }
   })
 
   it('a_queue_build_measures_everything_because_it_has_no_pull_request_to_diff_against', () => {

@@ -323,6 +323,7 @@ class TheCoordinatingSessionEndpoint {
 
 class ACheckoutWithNothingReady {
   static readonly REPOSITORY = 'acme/idle-widget'
+  static readonly STORY = 'IDLE-1'
 
   static async prepared(): Promise<{ base: string, root: string, state: string, bin: string, ghCalls: string }> {
     const base = await mkdtemp(join(tmpdir(), 'ct-api-idle-sweep-'))
@@ -335,6 +336,11 @@ class ACheckoutWithNothingReady {
     ACheckoutWithNothingReady.#git(root, 'config', 'user.name', 'Idle Fixture')
     ACheckoutWithNothingReady.#git(root, 'remote', 'add', 'origin', `https://github.com/${ACheckoutWithNothingReady.REPOSITORY}.git`)
     await writeFile(join(root, 'README.md'), '# Idle fixture\n')
+    await mkdir(join(root, 'docs', 'superpowers', 'specs'), { recursive: true })
+    await writeFile(
+      join(root, 'docs', 'superpowers', 'specs', `${ACheckoutWithNothingReady.STORY}-execution.md`),
+      '# The idle milestone — Execution spec\n',
+    )
     ACheckoutWithNothingReady.#git(root, 'add', '.')
     ACheckoutWithNothingReady.#git(root, 'commit', '-q', '-m', 'idle fixture baseline')
     const ghCalls = join(base, 'gh-calls.ndjson')
@@ -349,6 +355,13 @@ class ACheckoutWithNothingReady {
     await mkdir(controlTower, { recursive: true })
     await writeFile(join(controlTower, 'checkouts.json'), `${JSON.stringify({
       checkouts: [{ repo: ACheckoutWithNothingReady.REPOSITORY, path: root }],
+    }, null, 2)}\n`)
+    await mkdir(join(controlTower, 'coordinating-session'), { recursive: true })
+    await writeFile(join(controlTower, 'coordinating-session', 'conversation.json'), `${JSON.stringify({
+      conversation: '0f3c2a8e-5b1d-4c6e-9a7f-2d8b4e1c9a30',
+      repo: ACheckoutWithNothingReady.REPOSITORY,
+      root,
+      story: ACheckoutWithNothingReady.STORY,
     }, null, 2)}\n`)
 
     return { base, root, state, bin, ghCalls }
@@ -571,8 +584,7 @@ describe('ct-api entrypoint', () => {
     expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
-    expect(claude.session).toBe('unknown')
-    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(claude.fix).toBe(claude.session === 'ready' ? null : 'claude auth login')
     expect(body.metricsDelivery).toEqual({
       enabled: true,
       variable: 'CT_HARVEST_BQ_TABLE',
@@ -699,7 +711,7 @@ describe('ct-api entrypoint', () => {
     }
   })
 
-  it('the runtime sweeps every registered checkout and mounts the slice message path', async () => {
+  it('the runtime sweeps the checkout of its held story and mounts the slice message path', async () => {
     const fixture = await ACheckoutWithNothingReady.prepared()
     try {
       const started = await Entrypoint.started(ACheckoutWithNothingReady.environment(fixture))

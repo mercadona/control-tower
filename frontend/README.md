@@ -15,9 +15,8 @@ is the one the clone's `origin` names, read by the backend —
 current progress arrives over `GET /work-progress/:issue`, polled. It combines
 plan readiness, planning-agent activity and execution progress. The page shows the
 panels of gates 1 and 2, and the live terminals of the sessions the backend
-owns. `POST /start-plan` accepts only a milestone command: it selects and starts
-the next eligible slice; after the committed plan is published, the
-backend resumes the same headless conversation automatically. `POST
+owns. The backend dispatches authorised slices by itself; after the committed
+plan is published, it resumes the same headless conversation automatically. `POST
 /implement-plan` is not routed, so the page offers no implementation button.
 Each area has its own directory under `src/app/`, and the endpoint it consumes
 is named in the sections below. Additional context and feedback are entered
@@ -189,7 +188,7 @@ An uncertain entry carries a diagnostic, its original repo/issue/agent identity
 and one recovery action. `observe` and `continue` render **Recuperar trabajo**;
 `cleanup` renders **Limpiar arranque fallido**. A press sends the exact identity
 to `POST /recover-plan` or `POST /cleanup-plan` and then reads active plans
-again; it never calls `/start-plan`. The button is disabled while that request
+again; it never starts new work. The button is disabled while that request
 is pending, and late replies cannot replace a newer workflow or coordinating
 conversation. `inspect` stays read-only and offers **Reintentar recuperación**,
 which only repeats the GET. **Descartar estado** clears this page's local state
@@ -336,7 +335,7 @@ worst move available when nobody can tell what was created.
 - **`backend/` serves it, from the same origin.** `ct-api.ts` serves `dist/` at
   `/` when it exists, so page and API share `http://127.0.0.1:<port>`.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
-  `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
+  `Host`: a foreign page cannot call `POST /coordinating-session`, and ours can, with no
   CORS and no preflight.
 - **The client is `fetch`** (`src/app/coordinating-session/client.ts`,
   `src/app/active-plans/client.ts`, `src/app/work-progress/client.ts`). Native
@@ -420,3 +419,11 @@ that `__tests__/yardstick.test.ts` measures on every file: names in English,
 zero prose in comments, no `export default` other than the one Vite demands in
 its config, and no import that climbs with `../`. The interface's labels are in
 Spanish; everything else, in English.
+
+A backend refusal reaches the screen through `src/app/product-error.ts`, which
+turns its `code` into Spanish copy. The protocol codes every endpoint can answer
+(`not-found`, `foreign-origin`, `unsupported-media-type`, `unknown-field` and
+the like) are left out on purpose: only a defect of this page can cause them,
+so they show the backend's own `detail`, which is what makes the defect
+traceable. So does `repository-preparation-required`, whose `detail` is the
+list of what the repository lacks and is shown under a Spanish title.

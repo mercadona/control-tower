@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0](https://github.com/mercadona/control-tower/compare/frontend-v0.7.0...frontend-v0.8.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* the groom box shows only the issue titles, with its actions side by side ([#579](https://github.com/mercadona/control-tower/issues/579)) ([d77d219](https://github.com/mercadona/control-tower/commit/d77d219b37b62b1c0cdffa258721cea900b32c13))
+* the spec freeze box names its spec and puts the freeze beside it, like the groom box ([#580](https://github.com/mercadona/control-tower/issues/580)) ([f7fdeaa](https://github.com/mercadona/control-tower/commit/f7fdeaa973560592973ba601ba49503caab9d478))
+
+
+### Correcciones
+
+* the focused view names the pull request to merge while the frozen spec awaits publication ([#575](https://github.com/mercadona/control-tower/issues/575)) ([049e2c5](https://github.com/mercadona/control-tower/commit/049e2c53e7e57ddcdd1bc364d61850c25497aef2))
+
+
+### Refactorizaciones
+
+* remove the refusal codes nothing can send, and the dead code behind them ([#595](https://github.com/mercadona/control-tower/issues/595)) ([9d4cdab](https://github.com/mercadona/control-tower/commit/9d4cdab2e77927ec0371c25270b6e8a1be524427))
+
 ## [0.7.0](https://github.com/mercadona/control-tower/compare/frontend-v0.6.0...frontend-v0.7.0) (2026-09-25)
 
 

@@ -1,5 +1,6 @@
 import { ActivePlan, ActivePlansOutcome, RecoveryOutcome } from 'app/active-plans/ActivePlan.types'
 import { isPlanForRequest, isRecord, isRequest } from 'app/workflow-snapshot/validation'
+import { productError } from 'app/product-error'
 
 const PATH = '/active-plans'
 const RECOVERY_INCONCLUSIVE = 'active-plans-recovery-inconclusive'
@@ -55,7 +56,7 @@ const mutate = async (path: string, expectedStatus: number, plan: ActivePlan): P
     return { kind: 'accepted', agent: body.agent }
   }
   if (!response.ok && isRecord(body) && typeof body.code === 'string' && typeof body.detail === 'string') {
-    return { kind: 'refused', code: body.code, detail: body.detail }
+    return { kind: 'refused', code: body.code, detail: productError(body.code, body.detail) }
   }
   return { kind: 'unavailable' }
 }

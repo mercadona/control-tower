@@ -89,7 +89,7 @@ class PullRequestReviewLoop {
   static PULL_REQUEST_LISTED = JSON.stringify([
     { number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42' },
   ])
-  static IN_REVIEW_LABELS = JSON.stringify({ labels: [{ name: GhPlanIssues.IN_REVIEW_LABEL }] })
+  static IN_REVIEW_LABELS = JSON.stringify({ labels: [{ name: 'status:in-review' }] })
   static REVIEWS_PAGE = JSON.stringify([[
     { id: 101, state: 'CHANGES_REQUESTED', body: 'arregla el guard de []' },
   ]])
@@ -125,7 +125,7 @@ class PullRequestReviewLoop {
       sleep: () => Promise.resolve(),
     })
     this.pullRequests = new GhPullRequests({ gh })
-    this.planIssues = new GhPlanIssues({ gh, stderr: () => {} })
+    this.planIssues = new GhPlanIssues({ gh })
     this.brief = new PlanAgentBrief({
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
       conventions: '/plugin/conventions',

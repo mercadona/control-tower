@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MilestonePlanOutcome, PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
+import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { WorkProgressRoute } from '../../src/infrastructure/work-progress-route.ts'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
@@ -18,9 +18,6 @@ import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-ro
 import { RecoverPlanOutcome } from '../../src/infrastructure/recover-plan-route.ts'
 import { CleanupPlanOutcome } from '../../src/infrastructure/cleanup-plan-route.ts'
 import { SliceMessageOutcome, SliceMessageCollapse } from '../../src/infrastructure/slice-message-route.ts'
-import {
-  EscalationRequestOutcome, EscalationCollapse,
-} from '../../src/infrastructure/slice-escalation-route.ts'
 import { AnotherRoundOutcome, AnotherRoundCollapse } from '../../src/infrastructure/another-round-route.ts'
 
 class RequestVocabularies {
@@ -29,7 +26,6 @@ class RequestVocabularies {
   static codes(): string[] {
     return [
       ...Object.values(PlanRequestOutcome),
-      ...Object.values(MilestonePlanOutcome),
       ...Object.values(HistoryRequestOutcome),
       ...Object.values(SessionStreamOutcome),
       ...Object.values(SessionInputOutcome),
@@ -45,7 +41,6 @@ class RequestVocabularies {
       ...Object.values(EpicPromotionOutcome),
       ...Object.values(RecoverPlanOutcome),
       ...Object.values(CleanupPlanOutcome),
-      ...Object.values(EscalationRequestOutcome),
       ...Object.values(SliceMessageOutcome),
       ...Object.values(AnotherRoundOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
@@ -59,7 +54,6 @@ class SharedOnPurposeAcrossRequestVocabularies {
     SliceMessageOutcome.MALFORMED_REPO,
     SessionInputOutcome.NOT_LIVE,
     SpecFreezeOutcome.NOT_FROM_THE_PAGE,
-    SpecFreezeOutcome.NO_COORDINATING_SESSION,
     SpecFreezeOutcome.NO_EPIC_SPEC,
     EpicGroomOutcome.ISSUES_UNCERTAIN,
     EpicGroomOutcome.SPEC_NOT_FROZEN,
@@ -93,7 +87,6 @@ class EveryCodeTheApiEmits {
       ...Object.values(WorkProgressRoute.CODES),
       ...HistoryCollapse.declaredCodes(),
       ...SliceMessageCollapse.declaredCodes(),
-      ...EscalationCollapse.declaredCodes(),
       ...AnotherRoundCollapse.declaredCodes(),
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
     ]

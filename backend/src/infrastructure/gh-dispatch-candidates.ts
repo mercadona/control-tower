@@ -2,7 +2,8 @@ import { issuesQueryFor, normalizeGraphqlIssues } from '../../../plugin/scripts/
 import { buildDispatchInput, mapGhIssue } from '../../../plugin/scripts/gh-issue-map.js'
 import { UNCAPPED, collectTokenHolders, planDispatch } from '../../../plugin/scripts/dispatch.js'
 import { DispatchCandidates } from '../domain/ports/dispatch-candidates.ts'
-import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood } from '../domain/exceptions.ts'
+import { DispatchNotAvailable, DispatchNotRead, DispatchNotUnderstood, DispatchWaitsBehind } from '../domain/exceptions.ts'
+import { DispatchWait } from '../domain/value-objects/dispatch-wait.ts'
 import { AuthorisedMilestones } from '../domain/value-objects/authorised-milestones.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
@@ -83,6 +84,8 @@ class GhPayload {
 }
 
 export class GhDispatchCandidates extends DispatchCandidates {
+  static readonly #COLLISION = 'collision'
+
   readonly gh: Gh
 
   constructor({ gh }: { gh: Gh }) {
@@ -250,11 +253,27 @@ export class GhDispatchCandidates extends DispatchCandidates {
       cap: UNCAPPED,
     })
     if (dispatch.selected.length === 0) {
-      throw new DispatchNotAvailable(`the plugin did not select a slice: ${JSON.stringify(dispatch.blockReason)}`)
+      throw GhDispatchCandidates.#notSelected(dispatch.blockReason)
     }
 
     return dispatch.selected.map(
       (selected: { n: number }) => GhDispatchCandidates.#selectedIssue(selected, openIssues)
     )
   }
+
+  static #notSelected(blockReason: {
+    reason?: string, issue?: number, token?: string, withIssue?: number | null, withIssueStatus?: string | null,
+  } | null): DispatchNotAvailable {
+    if (blockReason?.reason === GhDispatchCandidates.#COLLISION) {
+      return new DispatchWaitsBehind(new DispatchWait({
+        waiting: blockReason.issue!,
+        token: blockReason.token!,
+        holder: blockReason.withIssue ?? null,
+        holderStatus: blockReason.withIssueStatus ?? null,
+      }))
+    }
+
+    return new DispatchNotAvailable(`the plugin did not select a slice: ${JSON.stringify(blockReason)}`)
+  }
+
 }

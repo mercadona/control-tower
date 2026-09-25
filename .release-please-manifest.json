@@ -1,5 +1,5 @@
 {
   "plugin": "0.62.0",
-  "backend": "0.7.0",
-  "frontend": "0.7.0"
+  "backend": "0.7.1",
+  "frontend": "0.8.0"
 }

@@ -19,6 +19,7 @@ import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { DispatchRelay } from './dispatch-relay.ts'
+import { HeldStoryMilestone } from './held-story-milestone.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanSessions } from './plan-sessions.ts'
@@ -312,7 +313,7 @@ class CtApi {
   }
 
   static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
-    const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
+    const probes = ProbedToolSessions.PROBES.map((row) => row.probe)
     const clients = Object.fromEntries(
       probes.map((bin): [string, ExternalTool] => [bin, CtApi.#talkingTo(bin, ExternalTool)])
     )
@@ -471,10 +472,7 @@ class CtApi {
       nowMs: Date.now,
     })
     const userStories = CtApi.#userStories(gh)
-    const planIssues = new GhPlanIssues({
-      gh,
-      stderr: (line) => process.stderr.write(line),
-    })
+    const planIssues = new GhPlanIssues({ gh })
     const pullRequests = new GhPullRequests({ gh })
     const workbench = new DispatchCheckWorkbench({
       node: CtApi.#tool(process.execPath),
@@ -728,8 +726,13 @@ class CtApi {
       records,
       checkouts,
     })
+    const heldStoryMilestone = new HeldStoryMilestone({
+      held: () => coordinatingSessions.held()?.conversation ?? null,
+      specs: epicSpecs,
+    })
     const dispatchRelay = new DispatchRelay({
       milestones: (repository) => dispatchCandidates.authorisedMilestones({ repository }),
+      ownMilestone: (asked) => heldStoryMilestone.of(asked),
       dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),
@@ -746,7 +749,6 @@ class CtApi {
     const server = new ApiServer({
       preparation,
       port: asked.port,
-      startMilestonePlan,
       startsInFlight,
       sliceMessage: (changed) => requestFixes.execute(new RequestFixesParams(changed)),
       sliceHeldChange: (changed) => planAgents.hold(changed),
@@ -771,8 +773,6 @@ class CtApi {
         nowMs: Date.now,
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
-      sliceEscalation: readSliceEscalation,
-      sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
         toolSessions: CtApi.#toolSessions(environment),
