@@ -1,0 +1,26 @@
+{
+  "issue": 554,
+  "tasks_total": 5,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Every sentence of the Desired end state is in the accumulated diff. (1) ProcessRatchet.LISTED loses the four lines for claude-calls-real-process, claude-conversations-real-process, tool-runner-real-process and tool-runner-whole-output-real-process, and all four files are deleted. (2) backend/__tests__/infrastructure/tool-runner.test.ts is created. It imports only ToolRunner, the ProcessRunner port and the scripted-conversation fixtures, so the ratchet finds no process in it, and the green global run of process-ratchet.test.ts confirms that. (3) A refusal and an unreadable output come back apart through ToolRunner ('a_refusal_and_an_answer_nobody_can_parse_come_back_apart': gh/issue-view-missing gives failed true and code 1, claude/result-text gives failed false with the stdout unchanged). They also come back apart through ClaudeCalls and its worker ('a claude that refuses and a claude whose output nobody can read complete apart': error/error_max_turns with code 1, and unavailable/malformed JSON with code 0). (4) The ledger gains 19 rows: 12 for tool-runner-real-process, 2 for whole-output, 4 for claude-calls-real-process and 1 for claude-conversations-real-process. That matches 12+2+4+1 cases of the four deleted files. (5) The ratchet test, the ledger test, typecheck and the backend suite are all in the Global verification, which ran green. No later task undoes an earlier promise.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The five commits build on each other without reversal. Task 1 creates tool-runner.test.ts with AnsweredRunner and the Runner helper, and adds the claude/result-text capture. Task 2 appends one case to the same file, reuses Runner.of and ScriptedConversation, and does not rework Task 1's cases. Task 3 widens ScriptedClaude.#played so that stdout which is not JSON is replayed unchanged, and it reuses Task 1's result-text capture as the unreadable output the plan's inventory assigned it. Task 4 extends Task 3's Scenario.ready(root, capture) into calls()/measured()/unspawnableDescriptor() without changing the Task 3 case. Task 5 only drops a ratchet line and a file, and adds a ledger row. Each task removes one different line from process-ratchet.ts, and the ledger rows are appended in task order with no row rewritten. No problem is solved two ways, and no intermediate scaffolding is left: AnsweredRunner serves only the node-built failures, and ScriptedConversation serves the captures, as the closed decision splits them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"; el juez de slice mide su ítem observabilidad como sin-vara)'. The slice was never asked to promise a signal, so there is no yardstick to measure against.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "cb1105fa0da35756e238dd83d98e2a730c6a2e84aee93328aaf42cfe4dc3e096"
+  }
+}
