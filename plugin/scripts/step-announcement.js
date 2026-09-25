@@ -163,7 +163,7 @@ export class StepAnnouncement {
     })
   }
 
-  static refusal({ issue, task, tasksTotal, step, discards, state, outcome, exit, detail, findings, verdict, failure }) {
+  static refusal({ issue, task, tasksTotal, step, discards, state, outcome, exit, detail, findings, verdict, failure = null }) {
     StepAnnouncement.#requireDeclared(step, STEPS, 'step')
     StepAnnouncement.#requireDeclared(state, RUN_STATES, 'run state')
     StepAnnouncement.#requireDeclared(outcome, OUTCOMES, 'outcome')
