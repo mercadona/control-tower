@@ -262,6 +262,21 @@ describe('MilestoneProgressRoute', () => {
     expect(read.asked).toEqual([])
   })
 
+  it('a session the person closed answers none and the read gets no call', async () => {
+    const held = Mother.live()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.finishClose(identity)
+    const read = ReadMilestoneProgressDouble.neverAsked()
+    const api = new RunningApi({ coordinatingSessions: held, readMilestoneProgress: read })
+
+    const response = await fetch(`${await api.start()}/milestone-progress`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+    expect(read.asked).toEqual([])
+  })
+
   it('a read that fails answers milestone-progress-not-read', async () => {
     const failure = new ImplementationProgressNotRead('the run file could not be read')
     const read = ReadMilestoneProgressDouble.failing(failure)

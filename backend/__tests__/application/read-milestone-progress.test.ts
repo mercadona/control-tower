@@ -62,20 +62,27 @@ class UnaskedEpicIssues extends EpicIssues {
 }
 
 class WorkInventoryDouble extends WorkInventory {
-  readonly answer: TrackedWork | Error
+  readonly answers: ReadonlyMap<number, TrackedWork | Error>
+  readonly asked: { issue: number, repository: RepositoryName }[] = []
 
-  constructor(answer: TrackedWork | Error) {
+  constructor(answer: TrackedWork | Error, answers: ReadonlyMap<number, TrackedWork | Error> | null = null) {
     super()
-    this.answer = answer
+    this.answers = answers ?? new Map([[MilestoneProgressMother.ISSUE_NUMBER, answer]])
   }
 
   static notFound(): WorkInventoryDouble {
     return new WorkInventoryDouble(new WorkNotFound('no recorded work'))
   }
 
-  override async find(): Promise<TrackedWork> {
-    if (this.answer instanceof Error) throw this.answer
-    return this.answer
+  static byIssue(answers: ReadonlyMap<number, TrackedWork | Error>): WorkInventoryDouble {
+    return new WorkInventoryDouble(new WorkNotFound('unused'), answers)
+  }
+
+  override async find(issue: number, repository: RepositoryName): Promise<TrackedWork> {
+    this.asked.push({ issue, repository })
+    const answer = this.answers.get(issue) ?? new WorkNotFound(`no recorded work for #${issue}`)
+    if (answer instanceof Error) throw answer
+    return answer
   }
 }
 
@@ -159,14 +166,17 @@ class UnaskedImplementationHistory extends ImplementationHistory {
 }
 
 class ImplementationHistoryDouble extends ImplementationHistory {
-  readonly entries: ImplementationHistoryEntry[]
+  readonly entries: ImplementationHistoryEntry[] | Error
+  readonly asked: { root: CheckoutRoot, issue: number, repository: RepositoryName }[] = []
 
-  constructor(entries: ImplementationHistoryEntry[]) {
+  constructor(entries: ImplementationHistoryEntry[] | Error) {
     super()
     this.entries = entries
   }
 
-  override async of(): Promise<ImplementationHistoryEntry[]> {
+  override async of(asked: { root: CheckoutRoot, issue: number, repository: RepositoryName }): Promise<ImplementationHistoryEntry[]> {
+    this.asked.push(asked)
+    if (this.entries instanceof Error) throw this.entries
     return this.entries
   }
 }
@@ -178,14 +188,17 @@ class UnaskedSliceBaselines extends SliceBaselines {
 }
 
 class SliceBaselinesDouble extends SliceBaselines {
-  readonly answer: boolean
+  readonly answer: boolean | Error
+  readonly asked: { root: CheckoutRoot, issue: number }[] = []
 
-  constructor(answer: boolean) {
+  constructor(answer: boolean | Error) {
     super()
     this.answer = answer
   }
 
-  override async isRed(): Promise<boolean> {
+  override async isRed(asked: { root: CheckoutRoot, issue: number }): Promise<boolean> {
+    this.asked.push(asked)
+    if (this.answer instanceof Error) throw this.answer
     return this.answer
   }
 }
@@ -215,8 +228,8 @@ class Mother {
     })
   }
 
-  static implementing(): TrackedWork {
-    return new TrackedWork(MilestoneProgressMother.watch(), { phase: 'implementing', acceptsChange: true })
+  static implementing(number = MilestoneProgressMother.ISSUE_NUMBER): TrackedWork {
+    return new TrackedWork(MilestoneProgressMother.watch(number), { phase: 'implementing', acceptsChange: true })
   }
 
   static planning(): TrackedWork {
@@ -604,6 +617,97 @@ describe('ReadMilestoneProgress', () => {
     const deliveredLine = (await deliveredSubject.query().execute(deliveredSubject.params())).progress!.lines[0]
     expect(deliveredLine.attention).toBeNull()
     expect(deliveredLine.tasks).toEqual([])
+  })
+
+  it('a closed issue with no recorded work is a delivered line with no pull request', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.closedIssue()])
+    subject.inventory = WorkInventoryDouble.notFound()
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.DELIVERED)
+    expect(line.pullRequest).toBeNull()
+  })
+
+  it('a closed issue whose work still reads as implementing is delivered, never running', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.closedIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+
+    const read = await subject.query().execute(subject.params())
+
+    expect(read.progress!.lines[0].state).toBe(SliceLineState.DELIVERED)
+  })
+
+  it('a closed issue whose recorded work cannot be read is still delivered, with no pull request', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.closedIssue()])
+    subject.inventory = new WorkInventoryDouble(new ImplementationProgressNotRead('the harvest journal is corrupt'))
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.DELIVERED)
+    expect(line.pullRequest).toBeNull()
+  })
+
+  it('each line is read for its own issue and the milestone counts the delivered ones', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([
+      MilestoneProgressMother.closedIssue(700),
+      MilestoneProgressMother.closedIssue(701),
+      MilestoneProgressMother.openIssue(702),
+      MilestoneProgressMother.openIssue(703),
+    ])
+    subject.inventory = WorkInventoryDouble.byIssue(new Map([[703, Mother.implementing(703)]]))
+    subject.implementation = new ImplementationProgressDouble(Mother.implementationResult())
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    const history = new ImplementationHistoryDouble([])
+    subject.history = history
+    const baselines = new SliceBaselinesDouble(false)
+    subject.baselines = baselines
+
+    const read = await subject.query().execute(subject.params())
+
+    expect(read.progress!.lines.map((line) => line.state)).toEqual([
+      SliceLineState.DELIVERED, SliceLineState.DELIVERED, SliceLineState.PENDING, SliceLineState.RUNNING,
+    ])
+    expect(read.progress!.delivered()).toBe(2)
+    expect(history.asked.map((asked) => asked.issue)).toEqual([703])
+    expect(baselines.asked).toEqual([{ root: MilestoneProgressMother.ROOT, issue: 703 }])
+  })
+
+  it('a line whose work cannot be read needs the person, and the other lines are still answered', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue(702), MilestoneProgressMother.openIssue(703)])
+    subject.inventory = WorkInventoryDouble.byIssue(new Map([
+      [703, new ImplementationProgressNotRead('the worktree of #703 is not there')],
+    ]))
+
+    const read = await subject.query().execute(subject.params())
+
+    const [pending, unreadable] = read.progress!.lines
+    expect(pending.state).toBe(SliceLineState.PENDING)
+    expect(unreadable.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(unreadable.attention).toEqual({ kind: 'unreadable', detail: 'the worktree of #703 is not there' })
+  })
+
+  it('an uncertain slice whose worktree is gone keeps its recovery action, with no tasks and no baseline', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.uncertainRecoverable({ action: 'cleanup', detail: 'clean the failed start' }))
+    subject.history = new ImplementationHistoryDouble(new ImplementationProgressNotRead('the worktree is not there'))
+    subject.baselines = new SliceBaselinesDouble(new ImplementationProgressNotRead('the worktree is not there'))
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({ kind: 'uncertain', action: 'cleanup', detail: 'clean the failed start' })
+    expect(line.tasks).toEqual([])
+    expect(line.baselineRed).toBe(false)
   })
 
   it('a draft spec answers no milestone and reads no issue', async () => {

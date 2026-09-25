@@ -15,6 +15,7 @@ export type SliceAttention =
   | { readonly kind: 'veto', readonly task: number | null, readonly findings: string | null, readonly verdict: string | null }
   | { readonly kind: 'uncertain', readonly action: 'observe' | 'continue' | 'cleanup' | 'inspect', readonly detail: string }
   | { readonly kind: 'partial', readonly detail: string }
+  | { readonly kind: 'unreadable', readonly detail: string }
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 

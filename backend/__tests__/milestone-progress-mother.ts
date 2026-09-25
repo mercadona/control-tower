@@ -42,10 +42,10 @@ export class MilestoneProgressMother {
     })
   }
 
-  static openIssue(): EpicIssue {
+  static openIssue(number = MilestoneProgressMother.ISSUE_NUMBER): EpicIssue {
     return new EpicIssue({
-      number: MilestoneProgressMother.ISSUE_NUMBER,
-      url: MilestoneProgressMother.#issueUrl(),
+      number,
+      url: MilestoneProgressMother.#issueUrl(number),
       title: 'Milestone progress read',
       status: PlanIssueStatus.IN_PROGRESS,
       isOpen: true,
@@ -53,10 +53,10 @@ export class MilestoneProgressMother {
     })
   }
 
-  static closedIssue(): EpicIssue {
+  static closedIssue(number = MilestoneProgressMother.ISSUE_NUMBER): EpicIssue {
     return new EpicIssue({
-      number: MilestoneProgressMother.ISSUE_NUMBER,
-      url: MilestoneProgressMother.#issueUrl(),
+      number,
+      url: MilestoneProgressMother.#issueUrl(number),
       title: 'Milestone progress read',
       status: PlanIssueStatus.NONE,
       isOpen: false,
@@ -64,21 +64,21 @@ export class MilestoneProgressMother {
     })
   }
 
-  static watch(): PlanWatch {
+  static watch(number = MilestoneProgressMother.ISSUE_NUMBER): PlanWatch {
     return new PlanWatch({
       story: null,
-      issue: new PlanIssue({ number: MilestoneProgressMother.ISSUE_NUMBER, url: MilestoneProgressMother.#issueUrl() }),
+      issue: new PlanIssue({ number, url: MilestoneProgressMother.#issueUrl(number) }),
       located: new WorkspaceLocation({
         root: MilestoneProgressMother.ROOT.text,
-        path: `${MilestoneProgressMother.ROOT.text}/.worktrees/${MilestoneProgressMother.ISSUE_NUMBER}`,
-        branch: `feat/${MilestoneProgressMother.ISSUE_NUMBER}`,
+        path: `${MilestoneProgressMother.ROOT.text}/.worktrees/${number}`,
+        branch: `feat/${number}`,
       }),
       repository: MilestoneProgressMother.REPOSITORY,
       agent: MilestoneProgressMother.AGENT,
     })
   }
 
-  static #issueUrl(): string {
-    return `https://github.com/${MilestoneProgressMother.REPOSITORY.text}/issues/${MilestoneProgressMother.ISSUE_NUMBER}`
+  static #issueUrl(number: number): string {
+    return `https://github.com/${MilestoneProgressMother.REPOSITORY.text}/issues/${number}`
   }
 }

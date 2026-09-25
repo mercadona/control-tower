@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from 'express'
 import { Answer } from './http.ts'
+import { GateCheckout } from './coordinating-sessions.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import {
   ReadMilestoneProgressParams, type MilestoneProgressRead, type ReadMilestoneProgress,
@@ -18,11 +19,12 @@ export class MilestoneProgressRoute {
 
   static reading(held: CoordinatingSessions, read: Pick<ReadMilestoneProgress, 'execute'>): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
-      const reading = held.gateCheckout()
-      if (reading === null) {
+      const current = held.held()
+      if (current === null) {
         Answer.send(response, 200, { status: 'none' })
         return
       }
+      const reading = new GateCheckout({ conversation: current.conversation, target: current.target })
       let outcome: MilestoneProgressRead
       try {
         outcome = await read.execute(new ReadMilestoneProgressParams({

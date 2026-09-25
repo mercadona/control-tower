@@ -206,6 +206,45 @@ describe('CoordinatingSessionReopenRoute', () => {
     expect(reopen.asked).toEqual([])
   })
 
+  it('a reopen already under way is refused as busy and the reopen gets no second call', async () => {
+    const held = Mother.ended()
+    held.reserve()
+    const reopen = ReopenCoordinatingSessionDouble.neverAsked()
+    const api = new RunningApi({ coordinatingSessions: held, reopenCoordinatingSession: reopen })
+
+    const response = await fetch(`${await api.start()}/coordinating-session/reopen`, {
+      method: 'POST', headers: { [CoordinatingSessionTarget.HEADER]: Mother.TARGET },
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'coordinating-session-busy',
+      detail: 'the coordinating session is opening: wait for it to settle before acting',
+    })
+    expect(reopen.asked).toEqual([])
+    held.release()
+  })
+
+  it('a session whose close failed is refused until the close is finished', async () => {
+    const held = Mother.ended()
+    const identity = { conversation: Mother.CONVERSATION.id.text, target: Mother.TARGET }
+    held.beginClose(identity)
+    held.failClose(identity, { code: 'session-not-terminated', detail: 'the terminal did not exit' })
+    const reopen = ReopenCoordinatingSessionDouble.neverAsked()
+    const api = new RunningApi({ coordinatingSessions: held, reopenCoordinatingSession: reopen })
+
+    const response = await fetch(`${await api.start()}/coordinating-session/reopen`, {
+      method: 'POST', headers: { [CoordinatingSessionTarget.HEADER]: Mother.TARGET },
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: 'coordinating-session-close-failed',
+      detail: 'closing the coordinating conversation failed: finish the close before reopening it',
+    })
+    expect(reopen.asked).toEqual([])
+  })
+
   it('a reopen that fails frees the next press', async () => {
     const failure = new UserStoryNotRead('the ticket could not be read')
     const held = Mother.ended()

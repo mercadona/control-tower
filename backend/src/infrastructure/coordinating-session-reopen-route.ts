@@ -15,7 +15,7 @@ import {
 export const CoordinatingSessionReopenOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   NOT_ENDED: 'coordinating-session-not-ended',
-  REOPENING: 'coordinating-session-reopening',
+  CLOSE_FAILED: 'coordinating-session-close-failed',
 } as const)
 
 export class CoordinatingSessionReopenRoute {
@@ -23,8 +23,8 @@ export class CoordinatingSessionReopenRoute {
   static readonly METHODS = 'POST'
   static readonly #NOT_ENDED_DETAIL =
     'the coordinating conversation is still live: it has to end before it can be reopened'
-  static readonly #REOPENING_DETAIL =
-    'the coordinating conversation is being reopened: wait for it to be live and try again'
+  static readonly #CLOSE_FAILED_DETAIL =
+    'closing the coordinating conversation failed: finish the close before reopening it'
 
   static reopening(held: CoordinatingSessions, reopen: Pick<ReopenCoordinatingSession, 'execute'>): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
@@ -36,7 +36,7 @@ export class CoordinatingSessionReopenRoute {
       }
       const reserved = held.reserve()
       if (reserved.outcome !== OpeningReservation.RESERVED) {
-        Answer.refuse(response, 409, CoordinatingSessionReopenOutcome.REOPENING, CoordinatingSessionReopenRoute.#REOPENING_DETAIL)
+        Answer.refuse(response, 409, CoordinatingSessionReopenOutcome.CLOSE_FAILED, CoordinatingSessionReopenRoute.#CLOSE_FAILED_DETAIL)
         return
       }
       let reopened: CoordinatingSessionReopened

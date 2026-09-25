@@ -97,11 +97,30 @@ export class ReadMilestoneProgress {
   }
 
   async #lineFor(issue: EpicIssue, params: ReadMilestoneProgressParams): Promise<SliceLine> {
-    const work = await this.#workFor(issue, params)
-    if (!issue.isOpen) {
-      const pullRequest = work !== null && work.condition.phase === 'finished' ? work.condition.pullRequest : null
-      return ReadMilestoneProgress.#delivered(issue, pullRequest)
+    if (!issue.isOpen) return this.#closedLine(issue, params)
+    try {
+      return await this.#openLine(issue, params)
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      return ReadMilestoneProgress.#unreadable(issue, cause.message)
     }
+  }
+
+  async #closedLine(issue: EpicIssue, params: ReadMilestoneProgressParams): Promise<SliceLine> {
+    let work: TrackedWork | null
+    try {
+      work = await this.#workFor(issue, params)
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      work = null
+    }
+    const pullRequest = work !== null && work.condition.phase === 'finished' ? work.condition.pullRequest : null
+
+    return ReadMilestoneProgress.#delivered(issue, pullRequest)
+  }
+
+  async #openLine(issue: EpicIssue, params: ReadMilestoneProgressParams): Promise<SliceLine> {
+    const work = await this.#workFor(issue, params)
     if (work === null) return ReadMilestoneProgress.#pending(issue)
     switch (work.condition.phase) {
       case 'finished':
@@ -129,6 +148,14 @@ export class ReadMilestoneProgress {
       issue, state: SliceLineState.PENDING, step: null, task: null, totalTasks: null,
       stepStartedAt: null, lastToolCall: null, lastText: null, pullRequest: null, baselineRed: false,
       attention: null, tasks: [],
+    })
+  }
+
+  static #unreadable(issue: EpicIssue, detail: string): SliceLine {
+    return new SliceLine({
+      issue, state: SliceLineState.NEEDS_PERSON, step: null, task: null, totalTasks: null,
+      stepStartedAt: null, lastToolCall: null, lastText: null, pullRequest: null, baselineRed: false,
+      attention: { kind: 'unreadable', detail }, tasks: [],
     })
   }
 
@@ -199,9 +226,9 @@ export class ReadMilestoneProgress {
     const attention: SliceAttention = veto !== null
       ? { kind: 'veto', task: veto.task, findings: veto.findings, verdict: veto.verdict }
       : { kind: 'uncertain', action: condition.recovery.action, detail: condition.recovery.detail }
-    const entries = await this.history.of({ root: params.root, issue: issue.number, repository: params.repository })
+    const entries = await this.#historyOrNothing(issue, params)
     const tasks = SliceTask.listOf({ state: condition.execution, entries, veto })
-    const baselineRed = await this.baselines.isRed({ root: params.root, issue: issue.number })
+    const baselineRed = await this.#baselineOrNotRed(issue, params)
 
     return new SliceLine({
       issue, state: SliceLineState.NEEDS_PERSON,
@@ -210,6 +237,26 @@ export class ReadMilestoneProgress {
       stepStartedAt: null, lastToolCall: null, lastText: null,
       pullRequest: condition.execution?.pullRequest ?? null, baselineRed, attention, tasks,
     })
+  }
+
+  async #historyOrNothing(
+    issue: EpicIssue, params: ReadMilestoneProgressParams,
+  ): Promise<readonly ImplementationHistoryEntry[]> {
+    try {
+      return await this.history.of({ root: params.root, issue: issue.number, repository: params.repository })
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      return []
+    }
+  }
+
+  async #baselineOrNotRed(issue: EpicIssue, params: ReadMilestoneProgressParams): Promise<boolean> {
+    try {
+      return await this.baselines.isRed({ root: params.root, issue: issue.number })
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      return false
+    }
   }
 
   static #vetoOf(refusal: RunClosure | null): RunClosure | null {
