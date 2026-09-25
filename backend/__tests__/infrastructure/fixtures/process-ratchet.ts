@@ -8,7 +8,6 @@ export class ProcessRatchet {
 
   static readonly LISTED: readonly string[] = [
     'infrastructure/claude-calls.test.ts',
-    'infrastructure/claude-conversations-real-process.test.ts',
     'infrastructure/claude-run-calls.test.ts',
     'infrastructure/git-workspace-real-process.test.ts',
     'infrastructure/headless-dispatch-dry-run.test.ts',
