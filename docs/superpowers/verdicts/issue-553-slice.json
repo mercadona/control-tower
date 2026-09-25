@@ -1,0 +1,26 @@
+{
+  "issue": 553,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Every sentence of the Desired end state exists in the accumulated diff. The ratchet list in process-ratchet.ts loses the 'infrastructure/ct-api-real-process.test.ts' line, and that file is deleted. fixtures/ct-api-process.ts is deleted, and nothing under backend/ still names either file. ct-api.test.ts exists and imports no child_process, node-pty or spawn, so the ratchet finds no process in it. CtApi.run(argv, environment, host: ApiHost) replaces the static #PROCESSES field, and SystemProcesses.forThisHost() is built only in the guarded main lines at the end of ct-api.ts (line 865). The ledger gains 24 rows: 21 for the old file's cases (four startup, two run-backend deleted without substitute, eight routes, two external tools, two session, two recovery, one sweep) and three for the #563 cases (acli, gh and the chain mapped to the sweep). The ratchet test, the ledger test, typecheck and the backend suite are covered by the Global verification, which is already green.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The six commits build on each other in order and nothing reverses. Task 1 adds ApiHost, InProcessApi/HostProcesses and the first four cases. Tasks 2 and 3 add cases on that host without changing it. Task 4 adds ScriptedTerminals as the ProcessTable double, and Tasks 5 and 6 reuse it instead of building a second one. Task 6 retires the old file, its helper and its ratchet entry, which is the retirement the plan promised, so none of that scaffolding stays in place. Each wait goes through the single host.wait (#waiting, the sleep of ClaudeCalls and the sleep of PtyLiveSessions), and the recovery clock keeps its setTimeout, as the closed decision says. No task solves the same problem a second way.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)'. The slice was never asked to promise a signal, so there is nothing to measure against.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "c3aa6e71efa1e75848f92a4c08a3c389a3ffc7918e84bb01b3a0e02925ac729a"
+  }
+}
