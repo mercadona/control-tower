@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs/promises'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -43,7 +43,7 @@ import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measu
 import { CtRunMachine, RunInspection } from '../../src/infrastructure/ct-run-machine.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { RecordedCall } from '../../src/domain/value-objects/recorded-call.ts'
@@ -1646,7 +1646,15 @@ describe('RunPlanRecovery projection', () => {
 
 })
 
-class AcceptedWorker extends ChildProcess {}
+class AcceptedWorker extends EventEmitter implements LaunchedProcess {
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
+}
 
 class FiniteBridgePublication extends PlanPublication {
   override async publish(): Promise<void> {

@@ -8,10 +8,7 @@ export class ProcessRatchet {
 
   static readonly LISTED: readonly string[] = [
     'infrastructure/git-workspace-real-process.test.ts',
-    'infrastructure/headless-dispatch-dry-run.test.ts',
     'infrastructure/makefile-local-env.test.ts',
-    'infrastructure/recorded-plan-recovery.test.ts',
-    'infrastructure/run-plan-recovery.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
     'yardstick-real-process.test.ts',
   ]

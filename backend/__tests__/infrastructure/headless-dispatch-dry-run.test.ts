@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -29,7 +29,7 @@ import {
 } from '../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { DispatchCheckClaims } from '../../src/infrastructure/dispatch-check-claims.ts'
 import { GhDispatchCandidates } from '../../src/infrastructure/gh-dispatch-candidates.ts'
 import { GhPlanPublication } from '../../src/infrastructure/gh-plan-publication.ts'
@@ -45,7 +45,15 @@ import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 
-class AcceptedWorker extends ChildProcess {}
+class AcceptedWorker extends EventEmitter implements LaunchedProcess {
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
+}
 
 class Deferred {
   readonly promise: Promise<void>
