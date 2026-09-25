@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/mercadona/control-tower/compare/frontend-v0.8.0...frontend-v0.9.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* Focused implementation view ([#611](https://github.com/mercadona/control-tower/issues/611)) ([60fd995](https://github.com/mercadona/control-tower/commit/60fd995118b186f0c81206a06d8f761ed991fdad))
+* the tool bar checks whether claude is logged in ([#599](https://github.com/mercadona/control-tower/issues/599)) ([514962e](https://github.com/mercadona/control-tower/commit/514962ecc00b1e0490b0329b03948728040a3b7f))
+
+
+### Correcciones
+
+* backend refusals reach the page in Spanish ([#597](https://github.com/mercadona/control-tower/issues/597)) ([311abe7](https://github.com/mercadona/control-tower/commit/311abe7f7bab09c75f64549bbbc3d684e4fc62b4))
+* the tab being looked at is the one the session terminal fits ([#600](https://github.com/mercadona/control-tower/issues/600)) ([54e25c4](https://github.com/mercadona/control-tower/commit/54e25c48d754232842db6401f7d386a403e354b5))
+
 ## [0.8.0](https://github.com/mercadona/control-tower/compare/frontend-v0.7.0...frontend-v0.8.0) (2026-09-25)
 
 
