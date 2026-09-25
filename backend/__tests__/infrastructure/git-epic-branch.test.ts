@@ -140,13 +140,6 @@ class GitEpicBranchDouble {
     return branch
   }
 
-  async restarted(): Promise<void> {
-    await this.branch().restartFromDefault({
-      root: GitEpicBranchDouble.CHECKOUT,
-      branch: GitEpicBranchDouble.MILESTONE_BRANCH,
-    })
-  }
-
   static onTheMergedMilestoneBranch(): GitEpicBranchDouble {
     const holding = new GitEpicBranchDouble({
       current: GitEpicBranchDouble.printing(`${GitEpicBranchDouble.MILESTONE_BRANCH}\n`),
@@ -202,7 +195,7 @@ describe('GitEpicBranch', () => {
       '-C', GitEpicBranchDouble.ROOT, 'switch', '--create', GitEpicBranchDouble.MILESTONE_BRANCH,
     ])
     expect(git.calls).toContainEqual([
-      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE,
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE,
       GitEpicBranchDouble.MILESTONE_BRANCH,
     ])
     expect(git.calls.some((argv) => argv.includes(GitEpicBranchDouble.DEFAULT_BRANCH))).toBe(false)
@@ -281,57 +274,9 @@ describe('GitEpicBranch', () => {
       '-C', GitEpicBranchDouble.ROOT, 'commit', '-m', GitEpicBranchDouble.MESSAGE, '--', ...GitEpicBranchDouble.PATHS,
     ])
     expect(git.calls).toContainEqual([
-      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE, GitEpicBranchDouble.EPIC_BRANCH,
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE, GitEpicBranchDouble.EPIC_BRANCH,
     ])
     expect(git.cut()).toBe(false)
-  })
-
-  it('a milestone branch started again is refreshed from the remote and reset onto the default branch, carrying the uncommitted correction', async () => {
-    const git = new GitEpicBranchDouble()
-
-    await git.restarted()
-
-    expect(git.calls.slice(-2)).toEqual([
-      ['-C', GitEpicBranchDouble.ROOT, 'fetch', '--prune', GitEpicBranch.REMOTE],
-      [
-        '-C', GitEpicBranchDouble.ROOT, 'switch', '--no-track', '--force-create',
-        GitEpicBranchDouble.MILESTONE_BRANCH, `${GitEpicBranch.REMOTE}/${GitEpicBranchDouble.DEFAULT_BRANCH}`,
-      ],
-    ])
-  })
-
-  it('a push leases the remote branch, so a milestone branch started again replaces its squashed history instead of being refused', async () => {
-    const git = new GitEpicBranchDouble()
-
-    await git.branch().push({ root: GitEpicBranchDouble.CHECKOUT, branch: GitEpicBranchDouble.MILESTONE_BRANCH })
-
-    expect(git.calls).toEqual([[
-      '-C', GitEpicBranchDouble.ROOT, 'push', '--force-with-lease', '--set-upstream', GitEpicBranch.REMOTE,
-      GitEpicBranchDouble.MILESTONE_BRANCH,
-    ]])
-  })
-
-  it('a correction the default branch would overwrite refuses the restart in git\'s own words', async () => {
-    const git = new GitEpicBranchDouble({
-      switched: GitEpicBranchDouble.refused(GitEpicBranchDouble.CORRECTION_IN_THE_WAY),
-    })
-
-    const refusal = await git.restarted().catch((cause) => cause)
-
-    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
-    expect((refusal as Error).message).toContain(GitEpicBranchDouble.CORRECTION_IN_THE_WAY)
-  })
-
-  it('a remote that cannot be refreshed refuses the restart before the branch is touched', async () => {
-    const git = new GitEpicBranchDouble({
-      refresh: GitEpicBranchDouble.refused(GitEpicBranchDouble.REMOTE_UNREACHABLE),
-    })
-
-    const refusal = await git.restarted().catch((cause) => cause)
-
-    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
-    expect((refusal as Error).message).toContain(GitEpicBranchDouble.REMOTE_UNREACHABLE)
-    expect(git.calls.some((argv) => argv.includes('switch'))).toBe(false)
   })
 
   it('current answers the branch the checkout is on', async () => {
@@ -422,6 +367,17 @@ describe('GitEpicBranch returning a checkout to the default branch', () => {
 
     expect(await git.returned()).toBe('kept')
     expect(git.ran('push')).toBe(false)
+  })
+
+  it('a remote that cannot be refreshed refuses the return before the checkout is touched', async () => {
+    const git = GitEpicBranchDouble.onTheMergedMilestoneBranch()
+    git.refresh = GitEpicBranchDouble.refused(GitEpicBranchDouble.REMOTE_UNREACHABLE)
+
+    const refusal = await git.returned().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect(refusal.message).toContain(GitEpicBranchDouble.REMOTE_UNREACHABLE)
+    expect(git.ran('switch')).toBe(false)
   })
 
   it('a switch git refuses because it would overwrite changes deletes nothing and quotes git', async () => {

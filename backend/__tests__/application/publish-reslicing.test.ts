@@ -10,6 +10,7 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { Reslicing } from '../../src/domain/value-objects/reslicing.ts'
 import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
+import { ReturnFromMergedSpecBranchParams } from '../../src/application/actions/return-from-merged-spec-branch.ts'
 import { createHash } from 'node:crypto'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
@@ -17,13 +18,11 @@ type RereadAsked = { root: CheckoutRoot, spec: EpicSpec }
 type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 type CommittedAsked = { root: CheckoutRoot, paths: string[] }
 type PublishingAsked = { root: CheckoutRoot, milestone: string }
-type RestartAsked = { root: CheckoutRoot, branch: string }
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
 class EpicBranchDouble extends EpicBranch {
   checkedOut: () => void = () => {}
   publishingAsked: PublishingAsked[]
-  restartAsked: RestartAsked[]
   steps: string[]
   committedAsked: CommittedAsked[]
   commitAsked: CommitAsked[]
@@ -34,7 +33,6 @@ class EpicBranchDouble extends EpicBranch {
   constructor({ isCommitted = false, isPushed = false }: { isCommitted?: boolean, isPushed?: boolean } = {}) {
     super()
     this.publishingAsked = []
-    this.restartAsked = []
     this.steps = []
     this.committedAsked = []
     this.commitAsked = []
@@ -53,13 +51,9 @@ class EpicBranchDouble extends EpicBranch {
 
   async publishing(subject: PublishingAsked): Promise<string> {
     this.publishingAsked.push(subject)
+    this.steps.push('publishing')
     this.checkedOut()
     return Mother.BRANCH
-  }
-
-  async restartFromDefault(subject: RestartAsked): Promise<void> {
-    this.restartAsked.push(subject)
-    this.steps.push('restart')
   }
 
   async committed(subject: CommittedAsked): Promise<boolean> {
@@ -162,11 +156,28 @@ class Mother {
   }
 }
 
+class ReturningDouble {
+  readonly asked: ReturnFromMergedSpecBranchParams[]
+  readonly steps: string[]
+
+  constructor(steps: string[]) {
+    this.asked = []
+    this.steps = steps
+  }
+
+  async execute(params: ReturnFromMergedSpecBranchParams): Promise<null> {
+    this.asked.push(params)
+    this.steps.push('return')
+    return null
+  }
+}
+
 class Flow {
   specs: EpicSpecsDouble
   branch: EpicBranchDouble
   pullRequests: PullRequestsDouble
   revisions: SpecRevision
+  returning: ReturningDouble
 
   constructor({ specs, branch, pullRequests }: {
     specs?: EpicSpecsDouble,
@@ -177,6 +188,7 @@ class Flow {
     this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? PullRequestsDouble.withNoneOpen()
     this.revisions = Mother.REVISIONS
+    this.returning = new ReturningDouble(this.branch.steps)
     this.branch.checkedOut = () => this.specs.checkOutTheMilestoneBranch()
   }
 
@@ -257,13 +269,15 @@ describe('PublishReslicing', () => {
     expect(flow.branch.committedAsked).toEqual([{ root: Mother.ROOT, paths: [held.path] }])
   })
 
-  it('a correction whose branch has no pull request open starts again from the default branch before committing, so the squashed freeze does not travel with it', async () => {
+  it('a correction first takes the checkout back from a merged milestone branch, so the squashed freeze never travels with it', async () => {
     const flow = new Flow()
 
     await flow.run()
 
-    expect(flow.branch.restartAsked).toEqual([{ root: Mother.ROOT, branch: Mother.BRANCH }])
-    expect(flow.branch.steps).toEqual(['restart', 'commit'])
+    expect(flow.returning.asked).toEqual([
+      new ReturnFromMergedSpecBranchParams({ root: Mother.ROOT, repository: Mother.REPOSITORY }),
+    ])
+    expect(flow.branch.steps).toEqual(['return', 'publishing', 'commit'])
   })
 
   it('a correction made while the previous re-slicing is still open keeps growing that pull request instead of starting again', async () => {
@@ -271,7 +285,6 @@ describe('PublishReslicing', () => {
 
     const published = await flow.run()
 
-    expect(flow.branch.restartAsked).toEqual([])
     expect(flow.branch.commitAsked).toHaveLength(1)
     expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
     expect(published.pullRequest).toEqual(Mother.STANDING)
@@ -282,7 +295,6 @@ describe('PublishReslicing', () => {
 
     const published = await flow.run()
 
-    expect(flow.branch.restartAsked).toEqual([])
     expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
     expect(published.pullRequest).toEqual(Mother.OPENED)
   })
@@ -295,7 +307,7 @@ describe('PublishReslicing', () => {
     expect(published.outcome).toBe(ReslicingOutcome.NOT_FROZEN)
     expect(published.pullRequest).toBeNull()
     expect(flow.branch.publishingAsked).toEqual([])
-    expect(flow.branch.restartAsked).toEqual([])
+    expect(flow.returning.asked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.branch.pushAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])

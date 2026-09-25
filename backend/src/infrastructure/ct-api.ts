@@ -679,8 +679,9 @@ class CtApi {
     const specRevisions = new SpecRevision({
       digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
     })
+    const returnFromMergedSpecBranch = new ReturnFromMergedSpecBranch({ branch: epicBranch, pullRequests })
     const publishReslicing = new PublishReslicing({
-      specs: epicSpecs, branch: epicBranch, pullRequests, revisions: specRevisions,
+      specs: epicSpecs, branch: epicBranch, pullRequests, revisions: specRevisions, returning: returnFromMergedSpecBranch,
     })
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
@@ -811,7 +812,7 @@ class CtApi {
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, records, environment, harvestTable: asked.harvestTable,
       specBranches: new SpecBranchReturns({
-        returning: new ReturnFromMergedSpecBranch({ branch: epicBranch, pullRequests }),
+        returning: returnFromMergedSpecBranch,
         stderr: (line) => process.stderr.write(line),
       }),
       relay: dispatchRelay,

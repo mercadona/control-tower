@@ -19,13 +19,6 @@ export class EpicBranch {
     )
   }
 
-  async restartFromDefault({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement restartFromDefault({ root, branch }) and start ${branch} of ${root} ` +
-      `again from the branch the remote calls default, carrying what is not committed yet`
-    )
-  }
-
   async tipOf({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<string> {
     throw new Error(
       `${this.constructor.name} must implement tipOf({ root, branch }) and answer the commit ${branch} of ${root} points at`
