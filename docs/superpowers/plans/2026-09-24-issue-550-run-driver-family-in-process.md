@@ -233,7 +233,7 @@ It tested the git arrange of the old fixture, and no arrange runs git now.
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run __tests__/infrastructure/run-dispatch.test.ts __tests__/infrastructure/process-ratchet.test.ts __tests__/infrastructure/ledger.test.ts   # expected: exit 0
 test ! -e backend/__tests__/infrastructure/run-dispatch-real-process.test.ts   # expected: exit 0 — the old file is gone
-test "$(grep -c 'run-dispatch-real-process.test.ts >' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -eq 7   # expected: exit 0 — one row per kept case
+test "$(grep -c 'run-dispatch-real-process.test.ts >' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -ge 7   # expected: exit 0 — every kept case has its row; Task 6 adds the eighth
 ```
 
 ### Task 3 — the scripted model and the worker in process
@@ -473,3 +473,6 @@ test "$(grep -c '^| `__tests__/infrastructure/run-' docs/superpowers/ledgers/202
    still names it. The ledger row of that test names it, as the ledger demands. So the row of
    Task 2's removed case lands in Task 6, which removes no test by that name. The controls then
    measure the test files alone. Provenance: `ct-step controls` of Task 2, attempt 1.
+10. The review round runs the verification of every task again, on the final tree. So Task 2
+    counts at least seven dispatch rows, not exactly seven. Task 6 and §8 keep the exact count
+    of eight. Provenance: `ct-step controls` of the review round, attempt 2.

@@ -33,6 +33,7 @@ export class ScriptedOracle {
   readonly asked: string[][] = []
   readonly run: CtRunMachine['node']
 
+  readonly #ctStep: string
   #remaining: ScriptedStep[]
 
   constructor(asked: {
@@ -48,6 +49,7 @@ export class ScriptedOracle {
     this.issue = asked.issue
     this.pluginRoot = asked.pluginRoot
     this.dispatchCheck = asked.dispatchCheck
+    this.#ctStep = join(asked.pluginRoot, 'scripts', 'ct-step.mjs')
     this.#remaining = [...asked.steps]
     this.run = async (argv, options = {}) => this.#answer([...argv], options)
   }
@@ -76,17 +78,20 @@ export class ScriptedOracle {
       if (argv.at(-1) === '--check-plan') return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
       throw new UnscriptedRequest({ binary: argv[0], argv: argv.slice(1), cwd: options.cwd })
     }
+    if (argv[0] !== this.#ctStep) throw new UnscriptedRequest({ binary: argv[0], argv: argv.slice(1), cwd: options.cwd })
     if (argv[1] === 'next') {
       const step = this.#remaining.shift()
       if (step === undefined) throw new UnscriptedRequest({ binary: argv[0], argv: argv.slice(1), cwd: options.cwd })
       return new ProcessOutput({ code: 0, stdout: await this.announce(step), stderr: '' })
     }
     const verb = argv[1]
+    const step = STEP_OF_CONSUMING_VERB[verb]
+    if (step === undefined) throw new UnscriptedRequest({ binary: argv[0], argv: argv.slice(1), cwd: options.cwd })
     return new ProcessOutput({
       code: 0,
       stdout: StepAnnouncement.transition({
         issue: this.issue, task: 1, tasksTotal: 1,
-        step: STEP_OF_CONSUMING_VERB[verb] ?? STEPS.CONTROLS,
+        step,
         discards: 0, state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: 0,
       }).text(),
       stderr: '',

@@ -41,7 +41,7 @@ describe('run recovery in process', () => {
       const planner = await initial.calls.start(watch, 'plan', null)
       await initial.calls.wait(planner)
 
-      let completedTicket = ''
+      let completedTicket: string | null = null
       const cutCalls = new class extends RunCalls {
         override async perform(cutWatch: PlanWatch, instruction: RunInstruction): Promise<void> {
           await initial.driver.step.calls.perform(cutWatch, instruction)
@@ -61,7 +61,7 @@ describe('run recovery in process', () => {
       await establishing.execute(new DriveRunParams({ watch, planner })).catch((cause: unknown) => {
         if (!(cause instanceof Error) || cause.message !== 'labelled fixture cut after completed role') throw cause
       })
-      if (completedTicket.length === 0) throw new Error('recovery cut did not complete a role')
+      if (completedTicket === null) throw new Error('recovery cut did not complete a role')
 
       const callsDirectory = join(run.state, 'harness', watch.agent, 'calls')
       const launchesBeforeRecovery = (await readdir(callsDirectory)).length

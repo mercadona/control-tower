@@ -162,7 +162,9 @@ export class InProcessRun {
     this.#machine = asked.machine
   }
 
-  static async create(steps: readonly ScriptedStep[]): Promise<InProcessRun> {
+  static async create(
+    steps: readonly ScriptedStep[], delivery: CompletedRunDelivery = new CompletedRunDelivery(),
+  ): Promise<InProcessRun> {
     const base = await fs.realpath(await mkdtemp(join(tmpdir(), 'ct-in-process-run-')))
     const checkout = join(base, 'checkout')
     const state = join(base, 'state')
@@ -226,7 +228,7 @@ export class InProcessRun {
 
     return new InProcessRun({
       base, checkout, state, oracle, claude, workers,
-      delivery: new CompletedRunDelivery(), published: [],
+      delivery, published: [],
       identities, files, journal, machine,
     })
   }

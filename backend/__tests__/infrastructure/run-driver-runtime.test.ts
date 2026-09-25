@@ -1,5 +1,6 @@
-import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readdir, readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
@@ -11,9 +12,22 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus, type PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { CallDescriptor } from '../../src/infrastructure/claude-calls.ts'
+import { ClaudeConversations } from '../../src/infrastructure/claude-conversations.ts'
+import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
+import { DiskAgentMeasurements } from '../../src/infrastructure/disk-agent-measurements.ts'
+import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { ReviewWatch, type ChangesAsked } from '../../src/infrastructure/review-watch.ts'
 import { InProcessRun } from './fixtures/in-process-run.ts'
 import { ScriptedOracle } from './fixtures/scripted-oracle.ts'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const PLUGIN_ROOT = join(HERE, '..', '..', '..', 'plugin')
+const BRIEF = new PlanAgentBrief({
+  dispatchCheck: join(PLUGIN_ROOT, 'scripts', 'dispatch-check.mjs'),
+  conventions: join(PLUGIN_ROOT, 'conventions'),
+  ctStep: join(PLUGIN_ROOT, 'scripts', 'ct-step.mjs'),
+})
 
 class AnsweringPlanIssues extends PlanIssues {
   readonly asked: Array<{ issueNumber: number, repository: RepositoryName }> = []
@@ -75,10 +89,15 @@ describe('run driver runtime in process', () => {
       watch, purpose: 'plan', requestId: null, argv: ['--session-id', watch.agent],
       execution: { kind: 'success' }, startedAt: '2026-09-17T10:00:00.000Z',
     })
-    await run.recorded({
+    const implementation = await run.recorded({
       watch, purpose: 'implementation', requestId: `implementation:${planner.id}`, argv: ['--resume', watch.agent],
       execution: null, startedAt: '2026-09-17T10:00:01.000Z',
     })
+    const implementationPromptPath = join(
+      run.state, 'harness', watch.agent, 'calls', implementation.id, CallDescriptor.PROMPT,
+    )
+    const implementationPrompt = await readFile(implementationPromptPath, 'utf8')
+    const admissionPath = join(run.state, 'harness', watch.agent, 'run', 'admission.json')
     const identityOf = async (): Promise<unknown[]> => Promise.all(
       (await agents.transport.history(watch.agent)).map(async (recorded) => ({
         purpose: recorded.purpose,
@@ -100,6 +119,8 @@ describe('run driver runtime in process', () => {
       plan: expect.objectContaining({ agent: watch.agent }),
     })])
     expect(await identityOf()).toEqual(before)
+    expect(await readFile(implementationPromptPath, 'utf8')).toBe(implementationPrompt)
+    await expect(readFile(admissionPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     expect(run.workers.launches).toBe(0)
   })
 
@@ -149,6 +170,43 @@ describe('run driver runtime in process', () => {
     const fix = (await agents.transport.history(watch.agent)).find((recorded) => recorded.purpose === 'fix')
     if (fix === undefined) throw new Error('the review delivery did not start a fix call')
     await agents.transport.wait(fix.call)
+
+    const promptPath = join(run.state, 'harness', watch.agent, 'calls', fix.call.id, CallDescriptor.PROMPT)
+    const expectedArgv = [
+      '-p', '--output-format', 'stream-json', '--verbose',
+      '--permission-mode', ClaudePlanCalls.PERMISSION_MODE,
+      '--allowedTools', ClaudePlanCalls.ALLOWED_TOOLS,
+      '--model', ClaudeConversations.MODEL,
+      ClaudeConversations.PLUGIN_DIR_FLAG, PLUGIN_ROOT,
+      '--resume', watch.agent,
+      CallDescriptor.opening(promptPath),
+    ]
+    const expectedPrompt = BRIEF.fixErrandFor({
+      issueNumber: ISSUE, repository, changes: ReviewAskedOnceThenFrozen.CHANGES,
+    })
+
+    expect(await agents.transport.descriptorOf(fix.call)).toMatchObject({
+      conversation: watch.agent,
+      purpose: 'fix',
+      requestId: ReviewAskedOnceThenFrozen.REVIEW_ID,
+      argv: expectedArgv,
+    })
+    expect(await readFile(promptPath, 'utf8')).toBe(expectedPrompt)
+    expect(JSON.parse(await readFile(
+      join(run.state, 'harness', watch.agent, 'calls', fix.call.id, DiskAgentMeasurements.FILE), 'utf8',
+    ))).toMatchObject({
+      version: 1,
+      provider: 'claude-code',
+      purpose: 'fix',
+      conversation: watch.agent,
+      requestId: ReviewAskedOnceThenFrozen.REVIEW_ID,
+      execution: { kind: 'success' },
+    })
+    await expect(readFile(join(run.state, 'harness', watch.agent, 'run', 'admission.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+    expect(run.claude.asked).toEqual([{
+      conversation: watch.agent, role: 'implement', argv: expectedArgv, prompt: expectedPrompt,
+    }])
 
     expect(workbench.asked).toEqual([{ issueNumber: ISSUE, repository }])
     expect(planIssues.asked).toEqual([{ issueNumber: ISSUE, repository }])

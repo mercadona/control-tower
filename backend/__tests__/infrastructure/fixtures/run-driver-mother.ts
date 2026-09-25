@@ -25,7 +25,6 @@ import {
   VERDICT_RULES,
 } from '../../../../plugin/scripts/step-contracts.js'
 import { AgentDefinition } from '../../../../plugin/scripts/judge-agent-definition.js'
-import { RecoverPlan, RecoverPlanParams } from '../../../src/application/actions/recover-plan.ts'
 import { RunInstruction } from '../../../src/domain/value-objects/run-instruction.ts'
 import { CallDescriptor, ClaudeCalls, type CallInvocation } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
@@ -305,7 +304,6 @@ export class RunDriverMother {
   readonly state: string
   readonly bin: string
   readonly captures: string
-  readonly publication: string
   readonly files: HeadlessFiles
   readonly journal: RunJournal
   readonly watch: PlanWatch
@@ -321,7 +319,6 @@ export class RunDriverMother {
     state: string,
     bin: string,
     captures: string,
-    publication: string,
   }) {
     this.base = asked.base
     this.checkout = asked.checkout
@@ -329,7 +326,6 @@ export class RunDriverMother {
     this.state = asked.state
     this.bin = asked.bin
     this.captures = asked.captures
-    this.publication = asked.publication
     this.#processes = new FixtureProcesses(this.captures)
     this.files = new HeadlessFiles({ root: this.state, fs, newId: () => this.#identity() })
     this.journal = new RunJournal({
@@ -378,7 +374,6 @@ export class RunDriverMother {
       state: join(base, 'state'),
       bin: join(base, 'bin'),
       captures: join(base, 'captures'),
-      publication: join(base, 'publication.md'),
     })
     try {
       await fixture.#initialize(conflicting)
