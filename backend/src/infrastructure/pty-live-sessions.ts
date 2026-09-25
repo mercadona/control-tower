@@ -1054,7 +1054,7 @@ export class PtyLiveSessions extends LiveSessions {
     const seen = new Set<number>()
     const rows = stdout.split('\n')
     const startPattern = '(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([ 0-3]?\\d) ([0-2]\\d:[0-5]\\d:[0-5]\\d) (\\d{4})'
-    const rowPattern = new RegExp(`^\\s*(\\d+)\\s+(\\d+)\\s+(${startPattern})\\s*$`)
+    const rowPattern = new RegExp(`^\\s*(\\d+)\\s+(\\d+)\\s+(${startPattern}|@\\d+)\\s*$`)
     let parsed = 0
     for (const row of rows) {
       if (row.trim().length === 0) continue

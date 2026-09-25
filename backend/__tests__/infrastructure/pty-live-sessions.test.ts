@@ -941,6 +941,57 @@ describe('PtyLiveSessions', () => {
     expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
   })
 
+  it('a leader identified by its start ticks stays live while its ticks do not change', async () => {
+    vi.useFakeTimers()
+    const inspection = new ControlledInspection(Date.now)
+    const processes = new ControlledProcesses()
+    const sessions = Cabin.opening({
+      spawn: SpawnDouble.withPids(4101),
+      inspectProcessTable: inspection.inspect,
+      inspectionNow: Date.now,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.succeeds(0, `${ProcessTables.row(4101, 4101, '@11585546')}\n`)
+    await AsyncTurns.run()
+
+    await Inspections.until(() => inspection.calls.length === 2, 'second background scan did not start')
+    inspection.succeeds(1, `${ProcessTables.row(4101, 4101, '@11585546')}\n`)
+    await AsyncTurns.run()
+
+    expect(sessions.find(session.id)).toBe(session)
+  })
+
+  it('a leader whose start ticks changed is a replacement, as a changed start time is', async () => {
+    vi.useFakeTimers()
+    const inspection = new ControlledInspection(Date.now)
+    const processes = new ControlledProcesses()
+    const sessions = Cabin.opening({
+      spawn: SpawnDouble.withPids(4101),
+      inspectProcessTable: inspection.inspect,
+      inspectionNow: Date.now,
+      signal: processes.signal,
+      sleep: processes.sleep,
+      now: () => processes.now,
+    })
+    const session = sessions.open(LoginProgram.default())
+    processes.alive.add(4101)
+    await vi.advanceTimersByTimeAsync(0)
+    inspection.succeeds(0, `${ProcessTables.row(4101, 4101, '@11585546')}\n`)
+    await AsyncTurns.run()
+
+    await Inspections.until(() => inspection.calls.length === 2, 'second background scan did not start')
+    inspection.succeeds(1, `${ProcessTables.row(4101, 4101, '@11590000')}\n`)
+    await AsyncTurns.run()
+
+    expect(sessions.find(session.id)).toBeNull()
+    expect(processes.signals.filter(({ signal }) => signal !== 0)).toEqual([])
+  })
+
   it('replacement proof finalizes a previously unusable terminal exactly once', async () => {
     const spawn = SpawnDouble.withPids(4101, 4102)
     let table = ProcessTables.groups(new Map([

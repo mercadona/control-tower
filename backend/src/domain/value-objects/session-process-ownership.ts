@@ -33,7 +33,7 @@ export class SessionProcessOwnership {
   }
 
   static pidOf(identity: string): number {
-    const matched = identity.match(/^(\d+):(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d:[0-5]\d (\d{4})$/)
+    const matched = identity.match(/^(\d+):(?:(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d:[0-5]\d (\d{4})|@\d+)$/)
     if (matched === null) throw new Error(`session process identity is not canonical: ${JSON.stringify(identity)}`)
     const pid = Number(matched[1])
     if (!Number.isSafeInteger(pid) || pid <= 0 || matched[1] !== String(pid)) {

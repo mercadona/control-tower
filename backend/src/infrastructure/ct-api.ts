@@ -230,7 +230,7 @@ class Disk {
 }
 
 class CtApi {
-  static readonly #PROCESSES = new SystemProcesses()
+  static readonly #PROCESSES = SystemProcesses.forThisHost()
   static readonly #USAGE =
     `usage: make run-backend (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
   static readonly #BAD_USAGE = 2

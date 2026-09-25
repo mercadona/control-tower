@@ -140,6 +140,13 @@ class ClosureMother {
     return ClosureMother.requested().withOwnership(ClosureMother.OWNERSHIP)
   }
 
+  static preparedFromStartTicks(): SessionClosure {
+    return ClosureMother.requested().withOwnership(new SessionProcessOwnership({
+      rootIdentity: '4102:@11585546',
+      members: [{ pid: 4102, identity: '4102:@11585546' }, { pid: 4103, identity: '4103:@11585600' }],
+    }))
+  }
+
   static params(session: LiveSession | null = ClosureMother.SESSION): CloseCoordinatingSessionParams {
     return new CloseCoordinatingSessionParams({
       conversation: ClosureMother.CONVERSATION,
@@ -225,6 +232,18 @@ describe('CloseCoordinatingSession', () => {
     await expect(checkpointFailure.close()).rejects.toThrow('checkpoint refused')
     expect(checkpointFailure.liveSessions.terminated).toEqual([])
     expect(checkpointFailure.records.recalled).toEqual(ClosureMother.requested())
+  })
+
+  it('an ownership taken from /proc start ticks is checkpointed and terminated like one taken from ps', async () => {
+    const flow = new Flow()
+    flow.liveSessions.prepareAnswer = ClosureMother.preparedFromStartTicks()
+
+    await expect(flow.close()).resolves.toEqual({
+      conversation: ClosureMother.CONVERSATION,
+      target: ClosureMother.TARGET,
+    })
+    expect(flow.records.requested).toEqual([ClosureMother.requested(), ClosureMother.preparedFromStartTicks()])
+    expect(flow.liveSessions.terminated).toEqual([ClosureMother.preparedFromStartTicks()])
   })
 
   it('retains retryable closure when intent termination or completion fails', async () => {
