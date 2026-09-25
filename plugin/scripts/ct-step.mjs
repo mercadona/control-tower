@@ -64,6 +64,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent, expectedCommits } from './run-machine.js'
 import { JudgedUnit } from './judged-unit.js'
+import { RunClosure } from './run-closure.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -358,15 +359,18 @@ if (runExisted) {
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
   }
-  // The judge's closure, given the shape of the good one right above: the state
-  // is READ from the file instead of rebuilt from the table, and the verbs that
-  // would transition are sequence errors. The pair (outcome, exit) is not
-  // persisted because it does not have to be — the discard budget exits before
-  // the persistence, so a `blocked-judge` on disk is always the veto.
-  if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
-    const WAY_OUT = `the judge vetoed ${unit.vetoedName} of issue ${issue} three times and the run is closed. `
-      + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
-    if (verb === 'reopen') {
+  // The closures a person lifts, given the shape of the good one right above:
+  // the state is READ from the file instead of rebuilt from the table, and the
+  // verbs that would transition are sequence errors. The pair (outcome, exit)
+  // is not persisted because it does not have to be — the discard budget exits
+  // before the persistence, so a `blocked-judge` on disk is always the veto,
+  // and the controls and the Global verification keep their outcome in
+  // `lastFailure`, which `RunClosure.outcomeOf` reads.
+  if (RunClosure.REOPENABLE.includes(run.closed)) {
+    const WAY_OUT = RunClosure.wayOut({ run, issue, planPath, subject: unit.vetoedName })
+    // Only the judge's closure is lifted here; a `reopen` of the other two is,
+    // for now, the sequence error at the end of this block.
+    if (verb === 'reopen' && run.closed === RUN_STATES.BLOCKED_JUDGE) {
       const instruction = arg('--instruction')
       if (typeof instruction !== 'string' || instruction.trim() === '') {
         die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
@@ -398,11 +402,14 @@ if (runExisted) {
       process.exit(EXIT.OK)
     }
     if (verb === 'next') {
+      const outcome = RunClosure.outcomeOf(run)
+      const exit = exitCodeOf(run.closed, run.step, outcome)
       if (announcing) {
-        // The same two fields the closing verb announced, so a second `next`
-        // is not a contentless duplicate: the backend re-announces on every
-        // re-ask, and a line with no findings and no verdict path tells the
-        // coordinating session nothing it can act on.
+        // The same fields the closing verb announced, so a second `next` is
+        // not a contentless duplicate: the backend re-announces on every
+        // re-ask, and a line with no findings and no verdict path — or, for
+        // the controls and the Global verification, no failing command and no
+        // log — tells the coordinating session nothing it can act on.
         //
         // The attempt is read with `StepSeal.attemptOf` and the path is built
         // here instead of through `archivedVerdictPath()`: that helper reaches
@@ -412,16 +419,21 @@ if (runExisted) {
         // untouched by the closure, so the attempt is the one that archived
         // the verdict.
         const archived = join('.agent', `run-${issue}`, `${unit.stem}-verdict-${StepSeal.attemptOf(run)}.json`)
+        const explained = run.closed === RUN_STATES.BLOCKED_JUDGE
+          ? {
+              findings: run.lastFindings ?? null,
+              verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+            }
+          : { failure: RunClosure.failureOf(run) }
         safeWrite(1, StepAnnouncement.refusal({
           issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
-          state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
+          state: run.closed, outcome, exit,
           detail: WAY_OUT,
-          findings: run.lastFindings ?? null,
-          verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+          ...explained,
         }).text())
       }
       out(WAY_OUT)
-      process.exit(EXIT.VETOED)
+      process.exit(exit)
     }
     die(WAY_OUT, EXIT.WRONG_STEP)
   }
@@ -1740,11 +1752,15 @@ function controlsVerb() {
     )
   }
 
+  // The command that broke the loop, for `lastFailure`. A red that came from
+  // the checks above ran no command, so both stay null and the outcome alone
+  // says what happened.
+  let failing = { command: null, code: null }
   for (const command of result === OUTCOMES.DONE && !skippedForNoCode ? commands : []) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
-    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
-    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; failing = { command, code: null }; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; failing = { command, code: measured.code }; break }
   }
 
   writeFileSync(log, lines.join('\n'))
@@ -1755,7 +1771,7 @@ function controlsVerb() {
     ...(skippedForNoCode ? { skipped: 'no-code' } : {}),
     duration_ms: Date.now() - startedAt,
   })
-  run = { ...run, lastControlsLog: log }
+  run = { ...run, lastControlsLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
   // A task with no judge goes from here to `commit`, so the controls seal the
   // index the verdict would have sealed: what they measured is what commits.
   // The table says where green goes, so the seal asks it instead of guessing.
@@ -2291,6 +2307,7 @@ function globalVerb() {
   const startedAt = Date.now()
   if (!globalVerification.commands.length) {
     measure('global', { outcome: OUTCOMES.DONE, global_log: null, commands: 0, duration_ms: Date.now() - startedAt })
+    run = { ...run, lastFailure: null }
     out('global: done (the plan declares N/A — there is no end to end to run)')
     return OUTCOMES.DONE
   }
@@ -2298,17 +2315,20 @@ function globalVerb() {
   const log = join(workDir, 'global-verification.log')
   const lines = []
   let result = OUTCOMES.DONE
+  let failing = { command: null, code: null }
   for (const command of globalVerification.commands) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
-    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
-    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; failing = { command, code: null }; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; failing = { command, code: measured.code }; break }
   }
   writeFileSync(log, lines.join('\n'))
   measure('global', { outcome: result, global_log: log, commands: globalVerification.commands.length, duration_ms: Date.now() - startedAt })
   // `lastGlobalLog` is what `next` shows the slice judge: the proof that the
   // end to end has already run, so that it does not re-derive it from the diff.
-  run = { ...run, lastGlobalLog: log }
+  // `lastFailure` is what a `blocked-global` closure names when it explains
+  // itself.
+  run = { ...run, lastGlobalLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
   out(`global: ${result} (log en ${log})`)
   return result
 }
@@ -2980,14 +3000,15 @@ try {
   // file without rebuilding the table, because `dispatch-check --release`
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
-  if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
-  // The judge's veto is persisted for the same reason the good closure is: a
-  // closure that lives only in the exit code of a process that has gone leaves
-  // the run reading `step: judge` with the budget spent, so the next `next`
-  // re-enters the judge and re-closes for free. Only this state, and only from
-  // this path: the discard budget exits above, so a persisted `blocked-judge`
-  // is always the veto — `FAILED`, `EXIT.VETOED`. `reopen` is what lifts it.
-  if (transition.state === RUN_STATES.BLOCKED_JUDGE) run = { ...run, closed: RUN_STATES.BLOCKED_JUDGE }
+  // The judge's veto, the red or unmeasured controls and the red or unmeasured
+  // Global verification are persisted for the same reason the good closure
+  // is: a closure that lives only in the exit code of a process that has gone
+  // leaves the run reading its step with the budget spent, so the next `next`
+  // re-enters it and re-closes for free. The discard budget exits above, so a
+  // persisted `blocked-judge` is always the veto — `FAILED`, `EXIT.VETOED` —
+  // and the other two carry their outcome in `lastFailure`. `reopen` is what
+  // lifts them.
+  if (RunClosure.persists(transition.state)) run = { ...run, closed: transition.state }
   save()
 
   // The e2e report is committed HERE, after persisting the state and only if
@@ -3033,13 +3054,16 @@ try {
       issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
       state: transition.state, outcome, exit: code,
     }
-    // Only the judge's closure explains itself, and only because it is the one
-    // whose reason the run is already holding: `lastVerdict` and `lastFindings`
-    // are written by `verdictVerb` and `archive` has just put the verdict on
-    // disk. Nothing is recomputed here.
+    // The closures that explain themselves are the ones whose reason the run
+    // is already holding: `lastVerdict` and `lastFindings` are written by
+    // `verdictVerb` and `archive` has just put the verdict on disk, and
+    // `lastFailure` by `controlsVerb` and `globalVerb`. Nothing is recomputed
+    // here.
     const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
       ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
-      : {}
+      : [RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL].includes(transition.state)
+        ? { failure: RunClosure.failureOf(run) }
+        : {}
     const announcement = code === EXIT.OK
       ? StepAnnouncement.transition(closure)
       : StepAnnouncement.refusal({ ...closure, detail, ...explained })
