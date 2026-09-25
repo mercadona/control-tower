@@ -148,3 +148,46 @@ does not claim: `docs/pull-request-titles.md`.**
   conventional-commit type, because that title becomes the commit on `main` and
   release-please reads it. The prose stays; the type goes in front.
 - **Anything else:** English.
+
+<!-- ct-init:loop -->
+## Control Tower loop
+
+This repo is governed by the Control Tower loop: **one issue = one slice = one session**.
+
+- **This repo's commands**: build `make build-plugin build-frontend` · test `make test-all`, and `npx tsc -p tsconfig.json` in `backend/` · lint: none; do not run `npx eslint`, it installs itself and rewrites `package.json`.
+- **This repo's yardstick** —the documents of code rules that `ct-step`
+  pastes into every task's brief— is declared in `.agent/conventions.md`. ct's
+  own yardstick travels with the plugin and rules where the two say the same
+  thing; where ct says nothing, the repo's yardstick rules in full.
+- **A dispatched slice's state is `.agent/SLICE.md`**, its OWN worktree's
+  (ignored by git, never product). `.agent/STATE.md` is the main checkout's
+  coordinating session's, and a slice does not touch it. If you get stuck,
+  write `blocked: {reason, unblock}` in your `SLICE.md` and STOP.
+- **Each slice works in `.worktrees/<n>` on `feat/<n>`**, and its claim
+  (`status:ready` → `status:in-progress`) is done by `/ct-next` in code: do not
+  move those labels by hand. When opening the PR, put `Closes #N` in the body.
+- **What does not reach the issue's body does not reach the agent**: it does not receive the spec.
+- **The slices table format —the contract with `/ct-groom`— lives in
+  [`docs/superpowers/SLICES-CONTRACT.md`](docs/superpowers/SLICES-CONTRACT.md)**:
+  which columns it reads, what each one generates, and what `/ct-next` does with them. It is
+  what whoever writes a spec for this repo reads. `/ct-init` maintains it, it carries its
+  own version, and it is not edited by hand.
+- **How to bring this repo up** to walk it end to end: the section
+  «Cómo se atraviesa este repo (e2e)», below. Fill it in once.
+<!-- /ct-init:loop -->
+
+<!-- ct-init:e2e-howto -->
+## Cómo se atraviesa este repo (e2e)
+
+<!-- Rellena esto UNA vez. Lo lee el agente de un slice cuya fila declara
+     recorridos en la columna E2E de la tabla de slices. Si está sin
+     rellenar, el agente marca sus recorridos como "no-verificado" y NO se
+     inventa cómo levantar el repo. -->
+
+- Levantar:
+- Listo cuando:
+- Plazo:              (opcional; por defecto 60 segundos)
+- Tirar:
+- Herramientas:
+- Fuera de límites:
+<!-- /ct-init:e2e-howto -->
