@@ -193,4 +193,23 @@ describe('ToolRunner', () => {
 
     expect(runner.asked[0].options.env).toBeUndefined()
   })
+
+  it('keeps every byte when its output is collected whole, and still tells its exit code and its stderr', async () => {
+    const openIssuesArgv = ['api', 'graphql', '--paginate', '--slurp']
+    const issueViewArgv = ['issue', 'view', 'https://github.com/mercadona/control-tower/issues/999999999', '--json', 'title,body,comments']
+    const conversation = new ScriptedConversation()
+      .answering({ binary: 'gh', argv: openIssuesArgv }, Capture.read('gh', 'graphql-open-issues-repo-pulse'))
+      .answering({ binary: 'gh', argv: issueViewArgv }, Capture.read('gh', 'issue-view-missing'))
+    const opened = Capture.read('gh', 'graphql-open-issues-repo-pulse')
+    const missing = Capture.read('gh', 'issue-view-missing')
+    const runner = Runner.of(conversation)
+
+    const whole = await runner.runWholeOutput(openIssuesArgv)
+    const refusal = await runner.runWholeOutput(issueViewArgv)
+
+    expect(whole.stdout).toBe(opened.stdout)
+    expect(whole.code).toBe(0)
+    expect(refusal.code).toBe(1)
+    expect(refusal.stderr).toBe(missing.stderr)
+  })
 })
