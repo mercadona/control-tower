@@ -121,9 +121,13 @@ export class DriveRun {
     await this.#carriesOnWhetherOrNotItArrives(watch, this.announcements.announce({
       repository: watch.repository,
       issue: watch.issue.number,
+      state: closure.state,
+      outcome: closure.outcome,
       task: closure.task,
       findings: closure.findings,
       verdict: closure.verdict,
+      vetoed: closure.vetoed,
+      failure: closure.failure,
     }))
   }
 

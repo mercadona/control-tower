@@ -656,6 +656,32 @@ describe('a run the judge closed', () => {
     expect(announcements.announced[0]!.findings).toBe('- [high] uno.ts:1: mal')
   })
 
+  it('a veto announces what the plugin says the judge vetoed', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-judge: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 3,
+        findings: '- [high] uno.ts:1: mal', verdict: '.agent/run-7/slice-verdict-3.json',
+        vetoed: 'the review of the slice', failure: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-judge',
+      outcome: 'failed',
+      task: 3,
+      findings: '- [high] uno.ts:1: mal',
+      verdict: '.agent/run-7/slice-verdict-3.json',
+      vetoed: 'the review of the slice',
+      failure: null,
+    }])
+  })
+
   it('a refusal of any other state is not announced, because only the judge has a way out', async () => {
     const announcements = new AnnouncementsSpy()
     const driving = DriveRunMother.refusing({

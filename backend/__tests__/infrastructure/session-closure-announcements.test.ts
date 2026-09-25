@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SessionClosureAnnouncements } from '../../src/infrastructure/session-closure-announcements.ts'
 import type { CoordinatingSessions } from '../../src/infrastructure/coordinating-sessions.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import type { RunFailure } from '../../src/domain/value-objects/run-instruction.ts'
 
 class SessionsDouble {
   readonly announced: string[] = []
@@ -29,18 +30,36 @@ class Asked {
   static FINDINGS = '- [high] src/pago.ts:41: the amount is rounded before the discount\n'
     + '- [medium] src/pago.ts:88: the zero amount is not covered'
   static VERDICT = '.agent/run-973/task-2-verdict-3.json'
+  static FAILURE: RunFailure = { command: 'npm test', code: 1, log: '.agent/run-973/controls.log' }
 
   static of(over: Partial<ReturnType<typeof Asked.full>> = {}) {
     return { ...Asked.full(), ...over }
+  }
+
+  static byControls(over: Partial<ReturnType<typeof Asked.full>> = {}) {
+    return Asked.of({
+      state: 'blocked-controls', findings: null, verdict: null, failure: Asked.FAILURE, ...over,
+    })
+  }
+
+  static byGlobal(over: Partial<ReturnType<typeof Asked.full>> = {}) {
+    return Asked.of({
+      state: 'blocked-global', task: null, findings: null, verdict: null,
+      failure: { command: 'make test-all', code: 2, log: '.agent/run-973/global.log' }, ...over,
+    })
   }
 
   static full() {
     return {
       repository: Asked.REPOSITORY,
       issue: Asked.ISSUE,
+      state: 'blocked-judge',
+      outcome: 'failed',
       task: Asked.TASK as number | null,
       findings: Asked.FINDINGS as string | null,
       verdict: Asked.VERDICT as string | null,
+      vetoed: null as string | null,
+      failure: null as RunFailure | null,
     }
   }
 }
@@ -120,6 +139,13 @@ describe('telling the coordinating session that the judge closed a run', () => {
     expect(line).toContain('a task of owner/name#973')
   })
 
+  it('names_what_the_judge_vetoed_when_the_plugin_says_it_instead_of_the_task_number', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.of({ vetoed: 'the review of the slice', task: 3 }))
+
+    expect(line).toContain('The judge vetoed the review of the slice of owner/name#973')
+    expect(line).not.toContain('task 3')
+  })
+
   it('goes_through_the_one_thing_that_knows_which_session_is_live', async () => {
     const sessions = new SessionsDouble()
     const announcements = new SessionClosureAnnouncements({ sessions: () => sessions.asSessions })
@@ -141,5 +167,73 @@ describe('telling the coordinating session that the judge closed a run', () => {
     const announcements = new SessionClosureAnnouncements({ sessions: () => sessions.asSessions })
 
     await expect(announcements.announce(Asked.of())).resolves.toBe(true)
+  })
+})
+
+describe('telling the coordinating session that a check closed a run', () => {
+  it('a_run_closed_by_its_controls_names_the_task_the_failing_command_its_exit_and_the_log', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byControls())
+
+    expect(line).toContain('The controls of task 2 of owner/name#973 went red: `npm test` exited 1 '
+      + 'and the run is closed at blocked-controls. The log is at .agent/run-973/controls.log.')
+  })
+
+  it('a_run_closed_by_its_global_verification_names_the_failing_command_its_exit_and_the_log', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byGlobal())
+
+    expect(line).toContain('The Global verification of owner/name#973 went red: `make test-all` exited 2 '
+      + 'and the run is closed at blocked-global. The log is at .agent/run-973/global.log.')
+  })
+
+  it('an_unmeasured_check_says_it_could_not_be_measured_instead_of_red', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byGlobal({
+      outcome: 'indeterminate', failure: { command: 'make test-all', code: null, log: '.agent/run-973/global.log' },
+    }))
+
+    expect(line).toContain('The Global verification of owner/name#973 could not be measured: `make test-all` '
+      + 'and the run is closed at blocked-global.')
+    expect(line).not.toContain('went red')
+  })
+
+  it('an_unmeasured_check_with_no_command_says_only_that_it_could_not_be_measured', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byControls({
+      outcome: 'indeterminate', failure: { command: null, code: null, log: '.agent/run-973/controls.log' },
+    }))
+
+    expect(line).toContain('The controls of task 2 of owner/name#973 could not be measured and the run is '
+      + 'closed at blocked-controls. The log is at .agent/run-973/controls.log.')
+  })
+
+  it('a_red_check_with_no_command_says_only_that_it_went_red', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byControls({
+      failure: { command: null, code: 1, log: '.agent/run-973/controls.log' },
+    }))
+
+    expect(line).toContain('The controls of task 2 of owner/name#973 went red and the run is closed at blocked-controls.')
+  })
+
+  it('a_closure_by_a_check_names_the_call_that_grants_the_round_and_keeps_the_instruction_with_the_person', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byControls())
+
+    expect(line).toMatch(/ Tell the person what failed, ask them what to change, and send THEIR words with POST \/slices\/973\/another-round \{repo, agent, instruction\}\. The instruction is theirs: you do not invent it\.$/)
+    expect(line).not.toContain('\n')
+  })
+
+  it('a_closure_by_a_check_from_a_plugin_that_named_no_failure_still_names_the_slice_and_the_state', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byControls({ task: null, failure: null }))
+
+    expect(line).toContain('The controls of a task of owner/name#973 went red and the run is closed at '
+      + 'blocked-controls. Tell the person what failed')
+    expect(line).not.toContain('The log is at')
+  })
+
+  it('a_closure_with_no_line_to_announce_is_refused_by_name_instead_of_announced_as_a_veto', () => {
+    expect(() => SessionClosureAnnouncements.lineFor(Asked.of({ state: 'blocked-slice-judge' })))
+      .toThrow('a closure with no line to announce: "blocked-slice-judge"')
+  })
+
+  it('a_check_with_an_outcome_the_plugin_never_closes_on_is_refused_by_name_instead_of_called_red', () => {
+    expect(() => SessionClosureAnnouncements.lineFor(Asked.byControls({ outcome: 'done' })))
+      .toThrow('a closure with no cause to announce: "done"')
   })
 })
