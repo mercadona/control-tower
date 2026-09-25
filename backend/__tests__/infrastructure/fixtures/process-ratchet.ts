@@ -23,7 +23,6 @@ export class ProcessRatchet {
     'infrastructure/recorded-plan-recovery.test.ts',
     'infrastructure/run-driver-runtime-real-process.test.ts',
     'infrastructure/run-plan-recovery.test.ts',
-    'infrastructure/run-recovery-real-process.test.ts',
     'infrastructure/session-channel-real-process.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
     'infrastructure/tool-runner-real-process.test.ts',

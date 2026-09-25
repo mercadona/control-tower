@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -9,12 +10,22 @@ import { DriveRun } from '../../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../../src/application/actions/execute-run-instruction.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
+import { CheckoutRegistry } from '../../../src/domain/ports/checkout-registry.ts'
 import { PlanAgents } from '../../../src/domain/ports/plan-agents.ts'
 import { PlanPublication } from '../../../src/domain/ports/plan-publication.ts'
+import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
 import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
-import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
+import { PlanBriefing } from '../../../src/domain/value-objects/plan-briefing.ts'
+import type { CallCost, CallExecution, PlanCallPurpose } from '../../../src/domain/value-objects/plan-call.ts'
+import { CompletedPlanCall, StartedPlanCall } from '../../../src/domain/value-objects/plan-call.ts'
+import { PlanIssue } from '../../../src/domain/value-objects/plan-issue.ts'
 import type { PlanWatch } from '../../../src/domain/value-objects/plan-watch.ts'
-import { ClaudeCalls } from '../../../src/infrastructure/claude-calls.ts'
+import type { RegisteredCheckout } from '../../../src/domain/value-objects/registered-checkout.ts'
+import { RepositoryName } from '../../../src/domain/value-objects/repository-name.ts'
+import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
+import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
+import { ActivePlans } from '../../../src/infrastructure/active-plans-route.ts'
+import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
@@ -24,8 +35,12 @@ import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.t
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-calls.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
+import { PlanSessions } from '../../../src/infrastructure/plan-sessions.ts'
+import { RecordedPlanRecovery } from '../../../src/infrastructure/recorded-plan-recovery.ts'
+import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
+import { RunPlanRecovery } from '../../../src/infrastructure/run-plan-recovery.ts'
 import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
 import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 import { InProcessWorkers } from './in-process-workers.ts'
@@ -69,6 +84,30 @@ class Identities {
   }
 }
 
+class CountingReviewWatch extends ReviewWatch {
+  started = 0
+
+  constructor() {
+    super({
+      asked: async () => ({ changes: [] }),
+      review: async () => {},
+      sleep: async () => {},
+      stderr: () => {},
+      label: 'in-process recovery fixture',
+      log: new ReviewLog(),
+    })
+  }
+
+  override startRecovered(): Promise<void> {
+    this.started += 1
+    return new Promise(() => {})
+  }
+}
+
+class UnregisteredCheckouts extends CheckoutRegistry {
+  override remember(_checkout: RegisteredCheckout): void {}
+}
+
 export class InProcessRun {
   static readonly ISSUE = 7
   static readonly REPOSITORY = 'acme/widget'
@@ -79,6 +118,7 @@ export class InProcessRun {
   static readonly #PLUGIN = join(InProcessRun.#ROOT, 'plugin')
   static readonly #CT_STEP = join(InProcessRun.#PLUGIN, 'scripts', 'ct-step.mjs')
   static readonly #DISPATCH_CHECK = join(InProcessRun.#PLUGIN, 'scripts', 'dispatch-check.mjs')
+  static readonly #EPOCH = '2026-09-17T10:00:00.000Z'
 
   readonly checkout: string
   readonly state: string
@@ -262,9 +302,146 @@ export class InProcessRun {
     })
   }
 
+  async journaled(steps: readonly ScriptedStep[]): Promise<PlanWatch> {
+    const records = new DiskPlanRecords({
+      files: this.#files,
+      newId: () => this.#identities.next(),
+      now: () => new Date().toISOString(),
+      exists: async (path) => existsSync(path),
+    })
+    const watch = await records.prepare(new PlanBriefing({
+      story: null,
+      issue: new PlanIssue({
+        number: InProcessRun.ISSUE,
+        url: `https://github.com/${InProcessRun.REPOSITORY}/issues/${InProcessRun.ISSUE}`,
+      }),
+      located: new WorkspaceLocation({ root: this.checkout, path: this.checkout, branch: 'feat/7' }),
+      repository: new RepositoryName(InProcessRun.REPOSITORY),
+    }))
+    await this.#journal.admit(watch)
+    await this.#recordCall(watch, {
+      purpose: 'plan',
+      requestId: null,
+      argv: ['--session-id', watch.agent],
+      execution: { kind: 'success' },
+      cost: { kind: 'reported', totalUsd: 0.1, attribution: 'initial-invocation' },
+    })
+    const plan = await readFile(join(this.checkout, InProcessRun.PLAN), 'utf8')
+    await this.#journal.establish(watch, `${JSON.stringify({
+      version: 1,
+      conversation: watch.agent,
+      repository: watch.repository.text,
+      issue: watch.issue.number,
+      plan: InProcessRun.PLAN,
+      initialPlanSha256: InProcessRun.#digest(plan),
+    })}\n`)
+    let previous: string | null = null
+    for (const step of steps) {
+      const ticket = await this.#journal.begin(watch, `${JSON.stringify({
+        version: 1,
+        previous,
+        argv: [
+          InProcessRun.#CT_STEP, 'next', '--plan', InProcessRun.PLAN, '--issue', String(InProcessRun.ISSUE),
+          '--output-format', 'json',
+        ],
+        cwd: this.checkout,
+        planSha256: InProcessRun.#digest(plan),
+      })}\n`)
+      const stdout = await this.oracle.announce(step)
+      await this.#journal.finish(watch, ticket, `${JSON.stringify({
+        version: 1, code: 0, stdout, stderr: '', beforeRun: null, afterRun: null,
+      })}\n`)
+      previous = ticket
+    }
+    return watch
+  }
+
+  async recorded(call: { readonly watch: PlanWatch, readonly execution: CallExecution }): Promise<void> {
+    await this.#recordCall(call.watch, {
+      purpose: 'fix',
+      requestId: 'fix:after-delivery',
+      argv: ['--resume', call.watch.agent],
+      execution: call.execution,
+      cost: { kind: 'reported', totalUsd: 0.5, attribution: 'unverified-resume' },
+    })
+  }
+
+  recovery(): { readonly recovery: RunPlanRecovery, readonly activePlans: ActivePlans, readonly reviews: CountingReviewWatch } {
+    const agents = this.agents()
+    const reviews = new CountingReviewWatch()
+    const activePlans = new ActivePlans({ sessions: new PlanSessions() })
+    const legacy = new RecordedPlanRecovery({
+      records: agents.records,
+      calls: agents.calls,
+      ownership: agents.transport,
+      checkouts: new UnregisteredCheckouts(),
+      activePlans,
+      reviews,
+    })
+    const recovery = new RunPlanRecovery({
+      legacy,
+      records: agents.records,
+      calls: agents.calls,
+      transport: agents.transport,
+      machine: agents.machine,
+      journal: agents.journal,
+      agents,
+      delivery: agents.delivery,
+      checkouts: new UnregisteredCheckouts(),
+      activePlans,
+      reviews,
+      nowMs: Date.now,
+    })
+    return { recovery, activePlans, reviews }
+  }
+
   async remove(): Promise<void> {
     await this.workers.settled()
     await rm(this.#base, { recursive: true, force: true })
+  }
+
+  async #recordCall(watch: PlanWatch, asked: {
+    purpose: PlanCallPurpose,
+    requestId: string | null,
+    argv: readonly string[],
+    execution: CallExecution,
+    cost: CallCost,
+  }): Promise<void> {
+    const call = new StartedPlanCall({ conversation: watch.agent, id: this.#identities.next() })
+    const directory = this.#files.callDirectory(call)
+    const descriptor = new CallDescriptor({
+      conversation: watch.agent,
+      purpose: asked.purpose,
+      requestId: asked.requestId,
+      role: null,
+      cwd: watch.located.path,
+      binary: 'claude',
+      argv: asked.argv,
+      startedAt: InProcessRun.#EPOCH,
+      budgetMs: 7_200_000,
+      killGraceMs: 5_000,
+    })
+    const completed = new CompletedPlanCall({
+      call,
+      code: asked.execution.kind === 'success' ? 0 : null,
+      signal: null,
+      finishedAt: InProcessRun.#EPOCH,
+      wallDurationMs: 60_000,
+      execution: asked.execution,
+      measurement: { cost: asked.cost, turns: 2, durationMs: 55_000, unavailable: [] },
+    })
+    await mkdir(directory, { recursive: true })
+    await Promise.all([
+      writeFile(join(directory, CallDescriptor.FILE), descriptor.text()),
+      writeFile(join(directory, CallDescriptor.PROMPT), 'Labelled synthetic call.\n'),
+      writeFile(join(directory, CallDescriptor.STREAM), ''),
+      writeFile(join(directory, CallDescriptor.STDERR), ''),
+      writeFile(join(directory, CallDescriptor.COMPLETION), StoredCompletion.text(completed)),
+    ])
+  }
+
+  static #digest(text: string): string {
+    return createHash('sha256').update(text).digest('hex')
   }
 
   static #hasCode(cause: unknown, code: string): boolean {
