@@ -17,11 +17,14 @@ type RereadAsked = { root: CheckoutRoot, spec: EpicSpec }
 type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 type CommittedAsked = { root: CheckoutRoot, paths: string[] }
 type PublishingAsked = { root: CheckoutRoot, milestone: string }
+type RestartAsked = { root: CheckoutRoot, branch: string }
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
 class EpicBranchDouble extends EpicBranch {
   checkedOut: () => void = () => {}
   publishingAsked: PublishingAsked[]
+  restartAsked: RestartAsked[]
+  steps: string[]
   committedAsked: CommittedAsked[]
   commitAsked: CommitAsked[]
   pushAsked: string[]
@@ -31,6 +34,8 @@ class EpicBranchDouble extends EpicBranch {
   constructor({ isCommitted = false, isPushed = false }: { isCommitted?: boolean, isPushed?: boolean } = {}) {
     super()
     this.publishingAsked = []
+    this.restartAsked = []
+    this.steps = []
     this.committedAsked = []
     this.commitAsked = []
     this.pushAsked = []
@@ -42,10 +47,19 @@ class EpicBranchDouble extends EpicBranch {
     return new EpicBranchDouble({ isCommitted: true, isPushed: true })
   }
 
+  static withTheCorrectionCommittedAndNotPushed(): EpicBranchDouble {
+    return new EpicBranchDouble({ isCommitted: true, isPushed: false })
+  }
+
   async publishing(subject: PublishingAsked): Promise<string> {
     this.publishingAsked.push(subject)
     this.checkedOut()
     return Mother.BRANCH
+  }
+
+  async restartFromDefault(subject: RestartAsked): Promise<void> {
+    this.restartAsked.push(subject)
+    this.steps.push('restart')
   }
 
   async committed(subject: CommittedAsked): Promise<boolean> {
@@ -55,6 +69,7 @@ class EpicBranchDouble extends EpicBranch {
 
   async commit(subject: CommitAsked): Promise<void> {
     this.commitAsked.push(subject)
+    this.steps.push('commit')
   }
 
   async pushed(): Promise<boolean> {
@@ -242,6 +257,36 @@ describe('PublishReslicing', () => {
     expect(flow.branch.committedAsked).toEqual([{ root: Mother.ROOT, paths: [held.path] }])
   })
 
+  it('a correction whose branch has no pull request open starts again from the default branch before committing, so the squashed freeze does not travel with it', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([{ root: Mother.ROOT, branch: Mother.BRANCH }])
+    expect(flow.branch.steps).toEqual(['restart', 'commit'])
+  })
+
+  it('a correction made while the previous re-slicing is still open keeps growing that pull request instead of starting again', async () => {
+    const flow = new Flow({ pullRequests: PullRequestsDouble.withOneAlreadyOpen() })
+
+    const published = await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([])
+    expect(flow.branch.commitAsked).toHaveLength(1)
+    expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
+    expect(published.pullRequest).toEqual(Mother.STANDING)
+  })
+
+  it('a correction already committed and not yet pushed is resumed where it stands, never rebuilt from the default branch', async () => {
+    const flow = new Flow({ branch: EpicBranchDouble.withTheCorrectionCommittedAndNotPushed() })
+
+    const published = await flow.run()
+
+    expect(flow.branch.restartAsked).toEqual([])
+    expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
+    expect(published.pullRequest).toEqual(Mother.OPENED)
+  })
+
   it('a spec that is not frozen is refused and nothing is committed, pushed or opened', async () => {
     const flow = Flow.reading(Mother.draft())
 
@@ -250,6 +295,7 @@ describe('PublishReslicing', () => {
     expect(published.outcome).toBe(ReslicingOutcome.NOT_FROZEN)
     expect(published.pullRequest).toBeNull()
     expect(flow.branch.publishingAsked).toEqual([])
+    expect(flow.branch.restartAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.branch.pushAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
