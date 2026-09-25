@@ -1,0 +1,56 @@
+{
+  "issue": 555,
+  "tasks_total": 4,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Task 1: pty-live-sessions.test.ts no longer imports SystemProcesses nor mocks node:child_process; ExecFileDouble and the mockReset are gone, the three border cases are deleted, and the ratchet line is removed. Task 2: 'closing one session leaves another session live and writable' proves with doubles that a close touches only its session (find null / find second / written token, and only -4101 signalled). Task 3: pty-live-sessions-real-process.test.ts deleted, ratchet line removed, 12 ledger rows appended. Task 4: session-channel.test.ts created over an EchoingTerminals ProcessTable double serving ApiServer through RunningServers; the old file deleted, the ratchet line removed, 3 ledger rows appended. Every promised behaviour is present.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Task 1: it.each '(a timely $name inspection failure leaves close durably requested)' has the four rows ENOENT/abort/maxBuffer/malformed output; ControlledInspection answers the second read with fails(code) or succeeds('truncated process row\\n'); it keeps SessionNotTerminated, the settle under INSPECTION_TIMEOUT_MS, ClosureStatus.REQUESTED and no destructive signal. Task 2: the named case opens two sessions over SpawnDouble.withPids(4101, 4102), closes the first, writes to the second, asserts find null / find second / the token in written. Task 3 is 'No TDD'. Task 4: the named case asserts 200 with { sessions: [{ id, name }] }, 202 with { status: 'typed', id }, and the typed text on the stream; the third case holds inspections, prints 000-059, lists 200, prints 060-119 and asserts both halves in order.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "No Contract blocks; the Current state blocks for pty-live-sessions.test.ts lines 21-24 and process-ratchet.ts lines 16, 17 and 20 are each removed in the diff. Task 4's declared shapes hold: class EchoingTerminals extends ProcessTable with readonly opened: EchoingTerminal[], holdsInspections: boolean and releaseInspections(): void; class EchoingTerminal implements Terminal echoes write through onData and has prints(bytes: string): void. PtyLiveSessions is built with the three bindings CtApi uses (openTerminal, signal and readTable bound to the table, as in ct-api.ts:620-623).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3 and D-6: no test in the diff reaches the border or launches a process. D-11: three files leave LISTED. The test-only row holds: nothing under backend/src changes and the doubles stay in __tests__. 'How the PTY sits behind the port': session-channel builds PtyLiveSessions from one ProcessTable double with the three CtApi bindings. The it.each ledger row: one row for each expanded $name, with the value substituted. 'A test name that stays': the session-channel substitutes keep their old names, and the renames match §7. The other rows (coverage, timeouts, flag) are untouched.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The exemplars are matched. The new pty case uses ControlledProcesses, SpawnDouble, Cabin.opening, Inspections.settle and TerminationMother as the host file does. session-channel.test.ts reuses RunningServers and the SseFrames idiom of the old channel file, and follows the scripted-terminals ProcessTable-double shape. pty-live-sessions.test.ts is (modify) and follows its host's idiom. Boundaries: the new test imports only the ProcessTable port and application or domain classes, and nothing from process-border.ts (the plan's Test-only row). Delivery: no public contract changes, so no document of either yardstick asks for a delivery pattern. defects.md, rule by rule. Closed vocabulary: EchoingTerminals.holdsInspections is a boolean the plan itself declared ('holdsInspections: boolean') in a test double. It classifies nothing a consumer dispatches over, and no dispatch with a catch-all is added. No finding. Raw map as the return value of logic: no subject; the diff adds no production logic, and readTable returns the table text the port defines. Two fields that have to agree: the it.each row's code: null for 'malformed output' is test data carried over from the old case; no production state is added. No finding. An error named for where it happens: no error type is added; the one thrown Error in EchoingTerminal.prints describes what happened. No subject.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The removed cases are all accounted for: the three border cases of Task 1 ('Removed on purpose: the 4 cases of the border, 10 rows'), the 12 cases of pty-live-sessions-real-process (Task 3 Tests) and the 3 of session-channel-real-process (Task 4 Tests). In the rewritten it.each, the dropped 'expect(exec.calls[1].options.signal).toMatchObject({ aborted: false })' checked the border's execFile options. The brief lists which old assertions each row keeps, and that one is not among them. The exec.calls counts become inspection.calls counts. No weakening the brief is silent about.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The effects come from production code. The list, input and stream travel through ApiServer, ListLiveSessions, TypeIntoSession, WatchLiveSession and PtyLiveSessions. The doubles only stand in for the terminal and the process table, and the echo in EchoingTerminal is the program's own output, which the plan asks the double to play. In Task 2, PtyLiveSessions.terminate decides both the close and the signal to -4101 alone.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The touched paths match the union of the Files lines: pty-live-sessions.test.ts, process-ratchet.ts, the ledger, session-channel.test.ts (create) and the two deletions. No path is extra and none is missing. Nothing under plugin/, frontend/ or backend/src changes, scripted-terminals.ts and vitest.config.ts are untouched, and there is no plan amendment. The ledger holds exactly 10 + 12 + 3 rows, and the 12 + 3 real-process rows bring the §8 count to 97.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests are: Task 1's it.each (4 rows), Task 2's case and Task 4's three cases. Deterministic: fake timers in Task 1, a controlled clock in Task 2, and in Task 4 a loopback port-0 server with tokens compared to themselves and a bounded 2s budget. None depends on a real process, the network or the date. Isolated: a fresh EchoingTerminals per test, afterEach closes the SSE readers and stops the servers, and held inspections are released. Verifies real behaviour: reverting PtyLiveSessions or ApiServer would break each assertion. No finer (low) remark was raised, so the ct-test-driven-development skill was not needed to pin one.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "42096540cbf3534f4da6115363122fb8e18bb055e5f3564b6fcb611767957359"
+  }
+}
