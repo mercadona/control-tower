@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -48,7 +49,7 @@ class PublicationScenario {
   }
 
   static async successfulReleaseDirectory(state: string, watch: PlanWatch): Promise<string> {
-    const releases = join(state, 'harness', watch.agent, 'run', 'publication', 'release')
+    const releases = PublicationScenario.#releaseDirectory(state, watch)
     for (const name of await fs.readdir(releases)) {
       const path = join(releases, name, 'result.json')
       const present = await fs.stat(path).then(() => true, () => false)
@@ -60,12 +61,54 @@ class PublicationScenario {
   }
 
   static async releaseDispositionCount(state: string, watch: PlanWatch): Promise<number> {
-    const releases = join(state, 'harness', watch.agent, 'run', 'publication', 'release')
+    const releases = PublicationScenario.#releaseDirectory(state, watch)
     let count = 0
     for (const name of await fs.readdir(releases)) {
       if (await fs.stat(join(releases, name, 'disposition.json')).then(() => true, () => false)) count += 1
     }
     return count
+  }
+
+  static async pushOwner(state: string, watch: PlanWatch): Promise<{ pid: number, processGroup: number }> {
+    const pushes = join(state, 'harness', watch.agent, 'run', 'publication', 'push')
+    const [name] = await fs.readdir(pushes)
+    return JSON.parse(await fs.readFile(join(pushes, name, 'owner.json'), 'utf8'))
+  }
+
+  static async releaseOwner(state: string, watch: PlanWatch, attempt: number): Promise<{ pid: number, processGroup: number }> {
+    const directory = await PublicationScenario.#attemptDirectory(state, watch, attempt)
+    return JSON.parse(await fs.readFile(join(directory, 'owner.json'), 'utf8'))
+  }
+
+  static async writeReleaseDisposition(
+    state: string, watch: PlanWatch, attempt: number, overrides: Record<string, unknown> = {},
+  ): Promise<void> {
+    const directory = await PublicationScenario.#attemptDirectory(state, watch, attempt)
+    const request = await fs.readFile(join(directory, 'request.json'), 'utf8')
+    const owner = await fs.readFile(join(directory, 'owner.json'), 'utf8')
+    await fs.writeFile(join(directory, 'disposition.json'), `${JSON.stringify({
+      version: 1, attempt, at: '2026-09-25T09:00:00.000Z', kind: 'terminated',
+      requestDigest: PublicationScenario.#digest(request), ownerDigest: PublicationScenario.#digest(owner),
+      processGroup: JSON.parse(owner).processGroup, ...overrides,
+    })}\n`)
+  }
+
+  static async #attemptDirectory(state: string, watch: PlanWatch, attempt: number): Promise<string> {
+    const releases = PublicationScenario.#releaseDirectory(state, watch)
+    for (const name of await fs.readdir(releases).catch(() => [])) {
+      const directory = join(releases, name)
+      const request = await fs.readFile(join(directory, 'request.json'), 'utf8').catch(() => null)
+      if (request !== null && JSON.parse(request).attempt === attempt) return directory
+    }
+    throw new Error(`release attempt ${attempt} is absent`)
+  }
+
+  static #releaseDirectory(state: string, watch: PlanWatch): string {
+    return join(state, 'harness', watch.agent, 'run', 'publication', 'release')
+  }
+
+  static #digest(text: string): string {
+    return createHash('sha256').update(text).digest('hex')
   }
 
   static #registerGitAnswers(origin: ScratchOrigin, checkout: string): void {
@@ -303,5 +346,83 @@ describe('a living release group holds back the next release', () => {
       kind: 'delivered', pullRequest: { number: ScriptedGitHub.PULL_NUMBER, url: ScriptedGitHub.URL },
     })
     expect(await PublicationScenario.releaseDispositionCount(run.state, watch)).toBe(2)
+  })
+})
+
+describe('a failed result and a held push wait for their evidence', () => {
+  const runs: InProcessRun[] = []
+  const GROUP = 5151
+
+  afterEach(async () => {
+    await Promise.all(runs.splice(0).map((run) => run.remove()))
+  })
+
+  it('does not repeat a held push after restart and continues once its group terminates', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    const finishPush = origin.holdNextPush()
+
+    const held = delivery.deliver(watch)
+    void held.catch(() => {})
+    const owner = await vi.waitFor(() => PublicationScenario.pushOwner(run.state, watch))
+    table.alive.add(-owner.processGroup)
+
+    await expect(PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch))
+      .rejects.toThrow('may still be running')
+    expect(await delivery.journal.publicationList(watch, ['push'])).toHaveLength(1)
+    expect(github.pulls).toHaveLength(0)
+
+    table.alive.delete(-owner.processGroup)
+    finishPush()
+    await expect(held).rejects.toThrow('git push failed')
+
+    await PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch)
+    expect(await delivery.journal.publicationList(watch, ['push'])).toHaveLength(2)
+    expect(github.pulls).toHaveLength(1)
+  })
+
+  it('persists a refusal from the checked release without claiming delivery', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    release.next({ kind: 'refused' })
+
+    await expect(delivery.deliver(watch)).rejects.toThrow('checked release failed')
+
+    expect(github.labels).toEqual(['status:in-progress'])
+    const inspected = await PublicationScenario.rebuild(run, table, origin, github, release).inspect(watch)
+    expect(inspected).toMatchObject({ kind: 'publishing' })
+  })
+
+  it('keeps inspection read-only while a failed owned release result is pending and accepts its bound disposition', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    release.next({ kind: 'held', group: GROUP })
+
+    const failed = delivery.deliver(watch)
+    void failed.catch(() => {})
+    await vi.waitFor(() => PublicationScenario.releaseOwner(run.state, watch, 1))
+    expect(await PublicationScenario.rebuild(run, table, origin, github, release).inspect(watch))
+      .toMatchObject({ kind: 'publishing' })
+    expect(await PublicationScenario.releaseDispositionCount(run.state, watch)).toBe(0)
+
+    await PublicationScenario.writeReleaseDisposition(run.state, watch, 1)
+    release.finish(new ProcessOutput({ code: 7, stdout: '', stderr: '' }))
+    await expect(failed).rejects.toThrow('checked release failed')
+
+    await PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch)
+    expect(release.releases).toHaveLength(2)
+  })
+
+  it('refuses an invalid disposition paired with a valid failed result', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    release.next({ kind: 'refused' })
+
+    await expect(delivery.deliver(watch)).rejects.toThrow('checked release failed')
+    await PublicationScenario.writeReleaseDisposition(run.state, watch, 1, { ownerDigest: '0'.repeat(64) })
+
+    await expect(PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch))
+      .rejects.toThrow('termination disposition is malformed or unbound')
+    expect(release.releases).toHaveLength(1)
   })
 })
