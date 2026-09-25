@@ -168,7 +168,7 @@ describe('the announcement declares its whole shape', () => {
     )
   })
 
-  it('a refusal prints the failing command its exit and the log after the verdict', () => {
+  it('a refusal prints the failing command its exit and the log after its detail', () => {
     const run = {
       closed: RUN_STATES.BLOCKED_GLOBAL,
       lastFailure: { outcome: OUTCOMES.FAILED, command: 'npm test', code: 1, log: '.agent/run-42/global.log' },
@@ -181,16 +181,15 @@ describe('the announcement declares its whole shape', () => {
       discards: 0,
       state: RUN_STATES.BLOCKED_GLOBAL,
       outcome: OUTCOMES.FAILED,
-      exit: 1,
+      exit: 11,
       detail: 'the Global verification is red',
-      verdict: '.agent/run-42/task-5-verdict-1.json',
       failure: RunClosure.failureOf(run),
     })
 
     expect(announcement.text()).toBe(
-      '{"version":1,"kind":"refusal","state":"blocked-global","outcome":"failed","exit":1,'
+      '{"version":1,"kind":"refusal","state":"blocked-global","outcome":"failed","exit":11,'
       + '"run":{"issue":42,"task":5,"tasksTotal":5,"step":"global","discards":0},'
-      + '"detail":"the Global verification is red","verdict":".agent/run-42/task-5-verdict-1.json",'
+      + '"detail":"the Global verification is red",'
       + '"failure":{"command":"npm test","code":1,"log":".agent/run-42/global.log"}}\n'
     )
   })

@@ -1074,7 +1074,7 @@ function writeBrief() {
 function appendAdvice(brief) {
   if (run.reopenedFrom) {
     appendFileSync(brief, ReopenedBrief.section({
-      closure: run.reopenedFrom, instruction: run.lastAdvice, ...lastFailureLog(),
+      closure: run.reopenedFrom, phase: run.phase, instruction: run.lastAdvice, ...lastFailureLog(),
     }))
     return
   }
@@ -1812,6 +1812,11 @@ function controlsVerb() {
     duration_ms: Date.now() - startedAt,
   })
   run = { ...run, lastControlsLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
+  // Green controls end a controls reopen: its instruction and its log were for
+  // the round that just went green, and the judge's brief must not repeat
+  // them. A global reopen stays until its commit — the fix round has no judge,
+  // and the Global verification that closed it has not run again yet.
+  if (result === OUTCOMES.DONE) run = RunClosure.afterGreenControls(run)
   // A task with no judge goes from here to `commit`, so the controls seal the
   // index the verdict would have sealed: what they measured is what commits.
   // The table says where green goes, so the seal asks it instead of guessing.
@@ -2702,7 +2707,7 @@ function adviceVerb() {
     out(`advice discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
-  run = { ...run, lastAdvice: advice }
+  run = { ...run, lastAdvice: advice, reopenedFrom: null }
   // HAPPY-TO-DELETE: the third attempt does not start on top of two layers of
   // patches. It goes AFTER the telemetry row and after accepting the advice,
   // so that a git failure while cleaning does not sweep away the advice that
@@ -2770,7 +2775,7 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (a judged task's verdict is at ${unit.verdictPath}), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (${unit.verdictPath === null ? `${unit.vetoedName} has no verdict` : `a judged task's verdict is at ${unit.verdictPath}`}), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()

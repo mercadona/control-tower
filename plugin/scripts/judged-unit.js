@@ -79,12 +79,12 @@ class JudgedTask {
   }
 }
 
-class JudgedReview {
-  constructor({ run, tasks, issue }) {
+class WholeSliceUnit {
+  constructor({ run, tasks, issue, stem }) {
     this.run = run
     this.tasks = tasks
     this.issue = issue
-    this.stem = 'review'
+    this.stem = stem
     Object.freeze(this)
   }
 
@@ -95,6 +95,18 @@ class JudgedReview {
   get promisedTests() { return PromisedTests.NONE }
 
   get verdictPath() { return `docs/superpowers/verdicts/issue-${this.issue}-${this.stem}.json` }
+
+  get briefLead() { return new BriefLead({ n: 1, withContext: true }) }
+
+  get briefAppendices() {
+    return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
+  }
+}
+
+class JudgedReview extends WholeSliceUnit {
+  constructor({ run, tasks, issue }) {
+    super({ run, tasks, issue, stem: 'review' })
+  }
 
   verdictRecord(verdict) {
     return { issue: this.issue, tasks_total: this.run.tasksTotal, verdict }
@@ -110,12 +122,6 @@ class JudgedReview {
 
   get packageHeader() {
     return `# Review package: the ${this.run.tasksTotal} tasks of issue #${this.issue} (committed since ${this.run.baseSha.slice(0, 7)}, fixes staged)`
-  }
-
-  get briefLead() { return new BriefLead({ n: 1, withContext: true }) }
-
-  get briefAppendices() {
-    return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
   }
 
   get nextHeading() { return `slice of issue ${this.issue} — the review of the ${this.run.tasksTotal} tasks` }
@@ -139,22 +145,12 @@ class JudgedReview {
   }
 }
 
-class FixRound {
+class FixRound extends WholeSliceUnit {
   constructor({ run, tasks, issue }) {
-    this.run = run
-    this.tasks = tasks
-    this.issue = issue
-    this.stem = 'fix'
-    Object.freeze(this)
+    super({ run, tasks, issue, stem: 'fix' })
   }
 
-  get diffBase() { return [this.run.baseSha] }
-
-  get commands() { return this.tasks.flatMap((t) => t.commands) }
-
-  get promisedTests() { return PromisedTests.NONE }
-
-  get verdictPath() { return `docs/superpowers/verdicts/issue-${this.issue}-${this.stem}.json` }
+  get verdictPath() { return null }
 
   commitMessage() {
     return fixRoundCommitMessage({ issue: this.issue, tasksTotal: this.run.tasksTotal })
@@ -163,12 +159,6 @@ class FixRound {
   get commitsForTheSlice() { return true }
 
   committedLine(sha) { return `the fix round committed: ${sha.slice(0, 7)}` }
-
-  get briefLead() { return new BriefLead({ n: 1, withContext: true }) }
-
-  get briefAppendices() {
-    return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
-  }
 
   get nextHeading() { return `slice of issue ${this.issue} — the fix round after the Global verification` }
 

@@ -141,12 +141,12 @@ describe('the unit of the fix round', () => {
     expect(unit.nothingToCommitWarning).toBe('warning: nothing to commit of the fix round (are the fixes and the telemetry gitignored?) — the run carries on.')
   })
 
-  it('the fix round runs every task commands and promises no test', () => {
+  it('the fix round runs every task commands, promises no test and has no verdict', () => {
     expect(unit.stem).toBe('fix')
     expect(unit.diffBase).toEqual([baseSha])
     expect(unit.commands).toEqual(['test -f uno.txt', 'test -f dos.txt', 'npm test'])
     expect(unit.promisedTests).toBe(PromisedTests.NONE)
-    expect(unit.verdictPath).toBe('docs/superpowers/verdicts/issue-7-fix.json')
+    expect(unit.verdictPath).toBeNull()
   })
 
   it('the fix round commit message names the round and the issue', () => {

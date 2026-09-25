@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RUN_STATES } from '../scripts/run-machine.js'
+import { PHASES, RUN_STATES } from '../scripts/run-machine.js'
 import { ReopenedBrief } from '../scripts/reopened-brief.js'
 
 class ReopenedBriefMother {
@@ -10,6 +10,7 @@ class ReopenedBriefMother {
   static controls(over = {}) {
     return ReopenedBrief.section({
       closure: RUN_STATES.BLOCKED_CONTROLS,
+      phase: PHASES.TASK,
       instruction: ReopenedBriefMother.INSTRUCTION,
       logPath: ReopenedBriefMother.CONTROLS_LOG,
       logText: '$ npm test\nFAIL parser.test.js\nexit 1\n',
@@ -20,6 +21,7 @@ class ReopenedBriefMother {
   static global(over = {}) {
     return ReopenedBrief.section({
       closure: RUN_STATES.BLOCKED_GLOBAL,
+      phase: PHASES.FIX,
       instruction: ReopenedBriefMother.INSTRUCTION,
       logPath: ReopenedBriefMother.GLOBAL_LOG,
       logText: '$ make build-plugin\nerror: dist is stale\n',
@@ -61,6 +63,13 @@ describe('the brief of a reopened closure', () => {
     expect(lines).toContain(ReopenedBriefMother.INSTRUCTION)
     expect(lines).toContain(`The last log, at \`${ReopenedBriefMother.GLOBAL_LOG}\` (its last 200 lines):`)
     expect(lines).toContain('error: dist is stale')
+    expect(lines).not.toContain('This does not widen the task: `**Files:**` above is still its scope.')
+  })
+
+  it('a controls reopen inside the fix round does not narrow the scope to one task', () => {
+    const lines = ReopenedBriefMother.controls({ phase: PHASES.FIX }).split('\n')
+
+    expect(lines).toContain(ReopenedBriefMother.INSTRUCTION)
     expect(lines).not.toContain('This does not widen the task: `**Files:**` above is still its scope.')
   })
 

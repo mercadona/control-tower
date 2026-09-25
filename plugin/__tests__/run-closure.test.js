@@ -69,6 +69,17 @@ describe('reopening a closure a person can lift', () => {
     })
   })
 
+  it('a judge reopen after a controls reopen gives the judge brief', () => {
+    const closed = ClosedRunMother.closedAtJudge({ reopenedFrom: RUN_STATES.BLOCKED_CONTROLS })
+    const { closed: _lifted, reopenedFrom: _stale, ...rest } = closed
+    const reopened = RunClosure.reopen(closed, ClosedRunMother.INSTRUCTION)
+
+    expect(reopened).not.toHaveProperty('reopenedFrom')
+    expect(reopened).toEqual({
+      ...rest, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: ClosedRunMother.INSTRUCTION,
+    })
+  })
+
   it('an open run has nothing to reopen', () => {
     const open = ClosedRunMother.open({ step: STEPS.CONTROLS })
 
@@ -91,6 +102,16 @@ describe('reopening a closure a person can lift', () => {
   })
 })
 
+describe('the end of a reopened round', () => {
+  it('green controls end a controls reopen and keep a global one until the commit', () => {
+    const afterControlsReopen = { task: 2, lastAdvice: ClosedRunMother.INSTRUCTION, reopenedFrom: RUN_STATES.BLOCKED_CONTROLS }
+    const afterGlobalReopen = { task: 3, lastAdvice: ClosedRunMother.INSTRUCTION, reopenedFrom: RUN_STATES.BLOCKED_GLOBAL }
+
+    expect(RunClosure.afterGreenControls(afterControlsReopen)).toEqual({ task: 2, lastAdvice: null, reopenedFrom: null })
+    expect(RunClosure.afterGreenControls(afterGlobalReopen)).toEqual(afterGlobalReopen)
+  })
+})
+
 describe('the closures the run file keeps', () => {
   it('the run file keeps the three closures a person lifts', () => {
     expect([RUN_STATES.DELIVERED, RUN_STATES.BLOCKED_JUDGE, RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL]
@@ -110,7 +131,7 @@ describe('a closure explains its way out', () => {
     })
 
     expect(RunClosure.wayOut({ run: closed, issue: 7, planPath: 'p.md', subject: 'the review' })).toBe(
-      'the Global verification of issue 7 are red: `npm test` exited 1 (log at .agent/run-7/global.log) and the run is closed. '
+      'the Global verification of issue 7 is red: `npm test` exited 1 (log at .agent/run-7/global.log) and the run is closed. '
       + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
     )
   })
@@ -140,10 +161,49 @@ describe('a closure explains its way out', () => {
     )
   })
 
+  it('an unmeasured check with no command says it could not be measured', () => {
+    const closed = ClosedRunMother.closedAtControls({
+      lastFailure: { outcome: OUTCOMES.INDETERMINATE, command: null, code: null, log: '.agent/run-7/controls-2.log' },
+    })
+
+    expect(RunClosure.wayOut({ run: closed, issue: 7, planPath: 'p.md', subject: 'task 2' })).toBe(
+      'the controls of task 2 of issue 7 could not be measured: a check that runs no command could not run (log at .agent/run-7/controls-2.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
+  it('a red global check with no command says it is red', () => {
+    const closed = ClosedRunMother.closedAtGlobal({
+      lastFailure: { outcome: OUTCOMES.FAILED, command: null, code: null, log: '.agent/run-7/global.log' },
+    })
+
+    expect(RunClosure.wayOut({ run: closed, issue: 7, planPath: 'p.md', subject: 'the review' })).toBe(
+      'the Global verification of issue 7 is red: a check that runs no command failed (log at .agent/run-7/global.log) and the run is closed. '
+      + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
+    )
+  })
+
   it('the judge way out reads as before this slice', () => {
     expect(RunClosure.wayOut({ run: ClosedRunMother.closedAtJudge(), issue: 7, planPath: 'p.md', subject: 'task 2' })).toBe(
       'the judge vetoed task 2 of issue 7 three times and the run is closed. '
       + 'Grant another round with "ct-step reopen --plan p.md --issue 7 --instruction \\"…\\"".',
     )
+  })
+})
+
+describe('the outcome a closed run repeats', () => {
+  it('the outcome of a closure is the judge failure or the recorded failure outcome', () => {
+    const closures = [
+      ClosedRunMother.closedAtJudge(),
+      ClosedRunMother.closedAtControls({
+        lastFailure: { outcome: OUTCOMES.INDETERMINATE, command: 'npm test', code: null, log: '.agent/run-7/controls-2.log' },
+      }),
+      ClosedRunMother.closedAtGlobal({
+        lastFailure: { outcome: OUTCOMES.FAILED, command: 'npm test', code: 1, log: '.agent/run-7/global.log' },
+      }),
+    ]
+
+    expect(closures.map((closed) => RunClosure.outcomeOf(closed))).toEqual([OUTCOMES.FAILED, OUTCOMES.INDETERMINATE, OUTCOMES.FAILED])
+    expect(() => RunClosure.outcomeOf(ClosedRunMother.open({ closed: RUN_STATES.BLOCKED_SLICE_JUDGE }))).toThrow(/blocked-slice-judge/)
   })
 })
