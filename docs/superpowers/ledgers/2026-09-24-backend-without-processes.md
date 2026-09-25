@@ -125,3 +125,6 @@ same way, or reads `deleted without substitute — decided`. Every slice appends
 | `__tests__/infrastructure/makefile-local-env.test.ts > lets the local env file override the default port` | deleted without substitute — decided |
 | `__tests__/infrastructure/makefile-local-env.test.ts > ignores .env and every .env.* file except .env.example in the real checkout` | deleted without substitute — decided |
 | `__tests__/infrastructure/state-directory-real-process.test.ts > passes_the_local_env_value_to_child_processes_without_shell_splitting` | deleted without substitute — decided |
+| `__tests__/infrastructure/process-ratchet.test.ts > the_backend_suite_launches_processes_in_exactly_the_listed_files` | `__tests__/infrastructure/process-ratchet.test.ts > the_backend_suite_launches_no_process` |
+| `__tests__/infrastructure/process-ratchet.test.ts > a_spawning_test_file_the_list_does_not_name_fails_the_ratchet` | `__tests__/infrastructure/process-ratchet.test.ts > a_test_file_that_imports_child_process_spawns` |
+| `__tests__/infrastructure/process-ratchet.test.ts > a_listed_file_that_no_longer_spawns_fails_the_ratchet` | deleted without substitute — decided |

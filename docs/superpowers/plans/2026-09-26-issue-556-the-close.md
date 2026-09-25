@@ -302,6 +302,7 @@ test "$(grep -c 'makefile-local-env.test.ts > ' docs/superpowers/ledgers/2026-09
 
 **Files:** `backend/__tests__/infrastructure/process-ratchet.test.ts` (modify),
 `backend/__tests__/infrastructure/fixtures/process-ratchet.ts` (modify). Also the ledger (modify).
+Delete `backend/__tests__/infrastructure/fixtures/headless-child.ts`: no file imports it, and it imports `node:child_process`.
 
 Current state (backend/__tests__/infrastructure/process-ratchet.test.ts, lines 50-53):
 ```ts
@@ -406,7 +407,7 @@ The ledger names every deleted case.
 ```bash
 cd backend && npm run typecheck   # expected: exit 0
 cd backend && env -u CT_STATE_DIR npx vitest run   # expected: exit 0 — the whole backend suite
-test -z "$(grep -rl 'node:child_process' backend/__tests__)"   # expected: exit 0 — no test imports child_process
+test -z "$(grep -rlE "^import .* from 'node:child_process'" backend/__tests__)"   # expected: exit 0 — no file under the tests imports child_process
 test -z "$(find backend/__tests__ -name '*-real-process.test.ts')"   # expected: exit 0 — no real process file is left
 test "$(grep -c 'real-process.test.ts > ' docs/superpowers/ledgers/2026-09-24-backend-without-processes.md)" -eq 104   # expected: exit 0 — 97 earlier rows and 7 new rows
 ```
@@ -424,3 +425,5 @@ test "$(grep -c 'real-process.test.ts > ' docs/superpowers/ledgers/2026-09-24-ba
    So §8 counts 104. The rows of `makefile-local-env.test.ts` and `process-ratchet.test.ts` name no such file. Provenance: repo, the ledger.
 6. The whole suite passed on 2026-09-26 with 3390 cases. Its slowest case in process took 1443 ms, so the
    default of 5000 ms holds. Provenance: measured, `npx vitest run --reporter=json`.
+7. The detectors of `process-ratchet.ts` and `spawned-children.ts` name `node:child_process` inside strings. So §8 looks
+   for an import line, not for the name. `fixtures/headless-child.ts` had no importer on `main` either, and Task 5 deletes it. Provenance: repo, found during Task 5.

@@ -6,8 +6,6 @@ export class ProcessRatchet {
   static readonly SPAWNING: readonly string[] = ['node:child_process', 'child_process', 'node-pty']
   static readonly BORDER = '/process-border.ts'
 
-  static readonly LISTED: readonly string[] = []
-
   static spawningUnder(tests: string): string[] {
     const spawning = new Map<string, boolean>()
 
@@ -16,22 +14,6 @@ export class ProcessRatchet {
       .filter((file) => ProcessRatchet.#spawns(file, tests, spawning, new Set()))
       .map((file) => ProcessRatchet.#pathOf(tests, file))
       .sort()
-  }
-
-  static unlisted(spawning: readonly string[], listed: readonly string[]): string[] {
-    const named = new Set(listed)
-
-    return spawning
-      .filter((file) => !named.has(file))
-      .map((file) => `${file} launches a process and ProcessRatchet.LISTED does not name it`)
-  }
-
-  static stale(spawning: readonly string[], listed: readonly string[]): string[] {
-    const stillSpawning = new Set(spawning)
-
-    return listed
-      .filter((file) => !stillSpawning.has(file))
-      .map((file) => `${file} is in ProcessRatchet.LISTED and launches no process any more`)
   }
 
   static #spawns(file: string, root: string, memo: Map<string, boolean>, chain: Set<string>): boolean {
