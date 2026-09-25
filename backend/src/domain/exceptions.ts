@@ -113,6 +113,10 @@ export class SliceBaselineNotRead extends SliceBaselineFailure {}
 
 export class SliceBaselineNotUnderstood extends SliceBaselineFailure {}
 
+export class ImplementationActivityFailure extends PlanFailure {}
+
+export class ImplementationActivityNotRead extends ImplementationActivityFailure {}
+
 export class ImplementationProgressFailure extends PlanFailure {}
 
 export class ImplementationProgressNotRead extends ImplementationProgressFailure {}
