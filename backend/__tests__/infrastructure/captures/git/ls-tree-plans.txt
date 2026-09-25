@@ -1,0 +1,8 @@
+command: git -C <checkout> ls-tree -r --name-only HEAD -- docs/superpowers/plans
+version: git version 2.50.1 (Apple Git-155)
+date: 2026-09-24
+exit: 0
+--- stdout
+docs/superpowers/plans/2026-09-17-issue-7-driver.md
+
+--- stderr

@@ -1,0 +1,65 @@
+{
+  "issue": 550,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "I found each task's objective in the final diff. T1: run-dispatch.test.ts runs the four named cases over announcements that ScriptedOracle.announce renders. T2: run-dispatch-real-process.test.ts is deleted and off ProcessRatchet.LISTED, and all eight of its cases are in the ledger (seven rows plus the removed case's row, which the amendment moved to T6). T3: in-process-workers.test.ts drives a real ClaudeCalls through InProcessWorkers and the real HeadlessCallWorker, fed from captures/claude/result-success.txt, with launches at 1. T4: run-driver.test.ts takes a new admission through the real RunPlanAgents/DriveRun to CompletedRunDelivery with one conversation. T5: run-recovery.test.ts covers the cut run over agents() and the later fix after delivery, built through journaled/recorded. T6: run-driver-runtime.test.ts covers legacy recovery, the legacy fix through the real ReviewWatch and RequestFixes, and kept driver ownership.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Every TDD name is in the diff, and each asserts what the plan wrote. T1: dispatch.paths toEqual implementPaths (announced inputs plus role files), and the bytes are equal before and after. T2: rejects with RunNotUnderstood and material null after rm of the announced brief. T3: completed.succeeded true, claude.asked length 1 in the asked conversation, launches 1. T4: roles ['plan','implement','ct-judge','ct-slice-judge'], one conversation, one publication, run: request ids, and a success measurement per call. T5: failed run uncertain with diagnostic 'synthetic fix failed after delivery', action inspect, reviews.started 0; successful run implementing and watched; launches 0 and oracle.asked [] in both. T6: workers.launches 0, and journal entries serialized before and after recover() are equal.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "I checked the prose contracts name by name. ScriptedStep carries all twelve members. ScriptedOracle has REFUSAL, asked, announce and run. The last fix makes run throw UnscriptedRequest for any binary other than ct-step and the dispatch check, and for a verb outside CONSUMING_VERB_BY_STEP. That is stricter than the literal words 'any other ct-step verb', but it is what testing.md asks of a scripted conversation, and the suite is green. ScriptedClaude/ClaudeRequest, InProcessWorkers (launch guard, launches, ESRCH kill, schedule/cancel, settled), InProcessRun (ISSUE, REPOSITORY, PLAN, fields, agents, remove, journaled, recorded, recovery) and the ScriptedProcess export all match. The previous findings are fixed: the RecoverPlan import and the publication member are gone from RunDriverMother, and recoverCompletedResponses is gone too. One low deviation: create gained an optional second parameter.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3: no new file launches a process. The ratchet list loses the three files. D-8: the git answers come from ScriptedConversation over headed captures. Test-only code: everything stays under __tests__/, and backend/src is untouched. The #563 substitutes build their admission through journaled() and never through a POST. The oracle row: ScriptedOracle is the only place that renders StepAnnouncement text. The model row: InProcessWorkers runs the real HeadlessCallWorker, with spawn = ScriptedClaude.launch. The captures row: they live under __tests__/infrastructure/captures/. Test names: 'real' is dropped and the ledger maps the old name to the new one. No flag. No row is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "InProcessRun.agents() composes the same real classes as the RunDriverMother graph and the run-plan-agents.test.ts exemplar, with doubles that extend their ports (PlanPublication, SliceEscalations, CheckoutRegistry, ReviewWatch, PlanIssues, Workbench). CompletedRunDelivery is reused. The captures follow the Capture header format of scripted-conversation.ts. Backend imports use .ts and plugin imports use .js. No control clashes with a convention. defects.md, rule by rule. (1) Closed vocabulary: ScriptedStep is a closed union dispatched with `satisfies never`, and the old `?? STEPS.CONTROLS` catch-all in ScriptedOracle#answer is now an UnscriptedRequest. ScriptedClaude's role is a string, but the plan prescribes it as the value after --agent, so it is an open set of agent names. (2) Raw map as return value: none. ScriptedClaude#played parses the capture and reserializes it in one step at the wire, and recovery() returns a typed record. (3) Two fields that must agree / sentinel: the earlier `completedTicket = ''` sentinel is now `string | null`, and recorded() tells an omitted requestId (undefined) apart from an explicit null. No other case. (4) Error named for where: none. The fixtures raise UnscriptedRequest and plain labelled Errors.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Each deleted case has a ledger row. The one removal on purpose ('fixture setup failures…') is declared in T2 Tests:, and its row reads deleted without substitute. The census case is decided in T6. The fix round restores what the previous verdict found missing. The review-watcher case again asserts the fix descriptor (conversation, purpose fix, requestId 701, --resume argv), the fixErrand prompt bytes, the success measurement, no admission, and exactly what the model received. The only thing it replaces is the gh argv, with reopen/statusOf, which T6 accounts for. The legacy-recovery case again asserts the prompt bytes and the absent admission. The dispatch cases keep their assertions.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Production classes produce the asserted behaviour: CtRunMachine/RunDispatch for dispatch and sealing, ClaudeCalls plus HeadlessCallWorker for the worker, RunPlanAgents/DriveRun/ClaudeRunCalls for delivery, and RunPlanRecovery/RecordedPlanRecovery/ReviewWatch/RequestFixes/ActivePlans for recovery. The doubles sit at port boundaries (oracle node, claude spawn, git, publication, delivery, workbench, plan issues). The assertions are on durable state the production code wrote (descriptors, measurements, material files, journal) or on what those ports received.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every touched path is on some task's Files: line, and every Files: path is touched. Nothing under plugin/, frontend/, ct-api.ts or API.md changes, and ct-run-machine-real-process.test.ts and the rest of RunDriverMother stay. The plan amendment moves the removed dispatch case's ledger row from T2 to T6 and changes T2's count check from -eq 8 to -ge 7. It adds an exact -eq 8 check to T6, keeps §8's 16 rows, and adds assumptions 9 and 10, each citing the ct-step control that forced it. The final ledger still holds all eight dispatch rows and 16 in total, so the amendment relaxes nothing the slice promised. The fix-round edits (AwaitedDelivery, the stricter oracle, the restored assertions, the mother cleanup) each answer a finding of the previous verdict.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests build their own mkdtemp roots and remove them in afterEach. The captures are fixed files. No assertion reads the real clock. The literal-path case snapshots and restores TMPDIR. The earlier 2 s wall-clock poll in run-driver.test.ts is gone: it now awaits a promise that AwaitedDelivery.deliver resolves. The assertions are on production effects and would fail with the production graph removed. I report nothing beyond the three blocking properties, so I did not need to quote the TDD skill.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "contrato",
+        "severity": "low",
+        "what": "The brief states InProcessRun.create as `static create(steps)`. The diff adds an optional second parameter, a delivery, so that run-driver.test.ts can inject AwaitedDelivery and await delivery without a wall-clock poll. It is harmless and serves the previous verdict's determinism remark, but the signature is wider than the one the plan wrote.",
+        "path": "backend/__tests__/infrastructure/fixtures/in-process-run.ts",
+        "line": 359,
+        "evidence": "Brief T4: \"It has `static create(steps): Promise<InProcessRun>`\"; diff: \"steps: readonly ScriptedStep[], delivery: CompletedRunDelivery = new CompletedRunDelivery(),\""
+      }
+    ],
+    "review_token": "7e86c7b267e90aa172964d55d7d3abea49065632651f6657937e19eff16a8543"
+  }
+}
