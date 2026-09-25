@@ -54,6 +54,8 @@ import { InProcessWorkers } from './in-process-workers.ts'
 import { ScriptedClaude } from './scripted-claude.ts'
 import { Capture, ScriptedConversation, UnscriptedRequest } from './scripted-conversation.ts'
 import { ScriptedOracle, type ScriptedStep } from './scripted-oracle.ts'
+import type { ScriptedGitHub } from './scripted-github.ts'
+import type { ScriptedRelease } from './scripted-release.ts'
 
 class QuietEscalations extends SliceEscalations {
   static reader(): ReadSliceEscalation {
@@ -344,15 +346,17 @@ export class InProcessRun {
     })
   }
 
-  checkedDelivery(asked: { git: ScriptedConversation, table: ProcessTable }): CheckedRunDelivery {
+  checkedDelivery(asked: {
+    git: ScriptedConversation, table: ProcessTable, github?: ScriptedGitHub, release?: ScriptedRelease,
+  }): CheckedRunDelivery {
     const signal = asked.table.signal.bind(asked.table)
     const runner = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: asked.git, signal })
     return new CheckedRunDelivery({
       journal: this.#journal,
       machine: this.#machine,
       git: runner.runWholeOutput.bind(runner),
-      node: InProcessRun.#refusing('node'),
-      gh: new Gh({
+      node: asked.release?.node ?? InProcessRun.#refusing('node'),
+      gh: asked.github?.gh ?? new Gh({
         launch: InProcessRun.#refusing('gh'),
         policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
         sleep: async () => {},

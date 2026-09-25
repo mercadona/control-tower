@@ -1,0 +1,26 @@
+{
+  "issue": 552,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Every sentence of the Desired end state is in the accumulated diff. ProcessRatchet.LISTED loses both 'infrastructure/checked-run-delivery-real-process.test.ts' and 'infrastructure/ct-run-machine-real-process.test.ts', and both test files are deleted. fixtures/run-driver-mother.ts and fixtures/delivery-publisher.ts are deleted, and nothing under backend/ still names either one. backend/__tests__/infrastructure/checked-run-delivery.test.ts is created and imports no spawning module; the ratchet test runs inside the green Global verification. The ledger gains 21 rows (lines 28-48): 3 for ct-run-machine-real-process.test.ts and 18 for checked-run-delivery-real-process.test.ts, one per deleted test name. The typecheck and the whole backend suite are facts inherited from the green Global verification.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The six task commits build on one another and none of them undoes another. Task 1 retires the run machine file and its mother. Task 2 lays down ScratchOrigin, ScriptedGitHub, ScriptedRelease and the optional github/release fields of InProcessRun.checkedDelivery, which fall back to the refusing ports. Tasks 3 to 5 reuse that one arrangement, and Task 5 only adds holdNextPush to ScratchOrigin. Task 6 retires the old checked delivery file and its publisher once every substitute exists. No scaffolding is left behind: after Task 6 both publishers and both old files are gone, and no two tasks solve the same problem two different ways.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)'. The slice was never asked to promise a signal, so there is no yardstick to measure against.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "579d1f84982f74a3c763b9bb2f0d3d5b3d24436be20337e18d77b77ade7dfa06"
+  }
+}

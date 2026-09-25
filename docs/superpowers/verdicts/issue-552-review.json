@@ -1,0 +1,73 @@
+{
+  "issue": 552,
+  "tasks_total": 6,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Every objective is produced. Task 1: run-driver.test.ts adds the advisor and reconciler rounds in process, and the ct-run-machine line leaves ProcessRatchet.LISTED. Task 2: checked-run-delivery.test.ts proves the whole publication and the four corrupt records over ScratchOrigin, ScriptedGitHub and ScriptedRelease. Task 3: the adopt and in-flight creation cases. Task 4: the three living-group cases. Task 5: held push, refusal, pending result and invalid disposition cases, with holdNextPush on ScratchOrigin. Task 6: the checked-run-delivery line leaves the list, and both old files and both publishers (run-driver-mother.ts, delivery-publisher.ts) are deleted, with the ledger rows added.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Each named TDD test is in the diff under its exact name and asserts what the plan wrote. Advisor: one ct-advisor request, argv with --tools/ADVISOR_TOOLS/--allowedTools/ADVISOR_TOOLS/--json-schema/JSON.stringify(ADVICE_SCHEMA), a prompt that starts with 'Read the listed files.' and names the package path. That is the only mandatory input of advise in MANDATORY_INPUT_ROLES_OF_STEP. The requestId matches /^run:/. Publication: refused then released, one pull, two releases, remote at the sha, no third release, and delivered with pull 41 before and after advance. Adopt: holds with 'before', then 'checked release failed', a delivering restart, and 'conflicting journal evidence'. Living group: held with group 4343, publishing with 'is still running', one release, finish with exit 9, then two releases. Held push: owner group alive, 'may still be running', one push and no pull, 'git push failed', then two pushes and one pull. Task 6 declares No TDD.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The plan gives prose signatures, and I checked them name by name. ScriptedRelease(github) has releases {argv,cwd}, node, next and finish. An empty queue answers released. The four outcome kinds carry the stated exit codes, stdout 'released #7 → in-review' and stderr 'real gate refusal'. ScriptedGitHub has a gh over its own launch with a zero-attempt RetryPolicy, answers graphql, pr create (pull 41 of feat/7) and issue view, and throws UnscriptedRequest for anything else. ScratchOrigin extends ScriptedConversation and has remote and advance(sha). InProcessRun.checkedDelivery takes optional github and release and falls back to the refusing ports. Each Current state line of process-ratchet.ts is removed. One divergence is reported as low: the sentence that pull 41 is marked MERGED, the issue closed and the labels emptied has no code behind it.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The rows the diff bears on hold. D-3: the new tests and fixtures import no child_process, and every process is doubled. D-7 and Liveness: LivingProcessGroups answers liveness through negative groups in alive. D-8 and Where captures live: the three new git captures sit under backend/__tests__/infrastructure/captures/git/ with command/version/date headers. The release answer: the double prints 'released #7 → in-review', and nothing captures or runs dispatch-check.mjs. A restart: a new CheckedRunDelivery from another run.checkedDelivery call over the same InProcessRun. A test name that stays: the renames happen only where the old name says real/child/actual. Test-only code: nothing under backend/src changes. Feature flag: none.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "The exemplars match. checked-run-delivery.test.ts builds CheckedRunDelivery over InProcessRun, ScriptedConversation/ScratchOrigin and LivingProcessGroups, the way checked-run-delivery-process-groups.test.ts does. The run-driver cases reuse AwaitedDelivery and run.claude.asked. Captures go through Capture.read. The repo's rules hold: English throughout, and nothing test-only lands in src, as this-repository.md and the Test-only code row require. defects.md, rule by rule. Closed vocabulary: ReleaseOutcome and CreateHold are literal unions, and the outcome dispatch is exhaustive with `outcome satisfies never` and no catch-all. The optional `group` of `refused` is what the plan prescribes. Raw map as the return value of logic: none. The maps present (pulls as Record<string, unknown>, the parsed owner.json) are the double's wire-shaped state that Gh serializes, not the return value of logic. Two fields that have to agree: none. ScratchOrigin.remote uses null for an absent branch and the holds use null, with no sentinel strings or zeros. An error named for where it happens: none. The fixtures raise UnscriptedRequest, which names what happened, and plain Errors with descriptive messages. On boundaries and delivery pattern, the ports arrive injected through checkedDelivery, and no signature under src changes.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The deleted files are the removals the tasks declare: Task 1 removes the three cases of ct-run-machine-real-process.test.ts, and Task 6 removes the eighteen cases of checked-run-delivery-real-process.test.ts. Each has a ledger row, and the same-name substitutes keep the plan's assertions. One low: the substitute for the old publication case no longer pins the release argv, the cwd or the graphql query shape. Other suites still cover these (process-groups:258, recorded-pull-request:87, gh tests).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production CheckedRunDelivery and the run machine: refusal to repeat a release, adopting the pull, liveness waits and disposition validation. The doubles only answer the tool requests. The outcomes asserted ('may still be running', 'conflicting journal evidence', 'termination disposition is malformed or unbound', inspection kinds) are messages and states that production produces, not values the test defines.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every touched path is named by some task's Files line: run-driver.test.ts, process-ratchet.ts, the ledger, the two deleted tests and two deleted publishers, scratch-origin/scripted-github/scripted-release (create, then scratch-origin modified in Task 5), checked-run-delivery.test.ts, in-process-run.ts and the git captures. No declared path is missing. Nothing under plugin/, frontend/ or backend/src changes, as Out of scope requires. The diff carries no plan amendment.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests are deterministic: fixed shas, fixed groups (4343, 5151), no clock inside an assertion, no network, and vi.waitFor over promises rather than sleeps. They are isolated: each builds its own InProcessRun and removes it in afterEach. They verify real behaviour: the assertions fall on CheckedRunDelivery outcomes and journal records, and reverting the production lines would fail them. I report nothing beyond these three properties, so I did not load the TDD skill for the finer half.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "contrato",
+        "severity": "low",
+        "what": "The Task 2 prose credits ScriptedGitHub with marking pull 41 MERGED, closing the issue and emptying labels. The diff has no code that does it: issue view always answers state OPEN. The plan's §5 names this as a separate merge(), so the Task 2 sentence is garbled. No case of this slice needs it, because the merged case maps to checked-run-delivery-process-groups.test.ts. It is a divergence from the declared surface, not a defect in a case.",
+        "path": "backend/__tests__/infrastructure/fixtures/scripted-github.ts",
+        "line": 677,
+        "evidence": "`holdNextCreate('before' | 'after')` returns a release function, and marks pull 41 `MERGED`, closes the issue and empties `labels`."
+      },
+      {
+        "rule": "manipulacion-tests",
+        "severity": "low",
+        "what": "The ledger maps the old publication case to the same-name case in checked-run-delivery.test.ts, and that substitute drops three assertions of the old case: the exact release argv, the release cwd, and the graphql query shape. Other suites still cover them (checked-run-delivery-process-groups.test.ts:258, checked-run-delivery-recorded-pull-request.test.ts:87), so coverage survives. The substitute still asserts less than the row claims.",
+        "path": "backend/__tests__/infrastructure/checked-run-delivery-real-process.test.ts",
+        "line": 180,
+        "evidence": "-    expect(fixture.releases[0].argv).toEqual([\n-      '/plugin/scripts/dispatch-check.mjs', '7', '--repo', 'owner/name', '--release', '--no-watch-merge',"
+      }
+    ],
+    "review_token": "71e216bfb26eb0bf0f9e8f4ff374abccd8d990d15fe0a2d134d43dbabd5f7651"
+  }
+}
