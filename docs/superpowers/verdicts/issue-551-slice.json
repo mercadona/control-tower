@@ -1,0 +1,26 @@
+{
+  "issue": 551,
+  "tasks_total": 5,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Every sentence of the Desired end state is present in the sum of the diff. (1) process-ratchet.ts lists only checked-run-delivery-real-process.test.ts, not restart-recovery-real-process.test.ts, and that file does not exist (Global verification steps 3 and 4, exit 0). (2) Every rule in the table has an in-process test. The five new rules and the two new halves are in the diff: R11 is 'a restart over the same state gives back the dispatched plan as uncertain and launches nothing' plus the refused-recovery case. R5 is 'a read of a publication neither waits for it nor starts it'. R6 is 'the recovery clock hands a refused publication to a person...'. R4 is 'a living process group reads as publishing and never as uncertain' plus the dead-leader case. R1 is 'a dead leader alone does not authorize a retry while its group lives'. R2 is 'termination evidence permits a retry and never claims delivery'. R8 is 'a proven receipt answers later reads without asking GitHub again' plus the merged pull request case. The remaining rows point at tests that already existed. (3) restart-recovery.test.ts and checked-run-delivery-process-groups.test.ts both exist under backend/__tests__/infrastructure/, and the ratchet passes over them. (4) The ledger has exactly two restart-recovery-real-process rows, lines 26-27, each mapped in order. (5) Typecheck and the whole backend suite (165 files, 3422 passed) are green in the Global verification log. The backend/src, frontend and README changes in the accumulated diff come from the merged main commits (#606, #611, #613), not from any #551 task, so the out-of-scope promise about backend/src holds for the slice's own tasks.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "The five task commits build on one another and nothing reverses anything. T1 extracts admitted() out of journaled() and adds kills. T2 reuses journaled() and adds RefusedRunDelivery alongside CompletedRunDelivery. T3 adds LivingProcessGroups, checkedDelivery() and intended() to the same in-process-run.ts fixture, leaving T1's additions in place. T4 reuses T3's arrange and adds only captures. T5 writes its own publication scenario, a divergence its objective asked for because InProcessRun's repository is acme/widget, and it reuses LivingProcessGroups rather than building a second liveness double. No intermediate scaffolding is left behind, and no problem is solved two different ways.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The Señal section reads '(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)'. No signal was declared, so there is nothing to measure against.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "8447306aa15641c015a8609783463d389867d18c090fb2ee9111ef963a64d1c0"
+  }
+}

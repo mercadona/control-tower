@@ -20,6 +20,7 @@ class LaunchedWorker extends EventEmitter implements LaunchedProcess {
 
 export class InProcessWorkers extends ProcessRunner {
   launches = 0
+  kills = 0
   readonly #files: HeadlessFiles
   readonly #claude: ScriptedClaude
   readonly #worker: string
@@ -53,7 +54,7 @@ export class InProcessWorkers extends ProcessRunner {
     const worker = new HeadlessCallWorker({
       files: this.#files,
       spawn: this.#claude.launch.bind(this.#claude),
-      kill: InProcessWorkers.#kill,
+      kill: this.kill.bind(this),
       now: () => new Date().toISOString(),
       schedule: InProcessWorkers.#schedule,
       cancel: InProcessWorkers.#cancel,
@@ -66,7 +67,8 @@ export class InProcessWorkers extends ProcessRunner {
     emitter.emit('close', 0, null)
   }
 
-  static #kill(): void {
+  kill(pid: number, signal: NodeJS.Signals | 0): void {
+    this.kills += 1
     throw Object.assign(new Error('the scripted leader leaves no group'), { code: 'ESRCH' })
   }
 

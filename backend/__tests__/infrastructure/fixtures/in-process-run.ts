@@ -11,6 +11,7 @@ import { DriveRun } from '../../../src/application/actions/drive-run.ts'
 import { ExecuteRunInstruction } from '../../../src/application/actions/execute-run-instruction.ts'
 import { DeliverHeldMessages } from '../../../src/application/actions/deliver-held-messages.ts'
 import { ReadSliceEscalation } from '../../../src/application/queries/read-slice-escalation.ts'
+import { RetryBudget, RetryPolicy } from '../../../src/domain/policies/retry-policy.ts'
 import { CheckoutRegistry } from '../../../src/domain/ports/checkout-registry.ts'
 import { PlanPublication } from '../../../src/domain/ports/plan-publication.ts'
 import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
@@ -28,27 +29,30 @@ import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalat
 import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
 import { ActivePlans } from '../../../src/infrastructure/active-plans-route.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '../../../src/infrastructure/claude-calls.ts'
+import { CheckedRunDelivery } from '../../../src/infrastructure/checked-run-delivery.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
 import { CtRunMachine } from '../../../src/infrastructure/ct-run-machine.ts'
 import { DiskAgentMeasurements } from '../../../src/infrastructure/disk-agent-measurements.ts'
 import { DiskPlanRecords } from '../../../src/infrastructure/disk-plan-records.ts'
+import { Gh } from '../../../src/infrastructure/gh.ts'
 import { HeadlessFiles } from '../../../src/infrastructure/headless-files.ts'
 import { HeadlessPlanAgents } from '../../../src/infrastructure/headless-plan-agents.ts'
 import { MeasuredAgentCalls } from '../../../src/infrastructure/measured-agent-calls.ts'
 import { PlanAgentBrief } from '../../../src/infrastructure/plan-agent-brief.ts'
 import { PlanSessions } from '../../../src/infrastructure/plan-sessions.ts'
+import type { ProcessTable } from '../../../src/infrastructure/process-table.ts'
 import { RecordedPlanRecovery } from '../../../src/infrastructure/recorded-plan-recovery.ts'
 import { ReviewWatch } from '../../../src/infrastructure/review-watch.ts'
 import { RunJournal } from '../../../src/infrastructure/run-journal.ts'
 import { RunPlanAgents, SilentChangeAnnouncements } from '../../../src/infrastructure/run-plan-agents.ts'
 import { RunPlanRecovery } from '../../../src/infrastructure/run-plan-recovery.ts'
-import { ToolRunner } from '../../../src/infrastructure/tool-runner.ts'
+import { ToolRunner, type ProcessOutput } from '../../../src/infrastructure/tool-runner.ts'
 import { CompletedRunDelivery } from '../../run-delivery-double.ts'
 import { InProcessWorkers } from './in-process-workers.ts'
 import { ScriptedClaude } from './scripted-claude.ts'
-import { Capture, ScriptedConversation } from './scripted-conversation.ts'
+import { Capture, ScriptedConversation, UnscriptedRequest } from './scripted-conversation.ts'
 import { ScriptedOracle, type ScriptedStep } from './scripted-oracle.ts'
 
 class QuietEscalations extends SliceEscalations {
@@ -143,6 +147,8 @@ export class InProcessRun {
   static readonly #CT_STEP = join(InProcessRun.#PLUGIN, 'scripts', 'ct-step.mjs')
   static readonly #DISPATCH_CHECK = join(InProcessRun.#PLUGIN, 'scripts', 'dispatch-check.mjs')
   static readonly #EPOCH = '2026-09-17T10:00:00.000Z'
+  static readonly #BASE = 'main'
+  static readonly #DELIVERY_TITLE = 'feat: deliver the fixture slice'
 
   readonly checkout: string
   readonly state: string
@@ -203,7 +209,7 @@ export class InProcessRun {
     await writeFile(join(checkout, 'work.txt'), 'fixture baseline\n')
     await writeFile(join(checkout, InProcessRun.PLAN), planText)
     await writeFile(join(checkout, '.agent', 'SLICE.md'), renderState({
-      meta: { issue: InProcessRun.ISSUE, base: 'main', senal: 'fixture', e2e: [] },
+      meta: { issue: InProcessRun.ISSUE, base: InProcessRun.#BASE, senal: 'fixture', e2e: [] },
       body: '# Fixture slice',
     }))
 
@@ -338,7 +344,28 @@ export class InProcessRun {
     })
   }
 
-  async journaled(steps: readonly ScriptedStep[]): Promise<PlanWatch> {
+  checkedDelivery(asked: { git: ScriptedConversation, table: ProcessTable }): CheckedRunDelivery {
+    const signal = asked.table.signal.bind(asked.table)
+    const runner = new ToolRunner({ bin: 'git', budgetMs: 30_000, processes: asked.git, signal })
+    return new CheckedRunDelivery({
+      journal: this.#journal,
+      machine: this.#machine,
+      git: runner.runWholeOutput.bind(runner),
+      node: InProcessRun.#refusing('node'),
+      gh: new Gh({
+        launch: InProcessRun.#refusing('gh'),
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+      read: async () => null,
+      dispatchCheck: InProcessRun.#DISPATCH_CHECK,
+      newId: () => this.#identities.next(),
+      now: () => new Date().toISOString(),
+      signal,
+    })
+  }
+
+  async admitted(): Promise<PlanWatch> {
     const records = new DiskPlanRecords({
       files: this.#files,
       newId: () => this.#identities.next(),
@@ -355,6 +382,31 @@ export class InProcessRun {
       repository: new RepositoryName(InProcessRun.REPOSITORY),
     }))
     await this.#journal.admit(watch)
+    return watch
+  }
+
+  async intended(watch: PlanWatch, sha: string): Promise<void> {
+    if (watch.located.root === undefined) throw new Error('the plan watch has no checkout root')
+    const manifest = await this.#journal.manifest(watch)
+    const entries = await this.#journal.entries(watch)
+    await this.#journal.publicationWrite(watch, ['intent.json'], `${JSON.stringify({
+      version: 1,
+      conversation: watch.agent,
+      repository: watch.repository.text,
+      issue: watch.issue.number,
+      root: watch.located.root,
+      worktree: watch.located.path,
+      branch: watch.located.branch,
+      base: InProcessRun.#BASE,
+      sha,
+      machineDigest: InProcessRun.#digest(JSON.stringify({ manifest, entries })),
+      title: InProcessRun.#DELIVERY_TITLE,
+      body: `Closes #${watch.issue.number}\n\n<!-- control-tower-delivery:${watch.repository.text}#${watch.issue.number}:${watch.agent} -->`,
+    })}\n`)
+  }
+
+  async journaled(steps: readonly ScriptedStep[]): Promise<PlanWatch> {
+    const watch = await this.admitted()
     await this.#recordCall(watch, {
       purpose: 'plan',
       requestId: null,
@@ -509,6 +561,10 @@ export class InProcessRun {
 
   static #hasCode(cause: unknown, code: string): boolean {
     return cause !== null && typeof cause === 'object' && 'code' in cause && cause.code === code
+  }
+
+  static #refusing(binary: string): (argv: string[]) => Promise<ProcessOutput> {
+    return async (argv) => { throw new UnscriptedRequest({ binary, argv }) }
   }
 }
 
