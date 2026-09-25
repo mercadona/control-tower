@@ -67,7 +67,7 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
     terminal.loadAddon(fitAddon)
     terminal.open(screen)
 
-    let lastSize: TerminalSize = { cols: COLUMNS, rows: ROWS }
+    let lastSize: TerminalSize | null = null
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const fitAndResize = () => {
@@ -75,7 +75,7 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
       if (proposed === undefined || !Number.isFinite(proposed.cols) || !Number.isFinite(proposed.rows)) return
       if (proposed.cols <= 0 || proposed.rows <= 0) return
       fitAddon.fit()
-      if (proposed.cols === lastSize.cols && proposed.rows === lastSize.rows) return
+      if (lastSize !== null && proposed.cols === lastSize.cols && proposed.rows === lastSize.rows) return
       lastSize = { cols: proposed.cols, rows: proposed.rows }
       void SessionsClient.resize(session.id, lastSize)
     }
@@ -87,6 +87,12 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
       debounceTimer = setTimeout(fitAndResize, RESIZE_DEBOUNCE_MS)
     })
     resizeObserver.observe(screen)
+
+    const reclaimSize = () => {
+      lastSize = null
+      fitAndResize()
+    }
+    window.addEventListener('focus', reclaimSize)
 
     terminal.onData((text) => {
       void SessionsClient.type(session.id, text).then((outcome) => {
@@ -110,6 +116,7 @@ export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): Reac
     return () => {
       cancelled = true
       resizeObserver.disconnect()
+      window.removeEventListener('focus', reclaimSize)
       if (debounceTimer !== null) clearTimeout(debounceTimer)
       subscription.close()
       fitAddon.dispose()
