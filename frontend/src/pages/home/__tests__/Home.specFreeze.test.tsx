@@ -1,7 +1,6 @@
 import { cleanup, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -23,7 +22,6 @@ const stubBackend = (activePlans: Answer, coordinatingSession = CoordinatingSess
     if (path === '/spec-freeze') return responseFor(SpecFreezeMother.draftReady())
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-    if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinatingSession)
     throw new Error(`unexpected fetch to ${path}`)
   })

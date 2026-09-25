@@ -2,7 +2,6 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -56,7 +55,6 @@ class FocusedBackend {
       if (path === '/coordinating-session') return answer(session)
       if (path === '/coordinating-session/close' && close !== undefined) return answer(close)
       if (path === '/external-tools') return answer(ExternalToolsMother.allReady())
-      if (path === '/sessions') return answer(SessionsMother.noSessions())
       if (path === '/spec-freeze') return answer(specFreeze)
       if (path === '/epic-groom') return answer(epicGroom)
       throw new Error(`nobody scripted ${path}`)

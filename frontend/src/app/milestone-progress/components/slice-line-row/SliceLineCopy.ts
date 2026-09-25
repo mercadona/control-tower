@@ -16,7 +16,7 @@ class SliceLineCopy {
   static readonly #PARTIAL_TITLE = 'Implementación terminada; publicación sin confirmar'
   static readonly #UNREADABLE_TITLE = 'No se puede leer el trabajo de este slice'
 
-  static stepWithTime(line: SliceLine, now: number): string {
+  static #stepWithTime(line: SliceLine, now: number): string {
     const parts = [
       line.step === null ? null : SliceLineCopy.#stepLabel(line.step),
       line.stepStartedAt === null ? null : ElapsedTime.since(line.stepStartedAt, now),
@@ -28,7 +28,7 @@ class SliceLineCopy {
   static runningLabel(line: SliceLine, now: number): string {
     const parts = [
       line.step === null ? null : SliceLineCopy.#stepLabel(line.step),
-      line.task === null ? null : `Tarea ${line.task} de ${line.totalTasks}`,
+      line.task === null ? null : `Tarea ${line.task}${line.totalTasks === null ? '' : ` de ${line.totalTasks}`}`,
       line.stepStartedAt === null ? null : ElapsedTime.since(line.stepStartedAt, now),
     ].filter((part): part is string => part !== null)
 
@@ -44,7 +44,7 @@ class SliceLineCopy {
       case 'done': return SliceLineCopy.#TASK_DONE_LABEL
       case 'pending': return SliceLineCopy.#TASK_PENDING_LABEL
       case 'stopped': return SliceLineCopy.#TASK_STOPPED_LABEL
-      case 'running': return SliceLineCopy.stepWithTime(line, now)
+      case 'running': return SliceLineCopy.#stepWithTime(line, now)
     }
   }
 
@@ -69,4 +69,3 @@ class SliceLineCopy {
 }
 
 export { SliceLineCopy }
-export type { AttentionCopy }

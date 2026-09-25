@@ -2,7 +2,6 @@ import { act, cleanup, fireEvent, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -25,7 +24,6 @@ const backendHolding = (coordinatingSession: Answer, closeAnswer?: Answer | (() 
       return responseFor(typeof closeAnswer === 'function' ? closeAnswer() : closeAnswer)
     }
     if (input === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-    if (input === '/sessions') return responseFor(SessionsMother.noSessions())
     if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (input === '/spec-freeze') return responseFor(SpecFreezeMother.none())
     if (input === '/epic-groom') return responseFor(EpicGroomMother.none())
@@ -119,7 +117,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session/close') return pending
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -148,7 +145,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session/close') return pending
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.oneSession()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.draftReady()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.draft()))
@@ -296,7 +292,6 @@ describe('Home and the coordinating session', () => {
       }
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-      if (input === '/sessions') return responseFor(SessionsMother.noSessions())
       if (input === '/spec-freeze') return responseFor(SpecFreezeMother.none())
       if (input === '/epic-groom') return responseFor(EpicGroomMother.none())
       throw new Error(`unexpected fetch to ${String(input)}`)
@@ -321,7 +316,6 @@ describe('Home and the coordinating session', () => {
     fetching.mockImplementation((input: string | URL | Request) => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.working()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -343,7 +337,6 @@ describe('Home and the coordinating session', () => {
         return Promise.resolve(responseFor(CoordinatingSessionMother.awaitingPermissionWithNoMessage()))
       }
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))
@@ -363,7 +356,6 @@ describe('Home and the coordinating session', () => {
       if (input === '/coordinating-session') return Promise.resolve(responseFor(CoordinatingSessionMother.completed()))
       if (input === '/groom-session') return Promise.resolve(responseFor(EpicGroomMother.groomAskTyped()))
       if (input === '/external-tools') return Promise.resolve(responseFor(ExternalToolsMother.allReady()))
-      if (input === '/sessions') return Promise.resolve(responseFor(SessionsMother.noSessions()))
       if (input === '/active-plans') return Promise.resolve(responseFor(NO_ACTIVE_PLANS))
       if (input === '/spec-freeze') return Promise.resolve(responseFor(SpecFreezeMother.frozen()))
       if (input === '/epic-groom') return Promise.resolve(responseFor(EpicGroomMother.groomable()))

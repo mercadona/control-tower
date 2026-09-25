@@ -23,7 +23,7 @@ const Home = () => {
   const specFreezeRead = useSpecFreeze(coordinatingSession.target)
   const epicGroomRead = useEpicGroom(isSessionLive, coordinatingSession.target, isSessionLive)
   const stage = SessionStage.of(specFreezeRead, epicGroomRead)
-  const milestoneProgress = useMilestoneProgress(stage.step === 'implementation')
+  const milestoneProgress = useMilestoneProgress(stage.step === 'implementation', coordinatingSession.target)
 
   const formInteracted = useCallback(() => setBrainstormingUnreachable(false), [])
   const sessionOpened = useCallback(() => setBrainstormingUnreachable(false), [])

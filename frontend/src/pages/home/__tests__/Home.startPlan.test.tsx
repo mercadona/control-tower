@@ -1,7 +1,6 @@
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -27,7 +26,6 @@ const openFailsToReachBackend = () => {
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return new Response('{"plans":[]}', { status: 200 })
       if (input === '/external-tools') return new Response(ExternalToolsMother.allReady().body, { status: 200 })
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body, { status: 200 })
       if (input === '/coordinating-session' && init === undefined) return new Response(CoordinatingSessionMother.none().body, { status: 200 })
       return fetching(input, init)
     }),

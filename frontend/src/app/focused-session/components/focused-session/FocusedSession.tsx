@@ -66,7 +66,7 @@ const FocusedSession = ({
         dispatched={GATE_BAND_NO_DISPATCH}
       />
       {isImplementation ? (
-        <>
+        <div className="focused-session__implementation">
           <MilestoneBoard
             progress={milestoneProgress}
             onTalk={talkAction}
@@ -76,7 +76,7 @@ const FocusedSession = ({
             onClose={() => void lifecycle.close()}
           />
           {talking && terminal !== null && <SessionPanel session={terminal} onClose={() => setTalking(false)} />}
-        </>
+        </div>
       ) : (
         terminal !== null && <CentredSession session={terminal} />
       )}

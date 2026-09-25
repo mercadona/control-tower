@@ -9,6 +9,7 @@ const IN_IMPLEMENTATION = 'Los slices siguen en marcha. Reábrela para volver a 
 const BEFORE_IMPLEMENTATION = 'Reábrela para seguir; conserva lo que ya se habló.'
 const REOPEN = 'Reabrir la sesión'
 const IMPLEMENTATION_STEP = 'implementation'
+const REOPEN_UNREACHABLE = 'No se ha podido confirmar la reapertura. Comprueba la conexión antes de reintentar.'
 
 type SessionEndedNoticeProps = { step: SessionStep; busy: boolean; onReopen: () => Promise<OpenOutcome> }
 
@@ -22,13 +23,19 @@ const SessionEndedNotice = ({ step, busy, onReopen }: SessionEndedNoticeProps) =
     setError(null)
     const outcome = await onReopen()
     setPending(false)
-    setError(outcome.kind === 'refused' ? outcome.error : null)
+    setError(outcome.kind === 'refused' ? outcome.error : outcome.kind === 'backend-unreachable' ? REOPEN_UNREACHABLE : null)
   }
 
   return (
     <>
-      <Banner type="warning" role="alert" title={TITLE} description={description} />
-      <Button disabled={busy || pending} onClick={() => void reopen()}>{REOPEN}</Button>
+      <Banner type="warning" role="alert" title={TITLE} description={(
+        <>
+          {description}
+          <span className="focused-session__reopen">
+            <Button disabled={busy || pending} onClick={() => void reopen()}>{REOPEN}</Button>
+          </span>
+        </>
+      )} />
       {error !== null && <Banner type="error" role="alert" title={error} />}
     </>
   )

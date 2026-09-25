@@ -60,14 +60,12 @@ settle. A resize failure is swallowed — it is not user-actionable and never
 shows a banner. **The backend owns the session, not the page**: it is opened
 once at the backend's start-up, so the page is a window onto it and never its
 owner — closing the tab ends only the subscription and disposes the on-screen
-terminal, while the process, its scrollback and its row in `GET /sessions`
-survive; reopening it replays the scrollback the backend kept, as if nothing
-had been watching in between. That process does not outlive whatever ends
-the shell itself, though: an `exit` or a `Ctrl-D` typed into it — the same
-keystrokes `POST /sessions/:id/input` carries there — closes it for good, and
-nothing reopens one, so `GET /sessions` answers empty for the rest of the
-backend's run and the other two endpoints refuse that id with
-`session-not-live`.
+terminal, while the process and its scrollback survive; reopening the panel
+replays the scrollback the backend kept. An `exit` or a `Ctrl-D` typed into it
+ends that terminal, and input and resize requests then refuse its identifier
+with `session-not-live`. The held coordinating conversation remains visible and
+offers **Reabrir la sesión** through its dedicated lifecycle endpoint. The page
+gets the terminal identifier from the coordinating session, not `GET /sessions`.
 
 `app/coordinating-session` is the page's single owner of coordinating-session
 opening, polling and closure. It polls `GET /coordinating-session` every two
@@ -98,9 +96,14 @@ step, the story and repository, **Cancelar la sesión**, and the four steps; the
 band of the gate that asks for something; and the centre. In steps 1 to 3 the
 centre is the session. In step 4 it is `MilestoneBoard` (`app/milestone-progress`),
 one line per issue from `GET /milestone-progress`, polled every 3 s, or 15 s
-while an issue is in review. **Hablar con la sesión** opens the terminal in a
-panel over the list. A session that ended shows **Reabrir la sesión**, which
-calls `POST /coordinating-session/reopen`.
+while an issue is in review or being fixed. The list retains its last successful
+read through an outage for the same target and discards it when the held session
+target changes; the session owner supplies the single connection notice.
+**Hablar con la sesión** opens the terminal in a panel over the list, keeping the
+header and steps visible. A session that ended shows **Reabrir la sesión**, which
+calls `POST /coordinating-session/reopen`. Its step-4 list remains visible.
+When every issue is delivered, **Milestone completado** offers **Cerrar la sesión
+y volver al inicio**.
 
 `app/spec-freeze` (`SpecFreezePanel`, rendered inside `GateBand`,
 `app/focused-session`, while step 2 asks for it) is gate 1's panel.

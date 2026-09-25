@@ -29,15 +29,18 @@ const MilestoneBoard = ({ progress, onTalk, repo, story, onReread, onClose }: Mi
 
   return (
     <section className="milestone-board" aria-label={BOARD_LABEL}>
+      <div className="milestone-board__header">
+        <h2 className="milestone-board__title lg-headline-small">{BOARD_LABEL}</h2>
+        <p className="milestone-board__summary">{`${progress.delivered} de ${progress.total} entregadas`}</p>
+      </div>
       {baselineRed && <Banner type="warning" role="alert" title={BASELINE_TITLE} description={BASELINE_DESCRIPTION} />}
-      <p className="milestone-board__summary">{`${progress.delivered} de ${progress.total} entregadas`}</p>
       {completed ? (
-        <>
+        <div className="milestone-board__completed">
           <h2>{COMPLETED_TITLE}</h2>
           <p>{`Las ${progress.total} issues están entregadas y mergeadas`}</p>
           <p>{`${story} está terminado.`}</p>
           <Button onClick={onClose}>{CLOSE_LABEL}</Button>
-        </>
+        </div>
       ) : (
         <ul className="milestone-board__list">
           {progress.issues.map((line) => (

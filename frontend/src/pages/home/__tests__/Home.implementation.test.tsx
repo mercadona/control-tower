@@ -18,7 +18,7 @@ type Backend = {
   session?: () => Answer
   specFreeze?: () => Answer
   epicGroom?: () => Answer
-  milestone?: () => Answer
+  milestone?: () => Answer | Promise<Answer>
   activePlans?: () => Answer
   recoverPlan?: () => Answer
   cleanupPlan?: () => Answer
@@ -51,7 +51,7 @@ class ImplementationBackend {
       if (path === '/external-tools') return respond(ExternalToolsMother.allReady())
       if (path === '/spec-freeze') return respond(specFreeze())
       if (path === '/epic-groom') return respond(epicGroom())
-      if (path === '/milestone-progress') return respond(milestone())
+      if (path === '/milestone-progress') return respond(await milestone())
       if (path === '/active-plans') return respond(activePlans())
       if (path === '/recover-plan' && recoverPlan !== undefined) return respond(recoverPlan())
       if (path === '/cleanup-plan' && cleanupPlan !== undefined) return respond(cleanupPlan())
@@ -69,7 +69,10 @@ describe('Home is the start form with no session held, and the focused view for 
     FakeFitAddon.install()
     FakeEventSource.install()
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 
   it('with no session held the page shows only the start form', async () => {
     ImplementationBackend.with()
@@ -163,7 +166,110 @@ describe('Home is the start form with no session held, and the focused view for 
     vi.useRealTimers()
   })
 
-  it('a running line expands into its tasks, the judge finding, the last tool and the last message', async () => {
+  it('an outage retains the last milestone under one connection notice and resumes updating', async () => {
+    vi.useFakeTimers()
+    let reachable = true
+    let delivered = false
+    ImplementationBackend.with({
+      session: () => {
+        if (!reachable) throw new TypeError('network unavailable')
+        return CoordinatingSessionMother.working()
+      },
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => {
+        if (!reachable) throw new TypeError('network unavailable')
+        return MilestoneProgressMother.answer([
+          delivered ? MilestoneProgressMother.delivered(592) : MilestoneProgressMother.running(592),
+        ])
+      },
+    })
+    openHome()
+    await settle()
+    expect(screen.getByText('0 de 1 entregadas')).toBeInTheDocument()
+
+    reachable = false
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+
+    expect(screen.getByText('0 de 1 entregadas')).toBeInTheDocument()
+    expect(screen.getAllByText('Sin conexión con el backend')).toHaveLength(1)
+
+    reachable = true
+    delivered = true
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+
+    expect(screen.getByRole('heading', { name: 'Milestone completado' })).toBeInTheDocument()
+    expect(screen.queryByText('Sin conexión con el backend')).not.toBeInTheDocument()
+  })
+
+  it('a replacement session cannot display the previous target milestone even if that read arrives again', async () => {
+    vi.useFakeTimers()
+    let target = CoordinatingSessionMother.TARGET
+    const forTarget = (answer: Answer): Answer => ({
+      ...answer,
+      body: JSON.stringify({ ...JSON.parse(answer.body), target }),
+    })
+    ImplementationBackend.with({
+      session: () => forTarget(CoordinatingSessionMother.working()),
+      specFreeze: () => forTarget(SpecFreezeMother.frozen()),
+      epicGroom: () => forTarget(EpicGroomMother.authorised()),
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
+    })
+    openHome()
+    await settle()
+    expect(screen.getByText('0 de 1 entregadas')).toBeInTheDocument()
+
+    target = '78373982-8dcb-4ccc-9840-c8935d98058d'
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    await settle()
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Implementación')
+    expect(screen.queryByText('0 de 1 entregadas')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Issues del milestone' })).not.toBeInTheDocument()
+  })
+
+  it('a delayed old milestone cannot overwrite a replacement session reading', async () => {
+    vi.useFakeTimers()
+    let target = CoordinatingSessionMother.TARGET
+    let delayOldRead = false
+    let releaseOldRead!: (answer: Answer) => void
+    let releaseNewRead!: (answer: Answer) => void
+    const oldRead = new Promise<Answer>((resolve) => { releaseOldRead = resolve })
+    const newRead = new Promise<Answer>((resolve) => { releaseNewRead = resolve })
+    const forTarget = (answer: Answer): Answer => ({
+      ...answer,
+      body: JSON.stringify({ ...JSON.parse(answer.body), target }),
+    })
+    ImplementationBackend.with({
+      session: () => forTarget(CoordinatingSessionMother.working()),
+      specFreeze: () => forTarget(SpecFreezeMother.frozen()),
+      epicGroom: () => forTarget(EpicGroomMother.authorised()),
+      milestone: () => {
+        if (target !== CoordinatingSessionMother.TARGET) return newRead
+        return delayOldRead ? oldRead : MilestoneProgressMother.answer([MilestoneProgressMother.running(592)])
+      },
+    })
+    openHome()
+    await settle()
+    expect(screen.getByText('Slice #592')).toBeInTheDocument()
+
+    delayOldRead = true
+    await act(async () => vi.advanceTimersByTimeAsync(3000))
+    target = '78373982-8dcb-4ccc-9840-c8935d98058d'
+    await act(async () => vi.advanceTimersByTimeAsync(1000))
+    await settle()
+    expect(screen.queryByText('Slice #592')).not.toBeInTheDocument()
+
+    await act(async () => releaseNewRead(forTarget(MilestoneProgressMother.answer([MilestoneProgressMother.running(700)]))))
+    expect(screen.getByText('Slice #700')).toBeInTheDocument()
+
+    await act(async () => releaseOldRead(MilestoneProgressMother.answer([MilestoneProgressMother.running(592)])))
+
+    expect(screen.getByText('Slice #700')).toBeInTheDocument()
+    expect(screen.queryByText('Slice #592')).not.toBeInTheDocument()
+  })
+
+  it('a running line expands into its tasks, the judge ruling, the last tool and the last message', async () => {
     ImplementationBackend.with({
       session: CoordinatingSessionMother.working,
       specFreeze: SpecFreezeMother.frozen,
@@ -171,10 +277,10 @@ describe('Home is the start form with no session held, and the focused view for 
       milestone: () => MilestoneProgressMother.answer([
         MilestoneProgressMother.running(592, {
           tasks: [
-            { number: 1, name: 'Read the wire shape', status: 'done', ruling: null, findings: null },
+            { number: 1, name: 'Read the wire shape', status: 'done', ruling: 'passed', findings: null },
             { number: 2, name: 'Write the client', status: 'running', ruling: null, findings: null },
             { number: 3, name: 'Write the tests', status: 'pending', ruling: null, findings: null },
-            { number: 4, name: 'Wire the route', status: 'stopped', ruling: null, findings: 'the boundary case failed' },
+            { number: 4, name: 'Wire the route', status: 'pending', ruling: null, findings: null },
           ],
         }),
       ]),
@@ -184,7 +290,7 @@ describe('Home is the start form with no session held, and the focused view for 
     await user.click(await screen.findByRole('button', { name: 'Ver tareas' }))
 
     expect(screen.getByText('Hecha')).toBeInTheDocument()
-    expect(screen.getByText('Lo que encontró el juez: the boundary case failed')).toBeInTheDocument()
+    expect(screen.getByText('Dictamen del juez: passed')).toBeInTheDocument()
     expect(screen.getByText(/Última herramienta: Edit · src\/a\.ts/)).toBeInTheDocument()
     expect(screen.getByText(/Último mensaje: «ready»/)).toBeInTheDocument()
   })
@@ -227,7 +333,45 @@ describe('Home is the start form with no session held, and the focused view for 
     expect(await screen.findByText(title)).toBeInTheDocument()
     const board = screen.getByRole('region', { name: 'Issues del milestone' })
     expect(within(board).getByRole('button', { name: action })).toBeInTheDocument()
-    expect(within(board).getAllByRole('button')).toHaveLength(1)
+    const actions = within(board).getAllByRole('button').filter((button) => !button.hasAttribute('aria-expanded'))
+    expect(actions).toHaveLength(1)
+  })
+
+  it.each(['in-review', 'fixing'])('a running issue links its pull request while %s', async (step) => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([
+        MilestoneProgressMother.running(592, {
+          step,
+          pull_request: { number: 611, url: 'https://github.com/owner/name/pull/611' },
+        }),
+      ]),
+    })
+
+    openHome()
+
+    expect(await screen.findByRole('link', { name: 'Pull request #611' })).toHaveAttribute(
+      'href', 'https://github.com/owner/name/pull/611',
+    )
+  })
+
+  it('a task with an unknown total never prints null', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-25T09:01:05.000Z'))
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592, { total_tasks: null })]),
+    })
+
+    openHome()
+    await settle()
+
+    expect(screen.getByText('Implementando · Tarea 2 · 01:05')).toBeInTheDocument()
+    vi.useRealTimers()
   })
 
   it('the red-baseline notice shows only when some baseline was red', async () => {
@@ -273,6 +417,22 @@ describe('Home is the start form with no session held, and the focused view for 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo: StartPlanMother.REPO, issue: 592, agent: HeadlessPlanMother.agentFor(592) }),
     }))
+  })
+
+  it('an unavailable recovery read does not claim the work has disappeared', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.uncertain(592, 'continue')]),
+      activePlans: () => { throw new TypeError('network unavailable') },
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Recuperar trabajo' }))
+
+    expect(await screen.findByText('No se ha podido consultar el trabajo. Reintenta cuando vuelva la conexión.')).toBeInTheDocument()
+    expect(screen.queryByText('El backend ya no informa de este trabajo.')).not.toBeInTheDocument()
   })
 
   it('Hablar con la sesión opens the terminal in a panel over the list', async () => {
@@ -321,12 +481,26 @@ describe('Home is the start form with no session held, and the focused view for 
       session: CoordinatingSessionMother.ended,
       specFreeze,
       epicGroom,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
     })
 
     openHome()
 
     expect(await screen.findByText(description)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reabrir la sesión' })).toBeInTheDocument()
+    if (_step === 'implementation') expect(await screen.findByRole('region', { name: 'Issues del milestone' })).toBeInTheDocument()
+  })
+
+  it('an unreachable reopen explains that the session could not be confirmed', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.ended,
+      reopen: () => { throw new TypeError('network unavailable') },
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Reabrir la sesión' }))
+
+    expect(await screen.findByText('No se ha podido confirmar la reapertura. Comprueba la conexión antes de reintentar.')).toBeInTheDocument()
   })
 
   it('Reabrir la sesión posts the held target', async () => {
@@ -361,6 +535,8 @@ describe('Home is the start form with no session held, and the focused view for 
 
     expect(await screen.findByRole('heading', { name: 'Milestone completado' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cerrar la sesión y volver al inicio' })).toBeInTheDocument()
+    expect(screen.getByText('Las 2 issues están entregadas y mergeadas')).toBeInTheDocument()
+    expect(screen.getByText(`${CoordinatingSessionMother.STORY} está terminado.`)).toBeInTheDocument()
   })
 
   it('one issue not delivered keeps the list', async () => {

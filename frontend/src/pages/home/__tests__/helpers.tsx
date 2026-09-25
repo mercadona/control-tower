@@ -4,7 +4,6 @@ import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { Home } from 'pages/home/Home'
@@ -15,7 +14,6 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
-const NO_SESSIONS = SessionsMother.noSessions()
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_COORDINATING_SESSION = CoordinatingSessionMother.none()
 const NO_SPEC_FREEZE = SpecFreezeMother.none()
@@ -33,7 +31,6 @@ const backendAnswering = (answer: Answer) => {
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
-      if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
@@ -69,7 +66,6 @@ const backendPending = () => {
   const fetching = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
-      if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)

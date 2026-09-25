@@ -69,7 +69,7 @@ export class MilestoneProgressMother {
 
   static partial(number: number): WireSliceLine {
     return MilestoneProgressMother.#base(number, {
-      state: 'needs-person',
+      state: 'running',
       attention: { kind: 'partial', detail: 'the pull request could not be confirmed' },
     })
   }

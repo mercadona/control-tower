@@ -8,18 +8,21 @@ type MilestoneProgressLifecycle = {
   reread: () => void
 }
 
-export const useMilestoneProgress = (enabled: boolean): MilestoneProgressLifecycle => {
-  const [read, setRead] = useState<MilestoneProgressOutcome | null>(null)
+export const useMilestoneProgress = (enabled: boolean, target: string | null): MilestoneProgressLifecycle => {
+  const [held, setHeld] = useState<{ target: string | null; read: MilestoneProgressOutcome | null }>({ target, read: null })
   const timerRef = useRef<number | undefined>(undefined)
   const generationRef = useRef(0)
 
   const poll = useCallback((generation: number) => {
     void MilestoneProgressClient.read().then((outcome) => {
       if (generationRef.current !== generation) return
-      setRead(outcome)
+      const read: MilestoneProgressOutcome = 'target' in outcome && outcome.target !== target ? { kind: 'none' } : outcome
+      setHeld((previous) => read.kind === 'unavailable' && previous.target === target
+        ? previous
+        : { target, read })
       timerRef.current = window.setTimeout(() => poll(generation), MilestonePolling.intervalFor(outcome))
     })
-  }, [])
+  }, [target])
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -41,5 +44,5 @@ export const useMilestoneProgress = (enabled: boolean): MilestoneProgressLifecyc
     timerRef.current = window.setTimeout(() => poll(generation), 0)
   }, [enabled, poll])
 
-  return { read, reread }
+  return { read: enabled && held.target === target ? held.read : null, reread }
 }

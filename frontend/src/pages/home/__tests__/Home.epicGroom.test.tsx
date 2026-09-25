@@ -3,7 +3,6 @@ import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
@@ -38,7 +37,6 @@ const stubGroomableBackendWithASession = () => {
     }
     if (path === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-    if (path === '/sessions') return responseFor(SessionsMother.withGroomSession())
     if (path === '/coordinating-session') return opened
       ? new Response(groomLive)
       : responseFor(CoordinatingSessionMother.ended())
@@ -60,7 +58,6 @@ const stubBackend = (
     if (path === '/epic-groom') return responseFor(epicGroom)
     if (path === '/active-plans') return responseFor(activePlans)
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
-    if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinatingSession)
     throw new Error(`unexpected fetch to ${path}`)
   })

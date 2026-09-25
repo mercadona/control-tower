@@ -17,5 +17,4 @@ export type WorkProgress =
 
 export type DeliveredPullRequest = { number: number; url: string }
 
-export type WorkIdentity = { repo: string; issue: number; agent: string }
-export type WorkSnapshot = WorkIdentity & { progress: WorkProgress }
+export type WorkSnapshot = { repo: string; issue: number; agent: string; progress: WorkProgress }
