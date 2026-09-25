@@ -1,0 +1,8 @@
+command: gh issue view https://github.com/mercadona/control-tower/issues/154 --json title,body,comments
+version: gh version 2.100.0 (2026-09-03)
+date: 2026-09-25
+exit: 0
+--- stdout
+{"body":"<img width=\"3828\" height=\"538\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7d50ea63-2c08-45d9-817a-e758ba9d7a56\" />","comments":[],"title":"Analyse the implementer session's block during the e2e"}
+
+--- stderr
