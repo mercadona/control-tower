@@ -181,6 +181,17 @@ class Mother {
       ],
     })
   }
+
+  static closedByControlsLine(): SliceLine {
+    return new SliceLine({
+      issue: Mother.vetoedIssue(), state: SliceLineState.NEEDS_PERSON, step: 'controls', task: 2, totalTasks: 3,
+      stepStartedAt: null, lastToolCall: null, lastText: null, pullRequest: null, baselineRed: false,
+      attention: {
+        kind: 'controls', task: 2, outcome: 'failed', command: 'npm test', code: 1, log: '.agent/run-7/controls.log',
+      },
+      tasks: [],
+    })
+  }
 }
 
 describe('MilestoneProgressRoute', () => {
@@ -223,6 +234,21 @@ describe('MilestoneProgressRoute', () => {
     })
     expect(read.asked[0].root.text).toBe(Mother.ROOT.text)
     expect(read.asked[0].repository.text).toBe(Mother.REPOSITORY.text)
+  })
+
+  it('a line closed by its controls answers the controls attention with the command and the log', async () => {
+    const read = ReadMilestoneProgressDouble.answering(new MilestoneProgressRead(
+      new MilestoneProgress({ milestone: 'Some milestone', lines: [Mother.closedByControlsLine()] })
+    ))
+    const api = new RunningApi({ coordinatingSessions: Mother.live(), readMilestoneProgress: read })
+
+    const response = await fetch(`${await api.start()}/milestone-progress`)
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { issues: { attention: unknown }[] }
+    expect(body.issues[0].attention).toEqual({
+      kind: 'controls', task: 2, outcome: 'failed', command: 'npm test', code: 1, log: '.agent/run-7/controls.log',
+    })
   })
 
   it('an authorised checkout with no frozen milestone answers no-milestone', async () => {

@@ -645,6 +645,7 @@ describe('a run the judge closed', () => {
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2,
         findings: '- [high] uno.ts:1: mal', verdict: '.agent/run-7/task-2-verdict-3.json',
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -655,12 +656,39 @@ describe('a run the judge closed', () => {
     expect(announcements.announced[0]!.findings).toBe('- [high] uno.ts:1: mal')
   })
 
-  it('a refusal of any other state is not announced, because only the judge has a way out', async () => {
+  it('a veto announces what the plugin says the judge vetoed', async () => {
     const announcements = new AnnouncementsSpy()
     const driving = DriveRunMother.refusing({
-      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      detail: 'run blocked-judge: task 3/3, 0 discard(s)',
       closure: {
-        state: 'blocked-global', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
+        state: 'blocked-judge', outcome: 'failed', exit: 1, task: 3,
+        findings: '- [high] uno.ts:1: mal', verdict: '.agent/run-7/slice-verdict-3.json',
+        vetoed: 'the review of the slice', failure: null,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-judge',
+      outcome: 'failed',
+      task: 3,
+      findings: '- [high] uno.ts:1: mal',
+      verdict: '.agent/run-7/slice-verdict-3.json',
+      vetoed: 'the review of the slice',
+      failure: null,
+    }])
+  })
+
+  it('a refusal of any other state is not announced, because only the judge, the controls and the Global verification have a way out', async () => {
+    const announcements = new AnnouncementsSpy()
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-slice-judge: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-slice-judge', outcome: 'failed', exit: 9, task: 3, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -675,6 +703,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -688,6 +717,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 6 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'discarded', exit: 3, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements,
     })
@@ -702,6 +732,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: new AnnouncementsSpy(true),
       stderr: (line) => written.push(line),
@@ -719,6 +750,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: AnnouncementsSpy.withNobodyListening(),
       stderr: (line) => written.push(line),
@@ -735,6 +767,7 @@ describe('a run the judge closed', () => {
       detail: 'run blocked-judge: task 2/3, 0 discard(s)',
       closure: {
         state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: null,
       },
       announcements: new AnnouncementsSpy(),
       stderr: (line) => written.push(line),
@@ -742,5 +775,97 @@ describe('a run the judge closed', () => {
 
     await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
     expect(written).toEqual([])
+  })
+})
+
+describe('a run a check closed', () => {
+  it('a run closed by its controls is announced with the failing command, and still stops the drive', async () => {
+    const announcements = new AnnouncementsSpy()
+    const failure = { command: 'npm test', code: 1, log: '.agent/run-7/controls.log' }
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-controls: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-controls', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-controls',
+      outcome: 'failed',
+      task: 2,
+      findings: null,
+      verdict: null,
+      vetoed: null,
+      failure,
+    }])
+  })
+
+  it('a run closed by its Global verification is announced with the failing command, and still stops the drive', async () => {
+    const announcements = new AnnouncementsSpy()
+    const failure = { command: 'make test-all', code: null, log: '.agent/run-7/global.log' }
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-global', outcome: 'indeterminate', exit: 1, task: 3, findings: null, verdict: null,
+        vetoed: null, failure,
+      },
+      announcements,
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(announcements.announced).toEqual([{
+      repository: RunMother.WATCH.repository,
+      issue: RunMother.WATCH.issue.number,
+      state: 'blocked-global',
+      outcome: 'indeterminate',
+      task: 3,
+      findings: null,
+      verdict: null,
+      vetoed: null,
+      failure,
+    }])
+  })
+
+  it('an announcement of a Global verification closure that throws names blocked-global on stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-global', outcome: 'failed', exit: 1, task: 3, findings: null, verdict: null,
+        vetoed: null, failure: { command: 'make test-all', code: 2, log: '.agent/run-7/global.log' },
+      },
+      announcements: new AnnouncementsSpy(true),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([
+      `drive run: ${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number} closed at blocked-global `
+        + 'and the closure was not announced: the session went away\n',
+    ])
+  })
+
+  it('a closure by the controls that nobody was live to hear names blocked-controls on stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-controls: task 2/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-controls', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null,
+        vetoed: null, failure: { command: 'npm test', code: 1, log: '.agent/run-7/controls.log' },
+      },
+      announcements: AnnouncementsSpy.withNobodyListening(),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([
+      `drive run: ${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number} closed at blocked-controls `
+        + 'and the closure was not announced: no coordinating session was live to be told\n',
+    ])
   })
 })

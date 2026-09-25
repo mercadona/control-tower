@@ -1,3 +1,9 @@
+export type RunFailure = {
+  readonly command: string | null,
+  readonly code: number | null,
+  readonly log: string,
+}
+
 export type RunClosure = {
   readonly state: string,
   readonly outcome: string,
@@ -5,6 +11,8 @@ export type RunClosure = {
   readonly task: number | null,
   readonly findings: string | null,
   readonly verdict: string | null,
+  readonly vetoed: string | null,
+  readonly failure: RunFailure | null,
 }
 
 export type RunWork =

@@ -1567,7 +1567,7 @@ describe('RunPlanAgents', () => {
     tested.machine.inspection = new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
-      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null, vetoed: null, failure: null },
     })
     tested.machine.anotherRoundAnswer = new RunInstruction({
       kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
@@ -1587,6 +1587,89 @@ describe('RunPlanAgents', () => {
     expect(tested.agents.owns(AgentMother.WATCH)).toBe(true)
   })
 
+  it('a granted round lifts a run closed by its controls and puts a driver back on it', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-controls with outcome failed (exit 4)',
+      closure: {
+        state: 'blocked-controls', outcome: 'failed', exit: 4, task: 2, findings: null, verdict: null, vetoed: null,
+        failure: { command: 'npm test', code: 1, log: '/tmp/run-332/task-2-controls.log' },
+      },
+    })
+    tested.machine.anotherRoundAnswer = new RunInstruction({
+      kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'The test needs the fixture reset before each case.',
+    }
+
+    await tested.agents.anotherRound(asked)
+
+    expect(tested.machine.anotherRoundAsked).toEqual([{ watch: AgentMother.WATCH, instruction: asked.instruction }])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(true)
+  })
+
+  it('a granted round lifts a run closed by its Global verification and puts a driver back on it', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-global with outcome failed (exit 1)',
+      closure: {
+        state: 'blocked-global', outcome: 'failed', exit: 1, task: null, findings: null, verdict: null, vetoed: null,
+        failure: { command: 'npx tsc -p tsconfig.json', code: 2, log: '/tmp/run-332/global.log' },
+      },
+    })
+    tested.machine.anotherRoundAnswer = new RunInstruction({
+      kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Type the new field in the route too.',
+    }
+
+    await tested.agents.anotherRound(asked)
+
+    expect(tested.machine.anotherRoundAsked).toEqual([{ watch: AgentMother.WATCH, instruction: asked.instruction }])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(true)
+  })
+
+  it('a run closed by the slice judge is refused before anything is journaled', async () => {
+    const tested = await scenario(true)
+    tested.machine.inspection = new RunInspection({
+      kind: 'uncertain',
+      detail: 'ct-step refused: the run is blocked-slice-judge with outcome failed (exit 1)',
+      closure: {
+        state: 'blocked-slice-judge', outcome: 'failed', exit: 1, task: null, findings: null, verdict: null,
+        vetoed: null, failure: null,
+      },
+    })
+    tested.machine.anotherRoundAnswer = new RunInstruction({
+      kind: 'command', ticket: '44444444-4444-4444-8444-444444444444',
+    })
+    const asked = {
+      agent: AgentMother.CONVERSATION,
+      issue: AgentMother.ISSUE.number,
+      repository: AgentMother.REPOSITORY,
+      instruction: 'Please try again.',
+    }
+
+    const failure = await tested.agents.anotherRound(asked).catch((cause: unknown) => cause)
+
+    expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
+    expect((failure as Error).message).toBe(
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is uncertain rather than `
+        + 'blocked-judge, blocked-controls or blocked-global (closed at blocked-slice-judge)',
+    )
+    expect(tested.machine.anotherRoundAsked).toEqual([])
+    expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
+  })
+
   it('a run nobody closed at the judge is refused before anything is journaled', async () => {
     const tested = await scenario(true)
     tested.machine.inspection = new RunInspection({
@@ -1604,7 +1687,8 @@ describe('RunPlanAgents', () => {
 
     expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
     expect((failure as Error).message).toBe(
-      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is active rather than blocked-judge (no closure)`,
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is active rather than `
+        + 'blocked-judge, blocked-controls or blocked-global (no closure)',
     )
     expect(tested.machine.anotherRoundAsked).toEqual([])
     expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
@@ -1628,7 +1712,8 @@ describe('RunPlanAgents', () => {
 
     expect(failure).toBeInstanceOf(AnotherRoundNotGranted)
     expect((failure as Error).message).toBe(
-      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is uncertain rather than blocked-judge (no closure)`,
+      `conversation ${JSON.stringify(AgentMother.CONVERSATION)} is uncertain rather than `
+        + 'blocked-judge, blocked-controls or blocked-global (no closure)',
     )
     expect(tested.machine.anotherRoundAsked).toEqual([])
     expect(tested.agents.owns(AgentMother.WATCH)).toBe(false)
@@ -1639,7 +1724,7 @@ describe('RunPlanAgents', () => {
     tested.machine.inspection = new RunInspection({
       kind: 'uncertain',
       detail: 'ct-step refused: the run is blocked-judge with outcome failed (exit 1)',
-      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null },
+      closure: { state: 'blocked-judge', outcome: 'failed', exit: 1, task: 2, findings: null, verdict: null, vetoed: null, failure: null },
     })
     const detail = 'ct-step did not print an executable consuming verb'
     tested.machine.anotherRoundAnswer = new RunInstruction({ kind: 'refused', detail, closure: null })

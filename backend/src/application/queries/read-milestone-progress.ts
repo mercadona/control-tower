@@ -223,9 +223,8 @@ export class ReadMilestoneProgress {
     issue: EpicIssue, condition: UncertainCondition, params: ReadMilestoneProgressParams,
   ): Promise<SliceLine> {
     const veto = ReadMilestoneProgress.#vetoOf(condition.refusal)
-    const attention: SliceAttention = veto !== null
-      ? { kind: 'veto', task: veto.task, findings: veto.findings, verdict: veto.verdict }
-      : { kind: 'uncertain', action: condition.recovery.action, detail: condition.recovery.detail }
+    const attention: SliceAttention = ReadMilestoneProgress.#closureAttention(condition.refusal)
+      ?? { kind: 'uncertain', action: condition.recovery.action, detail: condition.recovery.detail }
     const entries = await this.#historyOrNothing(issue, params)
     const tasks = SliceTask.listOf({ state: condition.execution, entries, veto })
     const baselineRed = await this.#baselineOrNotRed(issue, params)
@@ -256,6 +255,23 @@ export class ReadMilestoneProgress {
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
       return false
+    }
+  }
+
+  static #closureAttention(refusal: RunClosure | null): SliceAttention | null {
+    if (refusal === null) return null
+    const failure = {
+      command: refusal.failure?.command ?? null, code: refusal.failure?.code ?? null, log: refusal.failure?.log ?? null,
+    }
+    switch (refusal.state) {
+      case DriveRun.BLOCKED_JUDGE:
+        return { kind: 'veto', task: refusal.task, findings: refusal.findings, verdict: refusal.verdict }
+      case DriveRun.BLOCKED_CONTROLS:
+        return { kind: 'controls', task: refusal.task, outcome: refusal.outcome, ...failure }
+      case DriveRun.BLOCKED_GLOBAL:
+        return { kind: 'global', outcome: refusal.outcome, ...failure }
+      default:
+        return null
     }
   }
 

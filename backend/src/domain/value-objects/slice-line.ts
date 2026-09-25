@@ -13,6 +13,10 @@ export type SliceLineStateValue = (typeof SliceLineState)[keyof typeof SliceLine
 
 export type SliceAttention =
   | { readonly kind: 'veto', readonly task: number | null, readonly findings: string | null, readonly verdict: string | null }
+  | { readonly kind: 'controls', readonly task: number | null, readonly outcome: string,
+      readonly command: string | null, readonly code: number | null, readonly log: string | null }
+  | { readonly kind: 'global', readonly outcome: string,
+      readonly command: string | null, readonly code: number | null, readonly log: string | null }
   | { readonly kind: 'uncertain', readonly action: 'observe' | 'continue' | 'cleanup' | 'inspect', readonly detail: string }
   | { readonly kind: 'partial', readonly detail: string }
   | { readonly kind: 'unreadable', readonly detail: string }

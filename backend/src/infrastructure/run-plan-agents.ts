@@ -51,7 +51,9 @@ type FixPlan = LocatedPlan & {
 }
 
 export class RunPlanAgents extends PlanAgents {
-  static readonly BLOCKED_JUDGE = RUN_STATES.BLOCKED_JUDGE
+  static readonly REOPENABLE: readonly string[] = Object.freeze([
+    RUN_STATES.BLOCKED_JUDGE, RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL,
+  ])
 
   readonly legacy: PlanAgents
   readonly records: PlanRecords
@@ -248,8 +250,8 @@ export class RunPlanAgents extends PlanAgents {
       const inspection = await this.machine.inspect(watch)
       if (inspection.fact.kind !== 'uncertain'
         || inspection.fact.closure === null
-        || inspection.fact.closure.state !== RunPlanAgents.BLOCKED_JUDGE) {
-        throw new AnotherRoundNotGranted(RunPlanAgents.#notBlockedJudgeDetail(watch.agent, inspection))
+        || !RunPlanAgents.REOPENABLE.includes(inspection.fact.closure.state)) {
+        throw new AnotherRoundNotGranted(RunPlanAgents.#notReopenableDetail(watch.agent, inspection))
       }
       const instruction = await this.machine.anotherRound(watch, asked.instruction)
       if (instruction.work.kind === 'refused') {
@@ -581,12 +583,17 @@ export class RunPlanAgents extends PlanAgents {
     throw cause
   }
 
-  static #notBlockedJudgeDetail(agent: string, inspection: RunInspection): string {
+  static #notReopenableDetail(agent: string, inspection: RunInspection): string {
     const closedAt = inspection.fact.kind === 'uncertain' && inspection.fact.closure !== null
       ? `closed at ${inspection.fact.closure.state}`
       : 'no closure'
     return `conversation ${JSON.stringify(agent)} is ${inspection.fact.kind} rather than `
-      + `${RunPlanAgents.BLOCKED_JUDGE} (${closedAt})`
+      + `${RunPlanAgents.#reopenableWords()} (${closedAt})`
+  }
+
+  static #reopenableWords(): string {
+    const reopenable = RunPlanAgents.REOPENABLE
+    return `${reopenable.slice(0, -1).join(', ')} or ${reopenable[reopenable.length - 1]}`
   }
 }
 

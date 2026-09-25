@@ -27,14 +27,24 @@ export class PhasePrompt {
     + 'and dropping it, do not send it again yourself, and never report a raw refusal code as the answer. '
     + 'When the backend tells you a kept change has gone out, say so to the person naming the ticket.'
   static readonly ANOTHER_ROUND_AFTER_A_VETO =
-    "When a slice's run closes at blocked-judge, the judge has vetoed the same task three times and the "
-    + "run waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and "
+    "When a slice's run closes at blocked-judge, the judge has vetoed the same unit three times (a task, "
+    + "the review of the slice or the fix round) and the run waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and "
     + 'the agent, tell the person what the judge found, and ask them what to change. Send their words '
     + 'with POST /slices/<issue>/another-round and {repo, agent, instruction}: the backend grants the '
     + "round and the run carries on by itself. The instruction is the person's: you do not invent it, "
     + 'you do not widen the task, and you do not grant a round nobody asked for. There is no limit on '
     + 'rounds; the limit is the person. When the call is refused, tell the person what the refusal said '
     + 'and do not retry it in a loop.'
+  static readonly ANOTHER_ROUND_AFTER_A_FAILED_CHECK =
+    "A slice's run closes at blocked-controls when the controls of a task stay red or could not be measured, "
+    + 'and at blocked-global when the Global verification goes red or could not be measured. Either way the run '
+    + "waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and the agent, "
+    + 'tell the person the failing command and the log, and ask them what to change. Send their words with '
+    + 'POST /slices/<issue>/another-round and {repo, agent, instruction}: for blocked-controls the implementer '
+    + 'of the same task gets another round with that instruction, and for blocked-global a fix round after the '
+    + "last task opens and then the Global verification runs again. The instruction is the person's: you do not "
+    + 'invent it, you do not widen the task, and you do not grant a round nobody asked for. When the call is '
+    + 'refused, tell the person what the refusal said and do not retry it in a loop.'
   static readonly RECOVERY_CAPABILITIES =
     'For recovery of already-authorized work, use the origin of $CT_SESSION_HOOKS_URL as the backend URL. '
     + 'Read GET /active-plans and preserve each returned repo, issue number and agent identity. '
@@ -66,6 +76,7 @@ export class PhasePrompt {
       PhasePrompt.#documentsOf(story),
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
@@ -81,6 +92,7 @@ export class PhasePrompt {
       ...PhasePrompt.#slicingReview({ spec, milestone }),
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }
@@ -100,6 +112,7 @@ export class PhasePrompt {
       PhasePrompt.SLICES_ARE_NOT_YOURS,
       PhasePrompt.CHANGE_TO_A_SLICE,
       PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
       PhasePrompt.RECOVERY_CAPABILITIES,
     ].join('\n'))
   }

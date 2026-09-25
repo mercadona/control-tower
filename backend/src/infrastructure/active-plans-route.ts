@@ -186,6 +186,8 @@ export class ActivePlans {
         task: refusal.task,
         findings: refusal.findings,
         verdict: refusal.verdict,
+        vetoed: refusal.vetoed,
+        failure: refusal.failure,
       })
     }
     return projected

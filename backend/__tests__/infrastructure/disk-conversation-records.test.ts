@@ -36,6 +36,7 @@ const PROMPT_TEXT = [
     + 'docs/superpowers/specs/ABC-1-execution.md, exactly those paths: when either already exists, continue it instead of starting another.',
   PhasePrompt.CHANGE_TO_A_SLICE,
   PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+  PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK,
   PhasePrompt.RECOVERY_CAPABILITIES,
 ].join('\n')
 
