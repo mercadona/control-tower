@@ -166,13 +166,15 @@ export function judgesEachTask(run) {
 }
 
 // Whether green controls go to the judge before the commit: a task of a run
-// that judges each task, and every fix round of the review. A task of a
-// final-review run is sealed and moves straight to commit.
+// that judges each task, every fix round of the review, and the fix round
+// after a red Global verification. A task of a final-review run is sealed and
+// moves straight to commit.
 export function judgesBeforeCommit(run) {
   switch (run.phase) {
     case PHASES.TASK: return judgesEachTask(run)
-    case PHASES.REVIEW: return true
-    case PHASES.FIX: return false
+    case PHASES.REVIEW:
+    case PHASES.FIX:
+      return true
     default: throw new Error(`controls have no judge to answer to in the phase "${run.phase}"`)
   }
 }

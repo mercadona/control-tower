@@ -65,7 +65,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent, expectedCommits } from './run-machine.js'
 import { JudgedUnit } from './judged-unit.js'
 import { RunClosure, ReopenRefused } from './run-closure.js'
-import { ReopenedBrief } from './reopened-brief.js'
+import { ReopenedBrief, BriefLog } from './reopened-brief.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -421,6 +421,7 @@ if (runExisted) {
           ? {
               findings: run.lastFindings ?? null,
               verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+              vetoed: unit.vetoedName,
             }
           : { failure: RunClosure.failureOf(run) }
         safeWrite(1, StepAnnouncement.refusal({
@@ -1068,29 +1069,33 @@ function writeBrief() {
   return brief
 }
 
-// The last thing a brief carries: a reopened controls or Global verification
-// closure brings the person's instruction and the log that closed the run;
-// anything else, the advice as it always did.
+// The last thing a brief carries. Every brief of the fix round carries the
+// Global verification log it answers, with whatever guidance the round holds:
+// the person's instruction, the adviser's approach, or nothing. Outside it, a
+// reopened controls closure brings the person's instruction and the controls
+// log; anything else, the advice as it always did.
 function appendAdvice(brief) {
+  if (run.phase === PHASES.FIX) {
+    appendFileSync(brief, ReopenedBrief.fixRoundOf(run, logAt))
+    return
+  }
   if (run.reopenedFrom) {
     appendFileSync(brief, ReopenedBrief.section({
-      closure: run.reopenedFrom, phase: run.phase, instruction: run.lastAdvice, ...lastFailureLog(),
+      closure: run.reopenedFrom, instruction: run.lastAdvice, log: logAt(run.lastFailure?.log ?? null),
     }))
     return
   }
   if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
 }
 
-// The log `lastFailure` names, and its text — null when there is no failure
-// left to read (green controls clear it) or the read throws, which the brief
-// then says instead of leaving it out.
-function lastFailureLog() {
-  const logPath = run.lastFailure?.log ?? null
-  if (logPath === null) return { logPath, logText: null }
+// A log and its text — null when there is no log to read or the read throws,
+// which the brief then says instead of leaving it out.
+function logAt(path) {
+  if (path === null) return new BriefLog({ path, text: null })
   try {
-    return { logPath, logText: readFileSync(logPath, 'utf8') }
+    return new BriefLog({ path, text: readFileSync(path, 'utf8') })
   } catch {
-    return { logPath, logText: null }
+    return new BriefLog({ path, text: null })
   }
 }
 
@@ -1814,8 +1819,9 @@ function controlsVerb() {
   run = { ...run, lastControlsLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
   // Green controls end a controls reopen: its instruction and its log were for
   // the round that just went green, and the judge's brief must not repeat
-  // them. A global reopen stays until its commit — the fix round has no judge,
-  // and the Global verification that closed it has not run again yet.
+  // them. A global reopen stays until its commit: the judge of the fix round
+  // reads the same instruction and the same Global verification log, which
+  // has not run again yet.
   if (result === OUTCOMES.DONE) run = RunClosure.afterGreenControls(run)
   // A task with no judge goes from here to `commit`, so the controls seal the
   // index the verdict would have sealed: what they measured is what commits.
@@ -2775,7 +2781,7 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (${unit.verdictPath === null ? `${unit.vetoedName} has no verdict` : `a judged task's verdict is at ${unit.verdictPath}`}), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict or controls were supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, or what the controls measured on a task with no judge, and this program does not commit what it cannot assert. Check it yourself and commit by hand (a judged task's verdict is at ${unit.verdictPath}), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()
@@ -3111,7 +3117,7 @@ try {
     // `lastFailure` by `controlsVerb` and `globalVerb`. Nothing is recomputed
     // here.
     const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
-      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
+      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath(), vetoed: unit.vetoedName }
       : [RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL].includes(transition.state)
         ? { failure: RunClosure.failureOf(run) }
         : {}

@@ -112,6 +112,20 @@ describe('the end of a reopened round', () => {
   })
 })
 
+describe('the fix round closed again', () => {
+  it('a judge closure of the fix round reopens in the fix round', () => {
+    const reopened = RunClosure.reopen(ClosedRunMother.closedAtJudge({ task: 3, phase: PHASES.FIX }), ClosedRunMother.INSTRUCTION)
+
+    expect(reopened).toMatchObject({ task: 3, phase: PHASES.FIX, step: STEPS.IMPLEMENT, judgeRetries: 0 })
+  })
+
+  it('a controls closure of the fix round reopens in the fix round', () => {
+    const reopened = RunClosure.reopen(ClosedRunMother.closedAtControls({ task: 3, phase: PHASES.FIX }), ClosedRunMother.INSTRUCTION)
+
+    expect(reopened).toMatchObject({ task: 3, phase: PHASES.FIX, step: STEPS.IMPLEMENT, controlRetries: 0, reopenedFrom: RUN_STATES.BLOCKED_CONTROLS })
+  })
+})
+
 describe('the closures the run file keeps', () => {
   it('the run file keeps the three closures a person lifts', () => {
     expect([RUN_STATES.DELIVERED, RUN_STATES.BLOCKED_JUDGE, RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL]

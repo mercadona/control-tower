@@ -88,8 +88,6 @@ class WholeSliceUnit {
     Object.freeze(this)
   }
 
-  get diffBase() { return [this.run.baseSha] }
-
   get commands() { return this.tasks.flatMap((t) => t.commands) }
 
   get promisedTests() { return PromisedTests.NONE }
@@ -101,6 +99,12 @@ class WholeSliceUnit {
   get briefAppendices() {
     return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
   }
+
+  verdictRecord(verdict) {
+    return { issue: this.issue, tasks_total: this.run.tasksTotal, verdict }
+  }
+
+  get commitsForTheSlice() { return true }
 }
 
 class JudgedReview extends WholeSliceUnit {
@@ -108,15 +112,11 @@ class JudgedReview extends WholeSliceUnit {
     super({ run, tasks, issue, stem: 'review' })
   }
 
-  verdictRecord(verdict) {
-    return { issue: this.issue, tasks_total: this.run.tasksTotal, verdict }
-  }
+  get diffBase() { return [this.run.baseSha] }
 
   commitMessage() {
     return reviewCommitMessage({ issue: this.issue, tasksTotal: this.run.tasksTotal })
   }
-
-  get commitsForTheSlice() { return true }
 
   committedLine(sha) { return `the judge's review committed: ${sha.slice(0, 7)}` }
 
@@ -150,26 +150,36 @@ class FixRound extends WholeSliceUnit {
     super({ run, tasks, issue, stem: 'fix' })
   }
 
-  get verdictPath() { return null }
+  get diffBase() { return [] }
 
   commitMessage() {
     return fixRoundCommitMessage({ issue: this.issue, tasksTotal: this.run.tasksTotal })
   }
 
-  get commitsForTheSlice() { return true }
-
   committedLine(sha) { return `the fix round committed: ${sha.slice(0, 7)}` }
+
+  get packageHeader() {
+    return `# Review package: the fix round of issue #${this.issue} after the Global verification (staged against HEAD, not yet committed)`
+  }
 
   get nextHeading() { return `slice of issue ${this.issue} — the fix round after the Global verification` }
 
-  get sentBackLines() { return [] }
+  get sentBackLines() {
+    return ['The judge reviewed the fix round: fix every finding, in any file of the slice. The fixes land in the fix round commit after the judge approves them.']
+  }
 
   get vetoedName() { return 'the fix round' }
+
+  get vetoedSelf() { return 'the fix round' }
 
   get reopenedAt() { return 'the fix round' }
 
   get nothingToCommitWarning() {
     return 'warning: nothing to commit of the fix round (are the fixes and the telemetry gitignored?) — the run carries on.'
+  }
+
+  get adviceLine() {
+    return "The judge has vetoed the fix round twice. On accepting the advice, the program returns the tree to the last commit for the paths of the fix round and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now."
   }
 }
 

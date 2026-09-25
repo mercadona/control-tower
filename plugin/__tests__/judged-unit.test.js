@@ -141,12 +141,26 @@ describe('the unit of the fix round', () => {
     expect(unit.nothingToCommitWarning).toBe('warning: nothing to commit of the fix round (are the fixes and the telemetry gitignored?) — the run carries on.')
   })
 
-  it('the fix round runs every task commands, promises no test and has no verdict', () => {
+  it('the fix round runs every task commands and promises no test', () => {
     expect(unit.stem).toBe('fix')
-    expect(unit.diffBase).toEqual([baseSha])
     expect(unit.commands).toEqual(['test -f uno.txt', 'test -f dos.txt', 'npm test'])
     expect(unit.promisedTests).toBe(PromisedTests.NONE)
-    expect(unit.verdictPath).toBeNull()
+  })
+
+  it('the judge of the fix round judges the fix round diff staged against HEAD, not the whole slice', () => {
+    expect(unit.diffBase).toEqual([])
+    expect(unit.packageHeader).toBe('# Review package: the fix round of issue #7 after the Global verification (staged against HEAD, not yet committed)')
+  })
+
+  it('the fix round verdict travels in its commit under its own path, with the shape of the whole slice', () => {
+    expect(unit.verdictPath).toBe('docs/superpowers/verdicts/issue-7-fix.json')
+    expect(unit.verdictRecord(verdict)).toEqual({ issue: 7, tasks_total: 3, verdict })
+  })
+
+  it('a veto of the fix round names the fix round in the brief, the sending back and the advice', () => {
+    expect(unit.vetoedSelf).toBe('the fix round')
+    expect(unit.sentBackLines).toEqual(['The judge reviewed the fix round: fix every finding, in any file of the slice. The fixes land in the fix round commit after the judge approves them.'])
+    expect(unit.adviceLine).toBe("The judge has vetoed the fix round twice. On accepting the advice, the program returns the tree to the last commit for the paths of the fix round and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
   })
 
   it('the fix round commit message names the round and the issue', () => {
@@ -160,9 +174,18 @@ describe('the unit of the fix round', () => {
     expect(unit.briefLead).toEqual(new BriefLead({ n: 1, withContext: true }))
     expect(unit.briefAppendices).toEqual([new BriefAppendix({ n: 2 }), new BriefAppendix({ n: 3 })])
     expect(unit.nextHeading).toBe('slice of issue 7 — the fix round after the Global verification')
-    expect(unit.sentBackLines).toEqual([])
     expect(unit.vetoedName).toBe('the fix round')
     expect(unit.reopenedAt).toBe('the fix round')
+  })
+})
+
+describe('what a judge refusal says was vetoed', () => {
+  it('a veto names the task, the review of the slice or the fix round, so the three closures at blocked-judge tell apart', () => {
+    expect([
+      unitOf({ task: 3, phase: PHASES.TASK }),
+      unitOf({ task: 3, phase: PHASES.REVIEW }),
+      unitOf({ task: 3, phase: PHASES.FIX }),
+    ].map((unit) => unit.vetoedName)).toEqual(['task 3', 'the review of the slice', 'the fix round'])
   })
 })
 

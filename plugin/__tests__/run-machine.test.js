@@ -425,9 +425,31 @@ describe('the fix round after the Global verification', () => {
     expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
   })
 
-  it('green controls in the fix round go straight to commit', () => {
-    const { run: next } = after(inTheFixRound({ step: STEPS.CONTROLS }), OUTCOMES.DONE)
-    expect(next.step).toBe(STEPS.COMMIT)
+  it('green controls in the fix round go to the judge before the commit', () => {
+    expect(judgesBeforeCommit(inTheFixRound())).toBe(true)
+    const { run: next, state } = after(inTheFixRound({ step: STEPS.CONTROLS }), OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect([next.phase, next.step]).toEqual([PHASES.FIX, STEPS.JUDGE])
+  })
+
+  it('the judge approving the fix round sends it to its commit, and the commit to the Global verification', () => {
+    const { run: judged } = after(inTheFixRound({ step: STEPS.JUDGE }), OUTCOMES.DONE)
+    expect([judged.phase, judged.step]).toEqual([PHASES.FIX, STEPS.COMMIT])
+    const { run: committed } = after(judged, OUTCOMES.DONE)
+    expect([committed.phase, committed.step]).toEqual([PHASES.SLICE, STEPS.GLOBAL])
+  })
+
+  it('a veto in the fix round spends the judge budget, calls the adviser and then closes at blocked-judge', () => {
+    const first = after(inTheFixRound({ step: STEPS.JUDGE }), OUTCOMES.FAILED)
+    expect(first.state).toBe(RUN_STATES.OPEN)
+    expect([first.run.phase, first.run.step, first.run.judgeRetries]).toEqual([PHASES.FIX, STEPS.IMPLEMENT, 1])
+    const second = after({ ...first.run, step: STEPS.JUDGE }, OUTCOMES.FAILED)
+    expect([second.run.phase, second.run.step, second.run.judgeRetries]).toEqual([PHASES.FIX, STEPS.ADVISE, 2])
+    const advised = after(second.run, OUTCOMES.DONE)
+    expect([advised.run.phase, advised.run.step]).toEqual([PHASES.FIX, STEPS.IMPLEMENT])
+    const third = after({ ...advised.run, step: STEPS.JUDGE }, OUTCOMES.FAILED)
+    expect(third.state).toBe(RUN_STATES.BLOCKED_JUDGE)
+    expect(third.run.phase).toBe(PHASES.FIX)
   })
 
   it('the fix round counts the commits of the slice, so its own commit is expected', () => {
