@@ -212,6 +212,16 @@ describe('telling the coordinating session that a check closed a run', () => {
     expect(line).toContain('The controls of task 2 of owner/name#973 went red and the run is closed at blocked-controls.')
   })
 
+  it('a_red_check_with_a_command_and_no_exit_names_the_command_without_an_exit', () => {
+    const line = SessionClosureAnnouncements.lineFor(Asked.byGlobal({
+      failure: { command: 'make test-all', code: null, log: '.agent/run-973/global.log' },
+    }))
+
+    expect(line).toContain('The Global verification of owner/name#973 went red: `make test-all` and the run is '
+      + 'closed at blocked-global. The log is at .agent/run-973/global.log.')
+    expect(line).not.toContain('exited')
+  })
+
   it('a_closure_by_a_check_names_the_call_that_grants_the_round_and_keeps_the_instruction_with_the_person', () => {
     const line = SessionClosureAnnouncements.lineFor(Asked.byControls())
 

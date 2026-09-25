@@ -831,6 +831,25 @@ describe('a run a check closed', () => {
     }])
   })
 
+  it('an announcement of a Global verification closure that throws names blocked-global on stderr', async () => {
+    const written: string[] = []
+    const driving = DriveRunMother.refusing({
+      detail: 'run blocked-global: task 3/3, 0 discard(s)',
+      closure: {
+        state: 'blocked-global', outcome: 'failed', exit: 1, task: 3, findings: null, verdict: null,
+        vetoed: null, failure: { command: 'make test-all', code: 2, log: '.agent/run-7/global.log' },
+      },
+      announcements: new AnnouncementsSpy(true),
+      stderr: (line) => written.push(line),
+    })
+
+    await expect(driving.drive()).rejects.toBeInstanceOf(RunNotAdvanced)
+    expect(written).toEqual([
+      `drive run: ${RunMother.WATCH.repository.text}#${RunMother.WATCH.issue.number} closed at blocked-global `
+        + 'and the closure was not announced: the session went away\n',
+    ])
+  })
+
   it('a closure by the controls that nobody was live to hear names blocked-controls on stderr', async () => {
     const written: string[] = []
     const driving = DriveRunMother.refusing({

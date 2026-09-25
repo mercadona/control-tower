@@ -492,8 +492,8 @@ tests that spawn a process stays as it is on `main`.
 ```bash
 cd backend && npx tsc -p tsconfig.json   # expected: exit 0
 cd backend && npx vitest run --maxWorkers=4   # expected: exit 0 — the whole backend suite
-test -z "$(git diff origin/main -- backend/__tests__/infrastructure/fixtures/process-ratchet.ts)"   # expected: exit 0 — the ratchet list stays
-test -z "$(git diff origin/main --name-only -- plugin frontend)"   # expected: exit 0 — plugin and frontend untouched
+test -z "$(git diff origin/main...HEAD -- backend/__tests__/infrastructure/fixtures/process-ratchet.ts)"   # expected: exit 0 — the ratchet list stays
+test -z "$(git diff origin/main...HEAD --name-only -- plugin frontend)"   # expected: exit 0 — plugin and frontend untouched
 ```
 
 ## 9. Assumptions

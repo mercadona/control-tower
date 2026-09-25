@@ -27,8 +27,8 @@ export class PhasePrompt {
     + 'and dropping it, do not send it again yourself, and never report a raw refusal code as the answer. '
     + 'When the backend tells you a kept change has gone out, say so to the person naming the ticket.'
   static readonly ANOTHER_ROUND_AFTER_A_VETO =
-    "When a slice's run closes at blocked-judge, the judge has vetoed the same task three times and the "
-    + "run waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and "
+    "When a slice's run closes at blocked-judge, the judge has vetoed the same unit three times (a task, "
+    + "the review of the slice or the fix round) and the run waits on a decision that is the person's. Read GET /active-plans for the repo, the issue and "
     + 'the agent, tell the person what the judge found, and ask them what to change. Send their words '
     + 'with POST /slices/<issue>/another-round and {repo, agent, instruction}: the backend grants the '
     + "round and the run carries on by itself. The instruction is the person's: you do not invent it, "

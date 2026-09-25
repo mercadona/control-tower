@@ -104,8 +104,10 @@ describe('what the coordinating session is told about a check that closes a run'
   })
 
   it('says_what_a_round_does_for_each_closure', () => {
-    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('the implementer of the same task')
-    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('a fix round after the last task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('for blocked-controls the implementer of the same task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('for blocked-global a fix round after the last task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('blocked-controls when the controls of a task')
+    expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('blocked-global when the Global verification')
     expect(PhasePrompt.ANOTHER_ROUND_AFTER_A_FAILED_CHECK).toContain('the Global verification runs again')
   })
 

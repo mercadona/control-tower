@@ -549,6 +549,14 @@ describe('what the refusal says about what was vetoed and what failed', () => {
     expect(announcement?.closure?.failure).toBeNull()
   })
 
+  it('a failure whose command and exit have the wrong type reads both as null', () => {
+    const announcement = RunAnnouncement.of(AnnouncementMother.CONTROLS_FAILED.replace(
+      '"failure":{"command":"npm test","code":1,', '"failure":{"command":7,"code":"1",',
+    ))
+
+    expect(announcement?.closure?.failure).toEqual({ command: null, code: null, log: '.agent/run-7/controls.log' })
+  })
+
   it('reads what the judge vetoed when the plugin names it', () => {
     const announcement = RunAnnouncement.of(AnnouncementMother.SLICE_REVIEW_VETOED)
 
