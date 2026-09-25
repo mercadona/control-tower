@@ -58,9 +58,11 @@ baseline of some slice was red.
 terminal in a panel over the list.
 
 **Session ended (I5).** A session that ended by itself shows, in every step, "La
-sesión coordinadora se ha cerrado", "Los slices siguen en marcha. Reábrela para
-volver a hablar con ellos; conserva lo que ya se habló." and "Reabrir la
-sesión". Reopening resumes the same conversation by its identifier; only when
+sesión coordinadora se ha cerrado" and "Reabrir la sesión". In step 4 the notice
+adds "Los slices siguen en marcha. Reábrela para volver a hablar con ellos;
+conserva lo que ya se habló."; in steps 1 to 3 it adds "Reábrela para seguir;
+conserva lo que ya se habló." This notice is the only change to steps 1 to 3.
+Reopening resumes the same conversation by its identifier; only when
 that is impossible does it open a new one with the prompt of the current step.
 
 **Completed (I6).** With every issue delivered: title "Milestone completado",
@@ -103,7 +105,8 @@ line per issue.
 resumes the same conversation with `ClaudeConversations.resume` when its
 transcript exists (`isResumable`), and otherwise opens a new conversation with
 the prompt of the step the story is in — a new implementation prompt for step
-4. After an explicit close nothing is held and nothing reopens; that case is
+4. The backend deduces that step itself: spec not frozen is brainstorming,
+frozen but not authorized is groom, gate 2 authorized is implementation. After an explicit close nothing is held and nothing reopens; that case is
 out of scope.
 
 Domain knows neither GitHub nor the disk; every source is injected.
