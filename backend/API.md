@@ -495,8 +495,9 @@ whether a merged slice's metrics have anywhere to go. No parameters. It exists
 to be asked **before** starting work: until now each of these failed at the
 moment it was used, mid-flow, in the tool's own words.
 
-Four are asked about a credential. Claude's login remains unobservable from
-this process, so its session is `unknown` when the binary is installed.
+All five are asked about a credential. `claude` counts as logged in with any
+account `claude auth status` reports, a subscription or an API key. That check
+is local: it says a credential is configured, not that the server accepts it.
 
 **200 OK**
 
@@ -504,8 +505,7 @@ this process, so its session is `unknown` when the binary is installed.
 {"ready":true,"tools":[
   {"tool":"gh","installed":true,"session":"ready","fix":null},
   {"tool":"acli","installed":true,"session":"ready","fix":null},
-  {"tool":"claude","installed":true,"session":"unknown",
-    "fix":"claude, then /login \u2014 not observable from this process"},
+  {"tool":"claude","installed":true,"session":"ready","fix":null},
   {"tool":"git","installed":true,"session":"ready","fix":null},
    {"tool":"bq","installed":true,"session":"ready","fix":null}],
  "metricsDelivery":{"enabled":true,"variable":"CT_HARVEST_BQ_TABLE",
@@ -587,7 +587,7 @@ How each one is asked:
 |---|---|---|
 | `gh` | `gh auth status` | it exited 0 |
 | `acli` | `acli jira auth status` | it exited 0 |
-| `claude` | nothing | never: its login is not observable from another process |
+| `claude` | `claude auth status` | it exited 0 |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
 

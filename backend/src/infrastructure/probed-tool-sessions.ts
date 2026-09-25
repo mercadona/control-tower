@@ -4,13 +4,11 @@ import type { SessionStateValue } from '../domain/value-objects/tool-session.ts'
 import type { ExternalTool } from './external-tool.ts'
 import type { ProcessOutput } from './tool-runner.ts'
 
-export type ProbeName = 'gh' | 'acli' | 'ssh' | 'gcloud'
+export type ProbeName = 'gh' | 'acli' | 'claude' | 'ssh' | 'gcloud'
 export type ToolLookUp = (bin: string) => string | null
 
 type ToolRow = { tool: string, bin: string, fix: string }
-type CredentialRow = ToolRow & { probe: ProbeName, argv: string[] }
-type UnobservableRow = ToolRow & { probe: null, argv: null }
-type ProbeRow = CredentialRow | UnobservableRow
+type ProbeRow = ToolRow & { probe: ProbeName, argv: string[] }
 
 export class ProbedToolSessions extends ToolSessions {
   static readonly PROBES: ProbeRow[] = [
@@ -19,10 +17,7 @@ export class ProbedToolSessions extends ToolSessions {
       tool: 'acli', bin: 'acli', probe: 'acli', argv: ['jira', 'auth', 'status'],
       fix: 'acli jira auth login',
     },
-    {
-      tool: 'claude', bin: 'claude', probe: null, argv: null,
-      fix: 'claude, then /login — not observable from this process',
-    },
+    { tool: 'claude', bin: 'claude', probe: 'claude', argv: ['auth', 'status'], fix: 'claude auth login' },
     {
       tool: 'git', bin: 'git', probe: 'ssh',
       argv: ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-T', 'git@github.com'],
@@ -40,6 +35,7 @@ export class ProbedToolSessions extends ToolSessions {
   static readonly #READINGS: Record<ProbeName, (output: ProcessOutput) => SessionStateValue> = {
     gh: (output) => (output.failed ? SessionState.MISSING : SessionState.READY),
     acli: (output) => (output.failed ? SessionState.MISSING : SessionState.READY),
+    claude: (output) => (output.failed ? SessionState.MISSING : SessionState.READY),
     ssh: (output) => (output.stderr.includes(ProbedToolSessions.AUTHENTICATED)
       ? SessionState.READY
       : SessionState.MISSING),
@@ -69,7 +65,7 @@ export class ProbedToolSessions extends ToolSessions {
 
   async #sessionFor(row: ProbeRow): Promise<ToolSession> {
     const installed = this.lookUp(row.bin) !== null
-    if (installed && row.probe !== null && row.probe !== row.bin && this.lookUp(row.probe) === null) {
+    if (installed && row.probe !== row.bin && this.lookUp(row.probe) === null) {
       const asked = { ...row, fix: `install ${row.probe}, then ${row.fix}` }
 
       return ProbedToolSessions.#sessionOf(asked, installed, SessionState.UNKNOWN)
@@ -88,13 +84,12 @@ export class ProbedToolSessions extends ToolSessions {
   }
 
   async #resolvedState(row: ProbeRow, installed: boolean): Promise<SessionStateValue> {
-    if (row.probe === null) return SessionState.UNKNOWN
     if (!installed) return SessionState.MISSING
 
     return this.#stateFor(row)
   }
 
-  async #stateFor(row: CredentialRow): Promise<SessionStateValue> {
+  async #stateFor(row: ProbeRow): Promise<SessionStateValue> {
     const output = await this.clients[row.probe].run(row.argv, { safeToRepeat: true })
 
     return ProbedToolSessions.#READINGS[row.probe](output)

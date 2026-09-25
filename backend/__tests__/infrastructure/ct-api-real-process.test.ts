@@ -584,8 +584,7 @@ describe('ct-api entrypoint', () => {
     expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
-    expect(claude.session).toBe('unknown')
-    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(claude.fix).toBe(claude.session === 'ready' ? null : 'claude auth login')
     expect(body.metricsDelivery).toEqual({
       enabled: true,
       variable: 'CT_HARVEST_BQ_TABLE',

@@ -309,7 +309,7 @@ class CtApi {
   }
 
   static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
-    const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
+    const probes = ProbedToolSessions.PROBES.map((row) => row.probe)
     const clients = Object.fromEntries(
       probes.map((bin): [string, ExternalTool] => [bin, CtApi.#talkingTo(bin, ExternalTool)])
     )

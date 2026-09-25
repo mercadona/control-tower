@@ -31,7 +31,7 @@ const MIXED_SESSIONS = {
     tools: [
       { tool: 'gh', installed: true, session: 'ready', fix: null },
       { tool: 'bq', installed: true, session: 'missing', fix: 'gcloud auth login' },
-      { tool: 'claude', installed: true, session: 'unknown', fix: 'claude, then /login' },
+      { tool: 'git', installed: true, session: 'unknown', fix: 'install ssh, then add an SSH key to your GitHub account' },
     ],
     metricsDelivery: { enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null },
   }),
@@ -59,10 +59,10 @@ describe('Home · navigation shell', () => {
     const tools = await screen.findByRole('list', { name: 'Herramientas' })
     expect(within(tools).getByText('gh')).toBeInTheDocument()
     expect(within(tools).getByText('bq')).toBeInTheDocument()
-    expect(within(tools).getByText('claude')).toBeInTheDocument()
+    expect(within(tools).getByText('git')).toBeInTheDocument()
     expect(within(tools).getByText('falta')).toBeInTheDocument()
     expect(within(tools).getByText('sin confirmar')).toBeInTheDocument()
-    expect(within(tools).getByText(/claude, then \/login/)).toBeInTheDocument()
+    expect(within(tools).getByText(/install ssh, then add an SSH key/)).toBeInTheDocument()
     expect(tools.querySelector('.tools-navbar__icon--ready')).toBeInTheDocument()
     expect(tools.querySelector('.tools-navbar__icon--missing')).toBeInTheDocument()
     expect(tools.querySelector('.tools-navbar__icon--informative')).toBeInTheDocument()
