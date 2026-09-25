@@ -8,7 +8,7 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 
 | | |
 |---|---|
-| Version | `0.61.0` <!-- x-release-please-version --> · slice table contract `v26` |
+| Version | `0.62.0` <!-- x-release-please-version --> · slice table contract `v26` |
 | Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` · `/ct-harvest` |
 | Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `visual` and `apply` gates a row can declare or a `Tipo` imply, and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
 | Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`ct-writing-plans-prescriptive`) |

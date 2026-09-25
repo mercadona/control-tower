@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.0](https://github.com/mercadona/control-tower/compare/plugin-v0.61.0...plugin-v0.62.0) (2026-09-25)
+
+
+### Funcionalidades
+
+* the execution spec's path is derived from the conversation's story ([#568](https://github.com/mercadona/control-tower/issues/568)) ([48737cd](https://github.com/mercadona/control-tower/commit/48737cdd7a14f1cd35934c603be16917f95501b9))
+
 ## [0.61.0](https://github.com/mercadona/control-tower/compare/plugin-v0.60.0...plugin-v0.61.0) (2026-09-24)
 
 
