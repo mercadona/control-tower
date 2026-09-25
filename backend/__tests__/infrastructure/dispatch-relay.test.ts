@@ -14,7 +14,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import {
-  DispatchNotAvailable, DispatchNotRead, PlanAgentNotLaunched,
+  DispatchNotAvailable, DispatchNotRead, EpicSpecNotRead, PlanAgentNotLaunched,
 } from '../../src/domain/exceptions.ts'
 import type { PlanFailure } from '../../src/domain/exceptions.ts'
 
@@ -63,6 +63,8 @@ class Mother {
 
 class Relaying {
   readonly milestonesAnswer: AuthorisedMilestones | Error
+  readonly own: string | null | Error
+  readonly ownAsked: { root: CheckoutRoot, repository: RepositoryName }[]
   readonly answers: ReadonlyMap<string, DispatchAnswer>
   readonly dispatchAsked: DispatchAsked[]
   readonly written: string[]
@@ -71,16 +73,20 @@ class Relaying {
 
   constructor({
     milestones = Mother.authorised(Mother.MILESTONE),
+    own = Mother.MILESTONE,
     answers = new Map([[Mother.MILESTONE, Mother.dispatching(Mother.started())]]),
     inFlight = new WorkInFlight(),
     during = () => {},
   }: {
     milestones?: AuthorisedMilestones | Error,
+    own?: string | null | Error,
     answers?: ReadonlyMap<string, DispatchAnswer>,
     inFlight?: WorkInFlight,
     during?: (inFlight: WorkInFlight) => void,
   } = {}) {
     this.milestonesAnswer = milestones
+    this.own = own
+    this.ownAsked = []
     this.answers = answers
     this.during = during
     this.dispatchAsked = []
@@ -97,6 +103,10 @@ class Relaying {
       milestones: () => this.milestonesAnswer instanceof Error
         ? Promise.reject(this.milestonesAnswer)
         : Promise.resolve(this.milestonesAnswer),
+      ownMilestone: (asked) => {
+        this.ownAsked.push(asked)
+        return this.own instanceof Error ? Promise.reject(this.own) : Promise.resolve(this.own)
+      },
       dispatch: (asked) => {
         this.dispatchAsked.push(asked)
         this.during(this.inFlight)
@@ -123,44 +133,30 @@ describe('DispatchRelay', () => {
     expect(relaying.written).toEqual([RelayLine.dispatched(Mother.started())])
   })
 
-  it('every authorised milestone is dispatched in the same sweep, one dispatch each', async () => {
+  it('only the milestone of the held story is dispatched, and another story\'s ready milestone is left alone', async () => {
     const relaying = await new Relaying({
       milestones: Mother.authorised(Mother.MILESTONE, Mother.OTHER_MILESTONE),
-      answers: new Map([
-        [Mother.MILESTONE, Mother.dispatching(Mother.started(12))],
-        [Mother.OTHER_MILESTONE, Mother.dispatching(Mother.started(20))],
-      ]),
-    }).run()
-
-    expect(relaying.dispatchAsked.map((asked) => asked.milestone)).toEqual([Mother.MILESTONE, Mother.OTHER_MILESTONE])
-    expect(relaying.written).toEqual([RelayLine.dispatched(Mother.started(12)), RelayLine.dispatched(Mother.started(20))])
-  })
-
-  it('a milestone whose dispatch fails is named and the next milestone still goes', async () => {
-    const unread = new DispatchNotRead('gh could not read the complete issue table')
-
-    const relaying = await new Relaying({
-      milestones: Mother.authorised(Mother.OTHER_MILESTONE, Mother.MILESTONE),
-      answers: new Map<string, DispatchAnswer>([
-        [Mother.MILESTONE, unread],
-        [Mother.OTHER_MILESTONE, Mother.dispatching(Mother.started(20))],
-      ]),
-    }).run()
-
-    expect(relaying.dispatchAsked.map((asked) => asked.milestone)).toEqual([Mother.MILESTONE, Mother.OTHER_MILESTONE])
-    expect(relaying.written).toEqual([
-      RelayLine.refusedIn(Mother.REPOSITORY, Mother.MILESTONE, unread),
-      RelayLine.dispatched(Mother.started(20)),
-    ])
-  })
-
-  it('a start the cabin reserves during the sweep stops the milestones still to go', async () => {
-    const relaying = await new Relaying({
-      milestones: Mother.authorised(Mother.MILESTONE, Mother.OTHER_MILESTONE),
-      during: (inFlight) => { inFlight.reserve(Mother.REPOSITORY.text) },
     }).run()
 
     expect(relaying.dispatchAsked.map((asked) => asked.milestone)).toEqual([Mother.MILESTONE])
+    expect(relaying.ownAsked).toEqual([{ root: Mother.ROOT, repository: Mother.REPOSITORY }])
+  })
+
+  it('a checkout whose backend holds no story dispatches nothing, even with ready milestones', async () => {
+    const relaying = await new Relaying({
+      milestones: Mother.authorised(Mother.MILESTONE, Mother.OTHER_MILESTONE), own: null,
+    }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
+    expect(relaying.written).toEqual([])
+  })
+
+  it('the held story\'s milestone with nothing ready dispatches nothing, whatever else is ready', async () => {
+    const relaying = await new Relaying({
+      milestones: Mother.authorised(Mother.OTHER_MILESTONE),
+    }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
   })
 
   it('the milestones that cannot be read are reported and never escape the relay, so the clock keeps sweeping', async () => {
@@ -170,6 +166,21 @@ describe('DispatchRelay', () => {
 
     expect(relaying.dispatchAsked).toEqual([])
     expect(relaying.written).toEqual([RelayLine.refused(Mother.REPOSITORY, unread)])
+  })
+
+  it('a held story whose spec cannot be read is reported and never escapes the relay, so the clock keeps sweeping', async () => {
+    const unread = new EpicSpecNotRead('docs/superpowers/specs/STAFF-128-execution.md could not be read')
+
+    const relaying = await new Relaying({ own: unread }).run()
+
+    expect(relaying.dispatchAsked).toEqual([])
+    expect(relaying.written).toEqual([RelayLine.refused(Mother.REPOSITORY, unread)])
+  })
+
+  it('a failure to name the held story\'s milestone that is not a plan failure still escapes', async () => {
+    const bug = new TypeError('a programming error, not a spec')
+
+    await expect(new Relaying({ own: bug }).run()).rejects.toThrow(bug)
   })
 
   it('a failure that is not a plan failure still escapes, because it is a fault and not a checkout', async () => {
@@ -248,13 +259,11 @@ describe('DispatchRelay', () => {
     ])
   })
 
-  it('the relay gives its reservation back once every milestone was tried, even after a failed one', async () => {
+  it('the relay gives its reservation back after its dispatch, even a failed one', async () => {
     const inFlight = new WorkInFlight()
     await new Relaying({
-      milestones: Mother.authorised(Mother.MILESTONE, Mother.OTHER_MILESTONE),
       answers: new Map<string, DispatchAnswer>([
         [Mother.MILESTONE, new DispatchNotRead('gh could not read the complete issue table')],
-        [Mother.OTHER_MILESTONE, Mother.dispatching(Mother.started(20))],
       ]),
       inFlight,
     }).run()

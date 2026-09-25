@@ -7,6 +7,8 @@ import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export type AuthorisedMilestonesRead = (repository: RepositoryName) => Promise<AuthorisedMilestones>
 
+export type OwnMilestoneRead = (asked: { root: CheckoutRoot, repository: RepositoryName }) => Promise<string | null>
+
 export type MilestoneDispatched = (asked: {
   repository: RepositoryName, root: CheckoutRoot, milestone: string,
 }) => Promise<StartMilestonePlanResult>
@@ -35,25 +37,31 @@ export class DispatchRelay {
   static readonly OWN_KEY_PREFIX = 'relay:'
 
   readonly milestones: AuthorisedMilestonesRead
+  readonly ownMilestone: OwnMilestoneRead
   readonly dispatch: MilestoneDispatched
   readonly inFlight: WorkInFlight
   readonly stderr: (line: string) => void
 
-  constructor({ milestones, dispatch, inFlight, stderr }: {
+  constructor({ milestones, ownMilestone, dispatch, inFlight, stderr }: {
     milestones: AuthorisedMilestonesRead,
+    ownMilestone: OwnMilestoneRead,
     dispatch: MilestoneDispatched,
     inFlight: WorkInFlight,
     stderr: (line: string) => void,
   }) {
     this.milestones = milestones
+    this.ownMilestone = ownMilestone
     this.dispatch = dispatch
     this.inFlight = inFlight
     this.stderr = stderr
   }
 
   async relay(root: CheckoutRoot, repository: RepositoryName): Promise<void> {
+    let milestone: string | null
     let authorised: AuthorisedMilestones
     try {
+      milestone = await this.ownMilestone({ root, repository })
+      if (milestone === null) return
       authorised = await this.milestones(repository)
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
@@ -61,16 +69,13 @@ export class DispatchRelay {
 
       return
     }
-    if (authorised.titles.length === 0) return
+    if (!authorised.titles.includes(milestone)) return
     if (this.inFlight.holds(repository.text)) return
 
     const own = DispatchRelay.ownKeyFor(repository)
     if (this.inFlight.reserve(own) === Reservation.IN_PROGRESS) return
     try {
-      for (const milestone of authorised.titles) {
-        if (this.inFlight.holds(repository.text)) return
-        await this.#dispatchMilestone(root, repository, milestone)
-      }
+      await this.#dispatchMilestone(root, repository, milestone)
     } finally {
       this.inFlight.release(own)
     }

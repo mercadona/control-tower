@@ -19,6 +19,7 @@ import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { DispatchRelay } from './dispatch-relay.ts'
+import { HeldStoryMilestone } from './held-story-milestone.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
 import { PlanSessions } from './plan-sessions.ts'
@@ -711,8 +712,13 @@ class CtApi {
       records,
       checkouts,
     })
+    const heldStoryMilestone = new HeldStoryMilestone({
+      held: () => coordinatingSessions.held()?.conversation ?? null,
+      specs: epicSpecs,
+    })
     const dispatchRelay = new DispatchRelay({
       milestones: (repository) => dispatchCandidates.authorisedMilestones({ repository }),
+      ownMilestone: (asked) => heldStoryMilestone.of(asked),
       dispatch: (relayed) => startMilestonePlan.execute(new StartMilestonePlanParams(relayed)),
       inFlight: startsInFlight,
       stderr: (line) => process.stderr.write(line),
