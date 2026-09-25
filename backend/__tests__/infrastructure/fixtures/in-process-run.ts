@@ -17,6 +17,8 @@ import { ReviewLog } from '../../../src/domain/ports/review-log.ts'
 import { SliceEscalations } from '../../../src/domain/ports/slice-escalations.ts'
 import { PlanBriefing } from '../../../src/domain/value-objects/plan-briefing.ts'
 import type { CallCost, CallExecution, PlanCallPurpose } from '../../../src/domain/value-objects/plan-call.ts'
+import type { AgentMeasurementReader } from '../../../src/domain/ports/agent-measurement-reader.ts'
+import type { AgentMeasurementStore } from '../../../src/domain/ports/agent-measurement-store.ts'
 import { CompletedPlanCall, StartedPlanCall } from '../../../src/domain/value-objects/plan-call.ts'
 import { PlanIssue } from '../../../src/domain/value-objects/plan-issue.ts'
 import type { PlanWatch } from '../../../src/domain/value-objects/plan-watch.ts'
@@ -25,7 +27,7 @@ import { RepositoryName } from '../../../src/domain/value-objects/repository-nam
 import { SliceEscalation } from '../../../src/domain/value-objects/slice-escalation.ts'
 import { WorkspaceLocation } from '../../../src/domain/value-objects/workspace-location.ts'
 import { ActivePlans } from '../../../src/infrastructure/active-plans-route.ts'
-import { CallDescriptor, ClaudeCalls, StoredCompletion } from '../../../src/infrastructure/claude-calls.ts'
+import { CallDescriptor, CallInvocation, ClaudeCalls, StoredCompletion } from '../../../src/infrastructure/claude-calls.ts'
 import { ClaudePlanCalls } from '../../../src/infrastructure/claude-plan-calls.ts'
 import { ClaudeRunCalls } from '../../../src/infrastructure/claude-run-calls.ts'
 import { ClaudeRunMeasurements } from '../../../src/infrastructure/claude-run-measurements.ts'
@@ -105,6 +107,27 @@ class CountingReviewWatch extends ReviewWatch {
   }
 }
 
+class SettlingAgentCalls extends MeasuredAgentCalls<CallInvocation, CallDescriptor> {
+  readonly #pending: Set<Promise<unknown>>
+
+  constructor(ports: {
+    executor: ClaudeCalls,
+    reader: AgentMeasurementReader,
+    store: AgentMeasurementStore,
+  }, pending: Set<Promise<unknown>>) {
+    super(ports)
+    this.#pending = pending
+  }
+
+  override wait(call: StartedPlanCall): Promise<CompletedPlanCall> {
+    const waiting = super.wait(call)
+    const settled = waiting.then(() => undefined, () => undefined)
+    this.#pending.add(settled)
+    void settled.then(() => this.#pending.delete(settled))
+    return waiting
+  }
+}
+
 class UnregisteredCheckouts extends CheckoutRegistry {
   override remember(_checkout: RegisteredCheckout): void {}
 }
@@ -128,6 +151,8 @@ export class InProcessRun {
   readonly workers: InProcessWorkers
   readonly delivery: CompletedRunDelivery
   readonly published: PlanWatch[]
+  readonly warnings: string[] = []
+  readonly #pending = new Set<Promise<unknown>>()
   readonly #base: string
   readonly #identities: Identities
   readonly #files: HeadlessFiles
@@ -234,7 +259,7 @@ export class InProcessRun {
   }
 
   agents(): RunPlanAgents {
-    const transport = new MeasuredAgentCalls({
+    const transport = new SettlingAgentCalls({
       executor: new ClaudeCalls({
         files: this.#files,
         binary: '/usr/local/bin/claude',
@@ -251,7 +276,7 @@ export class InProcessRun {
       }),
       reader: new ClaudeRunMeasurements({ files: this.#files }),
       store: new DiskAgentMeasurements({ files: this.#files }),
-    })
+    }, this.#pending)
     const records = new DiskPlanRecords({
       files: this.#files,
       newId: () => this.#identities.next(),
@@ -295,7 +320,7 @@ export class InProcessRun {
       calls: planCalls,
       continuation: new ContinuePlan({ calls: planCalls, publication }),
       newId: () => this.#identities.next(),
-      stderr: (line) => { throw new Error(line) },
+      stderr: (line) => { this.warnings.push(line) },
     })
     return new RunPlanAgents({
       legacy,
@@ -309,7 +334,7 @@ export class InProcessRun {
       announcements: new SilentChangeAnnouncements(),
       newId: () => this.#identities.next(),
       nowMs: Date.now,
-      stderr: (line) => { throw new Error(line) },
+      stderr: (line) => { this.warnings.push(line) },
     })
   }
 
@@ -422,9 +447,15 @@ export class InProcessRun {
     return { recovery, activePlans, reviews: watched }
   }
 
-  async remove(): Promise<void> {
+  async settled(): Promise<void> {
+    while (this.#pending.size > 0) await Promise.all([...this.#pending])
     await this.workers.settled()
+  }
+
+  async remove(): Promise<void> {
+    await this.settled()
     await rm(this.#base, { recursive: true, force: true })
+    if (this.warnings.length > 0) throw new Error(`the run wrote to stderr: ${this.warnings.join('')}`)
   }
 
   async #recordCall(watch: PlanWatch, asked: {

@@ -122,6 +122,8 @@ describe('run driver runtime in process', () => {
     expect(await readFile(implementationPromptPath, 'utf8')).toBe(implementationPrompt)
     await expect(readFile(admissionPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     expect(run.workers.launches).toBe(0)
+    await run.settled()
+    expect(run.warnings).toEqual([])
   })
 
   it('a new review request resumes the completed legacy conversation through the review watcher', async () => {
@@ -158,7 +160,7 @@ describe('run driver runtime in process', () => {
         releaseDelivered()
       },
       sleep: () => Promise.resolve(),
-      stderr: (line) => { throw new Error(line) },
+      stderr: (line) => { run.warnings.push(line) },
       label: 'in-process review fixture',
       log: new ReviewLog(),
     })
@@ -210,6 +212,9 @@ describe('run driver runtime in process', () => {
 
     expect(workbench.asked).toEqual([{ issueNumber: ISSUE, repository }])
     expect(planIssues.asked).toEqual([{ issueNumber: ISSUE, repository }])
+    reviews.stop({ issue: ISSUE, repository })
+    await run.settled()
+    expect(run.warnings).toEqual([])
   })
 
   it('recovery keeps recorded driver ownership without another launch', async () => {
@@ -245,5 +250,7 @@ describe('run driver runtime in process', () => {
       phase: 'uncertain',
       recovery: { action: 'inspect', detail: uncertain.diagnostic },
     })
+    await run.settled()
+    expect(run.warnings).toEqual([])
   })
 })
