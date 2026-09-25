@@ -62,8 +62,10 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
-import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
+import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent, expectedCommits } from './run-machine.js'
 import { JudgedUnit } from './judged-unit.js'
+import { RunClosure, ReopenRefused } from './run-closure.js'
+import { ReopenedBrief, BriefLog } from './reopened-brief.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -358,29 +360,29 @@ if (runExisted) {
     }
     die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
   }
-  // The judge's closure, given the shape of the good one right above: the state
-  // is READ from the file instead of rebuilt from the table, and the verbs that
-  // would transition are sequence errors. The pair (outcome, exit) is not
-  // persisted because it does not have to be — the discard budget exits before
-  // the persistence, so a `blocked-judge` on disk is always the veto.
-  if (run.closed === RUN_STATES.BLOCKED_JUDGE) {
-    const WAY_OUT = `the judge vetoed ${unit.vetoedName} of issue ${issue} three times and the run is closed. `
-      + `Grant another round with "ct-step reopen --plan ${planPath} --issue ${issue} --instruction \\"…\\"".`
+  // The closures a person lifts, given the shape of the good one right above:
+  // the state is READ from the file instead of rebuilt from the table, and the
+  // verbs that would transition are sequence errors. The pair (outcome, exit)
+  // is not persisted because it does not have to be — the discard budget exits
+  // before the persistence, so a `blocked-judge` on disk is always the veto,
+  // and the controls and the Global verification keep their outcome in
+  // `lastFailure`, which `RunClosure.outcomeOf` reads.
+  if (RunClosure.REOPENABLE.includes(run.closed)) {
+    const WAY_OUT = RunClosure.wayOut({ run, issue, planPath, subject: unit.vetoedName })
     if (verb === 'reopen') {
       const instruction = arg('--instruction')
       if (typeof instruction !== 'string' || instruction.trim() === '') {
         die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
       }
-      // The three fields a third veto leaves behind, and nothing else. The
-      // DISCARDS ARE NOT RESET: they count an answer that could not be read,
-      // which is a different failure from a judgement that said no, and clearing
-      // them here would hide a judge that is illegible behind a person's
-      // patience. The instruction travels as `lastAdvice` because that is the
-      // field the implementer's brief already appends (see adviceSection): the
-      // person's words reach the implementer by the road the adviser's already
-      // take.
-      const { closed: _lifted, ...reopened } = run
-      run = { ...reopened, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: instruction }
+      // What each closure leaves behind is reset, and nothing else: the
+      // DISCARDS ARE NOT RESET, because they count an answer that could not be
+      // read, which is a different failure from a judgement that said no or a
+      // command that went red. The instruction travels as `lastAdvice`, the
+      // field the implementer's brief already appends; the controls and the
+      // Global verification also leave `reopenedFrom`, so the brief carries
+      // their log with it (see ReopenedBrief).
+      const closure = run.closed
+      run = RunClosure.reopen(run, instruction)
       // Not `save()`: that helper is a `const` declared further down in this
       // same module scope, and this block runs at load time, before that
       // declaration is reached — calling it here is a temporal-dead-zone
@@ -394,15 +396,18 @@ if (runExisted) {
           state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: EXIT.OK,
         }).text())
       }
-      out(`run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      out(reopenedLine(closure))
       process.exit(EXIT.OK)
     }
     if (verb === 'next') {
+      const outcome = RunClosure.outcomeOf(run)
+      const exit = exitCodeOf(run.closed, run.step, outcome)
       if (announcing) {
-        // The same two fields the closing verb announced, so a second `next`
-        // is not a contentless duplicate: the backend re-announces on every
-        // re-ask, and a line with no findings and no verdict path tells the
-        // coordinating session nothing it can act on.
+        // The same fields the closing verb announced, so a second `next` is
+        // not a contentless duplicate: the backend re-announces on every
+        // re-ask, and a line with no findings and no verdict path — or, for
+        // the controls and the Global verification, no failing command and no
+        // log — tells the coordinating session nothing it can act on.
         //
         // The attempt is read with `StepSeal.attemptOf` and the path is built
         // here instead of through `archivedVerdictPath()`: that helper reaches
@@ -412,26 +417,34 @@ if (runExisted) {
         // untouched by the closure, so the attempt is the one that archived
         // the verdict.
         const archived = join('.agent', `run-${issue}`, `${unit.stem}-verdict-${StepSeal.attemptOf(run)}.json`)
+        const explained = run.closed === RUN_STATES.BLOCKED_JUDGE
+          ? {
+              findings: run.lastFindings ?? null,
+              verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+              vetoed: unit.vetoedName,
+            }
+          : { failure: RunClosure.failureOf(run) }
         safeWrite(1, StepAnnouncement.refusal({
           issue, task: run.task, tasksTotal: run.tasksTotal, step: run.step, discards: run.discards,
-          state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: EXIT.VETOED,
+          state: run.closed, outcome, exit,
           detail: WAY_OUT,
-          findings: run.lastFindings ?? null,
-          verdict: existsSync(join(repoRoot, archived)) ? archived : null,
+          ...explained,
         }).text())
       }
       out(WAY_OUT)
-      process.exit(EXIT.VETOED)
+      process.exit(exit)
     }
     die(WAY_OUT, EXIT.WRONG_STEP)
   }
-  // `reopen` outside its closure: the run is not the judge's to give back.
+  // `reopen` outside its closures: there is nothing a person can give back.
+  // `RunClosure.reopen` is the one that knows it, so its refusal is the message.
   if (verb === 'reopen') {
-    die(
-      `the run of issue ${issue} is not closed at ${RUN_STATES.BLOCKED_JUDGE}: it stands at step ${run.step}, `
-      + 'so there is nothing to reopen.',
-      EXIT.WRONG_STEP,
-    )
+    try {
+      RunClosure.reopen(run, arg('--instruction'))
+    } catch (e) {
+      if (!(e instanceof ReopenRefused)) throw e
+      die(e.message, EXIT.WRONG_STEP)
+    }
   }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
@@ -463,7 +476,7 @@ if (runExisted) {
   // taken for zero: `|| 0` covers the runs written before the field existed.
   // The review (#530) stands after the last task commit and before its own, so
   // it counts the `tasksTotal` task commits and nothing more.
-  const expected = expectedCommits()
+  const expected = expectedCommits(run)
   if (actual !== expected) {
     die(`the state and git do not count the same: the file expects ${expected} commit(s) (task ${run.task}, step ${run.step}) and in \`${shortRange}\` (merges excluded) there are ${actual}. It does not carry on blind.`, EXIT.PRECONDITION)
   }
@@ -509,18 +522,6 @@ function bornRun() {
   })
   writeFileSync(stateFile, JSON.stringify(born, null, 2) + '\n')
   return born
-}
-
-// The commits the run has made so far, by phase: the tasks before the current
-// one, every task while the review stands, and every task plus the slice's own
-// commits in the slice queue.
-function expectedCommits() {
-  switch (run.phase) {
-    case PHASES.TASK: return run.task - 1
-    case PHASES.REVIEW: return run.tasksTotal
-    case PHASES.SLICE: return run.tasksTotal + (run.sliceCommits || 0)
-    default: throw new Error(`a run phase this version does not know: "${run.phase}"`)
-  }
 }
 
 const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
@@ -1064,8 +1065,52 @@ function writeBrief() {
   // message says so itself—, so an approach announced outside it is an approach
   // that depends on the session copying it. It goes AT THE END, after the
   // yardstick: it is the last thing decided about this task.
-  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+  appendAdvice(brief)
   return brief
+}
+
+// The last thing a brief carries. Every brief of the fix round carries the
+// Global verification log it answers, with whatever guidance the round holds:
+// the person's instruction, the adviser's approach, or nothing. Outside it, a
+// reopened controls closure brings the person's instruction and the controls
+// log; anything else, the advice as it always did.
+function appendAdvice(brief) {
+  if (run.phase === PHASES.FIX) {
+    appendFileSync(brief, ReopenedBrief.fixRoundOf(run, logAt))
+    return
+  }
+  if (run.reopenedFrom) {
+    appendFileSync(brief, ReopenedBrief.section({
+      closure: run.reopenedFrom, instruction: run.lastAdvice, log: logAt(run.lastFailure?.log ?? null),
+    }))
+    return
+  }
+  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+}
+
+// A log and its text — null when there is no log to read or the read throws,
+// which the brief then says instead of leaving it out.
+function logAt(path) {
+  if (path === null) return new BriefLog({ path, text: null })
+  try {
+    return new BriefLog({ path, text: readFileSync(path, 'utf8') })
+  } catch {
+    return new BriefLog({ path, text: null })
+  }
+}
+
+// The line `reopen` prints: it names the closure it lifted. The judge's reads
+// as it always did.
+function reopenedLine(closure) {
+  const ask = 'Ask for the step with "ct-step next".'
+  switch (closure) {
+    case RUN_STATES.BLOCKED_CONTROLS:
+      return `run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round with the control retries at zero. ${ask}`
+    case RUN_STATES.BLOCKED_GLOBAL:
+      return `run reopened at a fix round of issue ${issue}: the implementer fixes what the Global verification showed, and the program then runs it again. ${ask}`
+    default:
+      return `run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round, and the judge will look again. ${ask}`
+  }
 }
 
 // THE JUDGE'S BRIEF (#111): the same task, the same repo yardstick and the
@@ -1078,7 +1123,7 @@ function writeJudgeBrief() {
   const brief = join(workDir, `${unit.stem}-judge-brief.md`)
   writeBriefBody(brief)
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
-  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+  appendAdvice(brief)
   return brief
 }
 
@@ -1752,11 +1797,15 @@ function controlsVerb() {
     )
   }
 
+  // The command that broke the loop, for `lastFailure`. A red that came from
+  // the checks above ran no command, so both stay null and the outcome alone
+  // says what happened.
+  let failing = { command: null, code: null }
   for (const command of result === OUTCOMES.DONE && !skippedForNoCode ? commands : []) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
-    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
-    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; failing = { command, code: null }; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; failing = { command, code: measured.code }; break }
   }
 
   writeFileSync(log, lines.join('\n'))
@@ -1767,7 +1816,13 @@ function controlsVerb() {
     ...(skippedForNoCode ? { skipped: 'no-code' } : {}),
     duration_ms: Date.now() - startedAt,
   })
-  run = { ...run, lastControlsLog: log }
+  run = { ...run, lastControlsLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
+  // Green controls end a controls reopen: its instruction and its log were for
+  // the round that just went green, and the judge's brief must not repeat
+  // them. A global reopen stays until its commit: the judge of the fix round
+  // reads the same instruction and the same Global verification log, which
+  // has not run again yet.
+  if (result === OUTCOMES.DONE) run = RunClosure.afterGreenControls(run)
   // A task with no judge goes from here to `commit`, so the controls seal the
   // index the verdict would have sealed: what they measured is what commits.
   // The table says where green goes, so the seal asks it instead of guessing.
@@ -2303,6 +2358,7 @@ function globalVerb() {
   const startedAt = Date.now()
   if (!globalVerification.commands.length) {
     measure('global', { outcome: OUTCOMES.DONE, global_log: null, commands: 0, duration_ms: Date.now() - startedAt })
+    run = { ...run, lastFailure: null }
     out('global: done (the plan declares N/A — there is no end to end to run)')
     return OUTCOMES.DONE
   }
@@ -2310,17 +2366,20 @@ function globalVerb() {
   const log = join(workDir, 'global-verification.log')
   const lines = []
   let result = OUTCOMES.DONE
+  let failing = { command: null, code: null }
   for (const command of globalVerification.commands) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
-    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
-    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; failing = { command, code: null }; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; failing = { command, code: measured.code }; break }
   }
   writeFileSync(log, lines.join('\n'))
   measure('global', { outcome: result, global_log: log, commands: globalVerification.commands.length, duration_ms: Date.now() - startedAt })
   // `lastGlobalLog` is what `next` shows the slice judge: the proof that the
   // end to end has already run, so that it does not re-derive it from the diff.
-  run = { ...run, lastGlobalLog: log }
+  // `lastFailure` is what a `blocked-global` closure names when it explains
+  // itself.
+  run = { ...run, lastGlobalLog: log, lastFailure: result === OUTCOMES.DONE ? null : { outcome: result, ...failing, log } }
   out(`global: ${result} (log en ${log})`)
   return result
 }
@@ -2654,7 +2713,7 @@ function adviceVerb() {
     out(`advice discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
-  run = { ...run, lastAdvice: advice }
+  run = { ...run, lastAdvice: advice, reopenedFrom: null }
   // HAPPY-TO-DELETE: the third attempt does not start on top of two layers of
   // patches. It goes AFTER the telemetry row and after accepting the advice,
   // so that a git failure while cleaning does not sweep away the advice that
@@ -2748,8 +2807,11 @@ function commitVerb() {
   if (unit.commitsForTheSlice) stageTelemetry()
   if (!(git(['diff', '--cached', '--name-only']) || '').trim()) {
     if (unit.commitsForTheSlice) {
-      err("warning: nothing to commit of the judge's review (are the verdict and the telemetry gitignored?) — the run carries on.")
-      run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null }
+      err(unit.nothingToCommitWarning)
+      run = {
+        ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, reopenedFrom: null, lastFailure: null,
+        lastControlsLog: null, sealedTree: null,
+      }
       return OUTCOMES.DONE
     }
     err(`task ${run.task} left nothing staged: there is nothing to commit`)
@@ -2784,10 +2846,13 @@ function commitVerb() {
   // The controls log goes with it too: the next judge to read one is the
   // review's (#530), and the last task's log is no measure of a fix round.
   // `run.task` is still the committed one: the machine advances it afterwards.
-  // Every commit spends its seal. The review commit is a slice commit: the
-  // state load counts it in `sliceCommits`, as it counts the slice verdict's.
+  // Every commit spends its seal. The review and fix round commits are slice
+  // commits: the state load counts them in `sliceCommits`, as it counts the
+  // slice verdict's. `reopenedFrom` and `lastFailure` go with the advice they
+  // came with: the closure they explained is lifted and committed.
   run = {
-    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null,
+    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, reopenedFrom: null, lastFailure: null,
+    lastControlsLog: null, sealedTree: null,
     ...(unit.commitsForTheSlice ? { sliceCommits: (run.sliceCommits || 0) + 1 } : {}),
   }
   out(unit.committedLine(sha))
@@ -2992,14 +3057,15 @@ try {
   // file without rebuilding the table, because `dispatch-check --release`
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
-  if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
-  // The judge's veto is persisted for the same reason the good closure is: a
-  // closure that lives only in the exit code of a process that has gone leaves
-  // the run reading `step: judge` with the budget spent, so the next `next`
-  // re-enters the judge and re-closes for free. Only this state, and only from
-  // this path: the discard budget exits above, so a persisted `blocked-judge`
-  // is always the veto — `FAILED`, `EXIT.VETOED`. `reopen` is what lifts it.
-  if (transition.state === RUN_STATES.BLOCKED_JUDGE) run = { ...run, closed: RUN_STATES.BLOCKED_JUDGE }
+  // The judge's veto, the red or unmeasured controls and the red or unmeasured
+  // Global verification are persisted for the same reason the good closure
+  // is: a closure that lives only in the exit code of a process that has gone
+  // leaves the run reading its step with the budget spent, so the next `next`
+  // re-enters it and re-closes for free. The discard budget exits above, so a
+  // persisted `blocked-judge` is always the veto — `FAILED`, `EXIT.VETOED` —
+  // and the other two carry their outcome in `lastFailure`. `reopen` is what
+  // lifts them.
+  if (RunClosure.persists(transition.state)) run = { ...run, closed: transition.state }
   save()
 
   // The e2e report is committed HERE, after persisting the state and only if
@@ -3045,13 +3111,16 @@ try {
       issue, task: run.task, tasksTotal: run.tasksTotal, step: before, discards: run.discards,
       state: transition.state, outcome, exit: code,
     }
-    // Only the judge's closure explains itself, and only because it is the one
-    // whose reason the run is already holding: `lastVerdict` and `lastFindings`
-    // are written by `verdictVerb` and `archive` has just put the verdict on
-    // disk. Nothing is recomputed here.
+    // The closures that explain themselves are the ones whose reason the run
+    // is already holding: `lastVerdict` and `lastFindings` are written by
+    // `verdictVerb` and `archive` has just put the verdict on disk, and
+    // `lastFailure` by `controlsVerb` and `globalVerb`. Nothing is recomputed
+    // here.
     const explained = transition.state === RUN_STATES.BLOCKED_JUDGE
-      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath() }
-      : {}
+      ? { findings: run.lastFindings ?? null, verdict: archivedVerdictPath(), vetoed: unit.vetoedName }
+      : [RUN_STATES.BLOCKED_CONTROLS, RUN_STATES.BLOCKED_GLOBAL].includes(transition.state)
+        ? { failure: RunClosure.failureOf(run) }
+        : {}
     const announcement = code === EXIT.OK
       ? StepAnnouncement.transition(closure)
       : StepAnnouncement.refusal({ ...closure, detail, ...explained })

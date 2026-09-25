@@ -1,5 +1,5 @@
 import { PHASES } from './run-machine.js'
-import { commitMessage, reviewCommitMessage } from './step-contracts.js'
+import { commitMessage, reviewCommitMessage, fixRoundCommitMessage } from './step-contracts.js'
 
 export class BriefLead {
   constructor({ n, withContext }) {
@@ -79,16 +79,14 @@ class JudgedTask {
   }
 }
 
-class JudgedReview {
-  constructor({ run, tasks, issue }) {
+class WholeSliceUnit {
+  constructor({ run, tasks, issue, stem }) {
     this.run = run
     this.tasks = tasks
     this.issue = issue
-    this.stem = 'review'
+    this.stem = stem
     Object.freeze(this)
   }
-
-  get diffBase() { return [this.run.baseSha] }
 
   get commands() { return this.tasks.flatMap((t) => t.commands) }
 
@@ -96,26 +94,34 @@ class JudgedReview {
 
   get verdictPath() { return `docs/superpowers/verdicts/issue-${this.issue}-${this.stem}.json` }
 
+  get briefLead() { return new BriefLead({ n: 1, withContext: true }) }
+
+  get briefAppendices() {
+    return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
+  }
+
   verdictRecord(verdict) {
     return { issue: this.issue, tasks_total: this.run.tasksTotal, verdict }
   }
+
+  get commitsForTheSlice() { return true }
+}
+
+class JudgedReview extends WholeSliceUnit {
+  constructor({ run, tasks, issue }) {
+    super({ run, tasks, issue, stem: 'review' })
+  }
+
+  get diffBase() { return [this.run.baseSha] }
 
   commitMessage() {
     return reviewCommitMessage({ issue: this.issue, tasksTotal: this.run.tasksTotal })
   }
 
-  get commitsForTheSlice() { return true }
-
   committedLine(sha) { return `the judge's review committed: ${sha.slice(0, 7)}` }
 
   get packageHeader() {
     return `# Review package: the ${this.run.tasksTotal} tasks of issue #${this.issue} (committed since ${this.run.baseSha.slice(0, 7)}, fixes staged)`
-  }
-
-  get briefLead() { return new BriefLead({ n: 1, withContext: true }) }
-
-  get briefAppendices() {
-    return Array.from({ length: Math.max(this.run.tasksTotal - 1, 0) }, (_, i) => new BriefAppendix({ n: i + 2 }))
   }
 
   get nextHeading() { return `slice of issue ${this.issue} — the review of the ${this.run.tasksTotal} tasks` }
@@ -130,8 +136,50 @@ class JudgedReview {
 
   get reopenedAt() { return 'the review' }
 
+  get nothingToCommitWarning() {
+    return "warning: nothing to commit of the judge's review (are the verdict and the telemetry gitignored?) — the run carries on."
+  }
+
   get adviceLine() {
     return "The judge has vetoed the review of the slice twice. On accepting the advice, the program returns the tree to the last commit for the paths of the fix rounds and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now."
+  }
+}
+
+class FixRound extends WholeSliceUnit {
+  constructor({ run, tasks, issue }) {
+    super({ run, tasks, issue, stem: 'fix' })
+  }
+
+  get diffBase() { return [] }
+
+  commitMessage() {
+    return fixRoundCommitMessage({ issue: this.issue, tasksTotal: this.run.tasksTotal })
+  }
+
+  committedLine(sha) { return `the fix round committed: ${sha.slice(0, 7)}` }
+
+  get packageHeader() {
+    return `# Review package: the fix round of issue #${this.issue} after the Global verification (staged against HEAD, not yet committed)`
+  }
+
+  get nextHeading() { return `slice of issue ${this.issue} — the fix round after the Global verification` }
+
+  get sentBackLines() {
+    return ['The judge reviewed the fix round: fix every finding, in any file of the slice. The fixes land in the fix round commit after the judge approves them.']
+  }
+
+  get vetoedName() { return 'the fix round' }
+
+  get vetoedSelf() { return 'the fix round' }
+
+  get reopenedAt() { return 'the fix round' }
+
+  get nothingToCommitWarning() {
+    return 'warning: nothing to commit of the fix round (are the fixes and the telemetry gitignored?) — the run carries on.'
+  }
+
+  get adviceLine() {
+    return "The judge has vetoed the fix round twice. On accepting the advice, the program returns the tree to the last commit for the paths of the fix round and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now."
   }
 }
 
@@ -143,6 +191,8 @@ export class JudgedUnit {
         return new JudgedTask({ run, task: tasks.find((t) => t.n === run.task), issue })
       case PHASES.REVIEW:
         return new JudgedReview({ run, tasks, issue })
+      case PHASES.FIX:
+        return new FixRound({ run, tasks, issue })
       default:
         throw new Error(`a run phase this version does not know: "${run.phase}"`)
     }

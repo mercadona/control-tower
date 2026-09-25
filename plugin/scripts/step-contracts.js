@@ -983,3 +983,20 @@ export function reviewCommitMessage({ issue, tasksTotal }) {
   }
   return message
 }
+
+export function fixRoundCommitMessage({ issue, tasksTotal }) {
+  const title = `the fix round after the Global verification (#${issue}, after task ${tasksTotal}/${tasksTotal})`
+  const body = [
+    '',
+    'The fixes a person asked for after the Global verification of the slice went red.',
+    '',
+    CtStepCommit.TRAILER_LINE,
+    'Co-Authored-By: Claude <noreply@anthropic.com>',
+  ].join('\n')
+  const message = title + '\n' + body
+  const keywords = findClosingKeywords(message)
+  if (keywords.length) {
+    throw new Error(`the commit message of the fix round contains a closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) and would close an issue without anybody having decided it`)
+  }
+  return message
+}

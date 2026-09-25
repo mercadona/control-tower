@@ -11,6 +11,7 @@ import {
 } from '../scripts/step-announcement.js'
 import { RoleBytes } from '../scripts/role-bytes.js'
 import { STEPS, RUN_STATES, OUTCOMES } from '../scripts/run-machine.js'
+import { RunClosure } from '../scripts/run-closure.js'
 
 describe('the response channel each dispatch step answers through', () => {
   it('every dispatch step declares the channel its role answers through', () => {
@@ -165,6 +166,70 @@ describe('the announcement declares its whole shape', () => {
       + '"run":{"issue":42,"task":1,"tasksTotal":5,"step":"judge","discards":1},'
       + '"detail":"the judge vetoed three times"}\n'
     )
+  })
+
+  it('a refusal prints the failing command its exit and the log after its detail', () => {
+    const run = {
+      closed: RUN_STATES.BLOCKED_GLOBAL,
+      lastFailure: { outcome: OUTCOMES.FAILED, command: 'npm test', code: 1, log: '.agent/run-42/global.log' },
+    }
+    const announcement = StepAnnouncement.refusal({
+      issue: 42,
+      task: 5,
+      tasksTotal: 5,
+      step: STEPS.GLOBAL,
+      discards: 0,
+      state: RUN_STATES.BLOCKED_GLOBAL,
+      outcome: OUTCOMES.FAILED,
+      exit: 11,
+      detail: 'the Global verification is red',
+      failure: RunClosure.failureOf(run),
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"refusal","state":"blocked-global","outcome":"failed","exit":11,'
+      + '"run":{"issue":42,"task":5,"tasksTotal":5,"step":"global","discards":0},'
+      + '"detail":"the Global verification is red",'
+      + '"failure":{"command":"npm test","code":1,"log":".agent/run-42/global.log"}}\n'
+    )
+  })
+
+  it('a judge refusal names what was vetoed after the verdict and before the failure', () => {
+    const announcement = StepAnnouncement.refusal({
+      issue: 42,
+      task: 5,
+      tasksTotal: 5,
+      step: STEPS.JUDGE,
+      discards: 0,
+      state: RUN_STATES.BLOCKED_JUDGE,
+      outcome: OUTCOMES.FAILED,
+      exit: 1,
+      detail: 'the judge vetoed the fix round of issue 42 three times',
+      findings: '- [high] a.js:1: the test was weakened',
+      verdict: '.agent/run-42/fix-verdict-3.json',
+      vetoed: 'the fix round',
+      failure: { command: 'npm test', code: 1, log: '.agent/run-42/fix-controls-3.log' },
+    })
+
+    expect(announcement.text()).toBe(
+      '{"version":1,"kind":"refusal","state":"blocked-judge","outcome":"failed","exit":1,'
+      + '"run":{"issue":42,"task":5,"tasksTotal":5,"step":"judge","discards":0},'
+      + '"detail":"the judge vetoed the fix round of issue 42 three times",'
+      + '"findings":"- [high] a.js:1: the test was weakened",'
+      + '"verdict":".agent/run-42/fix-verdict-3.json",'
+      + '"vetoed":"the fix round",'
+      + '"failure":{"command":"npm test","code":1,"log":".agent/run-42/fix-controls-3.log"}}\n'
+    )
+  })
+
+  it('a refusal with an empty vetoed prints no vetoed', () => {
+    const announcement = StepAnnouncement.refusal({
+      issue: 42, task: 1, tasksTotal: 5, step: STEPS.JUDGE, discards: 0,
+      state: RUN_STATES.BLOCKED_JUDGE, outcome: OUTCOMES.FAILED, exit: 1,
+      detail: 'the judge vetoed three times', vetoed: '',
+    })
+
+    expect(JSON.parse(announcement.text())).not.toHaveProperty('vetoed')
   })
 
   it('a refusal with no detail is malformed', () => {

@@ -100,7 +100,8 @@ var JUDGING = Object.freeze({
 var PHASES = Object.freeze({
   TASK: "task",
   REVIEW: "review",
-  SLICE: "slice"
+  SLICE: "slice",
+  FIX: "fix"
 });
 var freshCounters = Object.freeze({ controlRetries: 0, judgeRetries: 0, correctionRetries: 0 });
 
