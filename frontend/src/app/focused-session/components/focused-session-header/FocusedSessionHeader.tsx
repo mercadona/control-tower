@@ -4,6 +4,8 @@ import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import './FocusedSessionHeader.css'
 
+const TALK_LABEL = 'Hablar con la sesión'
+
 type FocusedSessionHeaderProps = {
   step: SessionStep
   story: string
@@ -11,15 +13,19 @@ type FocusedSessionHeaderProps = {
   closing: boolean
   closeError: string | null
   onCancel: () => void
+  onTalk?: (() => void) | null
 }
 
-const FocusedSessionHeader = ({ step, story, repo, closing, closeError, onCancel }: FocusedSessionHeaderProps) => (
+const FocusedSessionHeader = ({ step, story, repo, closing, closeError, onCancel, onTalk }: FocusedSessionHeaderProps) => (
   <header className="focused-session-header">
     <div className="focused-session-header__identity">
       <div className="focused-session-header__titles">
         <h1 className="focused-session-header__title lg-title3-semibold">{SessionStage.LABEL[step]}</h1>
         <p className="focused-session-header__story lg-body-regular">{story} · <code>{repo}</code></p>
       </div>
+      {onTalk !== undefined && (
+        <Button variant="secondary" disabled={onTalk === null} onClick={onTalk ?? undefined}>{TALK_LABEL}</Button>
+      )}
       <Button variant="secondary" disabled={closing} onClick={onCancel}>
         {closing ? 'Cancelando…' : 'Cancelar la sesión'}
       </Button>

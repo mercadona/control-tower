@@ -268,4 +268,35 @@ describe('Home is the start form with no session held, and the focused view for 
       body: JSON.stringify({ repo: StartPlanMother.REPO, issue: 592, agent: HeadlessPlanMother.agentFor(592) }),
     }))
   })
+
+  it('Hablar con la sesión opens the terminal in a panel over the list', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Hablar con la sesión' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Sesión coordinadora' })
+    expect(within(dialog).getByRole('region', { name: CoordinatingSessionMother.SESSION.name })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Issues del milestone' })).toBeInTheDocument()
+  })
+
+  it('Volver a la lista closes the panel', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Hablar con la sesión' }))
+    await user.click(screen.getByRole('button', { name: 'Volver a la lista' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Sesión coordinadora' })).not.toBeInTheDocument()
+  })
 })
