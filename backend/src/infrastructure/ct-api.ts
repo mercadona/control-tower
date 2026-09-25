@@ -62,6 +62,7 @@ import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { AskGroomReview } from '../application/actions/ask-groom-review.ts'
 import { CloseCoordinatingSession } from '../application/actions/close-coordinating-session.ts'
 import { RecoverCoordinatingSession } from '../application/actions/recover-coordinating-session.ts'
+import { ReopenCoordinatingSession } from '../application/actions/reopen-coordinating-session.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
@@ -683,6 +684,16 @@ class CtApi {
     })
     const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
+    const reopenCoordinatingSession = new ReopenCoordinatingSession({
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+      specs: epicSpecs,
+      issues: epicIssues,
+      userStories,
+      newId: randomUUID,
+      now: () => new Date().toISOString(),
+    })
     const groomRunner = new ToolRunner({
       bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS, processes: CtApi.#PROCESSES, signal: CtApi.#PROCESSES.signal.bind(CtApi.#PROCESSES),
     })
@@ -784,6 +795,7 @@ class CtApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
+      reopenCoordinatingSession,
       openGroomSession,
       askGroomReview,
       closeCoordinatingSession,

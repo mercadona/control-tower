@@ -15,6 +15,7 @@ import { SessionInputRoute } from './session-input-route.ts'
 import { SessionResizeRoute } from './session-resize-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
 import { CoordinatingSessionCloseRoute } from './coordinating-session-close-route.ts'
+import { CoordinatingSessionReopenRoute } from './coordinating-session-reopen-route.ts'
 import { GroomSessionRoute } from './groom-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
@@ -61,6 +62,7 @@ import { WorkProgressRoute } from './work-progress-route.ts'
 import type { ReadWorkProgress } from '../application/queries/read-work-progress.ts'
 import { MilestoneProgressRoute } from './milestone-progress-route.ts'
 import type { ReadMilestoneProgress } from '../application/queries/read-milestone-progress.ts'
+import type { ReopenCoordinatingSession } from '../application/actions/reopen-coordinating-session.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
@@ -131,6 +133,7 @@ export type ApiCollaborators = {
   maintenance?: WorkRecoveryClock | null,
   workProgress?: Pick<ReadWorkProgress, 'execute'> | null,
   readMilestoneProgress?: Pick<ReadMilestoneProgress, 'execute'> | null,
+  reopenCoordinatingSession?: Pick<ReopenCoordinatingSession, 'execute'> | null,
   openCoordinatingSession?: OpenCoordinatingSession | null,
   openGroomSession?: OpenGroomSession | null,
   askGroomReview?: AskGroomReview | null,
@@ -204,6 +207,7 @@ export class ApiServer {
   readonly maintenance: WorkRecoveryClock | null
   readonly workProgress: Pick<ReadWorkProgress, 'execute'> | null
   readonly readMilestoneProgress: Pick<ReadMilestoneProgress, 'execute'> | null | undefined
+  readonly reopenCoordinatingSession: Pick<ReopenCoordinatingSession, 'execute'> | null | undefined
   readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
   readonly openGroomSession: OpenGroomSession | null | undefined
   readonly askGroomReview: AskGroomReview | null | undefined
@@ -232,7 +236,7 @@ export class ApiServer {
     port, startMilestonePlan, startsInFlight, recoverPlan, cleanupPlan, implementHistory,
     sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, recovery = null, inspection = null, maintenance = null, workProgress = null,
-    readMilestoneProgress = null,
+    readMilestoneProgress = null, reopenCoordinatingSession = null,
     openCoordinatingSession, openGroomSession, askGroomReview, closeCoordinatingSession, coordinatingSessions,
     readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
     publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic, preparation,
@@ -257,6 +261,7 @@ export class ApiServer {
     this.maintenance = maintenance
     this.workProgress = workProgress
     this.readMilestoneProgress = readMilestoneProgress
+    this.reopenCoordinatingSession = reopenCoordinatingSession
     this.openCoordinatingSession = openCoordinatingSession
     this.openGroomSession = openGroomSession
     this.askGroomReview = askGroomReview
@@ -406,6 +411,12 @@ export class ApiServer {
       CoordinatingSessionCloseRoute.closing(this.closeCoordinatingSession!, this.coordinatingSessions!)
     )
     app.all(CoordinatingSessionCloseRoute.PATH, CoordinatingSessionCloseRoute.refuseOtherMethods)
+    app.post(
+      CoordinatingSessionReopenRoute.PATH,
+      Browsers.turnAwayForeign,
+      CoordinatingSessionReopenRoute.reopening(this.coordinatingSessions!, this.reopenCoordinatingSession!)
+    )
+    app.all(CoordinatingSessionReopenRoute.PATH, CoordinatingSessionReopenRoute.refuseOtherMethods)
     app.post(
       CoordinatingSessionRoute.PATH,
       Browsers.turnAwayForeign,
