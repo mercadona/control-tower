@@ -1,0 +1,56 @@
+{
+  "issue": 554,
+  "tasks_total": 5,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Task 1: tool-runner.test.ts covers each rule of ToolRunner.run (TDD case plus 11 substitutes) and tool-runner-real-process.test.ts is deleted. Task 2: the runWholeOutput case is in tool-runner.test.ts and tool-runner-whole-output-real-process.test.ts is deleted. Task 3: in-process-workers.test.ts shows a refusal and an unreadable output completing separately, over the new result-turn-limit capture and the tolerant #played. Task 4: the three call cases run over InProcessWorkers, which drives the real HeadlessCallWorker, and claude-calls-real-process.test.ts is deleted. Task 5: claude-conversations-real-process.test.ts is deleted and its ledger row names the claude-conversations.test.ts case, which exists at line 190. Every promise has a line that produces it.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Task 1: 'a_refusal_and_an_answer_nobody_can_parse_come_back_apart' answers gh/issue-view-missing and then claude/result-text, and asserts failed true, code 1 and the capture's stderr, then failed false and stdout equal to the capture's stdout. Task 2: 'keeps every byte when its output is collected whole, and still tells its exit code and its stderr' asserts the stdout of graphql-open-issues-repo-pulse with code 0, then code 1 and the stderr of issue-view-missing. Task 3: 'a claude that refuses and a claude whose output nobody can read complete apart' asserts the two execution objects and codes 1 and 0 word for word. Task 4: 'output and completion reach the call record the worker publishes' asserts succeeded true, signal null, the stream.ndjson subtype and stderr.log equal to the result-success stderr, and it keeps the measurement assertions. Task 5 declares No TDD.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "AnsweredRunner extends ProcessRunner, with constructor(outcome: RunOutcome) and asked: { binary, argv, options: RunAndWaitOptions }[]. Its runAndWait records the request and returns the outcome, and its launch throws UnscriptedRequest, all as the Task 1 brief states. The Current state lines of process-ratchet.ts (lines 10, 12, 24 and 25) are all removed. scripted-claude.ts #played returns the capture unchanged when the stdout does not parse and keeps its body otherwise. UnspawnableClaude throws exactly Object.assign(new Error('spawn /nonexistent-claude ENOENT'), { code: 'ENOENT' }). Every file the blocks name is touched.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3: no new test launches a process. D-8, and 'Where captures live': the two captures sit under backend/__tests__/infrastructure/captures/claude/, each headed by command, version and date. 'The two new captures': result-text and result-turn-limit carry the commands the brief states, and turn-limit exits 1 with error_max_turns and is_error true. 'An answer that is not a capture': the killed child and the missing binary come from AnsweredRunner. 'Test-only code': nothing under backend/src changes. 'A test name that stays': the kept names and the four renames match the brief.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the new in-process-workers cases extend the file's own Scenario idiom (mkdtemp root, InProcessWorkers over ScriptedClaude). tool-runner.test.ts answers with ScriptedConversation and Capture.read the way ct-api.test.ts does. The captures follow the header of result-success.txt. Boundaries: imports come only from src infrastructure and domain modules and from test fixtures, and no seam is added next to ProcessRunner. Delivery: no public contract changes, since only tests change. defects.md, rule by rule. Closed vocabulary: no classifying string or boolean is introduced, because the execution kinds asserted are production values. Raw map as the return value of logic: #resultObject returns a parsed Record inside a test double that only reshapes a capture, and no production logic returns a map. Two fields that have to agree: the Answered outcomes pair failure with stdout and stderr in the RunOutcome shape production already defines, and the diff adds no sentinel. Error named for where it happens: no new error type. No clash between a plan control and a document.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Every removed test is accounted for: the 12 cases of tool-runner-real-process (Task 1 Tests), the 2 of the whole-output file (Task 2), the 4 of claude-calls-real-process (Task 4), and the one of claude-conversations-real-process (Task 5). The prompt case drops its promptVariable assertion, which Assumption 6 declares. The budget case drops its wall-clock bound for the timeoutMs assertion the brief asks for.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The behaviours come from production code. ToolRunner (src) turns the RunOutcomes into failed/code/stderr. HeadlessCallWorker (src), which InProcessWorkers constructs, publishes the records, the stream, the stderr and the child-spawn failure. ClaudeCalls, MeasuredAgentCalls, DiskPlanRecords and ClaudePlanCalls produce the completion, the measurements and the recovery. The fixture change to #played only stops the double from crashing on a non-JSON capture, and the malformed-JSON diagnostic is produced by production parsing.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every touched path is named in a task's Files line: tool-runner.test.ts, the two captures, process-ratchet.ts, scripted-claude.ts, in-process-workers.test.ts, the ledger, and the four deletions. No path named in a Files line goes untouched. There is no plan amendment in the diff. Nothing under plugin/, frontend/ or backend/src changes, and claude-calls.test.ts and vitest.config.ts are untouched. The Scenario refactor (calls(), measured(), a capture parameter on ready(), unspawnableDescriptor()) serves the Task 3 and Task 4 cases. The ledger adds 12+2+4+1 = 19 rows, as the tasks list them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The new tests are deterministic: they use no network, and their roots are mkdtemp directories removed in afterEach. The new Date() and Date.now() values feed descriptor and fixture data, not an assertion. They are isolated: each builds its own root, conversation or AnsweredRunner, and nothing mutates process.env any more. They verify real behaviour: each asserts on ToolRunner output, on files the worker publishes, or on the requests production handed to the port. Reverting production would break them. I load the finer-grained skill only before a low finding beyond these three properties, and I have none, so I did not load it.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "d0eea89ff42d4eef96990cdbc497d1f7a2228f3c4b83617f7ed56c3e7d67ba70"
+  }
+}

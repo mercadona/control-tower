@@ -7,9 +7,7 @@ export class ProcessRatchet {
   static readonly BORDER = '/process-border.ts'
 
   static readonly LISTED: readonly string[] = [
-    'infrastructure/claude-calls-real-process.test.ts',
     'infrastructure/claude-calls.test.ts',
-    'infrastructure/claude-conversations-real-process.test.ts',
     'infrastructure/claude-run-calls.test.ts',
     'infrastructure/git-workspace-real-process.test.ts',
     'infrastructure/headless-dispatch-dry-run.test.ts',
@@ -21,8 +19,6 @@ export class ProcessRatchet {
     'infrastructure/run-plan-recovery.test.ts',
     'infrastructure/session-channel-real-process.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
-    'infrastructure/tool-runner-real-process.test.ts',
-    'infrastructure/tool-runner-whole-output-real-process.test.ts',
     'yardstick-real-process.test.ts',
   ]
 

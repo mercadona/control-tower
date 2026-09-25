@@ -53,7 +53,8 @@ export class ScriptedClaude extends ProcessRunner {
   }
 
   #played(request: ClaudeRequest): Capture {
-    const result = JSON.parse(this.#capture.stdout) as Record<string, unknown>
+    const result = ScriptedClaude.#resultObject(this.#capture.stdout)
+    if (result === null) return this.#capture
     result.session_id = request.conversation
     if (request.role === 'implement') result.structured_output = ScriptedClaude.#IMPLEMENT_STRUCTURED_OUTPUT
     if (request.role === 'ct-advisor') result.structured_output = ScriptedClaude.#ADVISOR_STRUCTURED_OUTPUT
@@ -66,6 +67,14 @@ export class ScriptedClaude extends ProcessRunner {
       stdout: `${JSON.stringify(result)}\n`,
       stderr: this.#capture.stderr,
     })
+  }
+
+  static #resultObject(stdout: string): Record<string, unknown> | null {
+    try {
+      return JSON.parse(stdout) as Record<string, unknown>
+    } catch {
+      return null
+    }
   }
 
   static #writeStdoutWhileItsDescriptorIsStillOpen(stdio: LaunchOptions['stdio'], capture: Capture): void {
