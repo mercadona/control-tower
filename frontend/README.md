@@ -102,8 +102,8 @@ while an issue is in review. **Hablar con la sesión** opens the terminal in a
 panel over the list. A session that ended shows **Reabrir la sesión**, which
 calls `POST /coordinating-session/reopen`.
 
-`app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
-the workspace, outside every `currentStage` branch) is gate 1's panel.
+`app/spec-freeze` (`SpecFreezePanel`, rendered inside `GateBand`,
+`app/focused-session`, while step 2 asks for it) is gate 1's panel.
 `GET /spec-freeze` polls the checkout's execution spec (`useSpecFreeze.ts`) and
 answers `none`, `no-spec`, `draft` — with the yardstick's findings and the
 one-time gate key — or `frozen`, with the freeze date and the pull request.
@@ -114,9 +114,8 @@ in `x-coordinating-target` to freeze it. Under
 the backend, so no gate key is ever minted for it: the button can only be
 pressed from the page the backend itself serves.
 
-`app/epic-groom` (`EpicGroomPanel`, rendered by `Home` right after
-`SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
-the groom and the authorisation. `GET /epic-groom` polls the same checkout
+`app/epic-groom` (`EpicGroomPanel`, rendered inside the same `GateBand` while
+step 3 or step 4 asks for it) is gate 2's panel: the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
 `groomed` or `authorised` — **unless the slicing is being reviewed**, and then it
 keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
@@ -168,12 +167,12 @@ The conversation **Revisar el slicing con la sesión** opens through the same
 lifecycle owner as the request form. `POST /groom-session` answers the session
 it created, `CoordinatingSessionClient.openedIn` reads that payload — one reader
 for the two doors that answer it — and the adopted session appears and is
-selected without waiting for the next `GET /sessions`. A delayed old listing
-cannot remove that adoption or resurrect a terminal after confirmed closure.
-Both gate reads answer `connecting` in the very render a new target appears,
-and `GateBand` is keyed by the current target, so old gate reads,
-confirmation fallbacks and automatic reslicing presses cannot repaint a
-replacement target.
+selected directly from that answer, with no further round trip. Both gate
+reads answer `connecting` in the very render a new target appears, because
+`useSpecFreeze.ts` and `useEpicGroom.ts` each hold their own `{ target, read }`
+pair and return `connecting` until an answer for the new target settles it, so
+old gate reads, confirmation fallbacks and automatic reslicing presses cannot
+repaint a replacement target.
 
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a

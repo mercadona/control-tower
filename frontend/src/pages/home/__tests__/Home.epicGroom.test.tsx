@@ -18,14 +18,6 @@ const A_LOADED_SUITE = { timeout: 5000 }
 const HEADING = 'Puerta 2 · El groom y la autorización'
 const REVIEW_THE_SLICING = 'Revisar el slicing con la sesión'
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
-const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = {
-  status: 400,
-  body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
-}
-const IMPLEMENTATION_HISTORY_NOT_READ: Answer = {
-  status: 400,
-  body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
-}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
@@ -50,8 +42,6 @@ const stubGroomableBackendWithASession = () => {
     if (path === '/coordinating-session') return opened
       ? new Response(groomLive)
       : responseFor(CoordinatingSessionMother.ended())
-    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
-    if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -72,8 +62,6 @@ const stubBackend = (
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinatingSession)
-    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
-    if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -161,4 +149,3 @@ describe('Home and gate 2', () => {
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/groom-session')).toHaveLength(1)
   })
 })
-import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

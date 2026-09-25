@@ -14,14 +14,6 @@ type Answer = { status: number; body: string }
 
 const HEADING = 'Puerta 1 · Congelación del spec'
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
-const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = {
-  status: 400,
-  body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
-}
-const IMPLEMENTATION_HISTORY_NOT_READ: Answer = {
-  status: 400,
-  body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
-}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
@@ -33,8 +25,6 @@ const stubBackend = (activePlans: Answer, coordinatingSession = CoordinatingSess
     if (path === '/external-tools') return responseFor(ExternalToolsMother.allReady())
     if (path === '/sessions') return responseFor(SessionsMother.noSessions())
     if (path === '/coordinating-session') return responseFor(coordinatingSession)
-    if (path.startsWith('/work-progress/')) return responseFor(WorkProgressMother.implementing(IMPLEMENTATION_PROGRESS_NOT_READ))
-    if (path.startsWith('/implement-history/')) return responseFor(IMPLEMENTATION_HISTORY_NOT_READ)
     throw new Error(`unexpected fetch to ${path}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -78,4 +68,3 @@ describe('Home and gate 1', () => {
   })
 
 })
-import { WorkProgressMother } from '__scenarios__/WorkProgressMother'

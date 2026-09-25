@@ -20,14 +20,9 @@ const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_COORDINATING_SESSION = CoordinatingSessionMother.none()
 const NO_SPEC_FREEZE = SpecFreezeMother.none()
 const NO_EPIC_GROOM = EpicGroomMother.none()
-const NO_IMPLEMENTATION_HISTORY_YET = {
-  status: 400,
-  body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
-}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status, headers: JSON_HEADERS })
 
-const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
 const isCoordinatingSessionRead = (input: string | URL | Request, init?: RequestInit) =>
   input === '/coordinating-session' && init === undefined
 
@@ -40,7 +35,6 @@ const backendAnswering = (answer: Answer) => {
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
-      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return fetching(input, init)
@@ -77,7 +71,6 @@ const backendPending = () => {
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
-      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       if (input === '/spec-freeze') return responseFor(NO_SPEC_FREEZE)
       if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)
       return pending

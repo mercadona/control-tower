@@ -5,9 +5,6 @@ import type {
 
 export class MilestoneProgressClient {
   static readonly PATH = '/milestone-progress'
-  static readonly #SLICE_LINE_STATES: readonly SliceLineState[] = ['pending', 'running', 'needs-person', 'delivered']
-  static readonly #SLICE_TASK_STATUSES: readonly SliceTaskStatus[] = ['pending', 'running', 'done', 'stopped']
-  static readonly #RECOVERY_ACTIONS: readonly RecoveryAction[] = ['observe', 'continue', 'cleanup', 'inspect']
 
   static async read(): Promise<MilestoneProgressOutcome> {
     try {
@@ -25,15 +22,15 @@ export class MilestoneProgressClient {
   }
 
   static #isSliceLineState(value: unknown): value is SliceLineState {
-    return typeof value === 'string' && MilestoneProgressClient.#SLICE_LINE_STATES.includes(value as SliceLineState)
+    return value === 'pending' || value === 'running' || value === 'needs-person' || value === 'delivered'
   }
 
   static #isSliceTaskStatus(value: unknown): value is SliceTaskStatus {
-    return typeof value === 'string' && MilestoneProgressClient.#SLICE_TASK_STATUSES.includes(value as SliceTaskStatus)
+    return value === 'pending' || value === 'running' || value === 'done' || value === 'stopped'
   }
 
   static #isRecoveryAction(value: unknown): value is RecoveryAction {
-    return typeof value === 'string' && MilestoneProgressClient.#RECOVERY_ACTIONS.includes(value as RecoveryAction)
+    return value === 'observe' || value === 'continue' || value === 'cleanup' || value === 'inspect'
   }
 
   static #isPullRequest(value: unknown): value is { number: number; url: string } {
@@ -71,10 +68,10 @@ export class MilestoneProgressClient {
 
     return {
       number: value.number,
-      name: value.name as string | null,
+      name: value.name,
       status: value.status,
-      ruling: value.ruling as string | null,
-      findings: value.findings as string | null,
+      ruling: value.ruling,
+      findings: value.findings,
     }
   }
 
@@ -115,14 +112,14 @@ export class MilestoneProgressClient {
       url: value.url,
       title: value.title,
       state: value.state,
-      step: value.step as string | null,
-      task: value.task as number | null,
-      totalTasks: value.total_tasks as number | null,
-      stepStartedAt: value.step_started_at as string | null,
-      lastTool: value.last_tool as { name: string; argument: string | null } | null,
-      lastText: value.last_text as string | null,
-      pullRequest: value.pull_request as { number: number; url: string } | null,
-      attention: value.attention as SliceAttention | null,
+      step: value.step,
+      task: value.task,
+      totalTasks: value.total_tasks,
+      stepStartedAt: value.step_started_at,
+      lastTool: value.last_tool,
+      lastText: value.last_text,
+      pullRequest: value.pull_request,
+      attention: value.attention,
       baselineRed: value.baseline_red,
       tasks,
     }

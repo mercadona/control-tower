@@ -32,14 +32,6 @@ type ImplementationProgressState = {
   pullRequest: PullRequest | null
 }
 
-export type ImplementProgressRead =
-  | { phase: 'connecting' }
-  | { phase: 'waiting' }
-  | ({ phase: 'progress' } & ImplementationProgressState)
-  | ({ phase: 'partial' } & ImplementationProgressState)
-  | { phase: 'failed'; error: string }
-  | { phase: 'unreachable' }
-
 const STEP_LABELS: Record<ImplementationStep, string> = {
   [ImplementationStep.STARTING]: 'Arrancando',
   [ImplementationStep.IMPLEMENT]: 'Implementando',

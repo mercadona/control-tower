@@ -4,7 +4,6 @@ import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
-import { WorkProgressMother } from '__scenarios__/WorkProgressMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openHome } from './helpers'
@@ -37,10 +36,6 @@ class Closing {
 }
 
 class FocusedBackend {
-  static readonly #NOT_READ_YET: Answer = {
-    status: 400, body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
-  }
-
   static #now(answering: Answering): Answer {
     return typeof answering === 'function' ? answering() : answering
   }
@@ -64,8 +59,6 @@ class FocusedBackend {
       if (path === '/sessions') return answer(SessionsMother.noSessions())
       if (path === '/spec-freeze') return answer(specFreeze)
       if (path === '/epic-groom') return answer(epicGroom)
-      if (path.startsWith('/work-progress/')) return answer(WorkProgressMother.planning())
-      if (path.startsWith('/implement-history/')) return answer(FocusedBackend.#NOT_READ_YET)
       throw new Error(`nobody scripted ${path}`)
     })
     vi.stubGlobal('fetch', fetching)
