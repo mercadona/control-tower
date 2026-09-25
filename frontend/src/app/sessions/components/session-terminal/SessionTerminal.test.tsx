@@ -204,15 +204,51 @@ describe('SessionTerminal', () => {
     }))
   })
 
-  it('an unchanged 80x24 posts nothing to resize', async () => {
+  it('an 80x24 fit is posted on mount too, because another tab may have left the session at its own size', async () => {
     FakeFitAddon.nextProposedDimensions = { cols: 80, rows: 24 }
     const posting = vi.fn(async () => new Response('', { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
     render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+
+    await waitFor(() => expect(posting).toHaveBeenCalledWith(`/sessions/${SESSION.id}/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 80, rows: 24 }),
+      signal: expect.any(AbortSignal),
+    }))
+  })
+
+  it('coming back to the page posts its size again even unchanged, so the tab being looked at is the one the session fits', async () => {
+    FakeFitAddon.nextProposedDimensions = { cols: 120, rows: 40 }
+    const posting = vi.fn(async () => new Response('', { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+    await waitFor(() => expect(posting).toHaveBeenCalledTimes(1))
+
+    window.dispatchEvent(new Event('focus'))
+
+    await waitFor(() => expect(posting).toHaveBeenCalledTimes(2))
+    expect(posting).toHaveBeenLastCalledWith(`/sessions/${SESSION.id}/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 120, rows: 40 }),
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('after unmounting, coming back to the page posts nothing', async () => {
+    FakeFitAddon.nextProposedDimensions = { cols: 120, rows: 40 }
+    const posting = vi.fn(async () => new Response('', { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+    const { unmount } = render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+    await waitFor(() => expect(posting).toHaveBeenCalledTimes(1))
+    unmount()
+
+    window.dispatchEvent(new Event('focus'))
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(posting).not.toHaveBeenCalled()
+    expect(posting).toHaveBeenCalledTimes(1)
   })
 
   it('a 0x0 proposal from a not-yet-laid-out container posts nothing to resize', async () => {
@@ -232,6 +268,8 @@ describe('SessionTerminal', () => {
     vi.stubGlobal('fetch', posting)
 
     render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+    await vi.advanceTimersByTimeAsync(0)
+    posting.mockClear()
 
     FakeFitAddon.nextProposedDimensions = { cols: 100, rows: 30 }
     resizeObserverCallback?.([], {} as ResizeObserver)
