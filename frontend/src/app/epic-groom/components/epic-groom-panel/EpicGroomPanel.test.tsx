@@ -165,25 +165,25 @@ describe('EpicGroomPanel', () => {
 
     render(<EpicGroomPanel target={null} liveAsk={null} openingBlocked operationBusy={false} openSession={vi.fn()} />)
 
-    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
-    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(await screen.findByText('Se van a crear estas issues')).toBeInTheDocument()
+    expect(screen.getByText('The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
     expect(screen.getByRole('button', SESSION_BUTTON)).toBeDisabled()
     expect(screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.')).toBeInTheDocument()
   })
 
-  it('shows what the groom will create before anything is created', async () => {
+  it('shows what the groom will create before anything is created, by title only', async () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)
 
     renderPanel()
 
-    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
-    expect(screen.getByText('2 issues')).toBeInTheDocument()
-    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
-    expect(screen.getByText(EpicGroomMother.GATE_ISSUE.labels.join(', '))).toBeInTheDocument()
-    expect(screen.getByText('#2 · The session channel')).toBeInTheDocument()
-    expect(screen.getByText(EpicGroomMother.CHANNEL_ISSUE.labels.join(', '))).toBeInTheDocument()
+    expect(await screen.findByText('Se van a crear estas issues')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'The intermediate gate retires',
+      'The session channel',
+    ])
+    expect(screen.queryByText(EpicGroomMother.MILESTONE)).not.toBeInTheDocument()
     expect(reading).toHaveBeenCalledTimes(1)
   })
 
@@ -193,9 +193,9 @@ describe('EpicGroomPanel', () => {
 
     renderPanel()
 
-    expect(await screen.findByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(await screen.findByText('The intermediate gate retires')).toBeInTheDocument()
     expect(
-      screen.getByText(`#3 · The pulse of the other repository · ${EpicGroomMother.OTHER_REPO}`)
+      screen.getByText(`The pulse of the other repository · ${EpicGroomMother.OTHER_REPO}`)
     ).toBeInTheDocument()
   })
 
@@ -222,6 +222,20 @@ describe('EpicGroomPanel', () => {
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('#349 · The session channel')).toBeInTheDocument()
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
+  })
+
+  it('while the groom runs, the way into the session is no longer offered', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Promise<Response>(() => {})
+        : new Response(EpicGroomMother.groomable().body, { status: 200 })))
+    const user = userEvent.setup()
+    renderPanel()
+
+    await user.click(await screen.findByRole('button', GROOM_BUTTON))
+
+    expect(await screen.findByRole('button', { name: 'Ejecutando el groom' })).toBeDisabled()
+    expect(screen.queryByRole('button', SESSION_BUTTON)).not.toBeInTheDocument()
   })
 
   it('the way into the conversation carries the gate key and says where the session can be talked to', async () => {
@@ -388,7 +402,7 @@ describe('EpicGroomPanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta acción solo se puede realizar desde la página que sirve el backend.')
     expect(listening).not.toHaveBeenCalled()
-    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(screen.getByText('The intermediate gate retires')).toBeInTheDocument()
     expect(
       screen.queryByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
     ).not.toBeInTheDocument()
@@ -506,8 +520,7 @@ describe('EpicGroomPanel', () => {
 
     renderPanel()
 
-    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
-    expect(screen.getByText('1 de 2 issues creadas')).toBeInTheDocument()
+    expect(await screen.findByText('1 de 2 issues creadas')).toBeInTheDocument()
     expect(screen.getByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('backlog')).toBeInTheDocument()
     expect(screen.getByText('Termina el groom antes de autorizar el trabajo.')).toBeInTheDocument()

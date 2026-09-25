@@ -1,56 +1,52 @@
 .epic-groom-panel {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+.epic-groom-panel > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.epic-groom-panel__body {
+  display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
-.epic-groom-panel__milestone {
+.epic-groom-panel__heading {
   margin: 0;
-  font-weight: 600;
+  color: var(--foreground-primary);
 }
 
-.epic-groom-panel__will-create,
-.epic-groom-panel__created,
-.epic-groom-panel__count,
-.epic-groom-panel__partial-count,
-.epic-groom-panel__partial-notice,
-.epic-groom-panel__session-opened,
-.epic-groom-panel__only-from-the-page,
-.epic-groom-panel__no-session,
-.epic-groom-panel__ask-blocked,
-.epic-groom-panel__ask-sent {
-  margin: 0;
-  color: var(--foreground-secondary);
+.epic-groom-panel__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .epic-groom-panel__plan,
 .epic-groom-panel__issues {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.epic-groom-panel__plan-item,
-.epic-groom-panel__issue {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.epic-groom-panel__plan-labels,
-.epic-groom-panel__issue-status {
+  gap: 2px;
+  margin: 4px 0 0;
+  padding-left: 18px;
   color: var(--foreground-secondary);
 }
 
-.epic-groom-panel__authorised,
-.epic-groom-panel__resliced,
-.epic-groom-panel__reslicing-published,
-.epic-groom-panel__awaiting {
-  margin: 0;
+.epic-groom-panel__issue-status {
+  margin-left: 8px;
 }
 
 .epic-groom-panel__pull-request {
-  align-self: flex-start;
+  color: var(--foreground-brand-primary);
+}
+
+.epic-groom-panel__notice {
+  margin: 0;
+  color: var(--foreground-secondary);
 }

@@ -84,7 +84,7 @@ describe('Home and the gate sequence', () => {
 
     await screen.findByRole('heading', { name: GATE_2_HEADING })
     expect(screen.getByRole('heading', { name: GATE_1_HEADING })).toBeInTheDocument()
-    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
+    expect(await screen.findByText('Se van a crear estas issues')).toBeInTheDocument()
     expect(screen.getByRole('button', GROOM_BUTTON)).toBeDisabled()
     expect(
       screen.getByText('No hay ninguna sesión coordinadora abierta: ábrela para actuar en esta puerta.'),
