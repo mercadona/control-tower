@@ -1,24 +1,34 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { PreparationMother } from '../preparation-mother.ts'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { lstat as realLstat } from 'node:fs/promises'
+import * as fs from 'node:fs/promises'
+import { lstat as realLstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseStateSafe } from '../../../plugin/scripts/state.js'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
 import { mapGhIssue, NO_MILESTONE_KEY } from '../../../plugin/scripts/gh-issue-map.js'
 import { resolveStatePath } from '../../../plugin/scripts/state-paths.js'
+import { issuesQueryFor } from '../../../plugin/scripts/gh-issues.js'
 import { Baseline, BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { CleanupPlan, CleanupPlanParams } from '../../src/application/actions/cleanup-plan.ts'
 import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
+import { DispatchCheckClaims } from '../../src/infrastructure/dispatch-check-claims.ts'
+import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
+import { GhDispatchCandidates } from '../../src/infrastructure/gh-dispatch-candidates.ts'
+import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
+import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import {
   WorkspaceFailure, WorkspaceNotCleaned, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood,
   CheckoutNotConfirmed, CheckoutNotOnDefaultBranch, CheckoutNotUpToDate,
   PlanCleanupConflict, PlanCleanupNotRead, PlanCleanupNotUnderstood,
 } from '../../src/domain/exceptions.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { PlanIssueStatus, type PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RootedWorkspaceLocation } from '../../src/domain/value-objects/rooted-workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
@@ -1368,6 +1378,299 @@ describe('GitWorkspace unused dispatch cleanup', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('GitWorkspace cleanup retirement', () => {
+  const roots: string[] = []
+  const watchTemplate = UnlaunchedWorkspaceDouble.WATCH
+  const agent = watchTemplate.agent
+  const nextAgent = '22222222-2222-4222-8222-222222222222'
+  const repository = watchTemplate.repository
+  const issue = watchTemplate.issue
+  const root = watchTemplate.located.root!
+  const worktree = watchTemplate.located.path
+  const dispatchCheck = '/fixture/plugin/dist/dispatch-check.js'
+  const startedAt = '2026-09-16T10:00:00.000Z'
+
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((stateRoot) => rm(stateRoot, { recursive: true, force: true })))
+  })
+
+  class DurableBytes {
+    static dispatch(sownRoot: string, sownWorktree: string): string {
+      return `${JSON.stringify({
+        repository: repository.text,
+        issue: { number: issue.number, url: issue.url },
+        story: null,
+        root: sownRoot,
+        worktree: sownWorktree,
+        branch: watchTemplate.located.branch,
+        startedAt,
+      }, null, 2)}\n`
+    }
+
+    static proof(): string {
+      return `${JSON.stringify({
+        conversation: agent,
+        callId: null,
+        source: 'before-worker',
+        diagnostic: 'worker never started',
+        observedAt: startedAt,
+      }, null, 2)}\n`
+    }
+  }
+
+  it.each(['full cleanup', 'branch removal', 'checked requeue', 'archive rename'] as const)(
+    'durable cleanup retries preserve evidence and finish retirement after %s', async (cut) => {
+      const fixture = await mkdtemp(join(tmpdir(), `ct-workspace-${cut.replace(' ', '-')}-`))
+      roots.push(fixture)
+      const stateRoot = join(fixture, 'state')
+      const active = join(stateRoot, DiskPlanRecords.DIRECTORY, agent)
+      const descriptorPath = join(active, 'dispatch.json')
+      const proofPath = join(active, DiskPlanRecords.NON_LAUNCH)
+      const snapshotPath = join(active, DiskPlanRecords.CLEANUP_EVIDENCE)
+      const descriptorBytes = DurableBytes.dispatch(root, worktree)
+      const proofBytes = DurableBytes.proof()
+      await mkdir(active, { recursive: true })
+      await writeFile(descriptorPath, descriptorBytes)
+      await writeFile(proofPath, proofBytes)
+
+      let faultEnabled = cut !== 'full cleanup'
+      let status: PlanIssueStatusValue = PlanIssueStatus.IN_PROGRESS
+      let successfulRequeues = 0
+      const statusArgv = ['issue', 'view', String(issue.number), '--repo', repository.text, '--json', 'labels']
+      const requeueArgv = [dispatchCheck, String(issue.number), '--repo', repository.text, '--requeue']
+      const checkout = new UnlaunchedWorkspaceDouble()
+      if (cut === 'branch removal') {
+        checkout.deleteFailure = new ProcessOutput({ code: 1, stdout: '', stderr: 'scripted branch removal refusal' })
+      }
+      const files = (): HeadlessFiles => new HeadlessFiles({
+        root: stateRoot,
+        fs: {
+          ...fs,
+          rename: async (source, destination) => {
+            if (cut === 'archive rename' && faultEnabled && String(source) === active) {
+              throw Object.assign(new Error('scripted archive rename refusal'), { code: 'EACCES' })
+            }
+            await fs.rename(source, destination)
+          },
+        },
+        newId: () => 'temporary-record',
+      })
+      const records = (): DiskPlanRecords => new DiskPlanRecords({
+        files: files(),
+        newId: () => nextAgent,
+        now: () => startedAt,
+        exists: async (path) => fs.stat(path).then(() => true, () => false),
+      })
+      const action = (): CleanupPlan => {
+        const claims = new DispatchCheckClaims({
+          dispatchCheck,
+          node: async (argv, options) => {
+            expect(argv).toEqual(requeueArgv)
+            expect(options).toEqual({ cwd: root })
+            if (cut === 'checked requeue' && faultEnabled) {
+              return new ProcessOutput({ code: 1, stdout: '', stderr: 'scripted checked requeue refusal' })
+            }
+            status = PlanIssueStatus.READY
+            successfulRequeues += 1
+            return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
+          },
+        })
+        const planIssues = new GhPlanIssues({
+          gh: new Gh({
+            launch: async (argv) => {
+              expect(argv).toEqual(statusArgv)
+              return new ProcessOutput({
+                code: 0,
+                stdout: JSON.stringify({ labels: [{ name: `status:${status}` }] }),
+                stderr: '',
+              })
+            },
+            policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+            sleep: async () => {},
+          }),
+        })
+        return new CleanupPlan({ records: records(), workspace: checkout.workspace(), claims, planIssues })
+      }
+      const params = new CleanupPlanParams({ agent, issue: issue.number, repository })
+      const initialRecords = records()
+      const watch = await initialRecords.recorded(agent)
+      expect(watch).not.toBeNull()
+      expect(await readFile(descriptorPath, 'utf8')).toBe(descriptorBytes)
+      expect(await readFile(proofPath, 'utf8')).toBe(proofBytes)
+
+      const initialWorkspace = action().workspace
+      await expect(initialWorkspace.confirmAbsent(watch!)).rejects.toThrow('remains after cleanup')
+
+      if (cut !== 'full cleanup') {
+        await expect(action().execute(params)).rejects.toThrow(cut === 'branch removal'
+          ? 'scripted branch removal refusal'
+          : cut === 'checked requeue' ? 'scripted checked requeue refusal' : 'scripted archive rename refusal')
+
+        const snapshotBytes = await readFile(snapshotPath, 'utf8')
+        expect(await readFile(descriptorPath, 'utf8')).toBe(descriptorBytes)
+        expect(await readFile(proofPath, 'utf8')).toBe(proofBytes)
+        expect(await readFile(snapshotPath, 'utf8')).toBe(snapshotBytes)
+        expect(snapshotBytes).toContain(`"baseSha": "${UnlaunchedWorkspaceDouble.BASE}"`)
+        expect(await initialRecords.recorded(agent)).toEqual(watch)
+        expect(await initialRecords.retired(agent)).toBeNull()
+
+        expect(checkout.worktreePresent).toBe(false)
+        expect(checkout.calls).toContainEqual(['-C', root, 'worktree', 'remove', worktree])
+        if (cut === 'branch removal') {
+          expect(checkout.branchPresent).toBe(true)
+          expect(checkout.branchTip).toBe(UnlaunchedWorkspaceDouble.BASE)
+          expect(status).toBe(PlanIssueStatus.IN_PROGRESS)
+          expect(successfulRequeues).toBe(0)
+        } else {
+          expect(checkout.branchPresent).toBe(false)
+          expect(status).toBe(cut === 'archive rename' ? PlanIssueStatus.READY : PlanIssueStatus.IN_PROGRESS)
+          expect(successfulRequeues).toBe(cut === 'archive rename' ? 1 : 0)
+        }
+
+        faultEnabled = false
+        checkout.deleteFailure = null
+        await action().execute(params)
+        const retiredAfterRetry = join(stateRoot, DiskPlanRecords.RETIRED_DIRECTORY, agent)
+        expect(await readFile(join(retiredAfterRetry, DiskPlanRecords.CLEANUP_EVIDENCE), 'utf8')).toBe(snapshotBytes)
+      } else {
+        await action().execute(params)
+      }
+
+      const retired = join(stateRoot, DiskPlanRecords.RETIRED_DIRECTORY, agent)
+      const retiredSnapshotBytes = await readFile(join(retired, DiskPlanRecords.CLEANUP_EVIDENCE), 'utf8')
+      expect(await records().recorded(agent)).toBeNull()
+      expect(await records().retired(agent)).toEqual(watch)
+      expect(await readFile(join(retired, 'dispatch.json'), 'utf8')).toBe(descriptorBytes)
+      expect(await readFile(join(retired, DiskPlanRecords.NON_LAUNCH), 'utf8')).toBe(proofBytes)
+      expect(retiredSnapshotBytes).toContain(`"baseSha": "${UnlaunchedWorkspaceDouble.BASE}"`)
+      expect(await records().cleanupEvidence(watch!)).toBeNull()
+      await expect(fs.stat(active)).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(checkout.worktreePresent).toBe(false)
+      expect(checkout.branchPresent).toBe(false)
+      expect(checkout.calls).toContainEqual(['-C', root, 'branch', '-d', watchTemplate.located.branch])
+      expect(status).toBe(PlanIssueStatus.READY)
+      expect(successfulRequeues).toBe(1)
+      await expect(initialWorkspace.confirmAbsent(watch!)).resolves.toBeUndefined()
+
+      const candidateIssue = {
+        number: issue.number,
+        url: issue.url,
+        title: 'Cleanup candidate',
+        body: '<!-- ct-order:1 -->',
+        state: 'OPEN',
+        stateReason: null,
+        milestone: { number: issue.number, title: 'CT331', description: null },
+        labels: { nodes: [{ name: `status:${status}` }, { name: 'gate:none' }] },
+      }
+      const page = (nodes: unknown[]): string => JSON.stringify([
+        { data: { repository: { issues: { nodes, pageInfo: { hasNextPage: false, endCursor: null } } } } },
+      ])
+      const [owner, name] = repository.text.split('/')
+      const candidates = new GhDispatchCandidates({
+        gh: new Gh({
+          launch: async (argv) => {
+            const state = argv.some((argument) => argument.includes('states:[OPEN]')) ? 'OPEN' : 'CLOSED'
+            expect(argv).toEqual([
+              'api', 'graphql', '--paginate', '--slurp',
+              '-f', `query=${issuesQueryFor([state])}`, '-f', `owner=${owner}`, '-f', `name=${name}`,
+            ])
+            return new ProcessOutput({
+              code: 0,
+              stdout: page(state === 'OPEN' ? [candidateIssue] : []),
+              stderr: '',
+            })
+          },
+          policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+          sleep: async () => {},
+        }),
+      })
+      const admissible = await candidates.admissible({ repository, milestone: 'CT331' })
+      expect(admissible).toEqual([issue])
+      const candidate = admissible[0]
+      const prepared = await records().prepare(new PlanBriefing({
+        story: null,
+        issue: candidate,
+        repository,
+        located: watch!.located,
+      }))
+      expect(prepared.agent).toBe(nextAgent)
+      expect(await records().recorded(nextAgent)).toEqual(prepared)
+      expect(await readFile(join(stateRoot, DiskPlanRecords.DIRECTORY, nextAgent, 'dispatch.json'), 'utf8'))
+        .toContain(`"number": ${issue.number}`)
+    },
+  )
+
+  it('invalid checkout queries never prove absence', async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'ct-invalid-cleanup-checkout-'))
+    roots.push(fixture)
+    const invalidRoot = join(fixture, 'missing-checkout')
+    const invalidWorktree = join(invalidRoot, '.worktrees', String(issue.number))
+    const stateRoot = join(fixture, 'state')
+    const active = join(stateRoot, DiskPlanRecords.DIRECTORY, agent)
+    const descriptorBytes = DurableBytes.dispatch(invalidRoot, invalidWorktree)
+    const proofBytes = DurableBytes.proof()
+    await mkdir(active, { recursive: true })
+    await writeFile(join(active, 'dispatch.json'), descriptorBytes)
+    await writeFile(join(active, DiskPlanRecords.NON_LAUNCH), proofBytes)
+    const records = new DiskPlanRecords({
+      files: new HeadlessFiles({ root: stateRoot, fs, newId: () => 'temporary-record' }),
+      newId: () => nextAgent,
+      now: () => startedAt,
+      exists: async () => false,
+    })
+    let requeues = 0
+    const claims = new DispatchCheckClaims({
+      dispatchCheck,
+      node: async () => {
+        requeues += 1
+        throw new Error('invalid checkout must stop before requeue')
+      },
+    })
+    const planIssues = new GhPlanIssues({
+      gh: new Gh({
+        launch: async (argv) => {
+          expect(argv).toEqual(['issue', 'view', String(issue.number), '--repo', repository.text, '--json', 'labels'])
+          return new ProcessOutput({
+            code: 0,
+            stdout: JSON.stringify({ labels: [{ name: 'status:in-progress' }] }),
+            stderr: '',
+          })
+        },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    const workspace = new GitWorkspace({
+      preparation: PreparationMother.check(),
+      run: async () => new ProcessOutput({
+        code: 128, stdout: '', stderr: `fatal: cannot change to '${invalidRoot}': No such file or directory`,
+      }),
+      write: async () => {},
+      read: async () => null,
+      stderr: () => {},
+      baseline: new Baseline({ run: async () => ({ code: 0, stdout: '', stderr: '' }), read: () => '' }),
+      gh: new Gh({
+        launch: async () => { throw new Error('invalid checkout must stop before GitHub') },
+        policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+        sleep: async () => {},
+      }),
+    })
+    const cleanup = new CleanupPlan({ records, workspace, claims, planIssues })
+    const watch = await records.recorded(agent)
+
+    await expect(cleanup.execute(new CleanupPlanParams({
+      agent, issue: issue.number, repository,
+    }))).rejects.toThrow('checkout remote could not be read')
+
+    expect(requeues).toBe(0)
+    expect(await records.recorded(agent)).toEqual(watch)
+    expect(await records.retired(agent)).toBeNull()
+    expect(await readFile(join(active, 'dispatch.json'), 'utf8')).toBe(descriptorBytes)
+    expect(await readFile(join(active, DiskPlanRecords.NON_LAUNCH), 'utf8')).toBe(proofBytes)
+    await expect(fs.stat(join(active, DiskPlanRecords.CLEANUP_EVIDENCE))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })
 

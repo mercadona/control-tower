@@ -7,7 +7,6 @@ export class ProcessRatchet {
   static readonly BORDER = '/process-border.ts'
 
   static readonly LISTED: readonly string[] = [
-    'infrastructure/git-workspace-real-process.test.ts',
     'infrastructure/makefile-local-env.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
     'yardstick-real-process.test.ts',
