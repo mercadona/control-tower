@@ -494,3 +494,19 @@ describe('PtyLiveSessions with real processes', () => {
     expect(sessions.find(other.id)).toBe(other)
   })
 })
+
+describe('the process table this host reads', () => {
+  const read = (): TableRead => ({ abort: new AbortController().signal, timeoutMs: 2_000, maxBufferBytes: 4_194_304 })
+
+  it.runIf(process.platform === 'linux')('on Linux it comes from /proc, with this process and its start ticks in it', async () => {
+    const table = await SystemProcesses.forThisHost().readTable(read())
+
+    expect(table).toMatch(new RegExp(`^${process.pid} \\d+ @\\d+$`, 'm'))
+  })
+
+  it.runIf(process.platform !== 'linux')('elsewhere it comes from ps, with this process and its start time in it', async () => {
+    const table = await SystemProcesses.forThisHost().readTable(read())
+
+    expect(table).toMatch(new RegExp(`^\\s*${process.pid}\\s+\\d+\\s+\\w{3} \\w{3} [ \\d]\\d \\d{2}:\\d{2}:\\d{2} \\d{4}\\s*$`, 'm'))
+  })
+})
