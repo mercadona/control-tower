@@ -107,6 +107,12 @@ export class PlanningActivityFailure extends PlanFailure {}
 
 export class PlanningActivityNotRead extends PlanningActivityFailure {}
 
+export class SliceBaselineFailure extends PlanFailure {}
+
+export class SliceBaselineNotRead extends SliceBaselineFailure {}
+
+export class SliceBaselineNotUnderstood extends SliceBaselineFailure {}
+
 export class ImplementationProgressFailure extends PlanFailure {}
 
 export class ImplementationProgressNotRead extends ImplementationProgressFailure {}
