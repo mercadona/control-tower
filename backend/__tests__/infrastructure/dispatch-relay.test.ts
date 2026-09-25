@@ -14,8 +14,9 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import {
-  DispatchNotAvailable, DispatchNotRead, EpicSpecNotRead, PlanAgentNotLaunched,
+  DispatchNotAvailable, DispatchNotRead, DispatchWaitsBehind, EpicSpecNotRead, PlanAgentNotLaunched,
 } from '../../src/domain/exceptions.ts'
+import { DispatchWait } from '../../src/domain/value-objects/dispatch-wait.ts'
 import type { PlanFailure } from '../../src/domain/exceptions.ts'
 
 type DispatchAsked = { repository: RepositoryName, root: CheckoutRoot, milestone: string }
@@ -52,6 +53,10 @@ class Mother {
     return new PlanIssue({ number, url: `https://github.com/josemerca/ct-loop-sandbox/issues/${number}` })
   }
 
+  static waitingBehind(holder = 985, token = 'area:tasks'): DispatchWaitsBehind {
+    return new DispatchWaitsBehind(new DispatchWait({ waiting: 1000, token, holder, holderStatus: 'in-progress' }))
+  }
+
   static notStarted(number: number, cause: PlanFailure): SliceNotStarted {
     return new SliceNotStarted({ issue: Mother.issue(number), repository: Mother.REPOSITORY, cause })
   }
@@ -65,7 +70,7 @@ class Relaying {
   readonly milestonesAnswer: AuthorisedMilestones | Error
   readonly own: string | null | Error
   readonly ownAsked: { root: CheckoutRoot, repository: RepositoryName }[]
-  readonly answers: ReadonlyMap<string, DispatchAnswer>
+  readonly answers: Map<string, DispatchAnswer>
   readonly dispatchAsked: DispatchAsked[]
   readonly written: string[]
   readonly inFlight: WorkInFlight
@@ -80,7 +85,7 @@ class Relaying {
   }: {
     milestones?: AuthorisedMilestones | Error,
     own?: string | null | Error,
-    answers?: ReadonlyMap<string, DispatchAnswer>,
+    answers?: Map<string, DispatchAnswer>,
     inFlight?: WorkInFlight,
     during?: (inFlight: WorkInFlight) => void,
   } = {}) {
@@ -98,8 +103,23 @@ class Relaying {
     return new Relaying({ answers: new Map([[milestone, answer]]) })
   }
 
+  #relay: DispatchRelay | null = null
+
+  answeringNext(milestone: string, answer: DispatchAnswer): Relaying {
+    this.answers.set(milestone, answer)
+
+    return this
+  }
+
   async run(): Promise<Relaying> {
-    const relay = new DispatchRelay({
+    this.#relay ??= this.#built()
+    await this.#relay.relay(Mother.ROOT, Mother.REPOSITORY)
+
+    return this
+  }
+
+  #built(): DispatchRelay {
+    return new DispatchRelay({
       milestones: () => this.milestonesAnswer instanceof Error
         ? Promise.reject(this.milestonesAnswer)
         : Promise.resolve(this.milestonesAnswer),
@@ -117,9 +137,6 @@ class Relaying {
       inFlight: this.inFlight,
       stderr: (line) => this.written.push(line),
     })
-    await relay.relay(Mother.ROOT, Mother.REPOSITORY)
-
-    return this
   }
 }
 
@@ -203,6 +220,43 @@ describe('DispatchRelay', () => {
 
     expect(full.written).toEqual([])
     expect(readFailure.written).toEqual([RelayLine.refusedIn(Mother.REPOSITORY, Mother.MILESTONE, unread)])
+  })
+
+  it('a slice waiting behind held tokens writes one line naming the holder, its status and the token', async () => {
+    const relaying = await Relaying.answering(Mother.MILESTONE, Mother.waitingBehind()).run()
+
+    expect(relaying.written).toEqual([
+      `relay: ${Mother.REPOSITORY.text} milestone "${Mother.MILESTONE}" waits: #1000 shares area:tasks with #985 (in-progress)\n`,
+    ])
+  })
+
+  it('the same wait on the next sweeps writes nothing more', async () => {
+    const relaying = await Relaying.answering(Mother.MILESTONE, Mother.waitingBehind()).run()
+
+    await relaying.run()
+    await relaying.run()
+
+    expect(relaying.written).toHaveLength(1)
+  })
+
+  it('a wait behind other work writes a new line', async () => {
+    const relaying = await Relaying.answering(Mother.MILESTONE, Mother.waitingBehind(985)).run()
+
+    await relaying.answeringNext(Mother.MILESTONE, Mother.waitingBehind(990, 'touches:api')).run()
+
+    expect(relaying.written).toEqual([
+      `relay: ${Mother.REPOSITORY.text} milestone "${Mother.MILESTONE}" waits: #1000 shares area:tasks with #985 (in-progress)\n`,
+      `relay: ${Mother.REPOSITORY.text} milestone "${Mother.MILESTONE}" waits: #1000 shares touches:api with #990 (in-progress)\n`,
+    ])
+  })
+
+  it('a wait that comes back after the milestone dispatched is written again', async () => {
+    const relaying = await Relaying.answering(Mother.MILESTONE, Mother.waitingBehind()).run()
+
+    await relaying.answeringNext(Mother.MILESTONE, Mother.dispatching(Mother.started(1001))).run()
+    await relaying.answeringNext(Mother.MILESTONE, Mother.waitingBehind()).run()
+
+    expect(relaying.written.filter((line) => line.includes('waits:'))).toHaveLength(2)
   })
 
   it('the clock never refuses the cabin: a request can reserve the repository while the relay is dispatching', async () => {
