@@ -15,7 +15,6 @@ export class ProcessRatchet {
     'infrastructure/makefile-local-env.test.ts',
     'infrastructure/recorded-plan-recovery.test.ts',
     'infrastructure/run-plan-recovery.test.ts',
-    'infrastructure/session-channel-real-process.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
     'yardstick-real-process.test.ts',
   ]
