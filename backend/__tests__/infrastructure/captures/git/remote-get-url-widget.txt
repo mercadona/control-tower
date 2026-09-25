@@ -1,0 +1,8 @@
+command: git remote get-url --all origin
+version: git version 2.50.1 (Apple Git-155)
+date: 2026-09-25
+exit: 0
+--- stdout
+https://github.com/acme/widget.git
+
+--- stderr
