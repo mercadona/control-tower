@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -10,12 +10,14 @@ import { StartedPlanCall } from '../../src/domain/value-objects/plan-call.ts'
 import { CallDescriptor, CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { HeadlessCallWorker } from '../../src/infrastructure/headless-call-worker.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
-class FakeChild extends ChildProcess {
+class FakeChild extends EventEmitter implements LaunchedProcess {
+  readonly pid: number
+
   constructor(pid: number) {
     super()
-    Object.defineProperty(this, 'pid', { value: pid })
+    this.pid = pid
   }
 
   accepted(): void {
@@ -29,6 +31,14 @@ class FakeChild extends ChildProcess {
   failed(cause: Error): void {
     this.emit('error', cause)
   }
+
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
 }
 
 class ManualClock {

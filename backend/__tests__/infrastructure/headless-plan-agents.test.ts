@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs/promises'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -20,7 +20,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
 class Deferred<T> {
   readonly promise: Promise<T>
@@ -123,11 +123,19 @@ class ContinuationDouble extends ContinuePlan {
   }
 }
 
-class AcceptedChild extends ChildProcess {
+class AcceptedChild extends EventEmitter implements LaunchedProcess {
   constructor() {
     super()
     queueMicrotask(() => this.emit('message', { kind: 'accepted' }))
   }
+
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
 }
 
 class HeadlessMother {
