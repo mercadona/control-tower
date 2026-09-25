@@ -2,13 +2,6 @@ name: Continuous Integration
 
 on:
   pull_request:
-  # A suite reports only on the pull requests that touch its own package, so a
-  # test that fails intermittently in another package is counted by nobody. One
-  # did: #406 failed for days and surfaced only because #404 happened to touch a
-  # root-level file and turned every suite on. Running on `main` gives every
-  # suite somewhere to report from that is nobody's pull request (#407).
-  push:
-    branches: [main]
   # The queue builds each entry on top of the ones ahead of it and runs the
   # checks THERE, which is the only place the combination of two pull requests
   # is ever measured: whichever lands second sits on a tree its own run never
@@ -21,13 +14,23 @@ on:
   # them were, and `gh pr checks` reports nothing at all for a run in that
   # state. Queuing is done by a person, so the `merge_group` run is theirs and
   # is not held.
+  #
+  # A queue build also turns every suite on, which is why there is no `push`
+  # trigger on `main`. A suite reports only on the pull requests that touch its
+  # own package, so a test that fails intermittently in another package was
+  # counted by nobody: #406 failed for days and surfaced only because #404
+  # happened to touch a root-level file. A run on `main` was added to give every
+  # suite somewhere to report from (#407). The queue build is that place now,
+  # and it runs before the merge instead of after it. A `push` run measured the
+  # tree the queue build had already measured, so every merged pull request ran
+  # the whole CI twice for one result.
   merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Cancelling is right for a pull request: only its newest commit matters. On
-  # `main` it is wrong — two merges in a row would cancel the first, and the
-  # first is a measurement of a commit that is now shipped.
+  # Cancelling is right for a pull request: only its newest commit matters. A
+  # queue build is the measurement of what is about to land on `main`, so it is
+  # never cancelled; each one has a ref of its own anyway.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The plugin lives in plugin/ (the `source` the marketplace distributes), the
@@ -52,9 +55,10 @@ concurrency:
 # installed cold. The frontend job could not even warm its own: it was killed
 # during the install, before the step that saves the cache.
 #
-# The `push` trigger on `main` changes that as a side effect: those runs write
-# caches every pull request can read. It is not a fix to lean on — the cache
-# key is the lockfile's hash (`cache-dependency-path`), so every release
+# warm-caches.yml changes that: it installs on `main` and nothing else, so it
+# writes caches every pull request can read. A queue build cannot do it,
+# because its ref is not the default branch. It is not a fix to lean on — the
+# cache key is the lockfile's hash (`cache-dependency-path`), so every release
 # invalidates all three at once, as #152 did on 2026-09-17. Between releases,
 # which are weeks apart, an install can be warm. The 15-minute budget below
 # stays either way.
@@ -131,11 +135,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # A run on `main`, and a queue build, have no pull request to compare
-          # against, so there is no diff to filter by and every suite is turned
-          # on. Not a fallback: that is the whole point of running there, and in
-          # the queue it is what makes an entry measured against the tree it is
-          # about to become rather than against the one it forked from.
+          # A queue build has no pull request to compare against, so there is
+          # no diff to filter by and every suite is turned on. Not a fallback:
+          # that is the whole point of running there, because it is what makes
+          # an entry measured against the tree it is about to become rather than
+          # against the one it forked from.
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             {
               echo "plugin=true"
