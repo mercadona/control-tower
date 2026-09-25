@@ -23,13 +23,13 @@ class Scenario {
     })
   }
 
-  static async ready(root: string): Promise<{
+  static async ready(root: string, capture: Capture = Capture.read('claude', 'result-success')): Promise<{
     claude: ScriptedClaude,
     workers: InProcessWorkers,
     calls: ClaudeCalls,
   }> {
     const files = new HeadlessFiles({ root, fs, newId: () => 'temporary-record' })
-    const claude = new ScriptedClaude(Capture.read('claude', 'result-success'))
+    const claude = new ScriptedClaude(capture)
     const workers = new InProcessWorkers({ files, claude, worker: Scenario.WORKER })
     const calls = new ClaudeCalls({
       files,
@@ -80,5 +80,26 @@ describe('a real ClaudeCalls over InProcessWorkers', () => {
     expect(() => workers.launch('/bin/sh', ['-c', 'echo hi'], { cwd: root, stdio: ['ignore', 'ignore', 'ignore'] }))
       .toThrow(`nobody wrote an answer for /bin/sh -c echo hi in ${root}`)
     expect(workers.launches).toBe(0)
+  })
+
+  it('a claude that refuses and a claude whose output nobody can read complete apart', async () => {
+    const refusedRoot = await mkdtemp(join(tmpdir(), 'ct-in-process-workers-'))
+    const unreadableRoot = await mkdtemp(join(tmpdir(), 'ct-in-process-workers-'))
+    roots.push(refusedRoot, unreadableRoot)
+
+    const refused = await Scenario.ready(refusedRoot, Capture.read('claude', 'result-turn-limit'))
+    const refusedCall = await refused.calls.start(Scenario.invocation(refusedRoot))
+    await refused.workers.settled()
+    const refusedCompletion = await refused.calls.wait(refusedCall)
+
+    const unreadable = await Scenario.ready(unreadableRoot, Capture.read('claude', 'result-text'))
+    const unreadableCall = await unreadable.calls.start(Scenario.invocation(unreadableRoot))
+    await unreadable.workers.settled()
+    const unreadableCompletion = await unreadable.calls.wait(unreadableCall)
+
+    expect(refusedCompletion.execution).toEqual({ kind: 'error', diagnostic: 'Claude reported error_max_turns' })
+    expect(refusedCompletion.code).toBe(1)
+    expect(unreadableCompletion.execution).toEqual({ kind: 'unavailable', diagnostic: 'Claude stream ended with malformed JSON' })
+    expect(unreadableCompletion.code).toBe(0)
   })
 })
