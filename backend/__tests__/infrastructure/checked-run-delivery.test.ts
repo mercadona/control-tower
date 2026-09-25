@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import type { CheckedRunDelivery } from '../../src/infrastructure/checked-run-delivery.ts'
 import type { ProcessTable } from '../../src/infrastructure/process-table.ts'
@@ -184,5 +184,44 @@ describe('a whole publication runs in process', () => {
     expect((await rebuilt.inspect(watch)).kind).toBe('uncertain')
     await expect(PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch)).rejects.toThrow()
     expect(release.releases).toHaveLength(before)
+  })
+
+  it('adopts the single PR created before an interrupted response instead of creating another', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    release.next({ kind: 'refused' })
+    release.next({ kind: 'released' })
+    const finishCreate = github.holdNextCreate('before')
+
+    const interrupted = delivery.deliver(watch)
+    void interrupted.catch(() => {})
+    await vi.waitFor(() => expect(github.pulls).toHaveLength(1))
+
+    await expect(PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch))
+      .rejects.toThrow('checked release failed')
+    await PublicationScenario.rebuild(run, table, origin, github, release).deliver(watch)
+
+    expect(github.pulls).toHaveLength(1)
+    finishCreate()
+    await expect(interrupted).rejects.toThrow('conflicting journal evidence')
+  })
+
+  it('reads a live publication as publishing and only its own pull request creation as in flight', async () => {
+    const { run, watch, table, origin, github, release, delivery } = await PublicationScenario.arranged()
+    runs.push(run)
+    release.next({ kind: 'refused' })
+    const finishCreate = github.holdNextCreate('after')
+
+    const publishing = delivery.deliver(watch)
+    void publishing.catch(() => {})
+    await vi.waitFor(async () => expect(await delivery.inspect(watch)).toEqual({
+      kind: 'publishing', pullRequest: null, diagnostic: 'pull request creation is in flight',
+    }))
+
+    expect(await PublicationScenario.rebuild(run, table, origin, github, release).inspect(watch)).toEqual({
+      kind: 'uncertain', pullRequest: null, diagnostic: 'pull request creation has an unknown effect',
+    })
+    finishCreate()
+    await expect(publishing).rejects.toThrow('checked release failed')
   })
 })
