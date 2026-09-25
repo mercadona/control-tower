@@ -21,7 +21,6 @@ export class ProcessRatchet {
     'infrastructure/run-plan-recovery.test.ts',
     'infrastructure/session-channel-real-process.test.ts',
     'infrastructure/state-directory-real-process.test.ts',
-    'infrastructure/tool-runner-real-process.test.ts',
     'infrastructure/tool-runner-whole-output-real-process.test.ts',
     'yardstick-real-process.test.ts',
   ]
