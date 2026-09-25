@@ -36,6 +36,7 @@ class PublishReslicingSpy extends PublishReslicing {
     super({
       specs: new EpicSpecs(), branch: new EpicBranch(), pullRequests: new PullRequests(),
       revisions: new SpecRevision({ digest: (text) => text }),
+      returning: { execute: async () => null },
     })
     this.asked = []
     this.answer = answer

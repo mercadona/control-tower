@@ -378,7 +378,11 @@ and feedback go directly into the coordinating conversation.
 **Puerta 1 · Congelación del spec.** The panel polls `GET /spec-freeze` and
 shows the yardstick's findings over the spec on disk. **Congelar el spec** stays
 disabled while any finding remains. Pressing it mutates `DRAFT → CONGELADA` and
-opens a pull request — gate 1 ends in a pull request, and a person merges it.
+opens a pull request — gate 1 ends in a pull request, and a person merges it. The
+spec is published from a `milestone/<story>-execution` branch the backend cuts in
+the clone. Once a spec pull request of that branch merges, the freeze or a new
+slicing, the backend's own sweep switches the clone back to the default branch,
+brings it up to date and deletes the milestone branch here and on the remote.
 
 **Puerta 2 · El groom y la autorización.** Once that pull request merges, the
 panel shows the dry run's product: the issues the groom would create, ordered

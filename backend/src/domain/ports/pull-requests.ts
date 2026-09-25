@@ -36,6 +36,17 @@ export class PullRequests {
     )
   }
 
+  async mergedHeadOf({ branch, repository, into }: {
+    branch: string,
+    repository: RepositoryName,
+    into: string,
+  }): Promise<string | null> {
+    throw new Error(
+      `${this.constructor.name} must implement mergedHeadOf({ branch, repository, into }) and answer the head commit `
+      + `of the latest pull request of ${branch} merged into ${into} of ${repository}, or null`
+    )
+  }
+
   async open({ repository, branch, title, body }: {
     repository: RepositoryName,
     branch: string,
