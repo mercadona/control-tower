@@ -64,7 +64,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent, expectedCommits } from './run-machine.js'
 import { JudgedUnit } from './judged-unit.js'
-import { RunClosure } from './run-closure.js'
+import { RunClosure, ReopenRefused } from './run-closure.js'
+import { ReopenedBrief } from './reopened-brief.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { LoopFootprint, FootprintOutcome } from './loop-footprint.js'
@@ -368,23 +369,20 @@ if (runExisted) {
   // `lastFailure`, which `RunClosure.outcomeOf` reads.
   if (RunClosure.REOPENABLE.includes(run.closed)) {
     const WAY_OUT = RunClosure.wayOut({ run, issue, planPath, subject: unit.vetoedName })
-    // Only the judge's closure is lifted here; a `reopen` of the other two is,
-    // for now, the sequence error at the end of this block.
-    if (verb === 'reopen' && run.closed === RUN_STATES.BLOCKED_JUDGE) {
+    if (verb === 'reopen') {
       const instruction = arg('--instruction')
       if (typeof instruction !== 'string' || instruction.trim() === '') {
         die(`reopen needs --instruction "<text>": ${WAY_OUT}`, EXIT.USAGE)
       }
-      // The three fields a third veto leaves behind, and nothing else. The
-      // DISCARDS ARE NOT RESET: they count an answer that could not be read,
-      // which is a different failure from a judgement that said no, and clearing
-      // them here would hide a judge that is illegible behind a person's
-      // patience. The instruction travels as `lastAdvice` because that is the
-      // field the implementer's brief already appends (see adviceSection): the
-      // person's words reach the implementer by the road the adviser's already
-      // take.
-      const { closed: _lifted, ...reopened } = run
-      run = { ...reopened, step: STEPS.IMPLEMENT, judgeRetries: 0, lastAdvice: instruction }
+      // What each closure leaves behind is reset, and nothing else: the
+      // DISCARDS ARE NOT RESET, because they count an answer that could not be
+      // read, which is a different failure from a judgement that said no or a
+      // command that went red. The instruction travels as `lastAdvice`, the
+      // field the implementer's brief already appends; the controls and the
+      // Global verification also leave `reopenedFrom`, so the brief carries
+      // their log with it (see ReopenedBrief).
+      const closure = run.closed
+      run = RunClosure.reopen(run, instruction)
       // Not `save()`: that helper is a `const` declared further down in this
       // same module scope, and this block runs at load time, before that
       // declaration is reached — calling it here is a temporal-dead-zone
@@ -398,7 +396,7 @@ if (runExisted) {
           state: RUN_STATES.OPEN, outcome: OUTCOMES.DONE, exit: EXIT.OK,
         }).text())
       }
-      out(`run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round, and the judge will look again. Ask for the step with "ct-step next".`)
+      out(reopenedLine(closure))
       process.exit(EXIT.OK)
     }
     if (verb === 'next') {
@@ -437,13 +435,15 @@ if (runExisted) {
     }
     die(WAY_OUT, EXIT.WRONG_STEP)
   }
-  // `reopen` outside its closure: the run is not the judge's to give back.
+  // `reopen` outside its closures: there is nothing a person can give back.
+  // `RunClosure.reopen` is the one that knows it, so its refusal is the message.
   if (verb === 'reopen') {
-    die(
-      `the run of issue ${issue} is not closed at ${RUN_STATES.BLOCKED_JUDGE}: it stands at step ${run.step}, `
-      + 'so there is nothing to reopen.',
-      EXIT.WRONG_STEP,
-    )
+    try {
+      RunClosure.reopen(run, arg('--instruction'))
+    } catch (e) {
+      if (!(e instanceof ReopenRefused)) throw e
+      die(e.message, EXIT.WRONG_STEP)
+    }
   }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
@@ -1064,8 +1064,48 @@ function writeBrief() {
   // message says so itself—, so an approach announced outside it is an approach
   // that depends on the session copying it. It goes AT THE END, after the
   // yardstick: it is the last thing decided about this task.
-  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+  appendAdvice(brief)
   return brief
+}
+
+// The last thing a brief carries: a reopened controls or Global verification
+// closure brings the person's instruction and the log that closed the run;
+// anything else, the advice as it always did.
+function appendAdvice(brief) {
+  if (run.reopenedFrom) {
+    appendFileSync(brief, ReopenedBrief.section({
+      closure: run.reopenedFrom, instruction: run.lastAdvice, ...lastFailureLog(),
+    }))
+    return
+  }
+  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+}
+
+// The log `lastFailure` names, and its text — null when there is no failure
+// left to read (green controls clear it) or the read throws, which the brief
+// then says instead of leaving it out.
+function lastFailureLog() {
+  const logPath = run.lastFailure?.log ?? null
+  if (logPath === null) return { logPath, logText: null }
+  try {
+    return { logPath, logText: readFileSync(logPath, 'utf8') }
+  } catch {
+    return { logPath, logText: null }
+  }
+}
+
+// The line `reopen` prints: it names the closure it lifted. The judge's reads
+// as it always did.
+function reopenedLine(closure) {
+  const ask = 'Ask for the step with "ct-step next".'
+  switch (closure) {
+    case RUN_STATES.BLOCKED_CONTROLS:
+      return `run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round with the control retries at zero. ${ask}`
+    case RUN_STATES.BLOCKED_GLOBAL:
+      return `run reopened at a fix round of issue ${issue}: the implementer fixes what the Global verification showed, and the program then runs it again. ${ask}`
+    default:
+      return `run reopened at ${unit.reopenedAt} of issue ${issue}: the implementer gets another round, and the judge will look again. ${ask}`
+  }
 }
 
 // THE JUDGE'S BRIEF (#111): the same task, the same repo yardstick and the
@@ -1078,7 +1118,7 @@ function writeJudgeBrief() {
   const brief = join(workDir, `${unit.stem}-judge-brief.md`)
   writeBriefBody(brief)
   appendFileSync(brief, repoYardstickSection("the judge's brief"))
-  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
+  appendAdvice(brief)
   return brief
 }
 
@@ -2756,8 +2796,11 @@ function commitVerb() {
   if (unit.commitsForTheSlice) stageTelemetry()
   if (!(git(['diff', '--cached', '--name-only']) || '').trim()) {
     if (unit.commitsForTheSlice) {
-      err("warning: nothing to commit of the judge's review (are the verdict and the telemetry gitignored?) — the run carries on.")
-      run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null }
+      err(unit.nothingToCommitWarning)
+      run = {
+        ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, reopenedFrom: null, lastFailure: null,
+        lastControlsLog: null, sealedTree: null,
+      }
       return OUTCOMES.DONE
     }
     err(`task ${run.task} left nothing staged: there is nothing to commit`)
@@ -2792,10 +2835,13 @@ function commitVerb() {
   // The controls log goes with it too: the next judge to read one is the
   // review's (#530), and the last task's log is no measure of a fix round.
   // `run.task` is still the committed one: the machine advances it afterwards.
-  // Every commit spends its seal. The review commit is a slice commit: the
-  // state load counts it in `sliceCommits`, as it counts the slice verdict's.
+  // Every commit spends its seal. The review and fix round commits are slice
+  // commits: the state load counts them in `sliceCommits`, as it counts the
+  // slice verdict's. `reopenedFrom` and `lastFailure` go with the advice they
+  // came with: the closure they explained is lifted and committed.
   run = {
-    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, lastControlsLog: null, sealedTree: null,
+    ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null, reopenedFrom: null, lastFailure: null,
+    lastControlsLog: null, sealedTree: null,
     ...(unit.commitsForTheSlice ? { sliceCommits: (run.sliceCommits || 0) + 1 } : {}),
   }
   out(unit.committedLine(sha))
