@@ -184,6 +184,13 @@ class OracleMother {
       + '"detail":"run blocked-controls: task 1/3, 0 discard(s)"}\n'
   }
 
+  static controlsRefusalWithFailure(): string {
+    return '{"version":1,"kind":"refusal","state":"blocked-controls","outcome":"failed","exit":4,'
+      + '"run":{"issue":332,"task":1,"tasksTotal":3,"step":"controls","discards":0},'
+      + '"detail":"run blocked-controls: task 1/3, 0 discard(s)",'
+      + '"failure":{"command":"npm test","code":1,"log":".agent/run-332/task-1-controls.log"}}\n'
+  }
+
   static implementReportPath(): string {
     return `${OracleMother.WORKTREE}/.agent/run-332/task-1-report.json`
   }
@@ -1889,6 +1896,29 @@ describe('CtRunMachine grants another round (#521)', () => {
     return vetoed
   }
 
+  const controlsClosedJournal = async (fixture: OracleFixture): Promise<string> => {
+    await fixture.establish()
+    const asked = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(null, OracleMother.nextArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), asked,
+      OracleMother.receipt(
+        OracleMother.output(0, OracleMother.controlsAnnouncementJson()), null, OracleMother.RUN_BYTES,
+      ),
+    )
+    const refused = await fixture.journal.begin(
+      OracleMother.watch(), OracleMother.request(asked, OracleMother.controlsArgv()),
+    )
+    await fixture.journal.finish(
+      OracleMother.watch(), refused,
+      OracleMother.receipt(
+        OracleMother.output(4, OracleMother.controlsRefusalWithFailure()), OracleMother.RUN_BYTES, OracleMother.RUN_BYTES,
+      ),
+    )
+    return refused
+  }
+
   it('the grant runs the reopen verb as the successor of the last command', async () => {
     const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-')))
     roots.push(fixture.root)
@@ -1907,6 +1937,27 @@ describe('CtRunMachine grants another round (#521)', () => {
     expect(entries).toHaveLength(4)
     expect(JSON.parse(entries[2].request)).toMatchObject({
       previous: vetoed, argv: OracleMother.reopenArgv(INSTRUCTION),
+    })
+  })
+
+  it('the grant of a run closed by its controls runs the same reopen verb as the successor of the last command', async () => {
+    const fixture = new OracleFixture(await mkdtemp(join(tmpdir(), 'ct-run-machine-grant-controls-')))
+    roots.push(fixture.root)
+    const refused = await controlsClosedJournal(fixture)
+    fixture.answer(OracleMother.reopenArgv(INSTRUCTION), OracleMother.output(0, OracleMother.openTransition()))
+    fixture.answer(OracleMother.nextArgv(), OracleMother.output(0, OracleMother.implementAnnouncement()))
+
+    const granted = await fixture.machine().anotherRound(OracleMother.watch(), INSTRUCTION)
+
+    expect(granted.work.kind).toBe('call')
+    expect(fixture.asked).toEqual([
+      { argv: OracleMother.reopenArgv(INSTRUCTION), cwd: OracleMother.WORKTREE },
+      { argv: OracleMother.nextArgv(), cwd: OracleMother.WORKTREE },
+    ])
+    const entries = await fixture.journal.entries(OracleMother.watch())
+    expect(entries).toHaveLength(4)
+    expect(JSON.parse(entries[2].request)).toMatchObject({
+      previous: refused, argv: OracleMother.reopenArgv(INSTRUCTION),
     })
   })
 
