@@ -297,9 +297,11 @@ infrastructure/
 
 ## Where the suite runs
 
-From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.ts'`. During a working session, run the fast subset per change and the whole suite before handing anything over.
+From `backend/`, never the repository root: `npx vitest run`. During a working session, run the files a change touches, and the whole suite before handing anything over.
 
-## Testing: a failing test must not leak a process
+## Testing: no test launches a process
 
-This suite launches real processes by design. Every spawned child is
-killed in `afterEach`, not after the assertion.
+No test under `backend/__tests__/` launches a process, the git arrange included. A test
+reaches git, gh and claude through a double of `ProcessRunner` or `ProcessTable`.
+`process-ratchet.test.ts` fails on a test file that imports `node:child_process`,
+`node-pty` or `process-border.ts`, and on a file whose name carries `-real-process`.

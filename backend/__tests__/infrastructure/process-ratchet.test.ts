@@ -14,15 +14,9 @@ class TemporaryTree {
     return mkdtempSync(join(tmpdir(), 'process-ratchet-'))
   }
 
-  static withAnUnlistedSpawn(): string {
+  static withASpawningImport(): string {
     const root = TemporaryTree.#make()
     writeFileSync(join(root, 'unlisted.test.ts'), "import { spawn } from 'node:child_process'\n")
-    return root
-  }
-
-  static withAListedEntryThatNoLongerSpawns(): string {
-    const root = TemporaryTree.#make()
-    writeFileSync(join(root, 'gone-quiet.test.ts'), 'export const calm = 1\n')
     return root
   }
 
@@ -47,34 +41,16 @@ class TemporaryTree {
   }
 }
 
-describe('the ratchet over the test files that still launch a process', () => {
-  it('the_backend_suite_launches_processes_in_exactly_the_listed_files', () => {
-    expect(ProcessRatchet.spawningUnder(join(Tests.HERE, '..'))).toEqual(ProcessRatchet.LISTED)
+describe('no backend test launches a process', () => {
+  it('the_backend_suite_launches_no_process', () => {
+    expect(ProcessRatchet.spawningUnder(join(Tests.HERE, '..'))).toEqual([])
   })
 
-  it('a_spawning_test_file_the_list_does_not_name_fails_the_ratchet', () => {
-    const root = TemporaryTree.withAnUnlistedSpawn()
+  it('a_test_file_that_imports_child_process_spawns', () => {
+    const root = TemporaryTree.withASpawningImport()
 
     try {
-      const spawning = ProcessRatchet.spawningUnder(root)
-
-      expect(ProcessRatchet.unlisted(spawning, [])).toEqual([
-        'unlisted.test.ts launches a process and ProcessRatchet.LISTED does not name it',
-      ])
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
-  })
-
-  it('a_listed_file_that_no_longer_spawns_fails_the_ratchet', () => {
-    const root = TemporaryTree.withAListedEntryThatNoLongerSpawns()
-
-    try {
-      const spawning = ProcessRatchet.spawningUnder(root)
-
-      expect(ProcessRatchet.stale(spawning, ['gone-quiet.test.ts'])).toEqual([
-        'gone-quiet.test.ts is in ProcessRatchet.LISTED and launches no process any more',
-      ])
+      expect(ProcessRatchet.spawningUnder(root)).toEqual(['unlisted.test.ts'])
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

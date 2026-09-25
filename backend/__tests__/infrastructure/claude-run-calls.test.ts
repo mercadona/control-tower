@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs/promises'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -30,7 +30,7 @@ import { CtRunMachine } from '../../src/infrastructure/ct-run-machine.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
 import { RunDispatch } from '../../src/infrastructure/run-dispatch.ts'
 import { RunJournal } from '../../src/infrastructure/run-journal.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 
 type Role = RunDispatch['role']
 type Response = RunDispatch['response']
@@ -40,7 +40,15 @@ type Script = Readonly<{
   written?: Readonly<{ path: string, text: string }>,
 }>
 
-class AcceptedWorker extends ChildProcess {}
+class AcceptedWorker extends EventEmitter implements LaunchedProcess {
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
+}
 
 class DispatchingMachine extends CtRunMachine {
   readonly dispatches: ReadonlyMap<string, RunDispatch>

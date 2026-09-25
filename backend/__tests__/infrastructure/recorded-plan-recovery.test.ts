@@ -1,4 +1,4 @@
-import { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import * as fs from 'node:fs/promises'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -16,7 +16,7 @@ import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { CallInvocation, ClaudeCalls } from '../../src/infrastructure/claude-calls.ts'
 import { DiskPlanRecords } from '../../src/infrastructure/disk-plan-records.ts'
 import { HeadlessFiles } from '../../src/infrastructure/headless-files.ts'
-import type { ProcessRunner } from '../../src/infrastructure/process-runner.ts'
+import type { LaunchedProcess, ProcessRunner } from '../../src/infrastructure/process-runner.ts'
 import { PlanSessions } from '../../src/infrastructure/plan-sessions.ts'
 import { RecordedPlanRecovery } from '../../src/infrastructure/recorded-plan-recovery.ts'
 import { ClaudePlanCalls } from '../../src/infrastructure/claude-plan-calls.ts'
@@ -57,7 +57,15 @@ class RecordingReviews extends ReviewWatch {
   }
 }
 
-class AcceptedChild extends ChildProcess {}
+class AcceptedChild extends EventEmitter implements LaunchedProcess {
+  kill(): boolean {
+    return false
+  }
+
+  disconnect(): void {}
+
+  unref(): void {}
+}
 
 class RecoveryMother {
   static readonly CONVERSATION = '11111111-1111-4111-8111-111111111111'
