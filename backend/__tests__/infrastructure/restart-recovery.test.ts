@@ -2,7 +2,9 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanRecoveryConflict } from '../../src/domain/exceptions.ts'
-import { InProcessRun } from './fixtures/in-process-run.ts'
+import type { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { CompletedRunDelivery, RefusedRunDelivery } from '../run-delivery-double.ts'
+import { InProcessRun, type ScriptedStep } from './fixtures/in-process-run.ts'
 
 class StateFiles {
   static async bytesOf(root: string): Promise<Record<string, string>> {
@@ -30,6 +32,10 @@ class RecoveryDiagnostic {
     return text.replace(RecoveryDiagnostic.#CALL_ID, '<call>')
   }
 }
+
+const DELIVERED_STEPS: readonly ScriptedStep[] = [
+  'implement', 'controls', 'judge', 'commit', 'reconcile-clean', 'global', 'slice-judge', 'delivered',
+]
 
 describe('a restart over the same state', () => {
   const runs: InProcessRun[] = []
@@ -100,6 +106,52 @@ describe('a restart over the same state', () => {
     const { recovery, activePlans } = run.recovery()
     expect(await recovery.recover()).toBeNull()
     expect(activePlans.known()).toEqual([expect.objectContaining({ phase: 'uncertain' })])
+
+    await run.settled()
+    expect(run.warnings).toEqual([])
+  })
+
+  it('a read of a publication neither waits for it nor starts it', async () => {
+    const delivery = new CompletedRunDelivery()
+    delivery.inspection = { kind: 'publishing', pullRequest: null, diagnostic: null }
+    Object.assign(delivery, {
+      deliver: async (watch: PlanWatch): Promise<void> => {
+        delivery.delivered.push(watch)
+        return new Promise<void>(() => {})
+      },
+    })
+    const run = await InProcessRun.create(DELIVERED_STEPS, delivery)
+    runs.push(run)
+    await run.journaled(DELIVERED_STEPS)
+
+    const { recovery, activePlans } = run.recovery()
+    expect(await recovery.inspect()).toBeNull()
+
+    expect(delivery.delivered).toEqual([])
+    expect(activePlans.known()).toEqual([expect.objectContaining({ phase: 'implementing' })])
+
+    await run.settled()
+    expect(run.warnings).toEqual([])
+  })
+
+  it('the recovery clock hands a refused publication to a person instead of another start on the next tick', async () => {
+    const delivery = new RefusedRunDelivery()
+    const run = await InProcessRun.create(DELIVERED_STEPS, delivery)
+    runs.push(run)
+    const watch = await run.journaled(DELIVERED_STEPS)
+
+    const { recovery, activePlans } = run.recovery()
+    expect(await recovery.recover()).toBeNull()
+    await run.settled()
+    expect(await recovery.recover()).toBeNull()
+
+    expect(delivery.asked).toEqual([watch])
+    const [uncertain] = activePlans.known()
+    expect(uncertain).toMatchObject({
+      phase: 'uncertain',
+      diagnostic: RefusedRunDelivery.REFUSAL,
+      recovery: { action: 'continue', detail: RefusedRunDelivery.REFUSAL },
+    })
 
     await run.settled()
     expect(run.warnings).toEqual([])
