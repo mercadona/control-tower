@@ -1,0 +1,27 @@
+import type { ActivePlan, RecoveryAction, RecoveryOutcome } from 'app/active-plans/ActivePlan.types'
+import { ActivePlansClient } from 'app/active-plans/client'
+
+export class SliceRecovery {
+  static readonly NOT_FOUND = 'El backend ya no informa de este trabajo.'
+  static readonly LABELS: Readonly<Record<RecoveryAction, string>> = {
+    observe: 'Recuperar trabajo',
+    continue: 'Recuperar trabajo',
+    cleanup: 'Limpiar arranque fallido',
+    inspect: 'Reintentar recuperación',
+  }
+
+  static async run(asked: { repo: string; issue: number; action: RecoveryAction }): Promise<RecoveryOutcome> {
+    const outcome = await ActivePlansClient.get()
+    const plan = outcome.kind === 'loaded' ? outcome.plans.find((candidate) => SliceRecovery.#matches(candidate, asked)) : undefined
+
+    if (plan === undefined || plan.phase !== 'uncertain') {
+      return { kind: 'refused', code: 'slice-recovery-not-found', detail: SliceRecovery.NOT_FOUND }
+    }
+
+    return asked.action === 'cleanup' ? ActivePlansClient.cleanup(plan) : ActivePlansClient.recover(plan)
+  }
+
+  static #matches(plan: ActivePlan, asked: { repo: string; issue: number }): boolean {
+    return plan.phase === 'uncertain' && plan.plan.repo === asked.repo && plan.plan.issue.number === asked.issue
+  }
+}

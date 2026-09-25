@@ -1,9 +1,11 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
+import { HeadlessPlanMother } from '__scenarios__/HeadlessPlanMother'
 import { MilestoneProgressMother } from '__scenarios__/MilestoneProgressMother'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
+import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openHome } from './helpers'
@@ -17,6 +19,9 @@ type Backend = {
   specFreeze?: () => Answer
   epicGroom?: () => Answer
   milestone?: () => Answer
+  activePlans?: () => Answer
+  recoverPlan?: () => Answer
+  cleanupPlan?: () => Answer
 }
 
 const settle = async () => {
@@ -29,6 +34,9 @@ class ImplementationBackend {
     specFreeze = SpecFreezeMother.none,
     epicGroom = EpicGroomMother.none,
     milestone = MilestoneProgressMother.none,
+    activePlans = HeadlessPlanMother.empty,
+    recoverPlan,
+    cleanupPlan,
   }: Backend = {}) {
     const fetching = vi.fn(async (input: string | URL | Request) => {
       const path = String(input)
@@ -38,6 +46,9 @@ class ImplementationBackend {
       if (path === '/spec-freeze') return respond(specFreeze())
       if (path === '/epic-groom') return respond(epicGroom())
       if (path === '/milestone-progress') return respond(milestone())
+      if (path === '/active-plans') return respond(activePlans())
+      if (path === '/recover-plan' && recoverPlan !== undefined) return respond(recoverPlan())
+      if (path === '/cleanup-plan' && cleanupPlan !== undefined) return respond(cleanupPlan())
       throw new Error(`nobody scripted ${path}`)
     })
     vi.stubGlobal('fetch', fetching)
@@ -190,5 +201,71 @@ describe('Home is the start form with no session held, and the focused view for 
 
     await user.click(screen.getByRole('button', { name: 'Ocultar tareas' }))
     expect(screen.getByRole('button', { name: 'Ver tareas' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it.each([
+    ['veto', MilestoneProgressMother.vetoed(592), 'El juez cerró este slice', 'Hablar con la sesión'],
+    ['partial', MilestoneProgressMother.partial(592), 'Implementación terminada; publicación sin confirmar', 'Hablar con la sesión'],
+    ['unreadable', MilestoneProgressMother.unreadable(592), 'No se puede leer el trabajo de este slice', 'Hablar con la sesión'],
+    ['uncertain', MilestoneProgressMother.uncertain(592, 'observe'), 'No se puede confirmar el estado', 'Recuperar trabajo'],
+  ])('a slice that needs the person shows what happened and exactly one action: %s', async (_kind, line, title, action) => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([line]),
+    })
+
+    openHome()
+
+    expect(await screen.findByText(title)).toBeInTheDocument()
+    const board = screen.getByRole('region', { name: 'Issues del milestone' })
+    expect(within(board).getByRole('button', { name: action })).toBeInTheDocument()
+    expect(within(board).getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('the red-baseline notice shows only when some baseline was red', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592, { baseline_red: true })]),
+    })
+    const { unmount } = openHome()
+
+    expect(await screen.findByText('El repositorio ya estaba en rojo antes de empezar.')).toBeInTheDocument()
+
+    unmount()
+
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
+    })
+    openHome()
+
+    expect(await screen.findByRole('region', { name: 'Issues del milestone' })).toBeInTheDocument()
+    expect(screen.queryByText('El repositorio ya estaba en rojo antes de empezar.')).not.toBeInTheDocument()
+  })
+
+  it('the recovery button recovers the plan with its agent', async () => {
+    const fetching = ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.uncertain(592, 'continue')]),
+      activePlans: () => HeadlessPlanMother.uncertainAmong(592, 'continue'),
+      recoverPlan: () => ({ status: 202, body: JSON.stringify({ agent: HeadlessPlanMother.agentFor(592) }) }),
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Recuperar trabajo' }))
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledWith('/recover-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: StartPlanMother.REPO, issue: 592, agent: HeadlessPlanMother.agentFor(592) }),
+    }))
   })
 })

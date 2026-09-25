@@ -62,3 +62,21 @@
   margin: 0;
   color: var(--foreground-secondary);
 }
+
+.slice-line-row__attention {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slice-line-row__attention-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.slice-line-row__attention-findings,
+.slice-line-row__attention-detail,
+.slice-line-row__attention-refusal {
+  margin: 0;
+  color: var(--foreground-secondary);
+}
