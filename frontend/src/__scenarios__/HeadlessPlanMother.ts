@@ -1,42 +1,12 @@
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
-import { WorkflowSnapshot } from 'app/workflow-snapshot/storage'
 
 type Answer = { status: number; body: string }
 type HeadlessPhase = 'planning' | 'implementing' | 'uncertain'
 type RecoveryAction = 'observe' | 'continue' | 'cleanup' | 'inspect'
 
-class DeferredHeadlessPlanChanges {
-  private pending: Array<(response: Response) => void> = []
-
-  readonly read = vi.fn((input?: string | URL | Request) => {
-    if (input !== undefined && input !== '/active-plans') return Promise.resolve(new Response('{}', { status: 400 }))
-    return new Promise<Response>((resolve) => this.pending.push(resolve))
-  })
-
-  activeReadCount() {
-    return this.read.mock.calls.filter(([input]) => input === undefined || input === '/active-plans').length
-  }
-
-  answerWith(answer: Answer) {
-    const resolve = this.pending.shift()
-    if (resolve === undefined) throw new Error('no active-plans read is pending')
-    resolve(new Response(answer.body, { status: answer.status }))
-  }
-}
-
 class HeadlessPlanMother {
-  static JUDGE_FINDINGS = '- [high] src/pago.ts:41: the amount is rounded before the discount'
-
   static empty(): Answer {
     return { status: 200, body: '{"plans":[]}' }
-  }
-
-  static planning(): Answer {
-    return HeadlessPlanMother.active('planning')
-  }
-
-  static implementing(): Answer {
-    return HeadlessPlanMother.active('implementing')
   }
 
   static uncertain(): Answer {
@@ -55,53 +25,6 @@ class HeadlessPlanMother {
     return HeadlessPlanMother.active('uncertain', 'cleanup')
   }
 
-  static deferredChanges(): DeferredHeadlessPlanChanges {
-    return new DeferredHeadlessPlanChanges()
-  }
-
-  static slicesInFlight(...issues: number[]): Answer {
-    return { status: 200, body: JSON.stringify({ plans: issues.map((issue) => HeadlessPlanMother.slice(issue)) }) }
-  }
-
-  static slicesInFlightPlanning(...issues: number[]): Answer {
-    return {
-      status: 200,
-      body: JSON.stringify({ plans: issues.map((issue) => ({ ...HeadlessPlanMother.slice(issue), phase: 'planning' })) }),
-    }
-  }
-
-  static slicesAcrossCheckouts(repo: string, root: string): Answer {
-    const other = HeadlessPlanMother.slice(8)
-    return {
-      status: 200,
-      body: JSON.stringify({ plans: [HeadlessPlanMother.slice(7), {
-        ...other,
-        request: { ...other.request, repo, path: root },
-        plan: { ...other.plan, repo, worktree: `${root}/.worktrees/8`, issue: { number: 8, url: `https://github.com/${repo}/issues/8` } },
-      }] }),
-    }
-  }
-
-  static slicesInFlightWithOneElsewhere(root: string, elsewhere: number, ...issues: number[]): Answer {
-    const other = HeadlessPlanMother.slice(elsewhere)
-    return {
-      status: 200,
-      body: JSON.stringify({ plans: [...issues.map((issue) => HeadlessPlanMother.slice(issue)), {
-        ...other,
-        request: { ...other.request, path: root },
-        plan: { ...other.plan, worktree: `${root}/.worktrees/${elsewhere}` },
-      }] }),
-    }
-  }
-
-  static planningAmong(planning: number, ...others: number[]): Answer {
-    const plans = [planning, ...others].map((issue) => (issue === planning
-      ? { ...HeadlessPlanMother.slice(issue), phase: 'planning' }
-      : HeadlessPlanMother.slice(issue)))
-
-    return { status: 200, body: JSON.stringify({ plans }) }
-  }
-
   static uncertainAmong(uncertain: number, action: RecoveryAction, ...others: number[]): Answer {
     const plans = [uncertain, ...others].map((issue) => (issue === uncertain
       ? {
@@ -115,38 +38,8 @@ class HeadlessPlanMother {
     return { status: 200, body: JSON.stringify({ plans }) }
   }
 
-  static vetoedByTheJudge(issue: number, ...others: number[]): Answer {
-    const plans = [issue, ...others].map((number) => (number === issue
-      ? {
-        ...HeadlessPlanMother.slice(number),
-        phase: 'uncertain',
-        diagnostic: HeadlessPlanMother.uncertainDiagnostic(number),
-        recovery: { action: 'inspect', detail: 'ct-step refused and the run is closed' },
-        refusal: {
-          state: 'blocked-judge',
-          outcome: 'failed',
-          exit: 1,
-          task: 2,
-          findings: HeadlessPlanMother.JUDGE_FINDINGS,
-          verdict: HeadlessPlanMother.verdictOf(number),
-        },
-      }
-      : HeadlessPlanMother.slice(number)))
-
-    return { status: 200, body: JSON.stringify({ plans }) }
-  }
-
-  static verdictOf(issue: number): string {
-    return `.agent/run-${issue}/task-2-verdict-3.json`
-  }
-
   static uncertainDiagnostic(issue: number): string {
     return `no se puede confirmar el estado de #${issue}`
-  }
-
-  static workflowOfSlice(issue: number): WorkflowSnapshot {
-    const { phase, request, plan } = HeadlessPlanMother.slice(issue)
-    return { phase, request, plan }
   }
 
   static agentFor(issue: number): string {

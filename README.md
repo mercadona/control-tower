@@ -335,7 +335,7 @@ two you are running.
 
 ## 5. The journey of a milestone
 
-The main screen has two stages: **Solicitud → Implementación**. The coordinating
+While a coordinating session is held, the main screen is the focused view through four steps. The coordinating
 session remains available throughout. A *slice* is one issue-sized piece of the
 milestone, executed in its own branch and worktree (an isolated working directory).
 
@@ -350,7 +350,7 @@ Solicitud
   -> groom creates the milestone and its issues
   -> human authorizes the work
 
-Implementación (one progress view per slice)
+Implementación (one compact list of the milestone's issues)
   Automatic planning -> execution and checks -> publication -> review on GitHub
                                                                   |
                                              requested fixes <----+
@@ -409,17 +409,26 @@ log then says which issue it waits behind, once while that stays the same. Each 
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.
 
-The same progress panel shows planning activity, the current task and checks,
-publication, review and fixes. The issue link, agent identity, branch and worktree
-are available in the collapsed **Detalles del agente y del entorno** section.
-A finished planning call is not proof that its plan is ready; a finished local
-implementation is not proof that its pull request has been published.
+The focused view keeps the story header and four steps throughout implementation.
+**Issues del milestone** lists only the held story's milestone, with one row per
+pending, running or delivered issue and a delivered count. Running rows show the
+step, current task and elapsed time; pull request links appear whenever known.
+Expanding a running row shows its tasks, judge rulings and the agent's latest
+tool and message. A finished local implementation is not proof that its pull
+request has been published: an unconfirmed publication has its own notice.
 
-**Changes and blocked work.** Ask the coordinating session for changes; the
-slice cards have no separate message box. The coordinator can deliver a change,
+**Changes and blocked work.** **Hablar con la sesión** opens the coordinating
+terminal over the list, leaving the header and steps visible; **Volver a la lista**
+returns to the issues. The coordinator can deliver a change,
 hold it for the next task boundary or act on an explicit recovery decision.
 If the state is uncertain, the page shows the diagnostic and the permitted
 recovery action. An unresolved decision stays with the person.
+
+A session that ends by itself offers **Reabrir la sesión**, preserving the
+conversation when it can be resumed. In step 4 the issues remain visible while
+the session is ended. When every issue is delivered, **Milestone completado**
+offers **Cerrar la sesión y volver al inicio**. **Cancelar la sesión** remains
+available in the header and returns to the start form.
 
 **Gate 3 · the merge.** It has no panel: it happens on GitHub. Still yours, but
 you no longer have to announce it —
@@ -438,25 +447,25 @@ plugin's own `/ct-next` route still closes its own. If any of the three fails it
 touches nothing and says which. `/ct-harvest` then answers what the milestone
 cost.
 
-### 5.2 Three tracking responsibilities
+### 5.2 Tracking the focused session
 
 An endpoint is an HTTP method and path. `GET` reads information; `POST` requests
-an action. The browser combines these three tracking responsibilities:
+an action. The browser uses these reads:
 
 | Responsibility | Endpoint | What it answers | When the page reads it |
 |---|---|---|---|
-| **Work inventory and recovery information** | `GET /active-plans` | Which works exist, their recorded identities, broad phases, whether they accept changes, and any diagnostic or recovery action | On opening/reloading, after recovery actions, and about every two seconds while following work |
-| **Current progress of one work** | `GET /work-progress/:issue?repo=owner/name` | Plan readiness and agent activity, execution step/task/attempt, publication and review, or an uncertain state | One polling owner per displayed work; normally every three seconds, fifteen seconds for confirmed delivered/review/fixing states |
-| **Completed-step history** | `GET /implement-history/:issue?root=<absolute-path>&repo=owner/name` | Finished steps, outcomes, timings, summaries, verdicts and recorded token usage | Immediately when the history panel opens, then every three seconds while visible; paused when collapsed |
+| **Coordinating session** | `GET /coordinating-session` | The held story, session target, lifecycle and connection state | Every two seconds |
+| **Milestone progress** | `GET /milestone-progress` | Pending, running and delivered issues, tasks, activity, pull requests and attention | In step 4, every three seconds; fifteen seconds while an issue is in review or being fixed |
+| **Recovery identity** | `GET /active-plans` | The recorded plan and agent required by a recovery action | When the person presses a recovery button |
 
-Intervals are measured after the previous response. The current-progress route
-gets the checkout from the recorded work, so it accepts `repo`, not a caller's
-`root`. History retains its existing `root` parameter.
+Intervals are measured after the previous response. Milestone progress uses the
+held session's target; the browser does not choose another story's checkout.
 
 The server interprets the evidence; the page presents it. If one part of a
 progress read fails, the other known facts remain available. If the connection
-fails, the last answer stays visible with a stale warning and the page retries.
-Stale or partial readings never trigger the automatic switch to another slice.
+fails, the last milestone answer for the same target stays visible with the
+single **Sin conexión con el backend** notice and the page retries. Changing the
+session target discards the previous milestone reading.
 
 **Reading the inventory or progress starts no publication or review watcher.**
 Automatic recovery belongs to the server: its own non-overlapping loop starts
@@ -464,8 +473,8 @@ with the server and runs again two seconds after each scan completes. It works
 with no browser open. Explicit recovery and cleanup use the mutation endpoints
 below. The separate harvest sweep runs every minute.
 
-The coordinating terminal has its own live stream. Collapsing the drawer pauses
-history queries but keeps the terminal and its conversation connected.
+The coordinating terminal has its own live stream. Closing its panel leaves
+the backend conversation running; opening it again replays the retained output.
 
 ### 5.3 Endpoint map
 
@@ -481,6 +490,8 @@ response and refusal contracts.
 | `POST /coordinating-session` | Open the coordinating conversation from a ticket, repository and local checkout |
 | `GET /coordinating-session` | Read its identity, current lifecycle operation, status and attention/history information |
 | `POST /coordinating-session/close` | Close or cancel the identified coordinating session |
+| `POST /coordinating-session/reopen` | Resume an ended coordinating conversation, or open its current-step replacement when it cannot be resumed |
+| `GET /milestone-progress` | Read the held milestone's issues, progress, activity and attention |
 | `POST /groom-session` | Open or resume the coordinating conversation for reviewing the proposed slice breakdown |
 | `GET /spec-freeze` | Read the specification's state and the findings that determine whether it can be frozen |
 | `POST /spec-freeze` | Perform the person's freeze action and publish the specification in a pull request |

@@ -32,7 +32,6 @@ const renderForm = ({ isCoordinatingSessionLive = false } = {}) => {
   const onUnreachable = vi.fn()
   render(
     <StartPlanForm
-      isLocked={false}
       isCoordinatingSessionLive={isCoordinatingSessionLive}
       openSession={CoordinatingSessionClient.open}
       onInteraction={vi.fn()}

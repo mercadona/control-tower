@@ -1,8 +1,5 @@
-import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
 import { SessionsClient } from 'app/sessions/client'
-
-const answering = (body: string) => vi.fn(async () => new Response(body))
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -19,29 +16,6 @@ describe('SessionsClient', () => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
     vi.restoreAllMocks()
-  })
-
-  it('the live sessions the backend lists reach the page', async () => {
-    vi.stubGlobal('fetch', answering(SessionsMother.oneSession().body))
-
-    await expect(SessionsClient.list()).resolves.toEqual({
-      kind: 'loaded',
-      sessions: [{ id: 'a1', name: 'zsh' }],
-    })
-  })
-
-  it('a malformed session row makes the whole answer unavailable', async () => {
-    vi.stubGlobal('fetch', answering(SessionsMother.malformedRow().body))
-
-    await expect(SessionsClient.list()).resolves.toEqual({ kind: 'unavailable' })
-  })
-
-  it('an unreachable backend is unavailable and never throws', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new TypeError('Failed to fetch')
-    }))
-
-    await expect(SessionsClient.list()).resolves.toEqual({ kind: 'unavailable' })
   })
 
   it('the bytes of a frame reach the listener', () => {
