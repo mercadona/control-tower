@@ -62,7 +62,7 @@ import { execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
-import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
+import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, JUDGING, PHASES, outcomeOfReconcile, reconcileBudgetSpent, expectedCommits } from './run-machine.js'
 import { JudgedUnit } from './judged-unit.js'
 import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
@@ -463,7 +463,7 @@ if (runExisted) {
   // taken for zero: `|| 0` covers the runs written before the field existed.
   // The review (#530) stands after the last task commit and before its own, so
   // it counts the `tasksTotal` task commits and nothing more.
-  const expected = expectedCommits()
+  const expected = expectedCommits(run)
   if (actual !== expected) {
     die(`the state and git do not count the same: the file expects ${expected} commit(s) (task ${run.task}, step ${run.step}) and in \`${shortRange}\` (merges excluded) there are ${actual}. It does not carry on blind.`, EXIT.PRECONDITION)
   }
@@ -509,18 +509,6 @@ function bornRun() {
   })
   writeFileSync(stateFile, JSON.stringify(born, null, 2) + '\n')
   return born
-}
-
-// The commits the run has made so far, by phase: the tasks before the current
-// one, every task while the review stands, and every task plus the slice's own
-// commits in the slice queue.
-function expectedCommits() {
-  switch (run.phase) {
-    case PHASES.TASK: return run.task - 1
-    case PHASES.REVIEW: return run.tasksTotal
-    case PHASES.SLICE: return run.tasksTotal + (run.sliceCommits || 0)
-    default: throw new Error(`a run phase this version does not know: "${run.phase}"`)
-  }
 }
 
 const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')

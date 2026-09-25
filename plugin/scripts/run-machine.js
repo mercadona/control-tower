@@ -127,6 +127,7 @@ export const PHASES = Object.freeze({
   TASK: 'task',
   REVIEW: 'review',
   SLICE: 'slice',
+  FIX: 'fix',
 })
 
 // The newborn run: task 1, step implement, every counter at zero.
@@ -171,6 +172,7 @@ export function judgesBeforeCommit(run) {
   switch (run.phase) {
     case PHASES.TASK: return judgesEachTask(run)
     case PHASES.REVIEW: return true
+    case PHASES.FIX: return false
     default: throw new Error(`controls have no judge to answer to in the phase "${run.phase}"`)
   }
 }
@@ -326,8 +328,21 @@ function afterCommitIn(run) {
       return open(run, { step: STEPS.RECONCILE, phase: PHASES.SLICE, ...freshCounters })
     case PHASES.TASK:
       return afterTaskCommit(run)
+    case PHASES.FIX:
+      return open(run, { step: STEPS.GLOBAL, phase: PHASES.SLICE, ...freshCounters })
     default:
       throw new Error(`impossible transition: a commit in the phase "${run.phase}"`)
+  }
+}
+
+export function expectedCommits(run) {
+  switch (run.phase) {
+    case PHASES.TASK: return run.task - 1
+    case PHASES.REVIEW: return run.tasksTotal
+    case PHASES.SLICE:
+    case PHASES.FIX:
+      return run.tasksTotal + (run.sliceCommits || 0)
+    default: throw new Error(`a run phase this version does not know: "${run.phase}"`)
   }
 }
 

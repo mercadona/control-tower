@@ -7,7 +7,7 @@
 // with a gap is not a table, it is a table plus an implicit decision taken by
 // omission.
 import { describe, it, expect } from 'vitest'
-import { after, newRun, judgesEachTask, judgesBeforeCommit, JUDGING, PHASES, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
+import { after, newRun, judgesEachTask, judgesBeforeCommit, expectedCommits, JUDGING, PHASES, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
 import { ReconcileOutcome } from '../scripts/reconcile-outcome.js'
 
 const run = (over = {}) => ({ ...newRun({ plan: 'p.md', issue: 7, baseSha: 'abc', tasksTotal: 3 }), ...over })
@@ -410,5 +410,35 @@ describe('bespoke budgets', () => {
       { ...DEFAULT_BUDGETS, correctionRetries: 5 })
     expect(r.step).toBe(STEPS.IMPLEMENT)
     expect(r.correctionRetries).toBe(3)
+  })
+})
+
+describe('the fix round after the Global verification', () => {
+  const inTheFixRound = (over = {}) => run({ judging: JUDGING.FINAL, task: 3, tasksTotal: 3, phase: PHASES.FIX, ...over })
+
+  it('the fix round commit goes back to the Global verification with the counters at zero', () => {
+    const r = inTheFixRound({ step: STEPS.COMMIT, controlRetries: 1, judgeRetries: 2, correctionRetries: 1 })
+    const { run: next, state } = after(r, OUTCOMES.DONE)
+    expect(state).toBe(RUN_STATES.OPEN)
+    expect(next.step).toBe('global')
+    expect(next.phase).toBe('slice')
+    expect([next.controlRetries, next.judgeRetries, next.correctionRetries]).toEqual([0, 0, 0])
+  })
+
+  it('green controls in the fix round go straight to commit', () => {
+    const { run: next } = after(inTheFixRound({ step: STEPS.CONTROLS }), OUTCOMES.DONE)
+    expect(next.step).toBe(STEPS.COMMIT)
+  })
+
+  it('the fix round counts the commits of the slice, so its own commit is expected', () => {
+    expect(expectedCommits(inTheFixRound({ step: STEPS.COMMIT, sliceCommits: 1 }))).toBe(4)
+    expect(expectedCommits(inTheFixRound({ step: STEPS.IMPLEMENT }))).toBe(3)
+    expect(expectedCommits(run({ phase: PHASES.TASK, task: 2 }))).toBe(1)
+    expect(expectedCommits(run({ phase: PHASES.REVIEW, task: 3 }))).toBe(3)
+    expect(expectedCommits(run({ phase: PHASES.SLICE, sliceCommits: 2 }))).toBe(5)
+  })
+
+  it('a phase this version does not know has no commit count', () => {
+    expect(() => expectedCommits(run({ phase: 'limbo' }))).toThrow('a run phase this version does not know: "limbo"')
   })
 })
