@@ -145,4 +145,50 @@ describe('Home is the start form with no session held, and the focused view for 
 
     vi.useRealTimers()
   })
+
+  it('a running line expands into its tasks, the judge finding, the last tool and the last message', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([
+        MilestoneProgressMother.running(592, {
+          tasks: [
+            { number: 1, name: 'Read the wire shape', status: 'done', ruling: null, findings: null },
+            { number: 2, name: 'Write the client', status: 'running', ruling: null, findings: null },
+            { number: 3, name: 'Write the tests', status: 'pending', ruling: null, findings: null },
+            { number: 4, name: 'Wire the route', status: 'stopped', ruling: null, findings: 'the boundary case failed' },
+          ],
+        }),
+      ]),
+    })
+
+    const { user } = openHome()
+    await user.click(await screen.findByRole('button', { name: 'Ver tareas' }))
+
+    expect(screen.getByText('Hecha')).toBeInTheDocument()
+    expect(screen.getByText('Lo que encontró el juez: the boundary case failed')).toBeInTheDocument()
+    expect(screen.getByText(/Última herramienta: Edit · src\/a\.ts/)).toBeInTheDocument()
+    expect(screen.getByText(/Último mensaje: «ready»/)).toBeInTheDocument()
+  })
+
+  it('a line starts closed and closes again', async () => {
+    ImplementationBackend.with({
+      session: CoordinatingSessionMother.working,
+      specFreeze: SpecFreezeMother.frozen,
+      epicGroom: EpicGroomMother.authorised,
+      milestone: () => MilestoneProgressMother.answer([MilestoneProgressMother.running(592)]),
+    })
+
+    const { user } = openHome()
+
+    const toggle = await screen.findByRole('button', { name: 'Ver tareas' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(toggle)
+    expect(screen.getByRole('button', { name: 'Ocultar tareas' })).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar tareas' }))
+    expect(screen.getByRole('button', { name: 'Ver tareas' })).toHaveAttribute('aria-expanded', 'false')
+  })
 })

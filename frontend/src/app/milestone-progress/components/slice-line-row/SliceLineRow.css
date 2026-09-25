@@ -1,10 +1,16 @@
 .slice-line-row {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
+}
+
+.slice-line-row__summary {
+  display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0;
-  border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
 }
 
 .slice-line-row__title {
@@ -14,5 +20,45 @@
 
 .slice-line-row__status {
   flex: none;
+  color: var(--foreground-secondary);
+}
+
+.slice-line-row__toggle {
+  flex: none;
+  background: none;
+  border: none;
+  color: var(--foreground-brand-primary);
+  cursor: pointer;
+}
+
+.slice-line-row__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slice-line-row__tasks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slice-line-row__task {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.slice-line-row__findings {
+  margin: 0;
+  color: var(--foreground-secondary);
+}
+
+.slice-line-row__activity {
+  margin: 0;
   color: var(--foreground-secondary);
 }
