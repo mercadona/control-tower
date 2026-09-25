@@ -3,6 +3,8 @@ import {
   ReadMilestoneProgress, ReadMilestoneProgressParams,
 } from '../../src/application/queries/read-milestone-progress.ts'
 import { SliceLineState } from '../../src/domain/value-objects/slice-line.ts'
+import { SliceTaskStatus } from '../../src/domain/value-objects/slice-task.ts'
+import { DriveRun } from '../../src/application/actions/drive-run.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { WorkInventory } from '../../src/domain/ports/work-inventory.ts'
@@ -13,11 +15,12 @@ import { SliceBaselines } from '../../src/domain/ports/slice-baselines.ts'
 import { EpicIssuesListing } from '../../src/domain/value-objects/epic-issues-listing.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { TrackedWork } from '../../src/domain/value-objects/tracked-work.ts'
-import { ImplementationState } from '../../src/domain/value-objects/implementation-state.ts'
+import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
+import type { ImplementationStepValue } from '../../src/domain/value-objects/implementation-state.ts'
 import { ImplementationHistoryEntry } from '../../src/domain/value-objects/implementation-history-entry.ts'
 import { ImplementationActivity } from '../../src/domain/value-objects/implementation-activity.ts'
 import { PlanningActivity, PlanningActivityState, PlanningToolCall } from '../../src/domain/value-objects/planning-activity.ts'
-import { WorkNotFound, ImplementationActivityNotRead } from '../../src/domain/exceptions.ts'
+import { WorkNotFound, ImplementationActivityNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 import type { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import type { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
@@ -91,6 +94,18 @@ class ImplementationProgressDouble {
 
   async execute(_params: ImplementationParamsLike): Promise<ImplementationResultLike> {
     return this.answer
+  }
+}
+
+class FailingImplementationProgress {
+  readonly failure: Error
+
+  constructor(failure: Error) {
+    this.failure = failure
+  }
+
+  async execute(): Promise<ImplementationResultLike> {
+    throw this.failure
   }
 }
 
@@ -184,6 +199,16 @@ class Mother {
     })
   }
 
+  static taskHistoryEntry({ task, taskName, ruling, writtenAt }: {
+    task: number, taskName: string | null, ruling: string | null, writtenAt: string,
+  }): ImplementationHistoryEntry {
+    return ImplementationHistoryEntry.of({
+      step: 'implement', task, taskName, tasksTotal: 2, attempt: 1,
+      outcome: null, writtenAt, durationMs: null, summary: null, ruling, findingsTotal: null,
+      toolTotalTokens: null,
+    })
+  }
+
   static finished(pullRequest: { number: number, url: string } | null): TrackedWork {
     return new TrackedWork(MilestoneProgressMother.watch(), {
       phase: 'finished', harvestedAt: '2026-09-25T09:00:00.000Z', pullRequest,
@@ -215,6 +240,36 @@ class Mother {
   static implementationState(): ImplementationState {
     return ImplementationState.of({
       step: 'implement', task: 2, totalTasks: 5, name: 'Keep progress visible', attempt: 1, discards: 0,
+    })
+  }
+
+  static implementationStateOf({ task, totalTasks, step = ImplementationStep.IMPLEMENT }: {
+    task: number, totalTasks: number, step?: ImplementationStepValue,
+  }): ImplementationState {
+    return ImplementationState.of({
+      step, task, totalTasks, name: 'Keep progress visible', attempt: 1, discards: 0,
+    })
+  }
+
+  static vetoed({ task, findings, verdict }: { task: number, findings: string, verdict: string }): TrackedWork {
+    return new TrackedWork(MilestoneProgressMother.watch(), {
+      phase: 'uncertain',
+      diagnostic: 'the run closed at blocked-judge',
+      recovery: { action: 'observe', detail: 'talk to the coordinating session' },
+      refusal: { state: DriveRun.BLOCKED_JUDGE, outcome: 'failed', exit: 1, task, findings, verdict },
+      execution: Mother.implementationStateOf({ task, totalTasks: 3, step: ImplementationStep.JUDGE }),
+    })
+  }
+
+  static uncertainRecoverable({ action, detail }: {
+    action: 'observe' | 'continue' | 'cleanup' | 'inspect', detail: string,
+  }): TrackedWork {
+    return new TrackedWork(MilestoneProgressMother.watch(), {
+      phase: 'uncertain',
+      diagnostic: 'the run could not be resolved',
+      recovery: { action, detail },
+      refusal: null,
+      execution: null,
     })
   }
 
@@ -380,6 +435,175 @@ describe('ReadMilestoneProgress', () => {
     const read = await subject.query().execute(subject.params())
 
     expect(read.progress!.lines[0].stepStartedAt).toBeNull()
+  })
+
+  it('the tasks below the current one are done, the current one runs and the rest wait', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new ImplementationProgressDouble(
+      Mother.implementationResult(Mother.implementationStateOf({ task: 2, totalTasks: 3 }))
+    )
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const statuses = read.progress!.lines[0].tasks.map((task) => task.status)
+    expect(statuses).toEqual([SliceTaskStatus.DONE, SliceTaskStatus.RUNNING, SliceTaskStatus.PENDING])
+  })
+
+  it('every task is done once the step moves past starting with no current task', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new ImplementationProgressDouble(
+      Mother.implementationResult(ImplementationState.of({
+        step: ImplementationStep.COMMIT, task: null, totalTasks: 3, name: null, attempt: 1, discards: 0,
+      }))
+    )
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const statuses = read.progress!.lines[0].tasks.map((task) => task.status)
+    expect(statuses).toEqual([SliceTaskStatus.DONE, SliceTaskStatus.DONE, SliceTaskStatus.DONE])
+  })
+
+  it('a task carries the name and ruling recorded in its own history entries', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new ImplementationProgressDouble(
+      Mother.implementationResult(Mother.implementationStateOf({ task: 2, totalTasks: 2 }))
+    )
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([
+      Mother.taskHistoryEntry({
+        task: 1, taskName: 'Write the port', ruling: 'approved', writtenAt: '2026-09-25T09:00:00.000Z',
+      }),
+    ])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const done = read.progress!.lines[0].tasks.find((task) => task.number === 1)!
+    expect(done.status).toBe(SliceTaskStatus.DONE)
+    expect(done.name).toBe('Write the port')
+    expect(done.ruling).toBe('approved')
+  })
+
+  it('no total tasks answers no tasks', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new ImplementationProgressDouble(Mother.implementationResult(
+      ImplementationState.of({ step: ImplementationStep.STARTING, task: null, totalTasks: null, name: null, attempt: null, discards: null })
+    ))
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    expect(read.progress!.lines[0].tasks).toEqual([])
+  })
+
+  it('a vetoed slice needs the person and its stopped task carries the judge findings', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(
+      Mother.vetoed({ task: 2, findings: 'the judge found a missing test', verdict: 'blocked' })
+    )
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({
+      kind: 'veto', task: 2, findings: 'the judge found a missing test', verdict: 'blocked',
+    })
+    const stopped = line.tasks.find((task) => task.number === 2)!
+    expect(stopped.status).toBe(SliceTaskStatus.STOPPED)
+    expect(stopped.findings).toBe('the judge found a missing test')
+  })
+
+  it('an uncertain slice needs the person with its one recovery action', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(
+      Mother.uncertainRecoverable({ action: 'continue', detail: 'resume the recorded call' })
+    )
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.NEEDS_PERSON)
+    expect(line.attention).toEqual({ kind: 'uncertain', action: 'continue', detail: 'resume the recorded call' })
+  })
+
+  it('an implementation read that fails leaves a running line with a partial attention', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new FailingImplementationProgress(
+      new ImplementationProgressNotRead('the run file could not be read')
+    )
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.RUNNING)
+    expect(line.attention).toEqual({ kind: 'partial', detail: 'the run file could not be read' })
+    expect(line.tasks).toEqual([])
+    expect(line.step).toBeNull()
+  })
+
+  it('an unverified delivery leaves a running line with a partial attention and its known state', async () => {
+    const subject = new Subject()
+    subject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    subject.inventory = new WorkInventoryDouble(Mother.implementing())
+    subject.implementation = new ImplementationProgressDouble({
+      state: Mother.implementationState(),
+      delivery: { kind: 'unavailable', detail: 'the pull request could not be confirmed' },
+    })
+    subject.activities = new ImplementationActivityDouble(Mother.activity('2026-09-25T10:00:00.000Z'))
+    subject.history = new ImplementationHistoryDouble([])
+    subject.baselines = new SliceBaselinesDouble(false)
+
+    const read = await subject.query().execute(subject.params())
+
+    const line = read.progress!.lines[0]
+    expect(line.state).toBe(SliceLineState.RUNNING)
+    expect(line.attention).toEqual({ kind: 'partial', detail: 'the pull request could not be confirmed' })
+    expect(line.step).toBe('implement')
+    expect(line.task).toBe(2)
+  })
+
+  it('pending and delivered lines carry no attention and no tasks', async () => {
+    const pendingSubject = new Subject()
+    pendingSubject.issues = new EpicIssuesDouble([MilestoneProgressMother.openIssue()])
+    pendingSubject.inventory = WorkInventoryDouble.notFound()
+    const pendingLine = (await pendingSubject.query().execute(pendingSubject.params())).progress!.lines[0]
+    expect(pendingLine.attention).toBeNull()
+    expect(pendingLine.tasks).toEqual([])
+
+    const deliveredSubject = new Subject()
+    deliveredSubject.issues = new EpicIssuesDouble([MilestoneProgressMother.closedIssue()])
+    deliveredSubject.inventory = new WorkInventoryDouble(Mother.finished(null))
+    const deliveredLine = (await deliveredSubject.query().execute(deliveredSubject.params())).progress!.lines[0]
+    expect(deliveredLine.attention).toBeNull()
+    expect(deliveredLine.tasks).toEqual([])
   })
 
   it('a draft spec answers no milestone and reads no issue', async () => {

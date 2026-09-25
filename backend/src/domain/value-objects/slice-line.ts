@@ -1,5 +1,6 @@
 import type { EpicIssue } from './epic-issue.ts'
 import type { PlanningToolCall } from './planning-activity.ts'
+import type { SliceTask } from './slice-task.ts'
 
 export const SliceLineState = Object.freeze({
   PENDING: 'pending',
@@ -9,6 +10,11 @@ export const SliceLineState = Object.freeze({
 } as const)
 
 export type SliceLineStateValue = (typeof SliceLineState)[keyof typeof SliceLineState]
+
+export type SliceAttention =
+  | { readonly kind: 'veto', readonly task: number | null, readonly findings: string | null, readonly verdict: string | null }
+  | { readonly kind: 'uncertain', readonly action: 'observe' | 'continue' | 'cleanup' | 'inspect', readonly detail: string }
+  | { readonly kind: 'partial', readonly detail: string }
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -25,6 +31,8 @@ export class SliceLine {
   readonly lastText: string | null
   readonly pullRequest: ReviewedPullRequest | null
   readonly baselineRed: boolean
+  readonly attention: SliceAttention | null
+  readonly tasks: readonly SliceTask[]
 
   constructor(asked: {
     issue: EpicIssue,
@@ -37,6 +45,8 @@ export class SliceLine {
     lastText: string | null,
     pullRequest: ReviewedPullRequest | null,
     baselineRed: boolean,
+    attention: SliceAttention | null,
+    tasks: readonly SliceTask[],
   }) {
     this.issue = asked.issue
     this.state = asked.state
@@ -48,6 +58,8 @@ export class SliceLine {
     this.lastText = asked.lastText
     this.pullRequest = asked.pullRequest
     this.baselineRed = asked.baselineRed
+    this.attention = asked.attention
+    this.tasks = Object.freeze([...asked.tasks])
     Object.freeze(this)
   }
 }

@@ -15,14 +15,18 @@ import type { ImplementationHistoryEntry } from '../../domain/value-objects/impl
 import type { PlanningActivity } from '../../domain/value-objects/planning-activity.ts'
 import type { ImplementationState } from '../../domain/value-objects/implementation-state.ts'
 import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
-import type { TrackedWork } from '../../domain/value-objects/tracked-work.ts'
+import type { TrackedWork, WorkCondition } from '../../domain/value-objects/tracked-work.ts'
+import type { RunClosure } from '../../domain/value-objects/run-instruction.ts'
 import { PlanningActivityState } from '../../domain/value-objects/planning-activity.ts'
 import { MilestoneProgress } from '../../domain/value-objects/milestone-progress.ts'
-import { SliceLine, SliceLineState } from '../../domain/value-objects/slice-line.ts'
+import { SliceLine, SliceLineState, type SliceAttention } from '../../domain/value-objects/slice-line.ts'
+import { SliceTask } from '../../domain/value-objects/slice-task.ts'
 import { EpicIssuesNotRead, PlanFailure, WorkNotFound } from '../../domain/exceptions.ts'
 import { ReadImplementationProgressParams, type ReadImplementationProgress } from './read-implementation-progress.ts'
+import { DriveRun } from '../actions/drive-run.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
+type UncertainCondition = Extract<WorkCondition, { phase: 'uncertain' }>
 
 export class ReadMilestoneProgressParams {
   readonly root: CheckoutRoot
@@ -107,7 +111,7 @@ export class ReadMilestoneProgress {
       case 'implementing':
         return this.#implementing(issue, work.watch, params)
       case 'uncertain':
-        return this.#uncertain(issue, work.condition.execution, params)
+        return this.#uncertain(issue, work.condition, params)
     }
   }
 
@@ -124,6 +128,7 @@ export class ReadMilestoneProgress {
     return new SliceLine({
       issue, state: SliceLineState.PENDING, step: null, task: null, totalTasks: null,
       stepStartedAt: null, lastToolCall: null, lastText: null, pullRequest: null, baselineRed: false,
+      attention: null, tasks: [],
     })
   }
 
@@ -131,6 +136,7 @@ export class ReadMilestoneProgress {
     return new SliceLine({
       issue, state: SliceLineState.DELIVERED, step: null, task: null, totalTasks: null,
       stepStartedAt: null, lastToolCall: null, lastText: null, pullRequest, baselineRed: false,
+      attention: null, tasks: [],
     })
   }
 
@@ -144,40 +150,70 @@ export class ReadMilestoneProgress {
     return new SliceLine({
       issue, state: SliceLineState.RUNNING, step: SliceLine.PLAN_STEP, task: null, totalTasks: null,
       stepStartedAt, lastToolCall: activity?.lastToolCall ?? null, lastText: activity?.lastText ?? null,
-      pullRequest: null, baselineRed,
+      pullRequest: null, baselineRed, attention: null, tasks: [],
     })
   }
 
   async #implementing(issue: EpicIssue, watch: PlanWatch, params: ReadMilestoneProgressParams): Promise<SliceLine> {
-    const result = await this.implementation.execute(new ReadImplementationProgressParams({
-      root: params.root, issue: issue.number, repository: params.repository,
-    }))
+    const outcome = await this.#implementationOutcome(issue, params)
     const activity = await this.#implementationActivityFor(watch)
     const entries = await this.history.of({ root: params.root, issue: issue.number, repository: params.repository })
     const stepStartedAt = ReadMilestoneProgress.#laterOf(
       activity?.startedAt ?? null, ReadMilestoneProgress.#latestWrittenAt(entries)
     )
     const baselineRed = await this.baselines.isRed({ root: params.root, issue: issue.number })
+    const tasks = SliceTask.listOf({ state: outcome.state, entries, veto: null })
 
     return new SliceLine({
-      issue, state: SliceLineState.RUNNING, step: result.state.step,
-      task: result.state.task, totalTasks: result.state.totalTasks, stepStartedAt,
+      issue, state: SliceLineState.RUNNING, step: outcome.state?.step ?? null,
+      task: outcome.state?.task ?? null, totalTasks: outcome.state?.totalTasks ?? null, stepStartedAt,
       lastToolCall: activity?.lastToolCall ?? null, lastText: activity?.lastText ?? null,
-      pullRequest: result.state.pullRequest, baselineRed,
+      pullRequest: outcome.state?.pullRequest ?? null, baselineRed, attention: outcome.attention, tasks,
     })
   }
 
+  async #implementationOutcome(
+    issue: EpicIssue, params: ReadMilestoneProgressParams
+  ): Promise<{ state: ImplementationState | null, attention: SliceAttention | null }> {
+    let result: Awaited<ReturnType<typeof this.implementation.execute>>
+    try {
+      result = await this.implementation.execute(new ReadImplementationProgressParams({
+        root: params.root, issue: issue.number, repository: params.repository,
+      }))
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+
+      return { state: null, attention: { kind: 'partial', detail: cause.message } }
+    }
+    if (result.delivery.kind === 'unavailable') {
+      return { state: result.state, attention: { kind: 'partial', detail: result.delivery.detail } }
+    }
+
+    return { state: result.state, attention: null }
+  }
+
   async #uncertain(
-    issue: EpicIssue, execution: ImplementationState | null, params: ReadMilestoneProgressParams,
+    issue: EpicIssue, condition: UncertainCondition, params: ReadMilestoneProgressParams,
   ): Promise<SliceLine> {
+    const veto = ReadMilestoneProgress.#vetoOf(condition.refusal)
+    const attention: SliceAttention = veto !== null
+      ? { kind: 'veto', task: veto.task, findings: veto.findings, verdict: veto.verdict }
+      : { kind: 'uncertain', action: condition.recovery.action, detail: condition.recovery.detail }
+    const entries = await this.history.of({ root: params.root, issue: issue.number, repository: params.repository })
+    const tasks = SliceTask.listOf({ state: condition.execution, entries, veto })
     const baselineRed = await this.baselines.isRed({ root: params.root, issue: issue.number })
 
     return new SliceLine({
       issue, state: SliceLineState.NEEDS_PERSON,
-      step: execution?.step ?? null, task: execution?.task ?? null, totalTasks: execution?.totalTasks ?? null,
+      step: condition.execution?.step ?? null, task: condition.execution?.task ?? null,
+      totalTasks: condition.execution?.totalTasks ?? null,
       stepStartedAt: null, lastToolCall: null, lastText: null,
-      pullRequest: execution?.pullRequest ?? null, baselineRed,
+      pullRequest: condition.execution?.pullRequest ?? null, baselineRed, attention, tasks,
     })
+  }
+
+  static #vetoOf(refusal: RunClosure | null): RunClosure | null {
+    return refusal !== null && refusal.state === DriveRun.BLOCKED_JUDGE ? refusal : null
   }
 
   async #planningActivityFor(watch: PlanWatch): Promise<PlanningActivity | null> {
