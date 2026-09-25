@@ -1,0 +1,7 @@
+command: acli jira workitem view ZZZ-999999 --json --fields summary,description
+version: acli version 1.3.36-stable
+date: 2026-09-25
+exit: 1
+--- stdout
+--- stderr
+✗ Error: La incidencia no existe o no tienes permiso para verla.

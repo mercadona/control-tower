@@ -2,6 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
+import { AcliUserStories } from '../../src/infrastructure/acli-user-stories.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { HostProcesses, InProcessApi } from './fixtures/in-process-api.ts'
 import { LivingProcessGroups } from './fixtures/living-process-groups.ts'
 import { Capture, ScriptedConversation } from './fixtures/scripted-conversation.ts'
@@ -77,7 +80,8 @@ class ExternalToolsProbe {
 }
 
 class ScriptedCheckout {
-  static readonly REPOSITORY_URL = 'git@github.com:acme/widget.git'
+  static readonly REPOSITORY = 'acme/widget'
+  static readonly REPOSITORY_URL = `git@github.com:${ScriptedCheckout.REPOSITORY}.git`
   static readonly BASE = 'main'
   static readonly #SENTINEL = 'committed sentinel\n'
   static readonly #UNTRACKED = 'untracked work must survive\n'
@@ -163,10 +167,14 @@ class CoordinatingSessionEndpoint {
   }
 
   static open(port: number, checkout: string): Promise<Response> {
+    return CoordinatingSessionEndpoint.openFor(port, CoordinatingSessionEndpoint.TICKET, checkout)
+  }
+
+  static openFor(port: number, id: string, checkout: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: CoordinatingSessionEndpoint.TICKET, path: checkout }),
+      body: JSON.stringify({ id, path: checkout }),
     })
   }
 
@@ -209,6 +217,34 @@ class CoordinatingSessionEndpoint {
       await reader.cancel().catch(() => {})
     }
     if (!received.includes(token)) throw new Error(`session output did not contain ${JSON.stringify(token)}`)
+  }
+}
+
+class ARecordedConversation {
+  static readonly ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
+  static readonly STORY = 'STAFF-128'
+
+  static async withATranscriptUnder(config: string, root: string): Promise<void> {
+    await ARecordedConversation.#recordedUnder(config, root)
+    const folder = ClaudeCodeTranscript.folderFor(root)
+    const transcript = join(config, ClaudeCodeTranscript.FOLDER, folder)
+    await mkdir(transcript, { recursive: true })
+    await writeFile(join(transcript, `${ARecordedConversation.ID}${ClaudeCodeTranscript.EXTENSION}`), '{"type":"user"}\n')
+  }
+
+  static withNoTranscriptAnywhere(config: string, root: string): Promise<void> {
+    return ARecordedConversation.#recordedUnder(config, root)
+  }
+
+  static async #recordedUnder(config: string, root: string): Promise<void> {
+    const recorded = join(config, 'control-tower', 'coordinating-session')
+    await mkdir(recorded, { recursive: true })
+    await writeFile(join(recorded, 'conversation.json'), `${JSON.stringify({
+      conversation: ARecordedConversation.ID,
+      repo: ScriptedCheckout.REPOSITORY,
+      root,
+      story: ARecordedConversation.STORY,
+    }, null, 2)}\n`)
   }
 }
 
@@ -490,6 +526,112 @@ describe('ct-api entrypoint composed in process', () => {
 
       expect(answered.map((response) => response.status).sort()).toEqual([202, 409])
       expect(await CoordinatingSessionEndpoint.brainstormingsOf(api.port)).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(config, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('the_recovery_reads_the_transcript_under_the_configured_claude_directory', async () => {
+    const root = await ScriptedCheckout.prepared()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-recovery-'))
+    await ARecordedConversation.withATranscriptUnder(config, root)
+    const conversation = ScriptedCheckout.answering(new ScriptedConversation(), root)
+    const table = new ScriptedTerminals()
+    const processes = new HostProcesses({ conversation, table })
+
+    try {
+      const api = await InProcessApi.started(
+        { CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh' }, processes
+      )
+
+      const recovered = await (await fetch(`http://127.0.0.1:${api.port}/coordinating-session`)).json() as
+        { status: string }
+
+      expect(recovered.status).not.toBe('unresumable')
+      expect(table.opened.length).toBe(1)
+      expect(table.opened[0].argv.some((token) => token.includes(ARecordedConversation.ID))).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(config, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('a_recorded_conversation_with_no_transcript_at_all_is_not_resumed', async () => {
+    const root = await ScriptedCheckout.prepared()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-recovery-'))
+    await ARecordedConversation.withNoTranscriptAnywhere(config, root)
+    const conversation = ScriptedCheckout.answering(new ScriptedConversation(), root)
+    const table = new ScriptedTerminals()
+    const processes = new HostProcesses({ conversation, table })
+
+    try {
+      const api = await InProcessApi.started(
+        { CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh' }, processes
+      )
+
+      const recovered = await (await fetch(`http://127.0.0.1:${api.port}/coordinating-session`)).json() as
+        { status: string }
+
+      expect(recovered.status).toBe('unresumable')
+      expect(table.opened.length).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(config, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here', async () => {
+    const key = new UserStoryKey('ZZZ-999999')
+    const root = await ScriptedCheckout.prepared()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-acli-'))
+    const conversation = ScriptedCheckout.answering(new ScriptedConversation(), root)
+      .answering({ binary: 'acli', argv: AcliUserStories.argvFor(key) }, Capture.read('acli', 'workitem-view-missing'))
+    const table = new ScriptedTerminals()
+    const processes = new HostProcesses({ conversation, table })
+
+    try {
+      const api = await InProcessApi.started(
+        { CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh' }, processes
+      )
+
+      const response = await CoordinatingSessionEndpoint.openFor(api.port, key.text, root)
+
+      expect(response.status).toBe(400)
+      const body = await response.json() as Failure
+      expect(body.code).toBe('user-story-not-read')
+      expect(body.detail).toMatch(/^acli jira failed: /)
+      expect(table.opened.length).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(config, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('a_whole_request_reaches_gh_so_a_typo_in_the_url_that_wires_the_user_stories_would_show_up_here', async () => {
+    const url = 'https://github.com/mercadona/control-tower/issues/999999999'
+    const root = await ScriptedCheckout.prepared()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-gh-'))
+    const conversation = ScriptedCheckout.answering(new ScriptedConversation(), root)
+      .answering(
+        { binary: 'gh', argv: ['issue', 'view', url, '--json', 'title,body,comments'] },
+        Capture.read('gh', 'issue-view-missing'),
+      )
+    const table = new ScriptedTerminals()
+    const processes = new HostProcesses({ conversation, table })
+
+    try {
+      const api = await InProcessApi.started(
+        { CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh' }, processes
+      )
+
+      const response = await CoordinatingSessionEndpoint.openFor(api.port, url, root)
+
+      expect(response.status).toBe(400)
+      const body = await response.json() as Failure
+      expect(body.code).toBe('user-story-not-read')
+      expect(body.detail).toMatch(/^gh issue view failed: /)
+      expect(table.opened.length).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(config, { recursive: true, force: true })
