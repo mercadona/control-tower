@@ -335,7 +335,7 @@ two you are running.
 
 ## 5. The journey of a milestone
 
-The main screen has two stages: **Solicitud → Implementación**. The coordinating
+While a coordinating session is held, the main screen is the focused view through four steps. The coordinating
 session remains available throughout. A *slice* is one issue-sized piece of the
 milestone, executed in its own branch and worktree (an isolated working directory).
 
@@ -350,7 +350,7 @@ Solicitud
   -> groom creates the milestone and its issues
   -> human authorizes the work
 
-Implementación (one progress view per slice)
+Implementación (one compact list of the milestone's issues)
   Automatic planning -> execution and checks -> publication -> review on GitHub
                                                                   |
                                              requested fixes <----+
