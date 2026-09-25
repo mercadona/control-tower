@@ -567,6 +567,20 @@ summary, `MUTATION_BLOCKED_HELP` and `.start-plan-form__summary*`. `TopBar` lose
 `actions`. `STEP_SHORT_LABELS` goes. Each type that loses its last reader goes. A type
 `contract.ts` imports stays.
 
+Amendment (additions only, this task's Files line, made while implementing): `HeadlessPlanMother.ts`
+is modified, not deleted — `active-plans/client.test.ts` and `Home.implementation.test.tsx`'s Task 6
+recovery tests still call `.empty`, `.uncertain`, `.awaitingObservation`, `.awaitingContinuation`,
+`.unlaunched`, `.uncertainAmong` and `.agentFor`; only the members `useAutomaticSliceSelection.test.ts`
+alone used are pruned. `frontend/src/app/active-plans/client.ts` also needed `isRecord`, `isRequest`
+and `isPlanForRequest` moved in from the deleted `workflow-snapshot/validation.ts`, its only other
+importer, following the module-that-was-already-there idiom already in that file. Also modified as
+the unavoidable companions of the listed changes: `frontend/src/app/sessions/client.test.ts` and
+`frontend/src/app/sessions/Sessions.types.ts` (the `SessionsClient.list` removal), `frontend/src/app/coordinating-session/useCoordinatingSession.test.ts`
+(the `closedSessionIds` removal), `frontend/src/pages/home/Home.tsx` (drops the `isLocked` prop
+`StartPlanForm` no longer declares), `frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.css`
+and `StartPlanForm.test.tsx`, `frontend/src/system-ui/top-bar/TopBar.css`, and
+`frontend/src/app/implement-progress/ImplementProgress.types.ts` (the `STEP_SHORT_LABELS` removal).
+
 **TDD:** No TDD — deletion only; the suite and the build prove that nothing kept used them.
 
 **Tests:** removed on purpose: the tests inside every deleted folder and file above.

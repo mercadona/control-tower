@@ -65,7 +65,6 @@ const Home = () => {
             onOpened={sessionOpened}
             onUnreachable={sessionUnreachable}
             onInteraction={formInteracted}
-            isLocked={false}
             isCoordinatingSessionLive={coordinatingSession.occupied}
             openSession={coordinatingSession.open}
           />

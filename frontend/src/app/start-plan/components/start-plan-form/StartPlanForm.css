@@ -15,27 +15,3 @@
   margin: -12px 0 0;
   color: var(--foreground-secondary);
 }
-
-.start-plan-form__summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  gap: 16px;
-  margin: 0;
-}
-
-.start-plan-form__summary div {
-  min-width: 0;
-}
-
-.start-plan-form__summary dt {
-  color: var(--foreground-secondary);
-}
-
-.start-plan-form__summary dd {
-  margin: 4px 0 0;
-  overflow-wrap: break-word;
-}
-
-.start-plan-form__summary code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}

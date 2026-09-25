@@ -15,7 +15,7 @@ type CoordinatingSessionRead =
 type HeldOutcome = Extract<CoordinatingSessionOutcome, { kind: 'live' | 'ended' | 'unresumable' }>
 type HeldSnapshot = { outcome: HeldOutcome; terminal: LiveSessionRef | null }
 type OpeningState = 'idle' | 'pending' | 'uncertain' | 'reconciling'
-type PendingClose = { target: string; conversation: string; sessionId: string | null }
+type PendingClose = { target: string; conversation: string }
 type BackendConnection = 'reachable' | 'unreachable'
 
 const CONNECTING: CoordinatingSessionRead = { phase: 'connecting' }
@@ -46,7 +46,6 @@ type CoordinatingLifecycle = {
   opened: OpenedCoordinatingSession | null
   closeError: string | null
   closing: boolean
-  closedSessionIds: readonly string[]
   open: (submission: StartPlanSubmission) => Promise<OpenOutcome>
   openGroom: (key: string, target: string) => Promise<GroomSessionOutcome>
   close: () => Promise<CloseOutcome | null>
@@ -61,7 +60,6 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
   const [closing, setClosing] = useState(false)
   const [closeError, setCloseError] = useState<string | null>(null)
   const explicitCloseErrorRef = useRef(false)
-  const [closedSessionIds, setClosedSessionIds] = useState<readonly string[]>([])
   const mountedRef = useRef(false)
   const readRef = useRef<CoordinatingSessionRead>(CONNECTING)
   const heldRef = useRef<HeldSnapshot | null>(null)
@@ -103,10 +101,6 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     if (outcome.kind === 'none') {
       updateRead({ phase: 'read', ...outcome })
       if (outcome.operation === 'idle') {
-        const terminalId = heldRef.current?.terminal?.id
-        if (terminalId !== undefined) {
-          setClosedSessionIds((current) => current.includes(terminalId) ? current : [...current, terminalId])
-        }
         updateHeld(null)
         explicitCloseErrorRef.current = false
         setCloseError(null)
@@ -259,7 +253,6 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     const pending: PendingClose = {
       target: snapshot.outcome.target,
       conversation: snapshot.outcome.conversation,
-      sessionId: snapshot.terminal?.id ?? null,
     }
     pendingCloseRef.current = pending
     beginMutation()
@@ -274,9 +267,6 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
         generationRef.current += 1
         inFlightRef.current = null
         confirmedClosedTargetsRef.current.add(pending.target)
-        if (pending.sessionId !== null) {
-          setClosedSessionIds((current) => current.includes(pending.sessionId!) ? current : [...current, pending.sessionId!])
-        }
         if (heldRef.current?.outcome.target === pending.target) updateHeld(null)
         updateRead({ phase: 'read', kind: 'none', operation: 'idle' })
         explicitCloseErrorRef.current = false
@@ -331,7 +321,6 @@ const useCoordinatingSession = (): CoordinatingLifecycle => {
     opened,
     closeError,
     closing,
-    closedSessionIds,
     open,
     openGroom,
     close,

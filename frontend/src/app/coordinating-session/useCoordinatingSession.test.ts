@@ -305,7 +305,6 @@ describe('useCoordinatingSession', () => {
 
     expect(result.current.target).toBeNull()
     expect(result.current.blocksOpening).toBe(false)
-    expect(result.current.closedSessionIds).toContain(CoordinatingSessionMother.SESSION.id)
   })
 
   it('retires an externally closing target when the next fresh read returns idle', async () => {
@@ -325,7 +324,6 @@ describe('useCoordinatingSession', () => {
 
     expect(result.current.target).toBeNull()
     expect(result.current.operationBusy).toBe(false)
-    expect(result.current.closedSessionIds).toContain(CoordinatingSessionMother.SESSION.id)
   })
 
   it('converges through fresh idle reconciliation when the local close acknowledgement is lost', async () => {
@@ -343,7 +341,6 @@ describe('useCoordinatingSession', () => {
 
     expect(result.current.closeError).toBeNull()
     expect(result.current.blocksOpening).toBe(false)
-    expect(result.current.closedSessionIds).toContain(CoordinatingSessionMother.SESSION.id)
   })
 
   it('ignores a pre-mutation stale none while fresh reconciliation confirms the adopted session', async () => {
@@ -496,23 +493,4 @@ describe('useCoordinatingSession', () => {
     expect(fetching.mock.calls.some(([input]) => input === '/coordinating-session/reopen')).toBe(false)
   })
 
-  it('captures the terminal ID before close so ended transitions cannot defeat cleanup', async () => {
-    const acknowledgement = new Deferred<Response>()
-    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
-      if (input === '/coordinating-session/close') return acknowledgement.promise
-      return Promise.resolve(response(CoordinatingSessionMother.working()))
-    }))
-    const { result } = renderHook(() => useCoordinatingSession())
-    await waitFor(() => expect(result.current.target).toBe(CoordinatingSessionMother.TARGET))
-
-    let closing!: Promise<unknown>
-    act(() => { closing = result.current.close() })
-    await waitFor(() => expect(result.current.closing).toBe(true))
-    await act(async () => {
-      acknowledgement.resolve(closed())
-      await closing
-    })
-
-    expect(result.current.closedSessionIds).toContain(CoordinatingSessionMother.SESSION.id)
-  })
 })
