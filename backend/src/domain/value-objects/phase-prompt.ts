@@ -42,6 +42,9 @@ export class PhasePrompt {
     + 'for cleanup, POST /cleanup-plan with the same identity. Read GET /active-plans again after an answer. '
     + 'Inspect means read the diagnostic and refresh only; never force cleanup or launch replacement work. '
     + 'Recovery acceptance is not completion. Respect refusals; gates 1 and 2 and merge remain human-owned.'
+  static readonly SLICES_ARE_NOT_YOURS =
+    'The slices of this milestone run by themselves: you start none, you implement none and you merge none. '
+    + 'When the person asks how a slice goes, read GET /active-plans and tell them what it answers.'
 
   readonly text: string
 
@@ -84,6 +87,21 @@ export class PhasePrompt {
 
   static groomReview({ spec, milestone }: { spec: EpicSpec, milestone: string }): PhasePrompt {
     return new PhasePrompt(PhasePrompt.#slicingReview({ spec, milestone }).join('\n'))
+  }
+
+  static implementation({ milestone, repository, root }: {
+    milestone: string,
+    repository: RepositoryName,
+    root: CheckoutRoot,
+  }): PhasePrompt {
+    return new PhasePrompt([
+      PhasePrompt.#roleOf({ repository, root }),
+      `Follow the implementation of the milestone "${milestone}" with the person.`,
+      PhasePrompt.SLICES_ARE_NOT_YOURS,
+      PhasePrompt.CHANGE_TO_A_SLICE,
+      PhasePrompt.ANOTHER_ROUND_AFTER_A_VETO,
+      PhasePrompt.RECOVERY_CAPABILITIES,
+    ].join('\n'))
   }
 
   oneLine(): string {

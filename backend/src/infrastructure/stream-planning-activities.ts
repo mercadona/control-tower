@@ -16,7 +16,7 @@ type StreamCursor = {
   lastText: string | null,
 }
 
-class StreamCursors {
+export class StreamCursors {
   static empty(): StreamCursor {
     return { consumedChars: 0, toolCalls: 0, lastToolCall: null, lastText: null }
   }
@@ -60,7 +60,7 @@ class MainArgument {
   }
 }
 
-class StreamLine {
+export class StreamLine {
   static apply(cursor: StreamCursor, raw: string): void {
     const trimmed = raw.trim()
     if (trimmed.length === 0) return

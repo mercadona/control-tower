@@ -996,6 +996,21 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ---
 
+## `POST /coordinating-session/reopen`
+
+Reopens the held coordinating session after it ended by itself. The request carries no body and
+the `x-coordinating-target` header of the held session. When the conversation's transcript
+exists, it resumes that conversation with `claude --resume <id>`. Otherwise it opens a new one
+with the prompt of the story's step: `brainstorming` for a draft spec, `groom` for a frozen spec
+that gate 2 did not authorise, `implementation` for an authorised milestone. It answers `202`
+with `status` (`resumed` or `opened`), `step`, `target`, `conversation`, `repo`, `story`, `root`
+and `session`. A live session answers `409 coordinating-session-not-ended`. An open, a recovery
+or a reopen already under way answers `400 coordinating-session-busy`, and a
+session whose close failed answers `409 coordinating-session-close-failed` until
+that close is finished.
+
+---
+
 ## `POST /groom-session`
 
 Gate 2's way into the conversation, by either of two roads. Both ask the
@@ -1787,6 +1802,24 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' \
   -H 'x-coordinating-target: 6d13bc52-740f-49f8-b128-15e597674f3a' \
   http://127.0.0.1:8787/epic-promotion
 ```
+
+---
+
+## `GET /milestone-progress`
+
+One read of the held coordinating session's milestone, from the spec and issues `GET /epic-groom`
+reads. No held session answers `{"status":"none"}`, and so does a session closed with
+**Cancelar la sesión**; no frozen spec answers `no-milestone`.
+Else it answers `status` `milestone`, `target`, `milestone`, `delivered`, `total` and `issues`.
+Each issue carries `number`, `url`, `title`, `state` (`pending`, `running`, `needs-person`,
+`delivered`), `step`, `task`, `total_tasks`, `step_started_at`, `last_tool`, `last_text`,
+`pull_request`, `attention` (`veto`, `uncertain`, `partial`, `unreadable` or null), `baseline_red` and
+`tasks`. Each task carries `number`, `name`, `status`, `ruling` and `findings`. An issue whose
+own work cannot be read does not blank the others: an open one answers `needs-person` with the
+`unreadable` attention and its `detail`, a closed one is still `delivered`, and an uncertain one
+keeps its recovery action with no tasks. Only a spec or an issue list that cannot be read answers
+`400 milestone-progress-not-read`. Every call reads GitHub for each issue in review, so a page
+polling it keeps a long interval while any issue is in review.
 
 ---
 
