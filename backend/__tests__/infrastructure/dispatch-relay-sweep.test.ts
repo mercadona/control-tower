@@ -209,6 +209,7 @@ class Sweep {
     })
     const relay = new DispatchRelay({
       milestones: (repository) => candidates.authorisedMilestones({ repository }),
+      ownMilestone: () => Promise.resolve(Slice.MILESTONE.title),
       dispatch: (asked) => {
         this.dispatchAsked.push(asked)
 
@@ -362,7 +363,7 @@ describe('DispatchRelay crossed with the real plugin selection', () => {
     ])
   })
 
-  it('ready slices of two authorised milestones are both dispatched by one sweep', async () => {
+  it('a ready slice of another story\'s milestone is left alone while the held story\'s one goes', async () => {
     const gh = new ScriptedGh([
       Slice.issue({ number: 40, order: 1, status: 'ready', touches: ['api'] }),
       Slice.issue({ number: 50, order: 1, status: 'ready', touches: ['ui'], milestone: Slice.OTHER_MILESTONE }),
@@ -370,9 +371,7 @@ describe('DispatchRelay crossed with the real plugin selection', () => {
 
     const swept = await new Sweep(gh).run()
 
-    expect(swept.dispatchAsked.map((asked) => asked.milestone)).toEqual([
-      Slice.MILESTONE.title, Slice.OTHER_MILESTONE.title,
-    ])
-    expect(swept.dispatched()).toEqual([40, 50])
+    expect(swept.dispatchAsked.map((asked) => asked.milestone)).toEqual([Slice.MILESTONE.title])
+    expect(swept.dispatched()).toEqual([40])
   })
 })

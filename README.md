@@ -393,9 +393,13 @@ the groom then presses itself.
 
 **Implementación, including planning.** Once work is authorized, the backend
 dispatches the slices that dependencies and shared-file constraints allow to run
-together. Every minute it looks for milestones with an open issue at
-`status:ready` and dispatches each, so an authorised epic keeps going while the
-next one is being brainstormed in the same clone. `POST /start-plan` is the explicit dispatch entrance: a milestone
+together. Every minute it looks at the milestone of the story its coordinating
+conversation holds for each clone, the one that story's execution spec names,
+and dispatches it while it has an open issue at `status:ready`. A milestone of
+another story is left alone even when its issues are ready, because in a
+repository several people drive it is somebody else's work. A clone with no
+held conversation dispatches nothing, and that includes one whose conversation
+was closed with **Cancelar la sesión**. `POST /start-plan` is the explicit dispatch entrance: a milestone
 request selects eligible existing issues. Each dispatched slice gets its own worktree and agent
 conversation. The agent writes its technical plan, the backend publishes it for
 tracking, and execution continues automatically through `ct-step`.
