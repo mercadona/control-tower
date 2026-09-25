@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.1](https://github.com/mercadona/control-tower/compare/backend-v0.7.0...backend-v0.7.1) (2026-09-25)
+
+
+### Correcciones
+
+* a backend dispatches only the milestone of its own story ([#596](https://github.com/mercadona/control-tower/issues/596)) ([fd2f293](https://github.com/mercadona/control-tower/commit/fd2f293d252f0e043d66e19eaf72899696841cf0))
+* a re-slicing published after the freeze merged starts again from the default branch ([#581](https://github.com/mercadona/control-tower/issues/581)) ([98b6f0e](https://github.com/mercadona/control-tower/commit/98b6f0e4b1f84c1640f6b67db9415fa9c8fd13d1))
+
+
+### Refactorizaciones
+
+* remove the refusal codes nothing can send, and the dead code behind them ([#595](https://github.com/mercadona/control-tower/issues/595)) ([9d4cdab](https://github.com/mercadona/control-tower/commit/9d4cdab2e77927ec0371c25270b6e8a1be524427))
+
 ## [0.7.0](https://github.com/mercadona/control-tower/compare/backend-v0.6.0...backend-v0.7.0) (2026-09-25)
 
 
