@@ -61,7 +61,9 @@ describe('a restart over the same state', () => {
     const { recovery, activePlans } = run.recovery()
     expect(await recovery.recover()).toBeNull()
 
-    const [uncertain] = activePlans.known()
+    const knownPlans = activePlans.known()
+    expect(knownPlans).toHaveLength(1)
+    const [uncertain] = knownPlans
     const diagnostic = uncertain.diagnostic
     if (diagnostic === undefined) throw new Error('the recovered plan carries no diagnostic')
     expect(uncertain).toMatchObject({
@@ -146,7 +148,9 @@ describe('a restart over the same state', () => {
     expect(await recovery.recover()).toBeNull()
 
     expect(delivery.asked).toEqual([watch])
-    const [uncertain] = activePlans.known()
+    const knownPlans = activePlans.known()
+    expect(knownPlans).toHaveLength(1)
+    const [uncertain] = knownPlans
     expect(uncertain).toMatchObject({
       phase: 'uncertain',
       diagnostic: RefusedRunDelivery.REFUSAL,

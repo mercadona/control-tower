@@ -1,0 +1,56 @@
+{
+  "issue": 551,
+  "tasks_total": 5,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "All five objectives are produced by the diff. T1: restart-recovery.test.ts carries both #563 cases, and each restart is a fresh recovery()/agents() instance over the same state directory. T2: the read case (inspect() only, with a deliver that never settles) and the clock case (two recover() ticks on one recovery() with run.settled() between them, over RefusedRunDelivery) are both there. T3: a living group, and a dead leader with a living group, both read as publishing through the real CheckedRunDelivery. T4: a dead leader alone rejects with RunDeliveryUncertain and asks for no push. Termination evidence gives one push, a terminated disposition, a RunDeliveryFailure, no receipt, and an inspect() that is not delivered. T5: a proven receipt answers two reads with one gh request, and a merged pull request reads as delivered with zero git requests.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "All five TDD names are in the diff, spelled literally, and each body asserts what its sentence wrote. T1: one plan (the previous round's medium is fixed: `expect(knownPlans).toHaveLength(1)`), phase uncertain, action inspect, the anonymized diagnostic verbatim, launches and kills at 0, and every state file with its bytes. T2: inspect() resolves null, delivered is empty, phase is implementing. T3: the exact publishing value, with alive holding -4242 and 4242. T4: RunDeliveryUncertain with the exact message, no push request, no disposition.json. T5: delivered with 605 on both reads, and one gh request.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The brief has no Contract, Call site or Final text blocks. Every task says 'No code' and carries its signatures in prose, and the diff matches that prose name by name. admitted() prepares and admits, records no call, and journaled() calls it. InProcessWorkers.kills is incremented before kill throws. RefusedRunDelivery extends CompletedRunDelivery with REFUSAL = 'the scripted checked release refused the delivery' and a publishing inspection, and its deliver pushes to asked and then rejects with RunDeliveryFailure. LivingProcessGroups extends ProcessTable: signal pushes pid, returns only for signal 0 with pid alive, and otherwise throws with code ESRCH, while readTable and openTerminal throw UnscriptedRequest. checkedDelivery({ git, table }) uses a ToolRunner over git, table.signal, and gh and node that refuse. intended(watch, sha) writes intent.json with machineDigest over { manifest, entries }.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "The rows the diff bears on are each implemented with their stated value. D-3: nothing is launched, and git and gh answer from ScriptedConversation. D-8 and 'Where captures live': the new captures are under backend/__tests__/infrastructure/captures/<tool>/, each headed by command, version and date. 'Test-only code': nothing under backend/src changes. 'A substitute of #563': the admitted plan is written straight into the state through admitted()/recorded(), with no POST. 'The ProcessTable double': LivingProcessGroups extends ProcessTable and supplies the signal of every new delivery test. 'One life of the backend': the clock case calls recover() twice on one recovery(), and the restart cases use a new instance. 'The feature flag': none is introduced. D-4, D-5 and 'Coverage is not a gate' are left alone, as they should be.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the recovery cases compose over InProcessRun and assert zero launches, as run-driver-runtime.test.ts does. The fixtures write admission, journal and calls straight into the state, in the idiom of in-process-run.ts. ProvenReceiptScenario hand-writes an intent/request/result/receipt publication, as DeliveredJournalMother does in checked-run-delivery-recorded-pull-request.test.ts. ScriptedConversation and Capture are reused rather than reinvented. Rules: backend/conventions/this-repository.md and the 'Test-only code' row hold, because every added line lives under __tests__/. The modified fixtures (in-process-run.ts, in-process-workers.ts, run-delivery-double.ts) follow their host's idiom (static # helpers, port objects). Everything is in English. defects.md, rule by rule. Closed vocabulary: no subject; no new classifying string, boolean or catch-all dispatch is added, and the inspection and disposition kinds are the production vocabulary. Raw map as the return value of logic: complied; StateFiles.bytesOf returns a Record, but it only feeds a toEqual assertion and nothing decides by key over it, and the arranged() helpers return typed objects. Two fields that have to agree: complied; there is no flag duplicating a value and no sentinel standing for an absence (RefusedRunDelivery.asked and the inherited delivered are records of distinct calls). An error named for where it happens: no subject; no new error type is added, and UnscriptedRequest, RunDeliveryFailure, RunDeliveryUncertain and PlanRecoveryConflict are reused. Declared clash with a plan control, left out of the findings (case one): the T4 verification `head -n 1 push-rejected.txt | cut -c 1-26` compared with 'command: git push origin ' forces the capture header to stop after 'origin ', instead of naming the full refspec as D-8's 'headed by command' implies. The defect is in the plan's control. Capture.read does not match on that header.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing assertion, case or test is removed or relaxed. The only '-' lines are in fixtures: journaled's opening lines extracted into admitted(), the literal 'main' replaced by #BASE, the static #kill turned into an instance kill that counts, and reworded import lines.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production code: the real RunPlanRecovery/RecordedPlanRecovery, RunPlanAgents, CheckedRunDelivery, CtRunMachine, ToolRunner and Gh, running over state the test writes. Doubles sit only at ports: ScriptedConversation for git and gh, LivingProcessGroups for signal, and the RunDelivery double in T2, where the subject is the recovery clock rather than the delivery. The expected diagnostics ('push process group 4242 is still running', '... may still be running', the ownership conflict, the incomplete-call diagnostic) are produced by production classes, not by the scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every touched path is named by a task, and every named path is touched. T1: restart-recovery.test.ts, in-process-run.ts, in-process-workers.ts, the ledger (two rows, the right names, in order). T2: run-delivery-double.ts. T3: living-process-groups.ts, checked-run-delivery-process-groups.test.ts, in-process-run.ts, ls-remote-absent-branch.txt. T4: symbolic-ref, rev-parse, status, worktree-list, remote-get-url and push-rejected, as 'the git captures that deliver() asks for'. T5: graphql-pull-requests-merged.txt. Nothing under backend/src, plugin/ or frontend/ changes, and checked-run-delivery-real-process.test.ts is untouched. The #BASE and #DELIVERY_TITLE constants serve intended(). The last fix round touched only restart-recovery.test.ts, adding the count assertion. There is no plan amendment in the diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Ten new tests, and each has all three properties. Deterministic: state lives in mkdtemp directories and git and gh answer from captures, with no network. Real time appears only where the plan asks for it (startedAt at the current time, well within the recorded deadline) or in values no assertion reads. Isolated: each test builds its own InProcessRun or ProvenReceiptScenario, and afterEach removes the runs and the roots. Verifies real behaviour: every assertion reads output of CheckedRunDelivery or the recovery classes, or the bytes on disk, and would fail if those production paths were reverted. No finer finding is reported, so the TDD skill was not needed as a citation source.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "c981c6207f823ea9369e2330cf6b79131c26989472c6073dbef88962a2421958"
+  }
+}
