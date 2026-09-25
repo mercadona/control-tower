@@ -1,0 +1,56 @@
+{
+  "issue": 556,
+  "tasks_total": 7,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "All seven objectives are in the diff. T1/T2: the six fake-child classes (FakeChild, AcceptedWorker x3, AcceptedChild x2) now extend EventEmitter and implement LaunchedProcess, and the node:child_process import is gone from all six files. T3: 'GitWorkspace cleanup retirement' runs the four it.each rows and 'invalid checkout queries never prove absence' over UnlaunchedWorkspaceDouble, and git-workspace-real-process.test.ts is deleted. T4: yardstick-real-process, makefile-local-env and state-directory-real-process are deleted, with 6 ledger rows. T5: LISTED/unlisted/stale are removed and the suite case expects []. T6: the test object is removed from vitest.config.ts and resolve.alias stays. T7: this-repository.md carries the Final text and names no fast subset.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "T1/T2 name the_backend_suite_launches_processes_in_exactly_the_listed_files as the red, driven by removing the list lines; T5 then replaces that case as planned. T3: the four rows of 'durable cleanup retries preserve evidence and finish retirement after %s' are present, and 'invalid checkout queries never prove absence' still rejects with 'checkout remote could not be read'. T5: it('the_backend_suite_launches_no_process') expects spawningUnder(join(Tests.HERE, '..')) toEqual([]), and it('a_test_file_that_imports_child_process_spawns') expects ['unlisted.test.ts'] over withASpawningImport(). Both match the TDD sentence word for word. T7: the two entries of conventions-no-restatement.test.ts changed as planned. T4 and T6 are marked No TDD.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "FakeChild has readonly pid: number, assigned in the constructor. Each class has kill(): boolean returning false, disconnect(): void {} and unref(): void {}. EventEmitter comes from node:events, and LaunchedProcess is a type import from process-runner.ts. The two entries of conventions-no-restatement.test.ts match the brief. The 'Where the suite runs' and 'Testing: no test launches a process' sections of this-repository.md match the Final text verbatim. The diff touches every file a Current state block names.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3: no backend test launches a process, the git arrange included (the cleanup cases now run over the double). D-10: the Makefile tests are deleted with no substitute and recorded as decided. D-11: the list is emptied and the test stays as a prohibition. D-13: only backend/conventions/this-repository.md is amended. D-14: the timeouts are removed. Fake child row: each file keeps its class name. Cleanup cases row: they moved into git-workspace.test.ts under their old names, over UnlaunchedWorkspaceDouble. Census row: the substitute is the walk case of yardstick.test.ts. Prohibition row: ProcessRatchet keeps its name. it.each ledger row: one row per expanded value. Test-only code: nothing under backend/src changed.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the fake children copy LaunchedWorker in fixtures/in-process-workers.ts (EventEmitter implements LaunchedProcess, with kill/disconnect/unref). The only difference is that kill returns false, which the brief asks for. The cleanup cases use UnlaunchedWorkspaceDouble's existing fields (deleteFailure, worktreePresent, branchPresent, branchTip, calls), and no seam was added. The ledger rows follow the existing 'file > case | file > case' / 'deleted without substitute — decided' format. Repo rules: nothing enters backend/src, the text is English, and every change is in pre-existing test modules and follows their host idiom. No document of either yardstick prescribes a delivery pattern for test-only changes, and there are no boundary changes. defects.md, rule by rule. Closed vocabulary: no subject; the only classifying value is the 'cut' literal union ported unchanged from the deleted file, and its ternaries are test assertions, not production dispatch. Raw map as the return value of logic: no subject; no logic returns a map. Two fields that have to agree: no subject; the fake children carry no new state, and FakeChild's pid is a required number, not a sentinel. Error named for where it happens: no subject; the diff adds no error type. Plan control vs convention clash: none found. Skills: none named.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Each removed or relaxed test is accounted for in the brief. The three ratchet cases are listed under T5 Tests as removed on purpose. The two restatement entries are changed by T7's text. The 5 cleanup cases (T3) and the 6 census/Makefile cases (T4) are named in Tests and recorded in the ledger. In the migrated cleanup cases, the real-git assertions (worktree list, rev-parse, branch --list, lstat of the worktree) became assertions on the double's worktreePresent/branchPresent/calls and on UnlaunchedWorkspaceDouble.BASE. T3 asks for exactly that: 'The double's worktreePresent, branchPresent and calls replace each GitProcess.run assertion.'",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The behaviour promised is test-infrastructure behaviour. For the prohibition, production of the effect lives in ProcessRatchet.spawningUnder, run over the real tree. The migrated cleanup cases drive the real CleanupPlan, DiskPlanRecords, GitWorkspace, DispatchCheckClaims and GhPlanIssues over a mkdtemp state root, with only git/gh/node at the port doubled. The retirement and evidence assertions read files that production code wrote.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The changed paths match the union of the tasks' Files lines, plus the deletions they name, the ledger and the plan file. Nothing under plugin/, frontend/, backend/src/ or the root Makefile changes. The plan amendment has three parts, and each is justified. (1) T5 Files gains the deletion of fixtures/headless-child.ts, which has no importer (a grep confirms no reference remains) and imports node:child_process. (2) The §8 grep moves from any mention of 'node:child_process' to import lines: the original command could not pass under any diff, because ProcessRatchet.SPAWNING itself names 'node:child_process' as a string. The narrowed grep still enforces the end state that no file under the tests imports child_process. (3) Assumption 7 records that reasoning. The amendment drops no test name and loosens no task verification beyond what the plan's own detector made unsatisfiable.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "New tests: the 5 cleanup cases in git-workspace.test.ts, and the_backend_suite_launches_no_process and a_test_file_that_imports_child_process_spawns in process-ratchet.test.ts. All are deterministic: fixed timestamps and ids, no network and no real clock, and paths only under mkdtemp or the repo tree read-only. All are isolated: roots are removed in afterEach or finally, and each case builds its own double and state. All assert on production behaviour: files written by DiskPlanRecords/CleanupPlan, the double's state mutated by GitWorkspace's commands, and spawningUnder's output. Reverting the production wiring (e.g. CleanupPlan not calling branch -d) would turn them red. No finer finding is reported, so the TDD skill was not needed to support one.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "61024a8c4c2f3d46f1ed3a71cd8b0d264e59e174cae61f4b66048e84b39e0ea4"
+  }
+}
